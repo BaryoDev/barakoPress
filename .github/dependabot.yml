@@ -1,0 +1,22 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      # Two pull requests rather than one per package: routine bumps together, majors apart.
+      # Majors are separated because they need reading, not because they need to arrive alone.
+      engine:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      engine-major:
+        patterns: ["*"]
+        update-types: ["major"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5

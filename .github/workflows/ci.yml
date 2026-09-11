@@ -1,0 +1,193 @@
+# barakoPress CI.
+#
+# The engine is a package before it is an app, so the build that matters is not this repo's own.
+# It is a separate app installing the packed tarball and rendering a content model that is not the
+# blog blueprint, because barakoCMS content types are defined at runtime and a client's posts are
+# as likely to be `article` with a `Headline`. Every defect worth catching here was found that way:
+# a peer floor that admitted a Next it cannot compile on, static export mode missing four things,
+# and a blog shape compiled into nine files.
+name: ci
+
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: House style
+        run: |
+          # An em dash or en dash in anything that ships. A local hook catches this while writing;
+          # this catches it when the hook was not running.
+          if grep -rlP '[\x{2014}\x{2013}]' --include='*.ts' --include='*.tsx' --include='*.md' \
+               --include='*.css' --include='*.yml' src app README.md 2>/dev/null; then
+            echo "the files above contain an em dash or en dash"
+            exit 1
+          fi
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+
+      - name: The reference app builds with no CMS reachable
+        # The image is built without a CMS on purpose, so this is the real case, not a degraded one.
+        # It has failed twice: the sitemap and then the feed threw instead of returning empty.
+        env:
+          CMS_URL: http://127.0.0.1:1
+        run: npm run build
+
+  consumer:
+    # The test that matters: can somebody else install this and render their own content model.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+      - name: Pack the engine
+        run: |
+          npm pack --pack-destination /tmp
+          # A changing name, because npm caches a file: tarball by path and version. Reinstalling
+          # the same name silently serves the old code, which once made a fixed bug look unfixed.
+          mv /tmp/barakopress-*.tgz "/tmp/engine-$GITHUB_SHA.tgz"
+
+      - name: Start a CMS and give it a model that is not the blueprint
+        run: |
+          cat > /tmp/compose.yml <<'YAML'
+          services:
+            postgres:
+              image: postgres:16-alpine
+              environment:
+                POSTGRES_DB: barakocms
+                POSTGRES_USER: postgres
+                POSTGRES_PASSWORD: ci-not-a-secret
+              healthcheck:
+                test: ["CMD-SHELL", "pg_isready -U postgres"]
+                interval: 5s
+                retries: 20
+            api:
+              image: ghcr.io/baryodev/barako-cms:4.0.1
+              depends_on: { postgres: { condition: service_healthy } }
+              ports: ["5099:8080"]
+              environment:
+                ASPNETCORE_ENVIRONMENT: Production
+                ConnectionStrings__DefaultConnection: "Host=postgres;Database=barakocms;Username=postgres;Password=ci-not-a-secret"
+                JWT__Key: "ci-only-key-that-is-long-enough-to-pass-the-guard"
+                InitialAdmin__Username: admin
+                InitialAdmin__Password: ci-not-a-secret
+                Seed__DemoContent: "false"
+          YAML
+          docker compose -f /tmp/compose.yml up -d
+          for i in $(seq 1 60); do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:5099/health)" = "200" ] && break
+            sleep 3
+          done
+          curl --fail --silent -o /dev/null http://localhost:5099/health
+
+          TOKEN=$(curl -s -X POST http://localhost:5099/api/auth/login \
+            -H 'content-type: application/json' \
+            -d '{"username":"admin","password":"ci-not-a-secret"}' | node -pe 'JSON.parse(require("fs").readFileSync(0)).token')
+
+          # Deliberately none of the blueprint's names.
+          curl --fail --silent -o /dev/null -X POST http://localhost:5099/api/content-types \
+            -H 'content-type: application/json' -H "authorization: Bearer $TOKEN" -d '{
+              "name":"article","displayName":"Article","isPubliclyDeliverable":true,
+              "fields":[
+                {"name":"Headline","displayName":"Headline","type":"string","isRequired":true},
+                {"name":"Permalink","displayName":"Permalink","type":"slug","isRequired":true},
+                {"name":"Standfirst","displayName":"Standfirst","type":"text"},
+                {"name":"Story","displayName":"Story","type":"markdown","isRequired":true},
+                {"name":"RunDate","displayName":"Run date","type":"datetime"}]}'
+
+          curl --fail --silent -o /dev/null -X POST http://localhost:5099/api/contents \
+            -H 'content-type: application/json' -H "authorization: Bearer $TOKEN" -d '{
+              "contentType":"article","status":"Published",
+              "data":{"Headline":"An article, not a post","Permalink":"ci-article",
+                      "Standfirst":"Different type, different field names.",
+                      "Story":"## It renders\n\nThe engine was told the names, not taught them.",
+                      "RunDate":"2026-01-01T00:00:00Z"}}'
+
+      - name: Build a consumer against it
+        run: |
+          mkdir -p /tmp/consumer/app/writing/'[slug]' && cd /tmp/consumer
+          cat > package.json <<JSON
+          { "name":"consumer","private":true,
+            "dependencies":{"barakopress":"file:/tmp/engine-$GITHUB_SHA.tgz",
+              "next":"^16.0.0","react":"^19.0.0","react-dom":"^19.0.0"},
+            "devDependencies":{"typescript":"^5.6.0","@types/react":"^19.0.0","@types/node":"^22.0.0"} }
+          JSON
+          cat > next.config.ts <<'TS'
+          import type { NextConfig } from "next";
+          const config: NextConfig = { transpilePackages: ["barakopress"] };
+          export default config;
+          TS
+          cat > tsconfig.json <<'JSON'
+          { "compilerOptions": { "target":"ES2022","lib":["dom","ES2022"],"strict":true,"noEmit":true,
+            "module":"esnext","moduleResolution":"bundler","jsx":"preserve","esModuleInterop":true,
+            "skipLibCheck":true,"isolatedModules":true,"plugins":[{"name":"next"}],
+            "paths":{"@/*":["./*"]} },
+            "include":["next-env.d.ts","**/*.ts","**/*.tsx",".next/types/**/*.ts"] }
+          JSON
+          cat > press.config.ts <<'TS'
+          import { defineConfig } from "barakopress";
+          export const config = defineConfig({
+            types: { post: "article", author: undefined, category: undefined },
+            fields: { title: "Headline", slug: "Permalink", excerpt: "Standfirst",
+                      body: "Story", publishedAt: "RunDate",
+                      coverImage: undefined, coverImageAlt: undefined, featured: undefined,
+                      tags: undefined, author: undefined, category: undefined },
+            routes: { post: "/writing" },
+            site: { name: "CI", url: "https://ci.example" },
+            cmsUrl: "http://localhost:5099",
+          });
+          TS
+          printf 'import { createBlogIndex } from "barakopress";\nimport { config } from "@/press.config";\nexport default createBlogIndex(config);\nexport const revalidate = 300;\n' > app/page.tsx
+          printf 'import { createBlogPost, createPostMetadata } from "barakopress";\nimport { config } from "@/press.config";\nexport default createBlogPost(config);\nexport const generateMetadata = createPostMetadata(config);\nexport const revalidate = 300;\n' > "app/writing/[slug]/page.tsx"
+          mkdir -p app/feed.xml
+          printf 'import { createFeed } from "barakopress";\nimport { config } from "@/press.config";\nexport const GET = createFeed(config);\nexport const revalidate = 300;\n' > app/feed.xml/route.ts
+          cat > app/layout.tsx <<'TSX'
+          import "barakopress/styles.css";
+          export const metadata = { title: "CI" };
+          export default function RootLayout({ children }: { children: React.ReactNode }) {
+            return <html lang="en"><body>{children}</body></html>;
+          }
+          TSX
+          npm install --no-audit --no-fund
+          npx next build
+
+      - name: The consumer renders the client's model, not the blueprint's
+        run: |
+          cd /tmp/consumer && npx next start --port 3000 &
+          for i in $(seq 1 30); do curl -s -o /dev/null http://localhost:3000/ && break; sleep 2; done
+
+          # The index links to /writing, which is where this consumer mounted it.
+          curl -s http://localhost:3000/ | grep -q 'href="/writing/ci-article"'
+          # The post renders a field the blueprint has never heard of.
+          curl -s http://localhost:3000/writing/ci-article | grep -q "An article, not a post"
+          # The feed carries the consumer's identity and its route, not the engine's defaults.
+          curl -s http://localhost:3000/feed.xml | grep -q "https://ci.example/writing/ci-article"
+          curl -s http://localhost:3000/feed.xml | grep -q "<title>CI</title>"
+
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose -f /tmp/compose.yml logs --tail 80
