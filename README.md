@@ -1,5 +1,11 @@
 # barakoPress
 
+Part of BaryoDev, alongside [barakoCMS](https://github.com/BaryoDev/barakoCMS) (the API) and
+[barakoBrew](https://github.com/BaryoDev/barakoBrew) (the console). It lives here rather than in a
+personal repository by the rule in barakoCMS#707: a thing stays in the org if it is a capability
+any instance might want, and moves out if it is the adapter for one named product. A site engine
+is the first kind.
+
 A blog on [barakoCMS](https://github.com/BaryoDev/barakoCMS). Server rendered, cached until the CMS
 says otherwise, so ordinary traffic never reaches Postgres and a publish is live in one request.
 
