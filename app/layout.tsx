@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import "./globals.css";
+import "barakopress/styles.css";
 
-const siteName = process.env.SITE_NAME ?? "barakoPress";
-const siteUrl = process.env.SITE_URL ?? "http://localhost:3000";
+import { config } from "@/press.config";
+
+const siteName = config.site.name;
+const siteUrl = config.site.url;
 
 export const metadata: Metadata = {
     metadataBase: new URL(siteUrl),
     title: { default: siteName, template: `%s | ${siteName}` },
-    description: process.env.SITE_TAGLINE ?? "A blog on barakoCMS",
+    description: config.site.tagline,
     alternates: {
         types: { "application/rss+xml": `${siteUrl}/feed.xml` },
     },

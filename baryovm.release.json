@@ -3,7 +3,7 @@
   "remoteRoot": "/opt/barakopress",
   "sync": [
     "app/",
-    "lib/",
+    "src/",
     "public/",
     "Dockerfile",
     "Caddyfile",
@@ -32,11 +32,11 @@
     "grep -q '^REVALIDATE_SECRET=.\\+' /opt/barakopress/.env || { echo 'REVALIDATE_SECRET is empty, the cache would never be invalidated'; exit 1; }"
   ],
   "verify": [
-    ". ./.env && curl --fail --silent --show-error --max-time 15 -o /dev/null \"https://$SITE_DOMAIN/\"",
-    ". ./.env && curl --fail --silent --show-error --max-time 15 -o /dev/null \"https://$SITE_DOMAIN/feed.xml\"",
-    ". ./.env && curl --fail --silent --show-error --max-time 15 -o /dev/null \"https://$SITE_DOMAIN/sitemap.xml\"",
-    ". ./.env && curl --fail --silent --show-error --max-time 15 -o /dev/null \"https://$API_DOMAIN/health\"",
-    ". ./.env && test \"$(curl --silent --max-time 15 -o /dev/null -w '%{http_code}' -X POST \"https://$SITE_DOMAIN/api/revalidate\")\" = 401"
+    "d=$(grep -m1 '^SITE_DOMAIN=' .env | cut -d= -f2- | tr -d '\"'\"'\\r'\"'\"') && test -n \"$d\" && curl --fail --silent --show-error --max-time 15 -o /dev/null \"https://$d/\"",
+    "d=$(grep -m1 '^SITE_DOMAIN=' .env | cut -d= -f2- | tr -d '\"'\"'\\r'\"'\"') && curl --fail --silent --show-error --max-time 15 -o /dev/null \"https://$d/feed.xml\"",
+    "d=$(grep -m1 '^SITE_DOMAIN=' .env | cut -d= -f2- | tr -d '\"'\"'\\r'\"'\"') && curl --fail --silent --show-error --max-time 15 -o /dev/null \"https://$d/sitemap.xml\"",
+    "d=$(grep -m1 '^API_DOMAIN=' .env | cut -d= -f2- | tr -d '\"'\"'\\r'\"'\"') && test -n \"$d\" && curl --fail --silent --show-error --max-time 15 -o /dev/null \"https://$d/health\"",
+    "d=$(grep -m1 '^SITE_DOMAIN=' .env | cut -d= -f2- | tr -d '\"'\"'\\r'\"'\"') && test \"$(curl --silent --max-time 15 -o /dev/null -w '%{http_code}' -X POST \"https://$d/api/revalidate\")\" = 401"
   ],
   "verifyAttempts": 10,
   "verifyDelaySeconds": 6

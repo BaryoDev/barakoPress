@@ -64,6 +64,31 @@ reachable, deliberately, so it is not tied to one instance. That means both ship
 is what the backstop above rescues. Verified with a short window: no webhook was ever fired and the
 page filled itself in.
 
+## Configuring it
+
+`press.config.ts` is the one file a site owns. A site on the `blog` blueprint gives only its
+identity; everything else defaults to what the blueprint creates.
+
+```ts
+export const config = defineConfig({
+  types:  { post: "article" },
+  fields: { title: "Headline", slug: "Permalink", body: "Story", publishedAt: "RunDate" },
+  routes: { post: "/writing" },
+  site:   { name: "Client Three", url: "https://clientthree.example" },
+});
+```
+
+That is a real test, not an illustration: a content type called `article` with none of the
+blueprint's field names, no authors, no categories and the posts mounted at /writing renders,
+links to /writing, and produces a feed carrying the client's own identity. barakoCMS content types
+are defined at runtime, so a client's model being nothing like the blueprint is the normal case,
+not the exception.
+
+**Identity is build-time.** The index, the feed, the sitemap and robots are prerendered, so
+anything `press.config.ts` reads from `process.env` is baked when the image is built, not when it
+starts. Write per-site values as literals in that file. Only per-environment values (`CMS_URL`,
+`REVALIDATE_SECRET`) come from the environment, and neither is rendered.
+
 ## Why this does not use the published client
 
 It should, and it is written to switch back. `@baryodev/barako-client@0.3.0` cannot express what a

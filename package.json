@@ -1,8 +1,7 @@
 {
   "name": "barakopress",
   "version": "0.1.0",
-  "private": true,
-  "description": "A configurable blog on barakoCMS. Server rendered, cached until the CMS says otherwise.",
+  "description": "A configurable blog engine on barakoCMS: server rendered, cached until the CMS says otherwise.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -12,16 +11,34 @@
   },
   "dependencies": {
     "@baryodev/barako-client": "0.3.0",
-    "marked": "^18.0.0",
-    "next": "^16.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "marked": "^18.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "typescript": "^5.6.0",
-    "vitest": "^4.0.0"
+    "vitest": "^4.0.0",
+    "next": "^16.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "type": "module",
+  "files": [
+    "src",
+    "Dockerfile",
+    "compose.yml",
+    "Caddyfile",
+    "baryovm.release.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles.css": "./src/styles.css"
+  },
+  "peerDependencies": {
+    "next": ">=16",
+    "react": ">=19"
   }
 }

@@ -16,6 +16,13 @@ const config: NextConfig = {
    * lib/cms.ts: every read is cached with no expiry and tagged, and only the signed webhook in
    * app/api/revalidate drops it. Ordinary traffic never reaches Postgres.
    */
+  /*
+   * The engine ships TypeScript and TSX rather than a compiled bundle, because every consumer is a
+   * Next app that already compiles both. This is what lets them do it, and a consuming site needs
+   * the same line.
+   */
+  transpilePackages: ["barakopress"],
+
   images: {
     // The CMS serves images from its own host with on-demand width variants, so Next's optimiser
     // would be a second resizer in front of a resizer. It also pulls in sharp, which is LGPL.
