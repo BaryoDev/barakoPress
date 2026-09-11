@@ -1,0 +1,314 @@
+/*
+ * Signal, the barakoCMS palette, as plain CSS custom properties.
+ *
+ * Copied from barakoBrew's globals.css so this site and the console look like one product. No
+ * Tailwind and no component library here on purpose: a starter that ships a design system is a
+ * template somebody has to delete their way out of. Take the tokens, bring your own framework.
+ *
+ * Light only. Dark mode was deferred in the design rather than drawn, so there is no theme to
+ * switch to and no toggle pretending otherwise.
+ *
+ * The rule doing most of the work: every machine-produced value (a slug, an id, a timestamp, a
+ * route) is monospace with tabular numerals, and human prose is not. That single distinction is
+ * what makes the surface read as a developer tool.
+ */
+
+:root {
+  --background: #fafafc;
+  --foreground: #101223;
+  --muted: #f2f2f7;
+  --muted-foreground: #4a4d63;
+  --card: #ffffff;
+  --border: #e6e6ef;
+  --primary: #5a46d6;
+  --primary-foreground: #ffffff;
+
+  --radius-chip: 0.5625rem;
+  --radius-control: 0.6875rem;
+  --radius-card: 0.875rem;
+
+  --font-sans: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Sora", var(--font-sans);
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin: 0 0 0.6rem;
+}
+
+h1 {
+  font-size: 2.6rem;
+  font-weight: 700;
+}
+
+h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+code,
+.mono,
+time {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.88em;
+}
+
+.shell {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 6rem;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+
+.topbar .brand {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--foreground);
+  letter-spacing: -0.01em;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 1.4rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.card h2 {
+  margin-bottom: 0.25rem;
+}
+
+.meta {
+  color: var(--muted-foreground);
+  font-size: 0.85rem;
+}
+
+.btn {
+  display: inline-block;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 0.6rem 1.1rem;
+  cursor: pointer;
+}
+
+.btn.ghost {
+  background: transparent;
+  color: var(--muted-foreground);
+  border: 1px solid var(--border);
+}
+
+.field {
+  display: block;
+  margin-bottom: 0.9rem;
+}
+
+.field span {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+
+.field input {
+  width: 100%;
+  font: inherit;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--card);
+  color: var(--foreground);
+}
+
+.field input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.notice {
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--primary);
+  border-radius: var(--radius-chip);
+  background: var(--muted);
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+}
+
+.error {
+  border-left-color: #c0392b;
+  color: #7d241a;
+}
+
+/* barakoPress: the blog surface on top of the Signal tokens above. */
+
+.masthead {
+  margin-bottom: 2.5rem;
+}
+
+.masthead h1 {
+  font-size: 2.9rem;
+}
+
+.tagline {
+  color: var(--muted-foreground);
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.featured-card {
+  border-color: var(--primary);
+}
+
+.chip {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary);
+  background: #eeebfd;
+  border-radius: var(--radius-chip);
+  padding: 0.15rem 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.excerpt {
+  margin: 0.5rem 0 0;
+}
+
+.tags {
+  margin: 0.9rem 0 0;
+}
+
+.tag {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--muted-foreground);
+  background: var(--muted);
+  border-radius: var(--radius-chip);
+  padding: 0.12rem 0.45rem;
+  margin-right: 0.35rem;
+}
+
+.cover {
+  width: 100%;
+  border-radius: var(--radius-card);
+  margin: 1.5rem 0;
+}
+
+.preview-banner {
+  border-left-color: #b8860b;
+  background: #fdf6e3;
+}
+
+.foot {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+  border-top: 1px solid var(--border);
+}
+
+/* Rendered markdown. The only place this site emits HTML it did not write itself, so the rules
+   here are visual only; the safety is in lib/markdown.ts. */
+.prose {
+  font-size: 1.05rem;
+}
+
+.prose h2 {
+  margin-top: 2.2rem;
+}
+
+.prose h3 {
+  margin-top: 1.6rem;
+  font-size: 1.15rem;
+}
+
+.prose pre {
+  background: var(--foreground);
+  color: #e8e9f2;
+  padding: 1rem 1.15rem;
+  border-radius: var(--radius-control);
+  overflow-x: auto;
+  font-size: 0.86rem;
+}
+
+.prose pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+.prose blockquote {
+  margin: 1.5rem 0;
+  padding-left: 1.1rem;
+  border-left: 4px solid var(--primary);
+  color: var(--muted-foreground);
+}
+
+.prose img {
+  max-width: 100%;
+  border-radius: var(--radius-control);
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.4rem 0;
+  font-size: 0.95rem;
+}
+
+.prose th,
+.prose td {
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.7rem;
+  text-align: left;
+}
