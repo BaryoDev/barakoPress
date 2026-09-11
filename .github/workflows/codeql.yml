@@ -11,6 +11,9 @@ on:
 permissions:
   contents: read
   security-events: write
+  # init reads the workflow run to work out what it is analysing. Without this it fails with
+  # "Resource not accessible by integration", which reads like a licensing problem and is not.
+  actions: read
 
 jobs:
   analyze:
