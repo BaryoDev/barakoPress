@@ -1,0 +1,43 @@
+{
+  "localRoot": "~/repos/barakoPress",
+  "remoteRoot": "/opt/barakopress",
+  "sync": [
+    "app/",
+    "lib/",
+    "public/",
+    "Dockerfile",
+    "Caddyfile",
+    "compose.yml",
+    "package.json",
+    "package-lock.json",
+    "next.config.ts",
+    "tsconfig.json"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next",
+    ".git",
+    ".env"
+  ],
+  "builds": [
+    {
+      "image": "barakopress-site:latest",
+      "dockerfile": "Dockerfile",
+      "context": "."
+    }
+  ],
+  "sudo": true,
+  "preDeploy": [
+    "test -f /opt/barakopress/.env || { echo 'no .env on the VM: copy .env.example, fill it in, and keep it out of the sync'; exit 1; }",
+    "grep -q '^REVALIDATE_SECRET=.\\+' /opt/barakopress/.env || { echo 'REVALIDATE_SECRET is empty, the cache would never be invalidated'; exit 1; }"
+  ],
+  "verify": [
+    ". ./.env && curl --fail --silent --show-error --max-time 15 -o /dev/null \"https://$SITE_DOMAIN/\"",
+    ". ./.env && curl --fail --silent --show-error --max-time 15 -o /dev/null \"https://$SITE_DOMAIN/feed.xml\"",
+    ". ./.env && curl --fail --silent --show-error --max-time 15 -o /dev/null \"https://$SITE_DOMAIN/sitemap.xml\"",
+    ". ./.env && curl --fail --silent --show-error --max-time 15 -o /dev/null \"https://$API_DOMAIN/health\"",
+    ". ./.env && test \"$(curl --silent --max-time 15 -o /dev/null -w '%{http_code}' -X POST \"https://$SITE_DOMAIN/api/revalidate\")\" = 401"
+  ],
+  "verifyAttempts": 10,
+  "verifyDelaySeconds": 6
+}

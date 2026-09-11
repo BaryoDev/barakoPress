@@ -2,6 +2,12 @@ import type { NextConfig } from "next";
 
 const config: NextConfig = {
   /*
+   * Standalone output, so the container carries a server and its traced dependencies rather than
+   * the whole node_modules tree. Without this the Dockerfile's runtime stage has nothing to copy.
+   */
+  output: "standalone",
+
+  /*
    * Not a static export, deliberately, and this is the one decision the whole project turns on.
    *
    * The site this replaces used output: 'export', which meant an edit was invisible until somebody

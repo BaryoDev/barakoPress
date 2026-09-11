@@ -1,0 +1,52 @@
+# Three hostnames, one proxy, certificates handled for you.
+#
+# Caddy asks Let's Encrypt for a certificate on first start and renews it on its own, which is why
+# a working blog is a compose up and not an afternoon with certbot. The only prerequisite is that
+# all three names already point at this machine: the challenge fails otherwise, and it fails
+# loudly in the caddy logs rather than silently serving plain http.
+
+{
+	email {$ACME_EMAIL}
+}
+
+# The blog. Everything a visitor sees.
+{$SITE_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy site:3000
+
+	header {
+		# Sent on every response, including the ones Next renders from cache.
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# The site renders markdown into HTML. lib/markdown.ts escapes raw HTML, so this is the
+		# second line rather than the first, and it is cheap.
+		X-Frame-Options "SAMEORIGIN"
+		-Server
+	}
+}
+
+# The API. Public because the delivery endpoints are anonymous by design, and because the console
+# is a browser app that calls it directly.
+{$API_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy api:8080
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+}
+
+# The console. Same box, its own name, so a cookie set here is not set for the blog.
+{$CONSOLE_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy console:3000
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+}

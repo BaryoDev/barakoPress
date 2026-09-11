@@ -1,0 +1,102 @@
+# The whole blog: a database, the API, the console, the site, and a reverse proxy that gets its own
+# certificate.
+#
+# Caddy is here rather than nginx because it obtains and renews TLS itself given a domain and an
+# email. That is the difference between "the deploy command succeeded" and "I have a website". The
+# alternative is telling every user to install nginx and run certbot, which is the step where most
+# of them stop.
+#
+# Ports 80 and 443 are the only ones published. The API, the console and the site are reachable
+# only through Caddy on the compose network, so nothing is exposed that does not need to be.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: barakocms
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    image: ghcr.io/baryodev/barako-cms:${API_TAG:-4.0.1}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: "Host=postgres;Database=barakocms;Username=postgres;Password=${DB_PASSWORD}"
+      JWT__Key: ${JWT_KEY:?set JWT_KEY in .env}
+      InitialAdmin__Username: ${ADMIN_USERNAME:-admin}
+      InitialAdmin__Password: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      # The console is the only browser origin that calls the API directly. The site never does:
+      # it reads from the server side, over the compose network.
+      CORS__AllowedOrigins: "https://${CONSOLE_DOMAIN:?set CONSOLE_DOMAIN in .env}"
+      # The attendance demo fixture, which also arms a workflow that sends mail. Off.
+      Seed__DemoContent: "false"
+      Swagger__Enabled: "false"
+      # Absolute links the API hands out, and the feed and sitemap it can serve.
+      App__BaseUrl: "https://${SITE_DOMAIN:?set SITE_DOMAIN in .env}"
+      Feeds__SiteUrl: "https://${SITE_DOMAIN}"
+      AllowedHosts: "*"
+      # Caddy terminates TLS and forwards over http, so the API has to be told the original scheme
+      # or it will build http:// links and refuse to set a Secure cookie.
+      ForwardedHeaders__Enabled: "true"
+      ForwardedHeaders__KnownNetworks__0: "0.0.0.0/0"
+
+  console:
+    image: ghcr.io/baryodev/barako-admin:${CONSOLE_TAG:-1.0.0}
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      # Read by the browser, so it is the public API address, not the service name.
+      NEXT_PUBLIC_API_URL: "https://${API_DOMAIN:?set API_DOMAIN in .env}"
+
+  site:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      # Server to server, inside the network. Never leaves the host.
+      CMS_URL: "http://api:8080"
+      SITE_URL: "https://${SITE_DOMAIN}"
+      SITE_NAME: ${SITE_NAME:-barakoPress}
+      SITE_TAGLINE: ${SITE_TAGLINE:-A blog on barakoCMS}
+      REVALIDATE_SECRET: ${REVALIDATE_SECRET:?set REVALIDATE_SECRET in .env}
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - site
+      - api
+      - console
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN}
+      API_DOMAIN: ${API_DOMAIN}
+      CONSOLE_DOMAIN: ${CONSOLE_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env, Let us Encrypt needs it}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

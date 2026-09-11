@@ -15,12 +15,15 @@
  * transport should go back to being someone else's problem. Writing it here is the compromise, not
  * the intent: a starter that keeps its own client is how a project ends up with two.
  *
- * Caching is the reason this is worth doing carefully. Every read below is tagged and cached with
- * no expiry, so ordinary traffic never reaches Postgres, and app/api/revalidate drops the tag when
- * the CMS says something changed.
+ * Caching is the reason this is worth doing carefully. Every read below is tagged, so
+ * app/api/revalidate can drop it the moment the CMS says something changed, and carries a time
+ * backstop so a deployment whose webhook was never wired up still refreshes on its own.
  */
 
 export const CMS_TAG = "cms";
+
+/** How long a cached read may live without the webhook saying otherwise. */
+export const BACKSTOP_SECONDS = 300;
 
 const baseUrl = (process.env.CMS_URL ?? process.env.NEXT_PUBLIC_CMS_URL ?? "http://localhost:5005").replace(
     /\/$/,
@@ -63,7 +66,15 @@ function headers(): HeadersInit {
 async function get<T>(path: string): Promise<T> {
     const res = await fetch(`${baseUrl}${path}`, {
         headers: headers(),
-        next: { tags: [CMS_TAG], revalidate: false },
+        // Tagged for instant invalidation, and given a backstop.
+        //
+        // `revalidate: false` was the first version, and it made the webhook the only thing that
+        // could ever refresh a page. That is fine until someone deploys without creating the
+        // workflow, which is a manual step in the console: their blog is then empty forever and
+        // nothing says why. A time backstop costs one read per page per window and removes the
+        // whole failure. The webhook still makes a publish instant; this just means "instant"
+        // degrades to "within a few minutes" rather than to "never".
+        next: { tags: [CMS_TAG], revalidate: BACKSTOP_SECONDS },
     });
     if (!res.ok) throw new Error(`${path} answered ${res.status}`);
     return (await res.json()) as T;

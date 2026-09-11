@@ -1,0 +1,13 @@
+# Docker does not read .gitignore, so this has to say it again. The important line is .env: without
+# it, COPY . . puts the deployment's secrets into a build layer.
+.env
+.env.*
+node_modules
+.next
+out
+.git
+.gitignore
+README.md
+baryovm.release.json
+Dockerfile
+.dockerignore

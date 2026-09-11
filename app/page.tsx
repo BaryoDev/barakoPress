@@ -1,6 +1,14 @@
 import Link from "next/link";
 import { listPosts, formatDate, type Post } from "@/lib/cms";
 
+/*
+ * Re-rendered at most this often even if no webhook ever arrives. The image is built without a
+ * CMS on purpose, so this page is prerendered empty; without a backstop it would stay empty until
+ * something invalidated it.
+ */
+export const revalidate = 300;
+
+
 export default async function Home() {
     let posts: Post[] = [];
     let failure: string | null = null;

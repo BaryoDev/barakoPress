@@ -84,6 +84,40 @@ through, link and image destinations must be http, https or mailto, and text is 
 attribute. An editor is authenticated, so this is the second line of defence, not the first. The
 trade is that an author cannot embed raw HTML or an iframe.
 
+## Deploying to a VM
+
+The stack is Postgres, the API, the console, this site, and Caddy in front getting its own TLS
+certificate. Caddy is there instead of nginx because it obtains and renews certificates itself,
+which is the difference between a deploy command succeeding and having a website.
+
+```bash
+baryovm vm provision blog1                     # or bring your own VM
+baryovm vm bootstrap blog1                     # installs Docker, and only Docker
+baryovm vm harden blog1                        # sshd policy and fail2ban
+baryovm stack add blog --vm blog1 --sudo --release-file ./baryovm.release.json
+baryovm stack release blog
+```
+
+Before the first release, three DNS names have to point at the machine and a `.env` has to exist on
+it at `/opt/barakopress/.env`. The release refuses to start without that file, and refuses again if
+`REVALIDATE_SECRET` is empty, because a stack that comes up with no secret can never be told that
+content changed.
+
+| Name | Serves |
+| --- | --- |
+| `SITE_DOMAIN` | the blog |
+| `API_DOMAIN` | the API, whose delivery endpoints are anonymous by design |
+| `CONSOLE_DOMAIN` | barakoBrew |
+
+Only ports 80 and 443 are published. The API, the console and the site are reachable only through
+Caddy on the compose network.
+
+### What is still manual
+
+Creating the workflow that invalidates the cache. Until that exists in the console, a publish is
+live within the backstop window rather than immediately. That is a degradation rather than a
+breakage, which is the whole reason the backstop exists.
+
 ## Status
 
 Early. The blog works end to end against a real instance. Known gaps, all tracked upstream:
