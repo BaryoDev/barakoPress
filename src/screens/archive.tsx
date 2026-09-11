@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import type { PressConfig } from "../config";
-import { getTerm, listPostsBy, type Post } from "../cms";
-import { renderMarkdown } from "../markdown";
-import { Card } from "./blog-index";
+import type { PressConfig } from "../config.js";
+import { getTerm, listPostsBy, type Post } from "../cms.js";
+import { renderMarkdown } from "../markdown.js";
+import { Card } from "./blog-index.js";
 
 type SlugParams = { params: Promise<{ slug: string }> };
 
@@ -65,7 +65,7 @@ export function createArchiveStaticParams(config: PressConfig, which: "author" |
         const type = config.types[which];
         if (!type) return [];
 
-        const { list } = await import("../delivery");
+        const { list } = await import("../delivery.js");
         try {
             const res = await list(config, type, { pageSize: 100 });
             return res.items

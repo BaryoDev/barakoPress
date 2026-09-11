@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import type { PressConfig } from "../config";
-import { getPost, getPostPreview, listPosts } from "../cms";
-import { PostView } from "./post-view";
+import type { PressConfig } from "../config.js";
+import { getPost, getPostPreview, listPosts } from "../cms.js";
+import { PostView } from "./post-view.js";
 
 type SlugParams = { params: Promise<{ slug: string }> };
 type PreviewParams = SlugParams & { searchParams: Promise<{ preview?: string }> };

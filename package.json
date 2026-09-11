@@ -1,50 +1,76 @@
 {
   "name": "barakopress",
-  "version": "0.1.0",
-  "description": "A configurable blog engine on barakoCMS: server rendered, cached until the CMS says otherwise.",
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
-  },
-  "dependencies": {
-    "@baryodev/barako-client": "0.3.0",
-    "marked": "^18.0.0"
-  },
-  "devDependencies": {
-    "@types/node": "^22.0.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "typescript": "^5.6.0",
-    "vitest": "^4.0.0",
-    "next": "^16.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
-  },
+  "version": "0.2.0",
+  "description": "A configurable blog engine for barakoCMS: Next.js server components, cached until the CMS says otherwise.",
+  "license": "MIT",
+  "author": "Arnel Robles",
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./styles.css": "./src/styles.css",
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "files": [
+    "dist",
     "src",
-    "Dockerfile",
-    "compose.yml",
-    "Caddyfile",
-    "baryovm.release.json",
     "README.md",
     "LICENSE"
   ],
-  "exports": {
-    ".": "./src/index.ts",
-    "./styles.css": "./src/styles.css"
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "build:package": "tsc -p tsconfig.build.json",
+    "watch": "tsc -p tsconfig.build.json --watch",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "dev": "npm run build:package && next dev",
+    "build": "npm run build:package && next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "prepare": "npm run build:package"
+  },
+  "dependencies": {
+    "marked": "^18.0.0"
   },
   "peerDependencies": {
     "next": ">=16",
     "react": ">=19"
   },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "next": "^16.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.0.0"
+  },
+  "keywords": [
+    "barakocms",
+    "headless-cms",
+    "blog",
+    "blog-engine",
+    "nextjs",
+    "react-server-components",
+    "rss",
+    "sitemap"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/BaryoDev/barakoPress.git"
   },
-  "homepage": "https://github.com/BaryoDev/barakoPress",
-  "author": "BaryoDev"
+  "homepage": "https://github.com/BaryoDev/barakoPress#readme",
+  "bugs": {
+    "url": "https://github.com/BaryoDev/barakoPress/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }

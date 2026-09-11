@@ -1,0 +1,151 @@
+# Publishes barakopress to npm on a version tag, using trusted publishing.
+#
+# No NPM_TOKEN. The runner proves who it is to npm over OIDC, npm checks that the request came from
+# this repository and this workflow file, and mints a short-lived credential itself. There is no
+# long-lived secret to leak, to rotate, or to forget to rotate.
+#
+# Provenance is generated automatically under trusted publishing, so there is no --provenance flag
+# here on purpose.
+#
+# One-time setup is in RELEASING.md, including why the very first publish cannot use this workflow.
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # the OIDC token npm verifies. Without it the publish is refused.
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Trusted publishing needs Node 22.14 or later.
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: npm new enough for trusted publishing
+        # Pinned, not @latest. This is the one job that holds id-token: write, so the npm it runs is
+        # a supply-chain input and "whatever was published an hour ago" is not a version. The floor
+        # check below stays as the guard that a future bump of this pin cannot go backwards.
+        run: |
+          npm install -g npm@11.19.1
+          npm --version
+          node -e '
+            const [maj, min, pat] = require("child_process")
+              .execSync("npm --version").toString().trim().split(".").map(Number);
+            const ok = maj > 11 || (maj === 11 && (min > 5 || (min === 5 && pat >= 1)));
+            if (!ok) { console.error("npm 11.5.1 or later is required for trusted publishing"); process.exit(1); }
+          '
+
+      - name: The tag matches the version being published
+        # Only a tag push has a tag to compare, which is why this is conditional. The Publish step
+        # carries the same condition, so the conditions cannot drift apart and leave a manual run
+        # publishing an unchecked version.
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(node -p "require('./package.json').version")
+          if [ "$tag" != "$pkg" ]; then
+            echo "tag v$tag does not match package.json version $pkg"
+            exit 1
+          fi
+          echo "publishing $pkg"
+
+      - run: npm ci
+
+      - name: House style
+        run: |
+          # Same scan as ci.yml: the whole tree minus the generated parts, so a root-level file
+          # cannot slip a dash through.
+          if grep -rlIP '[\x{2014}\x{2013}]' . \
+               --exclude-dir=node_modules --exclude-dir=.next --exclude-dir=.git \
+               --exclude-dir=dist --exclude=package-lock.json --exclude='*.tsbuildinfo' \
+               2>/dev/null; then
+            echo "the files above contain an em dash or en dash"
+            exit 1
+          fi
+
+      - name: The package builds, and has an entry point and types
+        # Before the typecheck, for the reason ci.yml spells out: app/ resolves barakopress through
+        # dist/index.d.ts, so tsc has nothing to find until dist exists. It passed here in the other
+        # order only because npm ci had run prepare, which an --ignore-scripts would take away.
+        run: |
+          npm run build:package
+          test -f dist/index.js
+          test -f dist/index.d.ts
+          test -f src/styles.css
+          # The same extension check as ci.yml, and the same reasoning: see the comment there.
+          if grep -rnoE "(from|import\(|^[[:space:]]*import)[[:space:]]*['\"]\.\.?/[^'\"]*['\"]" src \
+               | grep -vE "\.(js|css|json)['\"]"; then
+            echo "the relative imports above need a file extension"
+            exit 1
+          fi
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: A stranger's app builds against the tarball with no extra configuration
+        # The claim this package makes is "npm install and import it". No transpilePackages, no CMS.
+        run: |
+          npm pack --pack-destination /tmp
+          mv /tmp/barakopress-*.tgz "/tmp/engine-$GITHUB_SHA.tgz"
+          mkdir -p /tmp/strangers-app/app/blog/'[slug]' && cd /tmp/strangers-app
+          cat > package.json <<JSON
+          { "name":"strangers-app","private":true,"type":"module",
+            "dependencies":{"barakopress":"file:/tmp/engine-$GITHUB_SHA.tgz",
+              "next":"^16.0.0","react":"^19.0.0","react-dom":"^19.0.0"},
+            "devDependencies":{"typescript":"^5.6.0","@types/react":"^19.0.0","@types/node":"^22.0.0"} }
+          JSON
+          cat > tsconfig.json <<'JSON'
+          { "compilerOptions": { "target":"ES2022","lib":["dom","ES2022"],"strict":true,"noEmit":true,
+            "module":"esnext","moduleResolution":"bundler","jsx":"preserve","esModuleInterop":true,
+            "skipLibCheck":true,"isolatedModules":true,"plugins":[{"name":"next"}],
+            "paths":{"@/*":["./*"]} },
+            "include":["next-env.d.ts","**/*.ts","**/*.tsx",".next/types/**/*.ts"] }
+          JSON
+          cat > press.config.ts <<'TS'
+          import { defineConfig } from "barakopress";
+          export const config = defineConfig({
+            site: { name: "Stranger", url: "https://stranger.example" },
+            cmsUrl: "http://127.0.0.1:1",
+          });
+          TS
+          printf 'import { createBlogIndex } from "barakopress";\nimport { config } from "@/press.config";\nexport default createBlogIndex(config);\nexport const revalidate = 300;\n' > app/page.tsx
+          printf 'import { createBlogPost } from "barakopress";\nimport { config } from "@/press.config";\nexport default createBlogPost(config);\nexport const revalidate = 300;\n' > "app/blog/[slug]/page.tsx"
+          printf 'import { createSitemap } from "barakopress";\nimport { config } from "@/press.config";\nexport default createSitemap(config);\nexport const revalidate = 300;\n' > app/sitemap.ts
+          cat > app/layout.tsx <<'TSX'
+          import "barakopress/styles.css";
+          export const metadata = { title: "Stranger" };
+          export default function RootLayout({ children }: { children: React.ReactNode }) {
+            return <html lang="en"><body>{children}</body></html>;
+          }
+          TSX
+          npm install --no-audit --no-fund
+          npx next build
+
+      - name: What would go in the tarball
+        run: npm pack --dry-run
+
+      - name: Publish
+        # Tag pushes only, the same condition as the version check above. Without it a
+        # workflow_dispatch run skipped that check and published whatever version package.json held
+        # on whatever branch it was run from.
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: npm publish --access public
+
+      - name: Nothing was published
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          echo "$GITHUB_REF is not a v tag, so every check above ran and the publish was skipped."
+          echo "Push a version tag to publish."

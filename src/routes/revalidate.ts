@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { revalidateTag } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
-import type { PressConfig } from "../config";
+import type { PressConfig } from "../config.js";
 
 /*
  * The endpoint that makes the cache correct.

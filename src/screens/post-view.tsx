@@ -1,7 +1,7 @@
 import Link from "next/link";
-import type { PressConfig } from "../config";
-import { formatDate, type Post } from "../cms";
-import { renderMarkdown } from "../markdown";
+import type { PressConfig } from "../config.js";
+import { formatDate, type Post } from "../cms.js";
+import { renderMarkdown } from "../markdown.js";
 
 /*
  * The rendering, shared by the static screen and the preview screen.

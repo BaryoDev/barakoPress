@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import type { PressConfig } from "../config";
+import type { PressConfig } from "../config.js";
 
 /*
  * Generated, because the Sitemap line has to be an absolute URL and the domain is per deployment.

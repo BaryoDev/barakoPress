@@ -13,15 +13,15 @@ const config: NextConfig = {
    * The site this replaces used output: 'export', which meant an edit was invisible until somebody
    * rebuilt and redeployed. Rendering on the server instead means a publish is live in one request.
    * The cost that usually comes with that, a database read on every page view, is paid off by
-   * lib/cms.ts: every read is cached with no expiry and tagged, and only the signed webhook in
+   * src/cms.ts: every read is cached with no expiry and tagged, and only the signed webhook in
    * app/api/revalidate drops it. Ordinary traffic never reaches Postgres.
    */
+
   /*
-   * The engine ships TypeScript and TSX rather than a compiled bundle, because every consumer is a
-   * Next app that already compiles both. This is what lets them do it, and a consuming site needs
-   * the same line.
+   * No transpilePackages, and its absence is the point. This app consumes the engine by its package
+   * name, the same way a client site does, so if the published package needed a line of consumer
+   * config to compile, this file would need it too.
    */
-  transpilePackages: ["barakopress"],
 
   images: {
     // The CMS serves images from its own host with on-demand width variants, so Next's optimiser
