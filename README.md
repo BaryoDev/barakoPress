@@ -19,9 +19,13 @@ request  ->  Next cache  ->  HTML                        (no database)
 publish  ->  signed webhook  ->  revalidate  ->  next render reads once
 ```
 
-Every read in `lib/delivery.ts` is tagged `cms` and cached with no expiry. The only thing that drops
-that cache is `POST /api/revalidate`, which barakoCMS calls through a Webhook action when a post is
-published. Steady state is zero database reads.
+Every read in `lib/delivery.ts` is tagged `cms`. `POST /api/revalidate` drops that tag the moment
+barakoCMS says something changed, through a Webhook action on publish, so a publish is live in one
+request and the steady state is no database reads.
+
+Each read also carries a 300 second backstop. That is not for correctness, it is for the case where
+somebody deploys and never creates the workflow: without it their blog would be empty forever and
+nothing would say why. With it, a missing webhook degrades publishing from instant to a few minutes.
 
 **The cache invalidation is configuration, not code.** In barakoBrew: a workflow on the `post`
 content type, trigger `Published`, one Webhook action with the URL and a shared secret. Nothing is
@@ -44,7 +48,7 @@ delivery cannot be replayed later. An unsigned, missigned or stale delivery gets
 `REVALIDATE_SECRET` is unset the endpoint answers 503 and purges nothing, because an open
 cache-purge endpoint is a free denial of service.
 
-## Two behaviours that were measured, not assumed
+## Three behaviours that were measured, not assumed
 
 **Next serves one stale response after a purge.** The first request after a publish gets the
 previous render while the new one builds in the background. So the webhook requests the main pages
@@ -54,6 +58,11 @@ first request after a publish is fresh on the home page, the feed and the sitema
 **`revalidateTag` needs `{ expire: 0 }`, not a named profile.** Next 16 made the second argument
 mandatory. Passing `"max"` left the prerendered sitemap stale indefinitely. The sitemap also needs
 its own `revalidatePath`, because a metadata route does not follow the data tag on its own.
+
+**The home page and the sitemap are prerendered at build.** The image is built with no CMS
+reachable, deliberately, so it is not tied to one instance. That means both ship baked empty, which
+is what the backstop above rescues. Verified with a short window: no webhook was ever fired and the
+page filled itself in.
 
 ## Why this does not use the published client
 
