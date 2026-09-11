@@ -38,6 +38,14 @@ deployed to change it.
 3. Add a Webhook action with `Url` set to `https://your-site/api/revalidate` and `Secret` set to the
    same value.
 
+**If your site sets `trailingSlash: true`, the webhook URL needs the slash.** Next redirects
+`/api/revalidate` to `/api/revalidate/` with a 308, and barakoCMS does not follow redirects on a
+webhook, deliberately: following one was an SSRF hole, because the guard checked only the first
+hop. So a URL without the slash gets a 308, the delivery is recorded as failed, it retries five
+times and gives up, and the cache is never purged. The site keeps working because of the backstop,
+so the only symptom is that publishing feels slow. The verify step in `baryovm.release.json`
+catches this: it asserts an unsigned POST answers 401, and a 308 fails it.
+
 barakoCMS refuses to sign a delivery to an `http://` URL unless `Webhooks:AllowInsecureSignedUrls`
 is on, which is for a loopback receiver in a lab. In production the URL is https, so this is not in
 your way.
