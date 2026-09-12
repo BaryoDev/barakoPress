@@ -137,15 +137,49 @@ jobs:
       - name: What would go in the tarball
         run: npm pack --dry-run
 
+      - name: Is this version already on the registry
+        id: registry
+        # The registry is the authority on what has been published, not this workflow's history.
+        #
+        # Two cases where it already is. 0.2.0 was published by hand, because npm cannot attach a
+        # trusted publisher to a package that does not exist yet, so the tag for it arrives after the
+        # publish. And a run that uploaded the tarball and then failed on something after it would,
+        # on a re-run, fail again on a version npm will not let anyone replace.
+        #
+        # Both used to mean a red release for a reason that is not a problem. Every check above still
+        # runs; only the upload is skipped, and the step below says so out loud rather than leaving a
+        # green run that looks like it published something.
+        run: |
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          # A 200 on the exact version is the only answer treated as "already there". Anything else,
+          # a 404 or a registry having a bad minute, falls through to the publish, where npm itself
+          # refuses a duplicate. The registry is the guard; this is the explanation.
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --retry 3 --retry-delay 2 \
+                   "https://registry.npmjs.org/$name/$version" || echo 000)
+          echo "registry answered $code for $name@$version"
+          if [ "$code" = "200" ]; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish
         # Tag pushes only, the same condition as the version check above. Without it a
         # workflow_dispatch run skipped that check and published whatever version package.json held
         # on whatever branch it was run from.
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && steps.registry.outputs.already != 'true'
         run: npm publish --access public
 
       - name: Nothing was published
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') || steps.registry.outputs.already == 'true' }}
         run: |
-          echo "$GITHUB_REF is not a v tag, so every check above ran and the publish was skipped."
-          echo "Push a version tag to publish."
+          if [ "${{ steps.registry.outputs.already }}" = "true" ]; then
+            name=$(node -p "require('./package.json').name")
+            version=$(node -p "require('./package.json').version")
+            echo "::notice::$name@$version is already on the registry. Every check above ran and the upload was skipped."
+            echo "The registry will not replace a published version. Bump the version to publish a new one."
+          else
+            echo "$GITHUB_REF is not a v tag, so every check above ran and the publish was skipped."
+            echo "Push a version tag to publish."
+          fi

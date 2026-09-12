@@ -16,6 +16,16 @@ short-lived credential itself. Provenance is attached automatically, which is wh
 
 ## One time, before any of that works
 
+**0.2.0 is published.** It went out by hand on 12 September 2026 from `fb4640a`, for the reason
+below, and the steps in this section are done. They are kept because they are the record of why the
+first one was different, and because the trusted-publisher settings have to be re-entered if
+`release.yml` is ever renamed.
+
+One ordering point that cost a red run to learn, and is the reason `release.yml` now asks the
+registry before uploading: the tag for a hand-published version has to be pushed *after* the publish,
+and pushing it runs the whole workflow. The workflow handles that now. It runs every check, sees the
+version is already on the registry, skips the upload and says so.
+
 **The first publish cannot use trusted publishing.** npmjs.com only lets you attach a trusted
 publisher to a package that already exists, and `barakopress` does not exist yet, so there is no
 settings page to configure. That is a known npm limitation, tracked at
@@ -68,6 +78,12 @@ After that, `npm logout` if you like. Nothing on any machine needs npm credentia
 - publish on an npm older than 11.5.1, which cannot do trusted publishing and would fall back to
   asking for a token that is not there. The workflow installs a pinned npm rather than `@latest`,
   because that job is the one holding `id-token: write`
+- publish a version the registry already has. It checks before uploading, so a tag pushed for a
+  hand-published version, and a re-run of a job that uploaded and then failed on a later step, both
+  run every check and then stop at the upload instead of failing on something npm would refuse
+  anyway. The run says the version is already on the registry rather than going green as though it
+  published. It does not say which of the two it was, and cannot: a 200 is the only signal, and
+  nothing in it distinguishes a hand publish from an upload an earlier run already made
 
 The consumer test lives in `ci.yml` rather than here, because it needs a CMS and a content model: it
 installs the packed tarball into a separate app with a deliberately non-blueprint model and asserts
