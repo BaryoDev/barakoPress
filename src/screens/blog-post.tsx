@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import type { PressConfig } from "../config.js";
 import { getPost, getPostPreview, listPosts } from "../cms.js";
+import { listRelated } from "../related.js";
 import { PostView } from "./post-view.js";
 
 type SlugParams = { params: Promise<{ slug: string }> };
@@ -22,7 +23,8 @@ export function createBlogPost(config: PressConfig) {
         const { slug } = await params;
         const post = await getPost(config, slug);
         if (!post) notFound();
-        return <PostView config={config} post={post} />;
+        const related = await listRelated(config, post);
+        return <PostView config={config} post={post} related={related} />;
     };
 }
 
@@ -35,7 +37,12 @@ export function createBlogPostPreview(config: PressConfig) {
         const post = preview ? await getPostPreview(config, slug, preview) : await getPost(config, slug);
         if (!post) notFound();
 
-        return <PostView config={config} post={post} preview={Boolean(preview)} />;
+        // Related reads published content, so it is the same cached call here. A preview that
+        // hides the band would not be showing the editor the page they are about to publish.
+        const related = await listRelated(config, post);
+        return (
+            <PostView config={config} post={post} preview={Boolean(preview)} related={related} />
+        );
     };
 }
 

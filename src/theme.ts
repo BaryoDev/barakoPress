@@ -181,3 +181,23 @@ export function proseCss(theme: PressTheme, scope: string): string {
         `${s} th{background:${css(c.pageBg)};color:${css(c.ink)};font-weight:700;white-space:nowrap}`,
     ].join("");
 }
+
+/*
+ * Hover and focus for the related cards.
+ *
+ * These cannot be inline: a style attribute has no `:hover`, no `:focus-visible` and no media
+ * query. It is the same generated-from-tokens trick the prose stylesheet uses, for the same
+ * reason, and it stays small on purpose. The handoff's motion contract is deliberately minimal,
+ * and the lift is the only movement on this part of the page.
+ */
+export function relatedCss(theme: PressTheme, scope: string): string {
+    const c = theme.colors;
+    const s = `.${scope}`;
+
+    return [
+        `${s}{transition:border-color .2s ease,transform .2s ease}`,
+        `${s}:hover{border-color:${css(c.accent)};transform:translateY(-2px)}`,
+        `${s}:focus-visible{outline:2px solid ${css(c.accent)};outline-offset:2px}`,
+        `@media (prefers-reduced-motion: reduce){${s}{transition:none}${s}:hover{transform:none}}`,
+    ].join("");
+}

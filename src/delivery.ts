@@ -132,3 +132,56 @@ export async function bySlugPreview(
         `/api/public/${encodeURIComponent(type)}/${encodeURIComponent(slug)}?preview=${encodeURIComponent(token)}`,
     );
 }
+
+/*
+ * Semantic search, from the optional BarakoCMS.AI module.
+ *
+ * Optional is the whole design constraint. A CMS without the module answers 404 on this route, a
+ * type that is not publicly deliverable answers 404, and a module installed but not enabled
+ * answers 200 with an empty list, because it ships inert until `Ai:Enabled`. All three are normal
+ * and none of them is an error, so this returns an empty list for every one of them rather than
+ * throwing. A post page must not fail because a module the site never installed is not there.
+ */
+export interface SemanticHit {
+    contentType: string;
+    /** Nullable in the API. A hit with no slug is not linkable, so callers drop it. */
+    slug?: string;
+    title: string;
+    /** Cosine similarity, rounded to 4 decimals by the API. Anything under 0.4 is already dropped. */
+    score: number;
+}
+
+export interface SemanticResponse {
+    results: SemanticHit[];
+    count: number;
+    query: string;
+}
+
+/** The API clamps this itself. It is repeated here so a caller asking for 50 sends a legal request. */
+const MAX_SEMANTIC_LIMIT = 20;
+
+export async function semantic(
+    config: PressConfig,
+    type: string,
+    query: string,
+    limit: number,
+): Promise<SemanticHit[]> {
+    const q = query.trim();
+    // The API answers empty under two characters. Not spending a request to be told that.
+    if (q.length < 2) return [];
+
+    const params = new URLSearchParams({
+        q,
+        limit: String(Math.max(1, Math.min(limit, MAX_SEMANTIC_LIMIT))),
+    });
+
+    try {
+        const res = await get<SemanticResponse>(
+            config,
+            `/api/public/${encodeURIComponent(type)}/semantic?${params}`,
+        );
+        return Array.isArray(res.results) ? res.results : [];
+    } catch {
+        return [];
+    }
+}
