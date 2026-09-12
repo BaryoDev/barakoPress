@@ -1,6 +1,6 @@
 {
   "name": "barakopress",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A configurable blog engine for barakoCMS: Next.js server components, cached until the CMS says otherwise.",
   "license": "MIT",
   "author": "Arnel Robles",
