@@ -186,6 +186,23 @@ paragraphs belongs to the block model, which is issue #6, because only the body 
 Read time is derived from the body at 200 words a minute, with fenced code blocks excluded, so there
 is no field to fill in and nothing to keep in sync.
 
+### Related posts, if the CMS has the AI module
+
+`listRelated` asks `BarakoCMS.AI` for the posts closest to this one and hands them to `PostView`,
+which renders a band of cards with the similarity score on each. `createBlogPost` already does the
+call, so a site using the factory gets it for nothing.
+
+Nothing about it is required. A CMS without the module answers 404, a type that is not publicly
+deliverable answers 404, a module installed but not enabled answers an empty list, and an
+unreachable CMS throws. All four end the same way: an empty array, no band, no heading, no empty
+state. The reader of a site without the module never learns the feature exists.
+
+The post being read is its own closest match, so the fetch asks for more than it renders and drops
+itself. A hit with no slug is dropped too, because there is nothing to link it to.
+
+Turning it on is the CMS's job, not this package's: `dotnet add package BarakoCMS.AI`, point
+`Ai:EmbeddingBaseUrl` at an Ollama instance, set `Ai:Enabled`, and index the type.
+
 ## The caching design, which is the whole point
 
 A static site reads content at build time, so an edit is invisible until someone rebuilds and

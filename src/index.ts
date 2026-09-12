@@ -26,7 +26,7 @@
  */
 
 export { defineConfig, includesFor } from "./config.js";
-export { DEFAULT_THEME, resolveTheme, proseCss } from "./theme.js";
+export { DEFAULT_THEME, resolveTheme, proseCss, relatedCss } from "./theme.js";
 export type {
     PressTheme,
     PressThemeInput,
@@ -46,8 +46,18 @@ export type {
     SiteIdentity,
 } from "./config.js";
 
-export { list, bySlug, bySlugPreview } from "./delivery.js";
-export type { PublicContent, Seo, ListOptions, Paged } from "./delivery.js";
+export { list, bySlug, bySlugPreview, semantic } from "./delivery.js";
+export type {
+    PublicContent,
+    Seo,
+    ListOptions,
+    Paged,
+    SemanticHit,
+    SemanticResponse,
+} from "./delivery.js";
+
+export { listRelated, pickRelated } from "./related.js";
+export type { RelatedPost } from "./related.js";
 
 export {
     listPosts,

@@ -4,7 +4,8 @@ import type { PressConfig } from "../config.js";
 import { formatDate, type Post } from "../cms.js";
 import { renderMarkdown } from "../markdown.js";
 import { initials, readingMinutes } from "../reading-time.js";
-import { proseCss } from "../theme.js";
+import type { RelatedPost } from "../related.js";
+import { proseCss, relatedCss } from "../theme.js";
 
 /*
  * The post page, shared by the static screen and the preview screen.
@@ -28,6 +29,8 @@ import { proseCss } from "../theme.js";
 
 /** Scopes the generated body stylesheet. Prefixed so it cannot collide with a consumer's own `.prose`. */
 const PROSE_CLASS = "bp-prose";
+/** Same reason as PROSE_CLASS: a hover rule needs a selector, and a style attribute has none. */
+const RELATED_CLASS = "bp-related-card";
 
 export interface PostViewProps {
     config: PressConfig;
@@ -48,6 +51,13 @@ export interface PostViewProps {
     headerBackdrop?: ReactNode;
     beforeBody?: ReactNode;
     afterBody?: ReactNode;
+    /*
+     * Computed by `listRelated`, passed in rather than fetched here, because this component also
+     * serves the preview screen and a draft has no business warming a shared cache. An empty list
+     * renders no band at all: no heading, no empty state. A site whose CMS has no AI module gets
+     * an empty list every time and never sees that this feature exists, which is the point.
+     */
+    related?: RelatedPost[];
 }
 
 export function PostView({
@@ -57,6 +67,7 @@ export function PostView({
     headerBackdrop,
     beforeBody,
     afterBody,
+    related = [],
 }: PostViewProps) {
     const t = config.theme;
     const c = t.colors;
@@ -75,7 +86,11 @@ export function PostView({
 
     return (
         <div style={{ background: c.pageBg, color: c.ink, fontFamily: t.fonts.body }}>
-            <style dangerouslySetInnerHTML={{ __html: proseCss(t, PROSE_CLASS) }} />
+            <style
+                dangerouslySetInnerHTML={{
+                    __html: proseCss(t, PROSE_CLASS) + relatedCss(t, RELATED_CLASS),
+                }}
+            />
 
             {preview && (
                 <div style={{ ...band, paddingTop: "16px", background: c.surface }}>
@@ -282,6 +297,127 @@ export function PostView({
                     {afterBody}
                 </div>
             </article>
+
+            {related.length > 0 && (
+                <section
+                    style={{
+                        ...band,
+                        paddingTop: "52px",
+                        paddingBottom: "60px",
+                        background: c.surface,
+                        borderTop: `1px solid ${c.hairline}`,
+                    }}
+                >
+                    <div style={{ maxWidth: t.layout.wide, margin: "0 auto" }}>
+                        <div
+                            style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                alignItems: "baseline",
+                                gap: "12px",
+                            }}
+                        >
+                            <h2
+                                style={{
+                                    margin: 0,
+                                    fontFamily: t.fonts.heading,
+                                    fontSize: "24px",
+                                    fontWeight: 600,
+                                    letterSpacing: "-.025em",
+                                    color: c.ink,
+                                }}
+                            >
+                                Related
+                            </h2>
+                            {/* Says how the list was made, because a computed list that looks
+                                hand-picked invites the reader to assume somebody chose. */}
+                            <span
+                                style={{
+                                    fontFamily: t.fonts.mono,
+                                    fontSize: "11.5px",
+                                    color: c.muted,
+                                }}
+                            >
+                                cosine similarity, computed on load, not curated
+                            </span>
+                        </div>
+
+                        <div
+                            style={{
+                                marginTop: "20px",
+                                display: "grid",
+                                gridTemplateColumns: "repeat(auto-fit, minmax(min(260px, 100%), 1fr))",
+                                gap: "14px",
+                            }}
+                        >
+                            {related.map((r) => (
+                                <Link
+                                    key={r.slug}
+                                    href={`${config.routes.post}/${r.slug}`}
+                                    className={RELATED_CLASS}
+                                    style={{
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        gap: "10px",
+                                        minWidth: 0,
+                                        padding: "20px",
+                                        borderRadius: t.radii.panel,
+                                        border: `1px solid ${c.hairline}`,
+                                        background: c.pageBg,
+                                    }}
+                                >
+                                    <span
+                                        style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "10px",
+                                            fontFamily: t.fonts.mono,
+                                            fontSize: "11px",
+                                            color: c.muted,
+                                        }}
+                                    >
+                                        <span
+                                            style={{
+                                                padding: "3px 8px",
+                                                borderRadius: t.radii.pill,
+                                                background: c.accentTint,
+                                                color: c.accentInk,
+                                                fontVariantNumeric: "tabular-nums",
+                                            }}
+                                        >
+                                            {r.score.toFixed(4)}
+                                        </span>
+                                        {r.publishedAt && formatDate(config, r.publishedAt)}
+                                    </span>
+                                    <span
+                                        style={{
+                                            fontFamily: t.fonts.heading,
+                                            fontSize: "17px",
+                                            fontWeight: 600,
+                                            lineHeight: 1.3,
+                                            letterSpacing: "-.02em",
+                                            color: c.ink,
+                                        }}
+                                    >
+                                        {r.title}
+                                    </span>
+                                    {r.excerpt && (
+                                        <span
+                                            style={{
+                                                fontSize: "14px",
+                                                lineHeight: 1.6,
+                                                color: c.secondaryInk,
+                                            }}
+                                        >
+                                            {r.excerpt}
+                                        </span>
+                                    )}
+                                </Link>
+                            ))}
+                        </div>
+                    </div>
+                </section>
+            )}
         </div>
     );
 }
