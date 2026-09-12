@@ -36,7 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                         RSS
                     </a>
                 </nav>
-                <main className="shell">{children}</main>
+                <main>{children}</main>
                 <footer className="foot">
                     <p className="meta">
                         Published with{" "}

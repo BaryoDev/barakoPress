@@ -26,7 +26,7 @@ export function createArchive(config: PressConfig, which: "author" | "category")
         if (!term || !posts) notFound();
 
         return (
-            <>
+            <div className="shell">
                 <p className="meta">
                     <Link href="/">Back</Link>
                 </p>
@@ -54,7 +54,7 @@ export function createArchive(config: PressConfig, which: "author" | "category")
                 {posts.map((p: Post) => (
                     <Card key={p.id} config={config} post={p} />
                 ))}
-            </>
+            </div>
         );
     };
 }

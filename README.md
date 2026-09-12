@@ -137,12 +137,54 @@ for a post type with no such field.
 | `locale` | `en-GB` | Passed to `toLocaleDateString` |
 | `cmsUrl` | `CMS_URL`, or `http://localhost:5005` | Where the CMS is, from this server |
 | `tenant` | `CMS_TENANT` | Tenant slug, for a multi-tenant deployment |
+| `theme` | the barakoCMS palette | Colours, faces, radii and column widths. See below |
 
 **Identity is build time.** The index, the feed, the sitemap and robots are prerendered, so anything
 `press.config.ts` reads from `process.env` is baked when you build, not when the server starts. Write
 per-site values as literals in that file. Only per-environment values (`CMS_URL`,
 `REVALIDATE_SECRET`) come from the environment, and neither of those is rendered. Getting this wrong
 is how a client site ships with the vendor's name in its masthead.
+
+### The look is configuration too
+
+The post screen styles itself from `config.theme`, inline, so it renders correctly whether or not you
+import `barakopress/styles.css`. That import is optional and a screen that needs it renders unstyled
+for anyone who skips it, which is exactly what happened: barakocms.com never imported it, got an
+article at x=0 on a blank page, and stopped using the screen at all.
+
+```ts
+export const config = defineConfig({
+  site:  { name: "Client Three", url: "https://clientthree.example" },
+  theme: { colors: { accent: "#008060" }, layout: { prose: "68ch" } },
+});
+```
+
+Each group merges over the defaults on its own, so setting one colour keeps the other seventeen. The
+groups are `colors` (18 values), `fonts` (`heading`, `body`, `mono`), `radii` (`panel`, `control`,
+`pill`) and `layout` (`prose`, `wide`, `gutter`). `DEFAULT_THEME` is exported if you want to read the
+values or build a palette from them.
+
+Loading the faces is the site's job, not the engine's. The default theme names Sora, Manrope and
+JetBrains Mono with real fallback stacks, and a `<link>` in your root layout is what makes them
+arrive.
+
+**Three slots**, for what belongs to the site rather than the engine:
+
+```tsx
+<PostView
+  config={config}
+  post={post}
+  headerBackdrop={<Bean />}      {/* decoration behind the header band */}
+  beforeBody={<RoleStrip />}     {/* a wide band under the header */}
+  afterBody={<Newsletter />}     {/* the foot of the reading column */}
+/>
+```
+
+They are not a way to compose a post out of arbitrary sections. Anything that has to sit between two
+paragraphs belongs to the block model, which is issue #6, because only the body knows where it goes.
+
+Read time is derived from the body at 200 words a minute, with fenced code blocks excluded, so there
+is no field to fill in and nothing to keep in sync.
 
 ## The caching design, which is the whole point
 

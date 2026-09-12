@@ -14,6 +14,8 @@
  * `createBlogIndex(config)` and exports the result. One import, one call, full control.
  */
 
+import { resolveTheme, type PressTheme, type PressThemeInput } from "./theme.js";
+
 export interface TypeNames {
     /** The content type holding posts. */
     post: string;
@@ -84,6 +86,8 @@ export interface PressConfig {
     cmsUrl: string;
     /** Tenant slug, for a multi-tenant deployment. */
     tenant?: string;
+    /** What the screens look like. See theme.ts for why appearance is config and not a stylesheet. */
+    theme: PressTheme;
 }
 
 export type PressConfigInput = {
@@ -92,7 +96,13 @@ export type PressConfigInput = {
     routes?: Partial<RouteMap>;
     site?: Partial<SiteIdentity>;
     pageSizes?: Partial<PageSizes>;
-} & Partial<Omit<PressConfig, "types" | "fields" | "routes" | "site" | "pageSizes">>;
+    /*
+     * Nested partials, so a site overriding one colour keeps the other seventeen. A flat
+     * Partial<PressTheme> would take the whole colours object or none of it, which in practice
+     * means every consumer pastes the full palette to change an accent.
+     */
+    theme?: PressThemeInput;
+} & Partial<Omit<PressConfig, "types" | "fields" | "routes" | "site" | "pageSizes" | "theme">>;
 
 /** The `blog` blueprint, which is what `POST /api/content-types/blueprints/blog` creates. */
 const BLOG_BLUEPRINT: Pick<PressConfig, "types" | "fields"> = {
@@ -140,6 +150,7 @@ export function defineConfig(input: PressConfigInput & { site: SiteIdentity }): 
         locale: input.locale ?? "en-GB",
         cmsUrl: trimSlash(input.cmsUrl ?? process.env.CMS_URL ?? "http://localhost:5005"),
         tenant: input.tenant ?? process.env.CMS_TENANT ?? undefined,
+        theme: resolveTheme(input.theme),
     };
 }
 
