@@ -1,6 +1,6 @@
 import Link from "next/link";
-import type { PressConfig } from "../config";
-import { formatDate, listPosts, type Post } from "../cms";
+import type { PressConfig } from "../config.js";
+import { formatDate, listPosts, type Post } from "../cms.js";
 
 /*
  * The post list.

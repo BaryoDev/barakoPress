@@ -25,7 +25,7 @@
  * router.
  */
 
-export { defineConfig, includesFor } from "./config";
+export { defineConfig, includesFor } from "./config.js";
 export type {
     PressConfig,
     PressConfigInput,
@@ -34,10 +34,10 @@ export type {
     RouteMap,
     PageSizes,
     SiteIdentity,
-} from "./config";
+} from "./config.js";
 
-export { list, bySlug, bySlugPreview } from "./delivery";
-export type { PublicContent, Seo, ListOptions, Paged } from "./delivery";
+export { list, bySlug, bySlugPreview } from "./delivery.js";
+export type { PublicContent, Seo, ListOptions, Paged } from "./delivery.js";
 
 export {
     listPosts,
@@ -47,23 +47,23 @@ export {
     getTerm,
     toPost,
     formatDate,
-} from "./cms";
-export type { Post, Ref, Term } from "./cms";
+} from "./cms.js";
+export type { Post, Ref, Term } from "./cms.js";
 
-export { renderMarkdown, isSafeHref, anchor } from "./markdown";
+export { renderMarkdown, isSafeHref, anchor } from "./markdown.js";
 
-export { createBlogIndex, Card } from "./screens/blog-index";
+export { createBlogIndex, Card } from "./screens/blog-index.js";
 export {
     createBlogPost,
     createBlogPostPreview,
     createPostMetadata,
     createPostStaticParams,
-} from "./screens/blog-post";
-export { createArchive, createArchiveStaticParams } from "./screens/archive";
-export { PostView } from "./screens/post-view";
+} from "./screens/blog-post.js";
+export { createArchive, createArchiveStaticParams } from "./screens/archive.js";
+export { PostView } from "./screens/post-view.js";
 
-export { createRevalidateRoute } from "./routes/revalidate";
-export type { RevalidateOptions } from "./routes/revalidate";
-export { createFeed } from "./routes/feed";
-export { createSitemap } from "./routes/sitemap";
-export { createRobots } from "./routes/robots";
+export { createRevalidateRoute } from "./routes/revalidate.js";
+export type { RevalidateOptions } from "./routes/revalidate.js";
+export { createFeed } from "./routes/feed.js";
+export { createSitemap } from "./routes/sitemap.js";
+export { createRobots } from "./routes/robots.js";

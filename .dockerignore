@@ -11,3 +11,4 @@ README.md
 baryovm.release.json
 Dockerfile
 .dockerignore
+dist

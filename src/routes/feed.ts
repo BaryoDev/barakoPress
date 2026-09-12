@@ -1,5 +1,5 @@
-import type { PressConfig } from "../config";
-import { listPosts } from "../cms";
+import type { PressConfig } from "../config.js";
+import { listPosts } from "../cms.js";
 
 /*
  * RSS, built here rather than proxied from the CMS.

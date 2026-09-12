@@ -33,18 +33,52 @@ jobs:
       - name: House style
         run: |
           # An em dash or en dash in anything that ships. A local hook catches this while writing;
-          # this catches it when the hook was not running.
-          if grep -rlP '[\x{2014}\x{2013}]' --include='*.ts' --include='*.tsx' --include='*.md' \
-               --include='*.css' --include='*.yml' src app README.md 2>/dev/null; then
+          # this catches it when the hook was not running. The scan is the whole tree minus the
+          # generated parts, because the earlier version listed src, app, .github and three markdown
+          # files, so next.config.ts, press.config.ts, the Dockerfile, compose.yml and AGENTS.md
+          # were never read, and those are as likely to carry prose. -I so a binary asset added to
+          # public/ later cannot fail this on a stray byte pair.
+          if grep -rlIP '[\x{2014}\x{2013}]' . \
+               --exclude-dir=node_modules --exclude-dir=.next --exclude-dir=.git \
+               --exclude-dir=dist --exclude=package-lock.json --exclude='*.tsbuildinfo' \
+               2>/dev/null; then
             echo "the files above contain an em dash or en dash"
             exit 1
           fi
+
+      - name: The package builds, and has an entry point and types
+        # Before the typecheck, not after: app/ imports barakopress by name, so it resolves through
+        # dist/index.d.ts like a consumer does, and tsc cannot find it until this has run. The
+        # prepare script means npm ci has already done it; this asserts what came out.
+        run: |
+          npm run build:package
+          test -f dist/index.js
+          test -f dist/index.d.ts
 
       - name: Typecheck
         run: npx tsc --noEmit
 
       - name: Dependency audit
         run: npm audit --audit-level=high
+
+      - name: Relative imports carry a file extension
+        # The package is type: module, so `./config.js` is the specifier ESM asks for and `./config`
+        # is not. A default Next build does not care: measured on 16.3.4, the extensionless package
+        # builds and serves identically under Turbopack and webpack, because Next's webpack config
+        # sets fullySpecified: false for .m?js. What does care is a consumer on webpack with
+        # experimental.fullySpecified: true, which fails on the extensionless build and passes on
+        # this one, and Node's own resolver under serverExternalPackages, which refuses the
+        # extensionless dist at dist/config (it refuses this build too, at next/link, so the
+        # extensions are necessary there and not sufficient). So this keeps one form in the tree.
+        #
+        # -o so the extension filter applies per specifier and not per line, either quote because
+        # nothing here enforces one, and a bare `import "./x"` counts: all three were missed before.
+        run: |
+          if grep -rnoE "(from|import\(|^[[:space:]]*import)[[:space:]]*['\"]\.\.?/[^'\"]*['\"]" src \
+               | grep -vE "\.(js|css|json)['\"]"; then
+            echo "the relative imports above need a file extension"
+            exit 1
+          fi
 
       - name: The reference app builds with no CMS reachable
         # The image is built without a CMS on purpose, so this is the real case, not a degraded one.
@@ -66,6 +100,7 @@ jobs:
       - run: npm ci
       - name: Pack the engine
         run: |
+          # prepare builds dist on npm ci, and again before the tarball is made, so it is never stale.
           npm pack --pack-destination /tmp
           # A changing name, because npm caches a file: tarball by path and version. Reinstalling
           # the same name silently serves the old code, which once made a fixed bug look unfixed.
@@ -138,7 +173,9 @@ jobs:
           JSON
           cat > next.config.ts <<'TS'
           import type { NextConfig } from "next";
-          const config: NextConfig = { transpilePackages: ["barakopress"] };
+          // No transpilePackages, and its absence is the assertion: the published package compiles
+          // itself, so a consumer installs it and configures nothing.
+          const config: NextConfig = {};
           export default config;
           TS
           cat > tsconfig.json <<'JSON'

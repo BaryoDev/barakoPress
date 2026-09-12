@@ -1,4 +1,4 @@
-import type { PressConfig } from "./config";
+import type { PressConfig } from "./config.js";
 
 /*
  * The delivery layer: typed calls against barakoCMS's public API.

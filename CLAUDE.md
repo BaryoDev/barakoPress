@@ -39,10 +39,57 @@ src/screens/*.tsx    factories that take config and return a page component
 src/routes/*.ts      factories for the feed, sitemap, robots and the revalidate endpoint
 src/styles.css       Signal tokens. A consumer may take the markup and none of this
 app/                 the reference deployment: thin re-exports
+dist/                the published package: what tsc makes of src. Never edited, never committed
+tsconfig.build.json  the package build. The repo's tsconfig is typecheck only
 ```
 
 The screens are in `src/screens`, not `src/pages`, because Next claims `pages` and `app` as router
 directories and a `src/pages` inside a transpiled package is read as a second router.
+
+`app/` imports `barakopress` by name and resolves through `dist`, the same as a client site, so
+`dist` has to exist before the reference app builds. `npm run dev` and `npm run build` build the
+package first for that reason; `npm run watch` is the loop while changing `src/`.
+
+## 2a. The build, and why there is one
+
+The package ships compiled JS plus declarations. It used to ship TypeScript and point `exports` at
+`src/index.ts`, which worked only because every consumer added `transpilePackages: ["barakopress"]`.
+That is a fine bargain for one site the author owns and a bad one for a published package: it makes
+the consumer's build configuration part of the install instructions, it makes our `strict` settings
+and our TS version their problem, and a consumer with `jsx: "preserve"` and no transpile line gets a
+parse error out of `node_modules`. Compiling here costs one build step in this repository and removes
+a step from every consumer, forever. That is the trade, and it is why the decision went this way.
+
+What the build may not do, because of what is exported:
+
+- **No bundler.** `tsc` transpiles per file, one in and one out. The module graph is the contract
+  here: `next/*` and `react` must stay external so the consumer's copies are what run, and the
+  export names are what a consumer writes in its own route files. A bundler that inlines or reorders
+  that hands Next something it cannot wire up. It also keeps the door open for the first
+  `"use client"` or `"use server"` file. There is no directive anywhere in `src` today, so that half
+  is a rule for the file that adds one rather than a thing currently breaking: a directive is a file
+  level marker Next reads off the module it resolves, and a bundler is free to move it.
+- **No minifying or mangling.** Same reason. An export name is load-bearing, and a directive would
+  be.
+- **Every relative import carries `.js`, and the reason is narrower than it looks.** The package is
+  `type: module`, so `./config.js` is the specifier ESM asks for and `./config` is not, and `tsc`
+  never rewrites a specifier. What this does **not** buy is a default Next build. Measured on Next
+  16.3.4: strip every extension, pack, install into a fresh app with no `transpilePackages`, and the
+  build exits 0 under Turbopack and under `--webpack`, and serves the same pages. Next's webpack
+  config sets `fullySpecified: false` for `.m?js`, so webpack does not ask. Two resolvers do ask. A
+  consumer on webpack with `experimental.fullySpecified: true` fails on the extensionless build
+  (`Did you mean 'config.js'?`) and builds clean on this one. Node's own resolver, reached when a
+  consumer sets `serverExternalPackages: ["barakopress"]`, refuses the extensionless `dist` at
+  `dist/config`, and refuses this one too at `next/link`, which has no exports map: extensions are
+  necessary there and not sufficient, so that configuration is broken either way today. CI greps for
+  an extensionless specifier to hold the form. `nodenext` would enforce it at compile time, but it
+  refuses `next/link` for that same missing exports map.
+
+`src` ships alongside `dist` so the source maps resolve in a consumer's stack trace. Nothing imports
+it: `exports` points at `dist`, and `./styles.css` is the one file served from `src`.
+
+Publishing is in `RELEASING.md`. `prepare` runs the build, so `npm pack` and `npm publish` cannot
+ship a stale `dist`.
 
 ## 3. The rules that came from being wrong
 
@@ -97,10 +144,19 @@ The engine's own build proves almost nothing. What proves something:
 - build the reference app **with no CMS reachable**, which is how the image is built
 - pack the tarball, install it into a separate app, and build that
 - do it against a content model that is not the blueprint
+- do it with **no `transpilePackages`** in the consumer, which is the claim the package makes
 
 When iterating locally, give each packed tarball a different name. npm caches a `file:` tarball by
 path and version, so reinstalling the same name serves the old code, which once made a fixed bug
 look unfixed.
+
+A consumer test that only typechecks proves less than it looks like it does. `next build` resolves
+`dist` through Turbopack or webpack and then renders with it, and `tsc` does neither. Build the
+consumer, and start it and read a page if the change touched rendering.
+
+Claims about a resolver are cheap to make and cheap to check, so check them. Turbopack, webpack and
+Node do not agree about extensionless specifiers, and which of them cares today is one `next build`
+away: strip, pack, install, build, read the exit code.
 
 ## 7. Style
 

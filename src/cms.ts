@@ -1,6 +1,6 @@
-import type { PressConfig } from "./config";
-import { includesFor } from "./config";
-import { bySlug, bySlugPreview, list, type PublicContent, type Seo } from "./delivery";
+import type { PressConfig } from "./config.js";
+import { includesFor } from "./config.js";
+import { bySlug, bySlugPreview, list, type PublicContent, type Seo } from "./delivery.js";
 
 export type { Seo };
 

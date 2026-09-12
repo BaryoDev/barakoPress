@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
-import type { PressConfig } from "../config";
-import { listPosts } from "../cms";
+import type { PressConfig } from "../config.js";
+import { listPosts } from "../cms.js";
 
 /*
  * Built from the same cached read as every other page, so it costs nothing in the steady state
