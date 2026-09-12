@@ -26,6 +26,16 @@
  */
 
 export { defineConfig, includesFor } from "./config.js";
+export { DEFAULT_THEME, resolveTheme, proseCss } from "./theme.js";
+export type {
+    PressTheme,
+    PressThemeInput,
+    ThemeColors,
+    ThemeFonts,
+    ThemeRadii,
+    ThemeLayout,
+} from "./theme.js";
+export { readingMinutes, initials } from "./reading-time.js";
 export type {
     PressConfig,
     PressConfigInput,
@@ -61,6 +71,7 @@ export {
 } from "./screens/blog-post.js";
 export { createArchive, createArchiveStaticParams } from "./screens/archive.js";
 export { PostView } from "./screens/post-view.js";
+export type { PostViewProps } from "./screens/post-view.js";
 
 export { createRevalidateRoute } from "./routes/revalidate.js";
 export type { RevalidateOptions } from "./routes/revalidate.js";

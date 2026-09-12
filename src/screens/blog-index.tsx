@@ -83,8 +83,13 @@ export function createBlogIndex(config: PressConfig) {
         const featured = posts.filter((p) => p.featured);
         const rest = posts.filter((p) => !p.featured);
 
+        /*
+         * The screen carries its own reading column now. It used to come from a `.shell` class in
+         * the consumer's layout, which meant a screen could only be placed one way and the post
+         * screen, whose bands run edge to edge, could not be placed at all.
+         */
         return (
-            <>
+            <div className="shell">
                 <header className="masthead">
                     <h1>{config.site.name}</h1>
                     {config.site.tagline && <p className="tagline">{config.site.tagline}</p>}
@@ -116,7 +121,7 @@ export function createBlogIndex(config: PressConfig) {
                 {rest.map((p) => (
                     <Card key={p.id} config={config} post={p} />
                 ))}
-            </>
+            </div>
         );
     };
 }

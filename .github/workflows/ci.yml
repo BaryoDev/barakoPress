@@ -58,6 +58,13 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      - name: Unit tests
+        # The engine's own build proves almost nothing, which is why the consumer job below exists.
+        # These cover the parts a build cannot see: that overriding one theme token keeps the rest,
+        # that the generated body stylesheet stays inside its scope, and that read time is derived
+        # rather than typed.
+        run: npm test
+
       - name: Dependency audit
         run: npm audit --audit-level=high
 
