@@ -335,6 +335,20 @@ attribute. An editor is authenticated, so this is the second line of defence, no
 trade is that an author cannot embed raw HTML or an iframe. When you want that, the answer is a
 content field your frontend renders deliberately, not a hole here.
 
+The same renderer is its own entry, `barakopress/markdown`, for code that runs in the browser, such
+as an editor previewing a post. It imports `marked` and nothing else, where the main entry also
+pulls in `next/cache`, `next/server` and `node:crypto`.
+
+```ts
+import { renderMarkdown } from "barakopress/markdown";
+
+renderMarkdown(source);                                     // what the site renders
+renderMarkdown(source, { headingIds: false, newTab: true }); // no ids, links open a new tab
+```
+
+Both options change only the markup around what is already sanitised. `headingIds` defaults to true
+and `newTab` to false, which is the site's output.
+
 ## Two behaviours that were measured, not assumed
 
 **`revalidateTag` needs `{ expire: 0 }`, not a named profile.** Next 16 made the second argument

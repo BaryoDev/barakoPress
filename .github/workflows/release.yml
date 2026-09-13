@@ -84,6 +84,8 @@ jobs:
           npm run build:package
           test -f dist/index.js
           test -f dist/index.d.ts
+          test -f dist/markdown.js
+          test -f dist/markdown.d.ts
           test -f src/styles.css
           # The same extension check as ci.yml, and the same reasoning: see the comment there.
           if grep -rnoE "(from|import\(|^[[:space:]]*import)[[:space:]]*['\"]\.\.?/[^'\"]*['\"]" src \

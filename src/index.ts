@@ -76,6 +76,7 @@ export {
 export type { Post, Ref, Term, Page } from "./cms.js";
 
 export { renderMarkdown, isSafeHref, anchor } from "./markdown.js";
+export type { RenderMarkdownOptions } from "./markdown.js";
 
 export { createBlogIndex, Card } from "./screens/blog-index.js";
 export {
