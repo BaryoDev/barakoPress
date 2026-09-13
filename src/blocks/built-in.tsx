@@ -66,7 +66,7 @@ const image = defineBlock<{ src: string; alt?: string; caption?: string }>({
     ),
 });
 
-const columns = defineBlock({
+const columns = defineBlock<{}, "columns">({
     type: "columns",
     label: "Columns",
     fields: [{ name: "columns", kind: "slots", label: "Columns", required: true, min: 1, max: 4 }],

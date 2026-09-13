@@ -115,6 +115,26 @@ describe("resolveBlocks", () => {
         const raw = Array.from({ length: MAX_BLOCKS + 5 }, (_, i) => text(`b${i}`));
         expect(types(raw)).toHaveLength(MAX_BLOCKS);
     });
+
+    it("spends one budget across nested lists, not one per list", () => {
+        // Two levels of four full columns. Per list this was 100 * 4 * 100 blocks.
+        const leaf = Array.from({ length: MAX_BLOCKS }, (_, i) => text(`leaf${i}`));
+        const inner = { type: "columns", props: { columns: [leaf, leaf, leaf, leaf] } };
+        const raw = Array.from({ length: MAX_BLOCKS }, () => ({
+            type: "columns",
+            props: { columns: [[inner], [inner], [inner], [inner]] },
+        }));
+
+        const count = (blocks: ReturnType<typeof resolveBlocks>): number =>
+            blocks.reduce(
+                (n, b) => n + 1 + Object.values(b.slots).flat().reduce((m, list) => m + count(list), 0),
+                0,
+            );
+        const resolved = resolveBlocks(raw, registry, { perViewer: false });
+
+        expect(resolved.length).toBeGreaterThan(0);
+        expect(count(resolved)).toBeLessThanOrEqual(MAX_BLOCKS);
+    });
 });
 
 describe("BlockList", () => {
@@ -187,6 +207,19 @@ describe("blockSchema", () => {
         expect(cta?.fields.map((f) => f.name)).toEqual(["heading", "text", "label", "href"]);
     });
 
+    it("hands out copies, so changing the result cannot change what the registry accepts", () => {
+        const schema = blockSchema(registry);
+        const options = schema.blocks
+            .find((b) => b.type === "collection")
+            ?.fields.find((f) => f.name === "collection")?.options;
+
+        expect(options).toContain("post");
+        options?.splice(0, options.length, "hijacked");
+
+        expect(types([{ type: "collection", props: { collection: "post" } }])).toEqual(["collection"]);
+        expect(types([{ type: "collection", props: { collection: "hijacked" } }])).toEqual([]);
+    });
+
     it("offers only the collections this site can link to", () => {
         const noTaxonomy = defineConfig({
             site: { name: "T", url: "https://t.example" },
@@ -223,3 +256,40 @@ describe("toPage", () => {
         expect(page.body).toBe("");
     });
 });
+
+/*
+ * Compile-time checks. `npx tsc --noEmit` reads this file, so an expect-error that stops being an
+ * error fails the typecheck. None of these run.
+ */
+export const typeChecks = [
+    defineBlock<{ title: string }>({
+        type: "t",
+        label: "T",
+        // @ts-expect-error a field name the props do not have
+        fields: [{ name: "heading", kind: "text", required: true }],
+        component: ({ props }) => props.title,
+    }),
+    defineBlock<{ count: number }>({
+        type: "t",
+        label: "T",
+        // @ts-expect-error a text kind on a number prop
+        fields: [{ name: "count", kind: "text", required: true }],
+        component: ({ props }) => props.count,
+    }),
+    defineBlock<{ title: string }>({
+        type: "t",
+        label: "T",
+        // @ts-expect-error a prop the component treats as present, on a field that may be absent
+        fields: [{ name: "title", kind: "text" }],
+        component: ({ props }) => props.title,
+    }),
+    defineBlock<{ title?: string }, "body">({
+        type: "t",
+        label: "T",
+        fields: [
+            { name: "title", kind: "text" },
+            { name: "body", kind: "slots" },
+        ],
+        component: ({ props, slots }) => [props.title, slots.body],
+    }),
+];

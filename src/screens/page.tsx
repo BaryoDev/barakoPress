@@ -120,7 +120,9 @@ export function createPageMetadata(config: PressConfig) {
 export function createPageStaticParams(config: PressConfig) {
     return async function generateStaticParams(): Promise<{ slug: string }[]> {
         const slugs: { slug: string }[] = [];
-        for (let page = 1; page <= 200; page++) {
+        // No page cap: a static export has no fallback, so a slug not listed here is a 404. The
+        // loop ends on the API's hasNextPage, or on an empty page if that were ever wrong.
+        for (let page = 1; ; page++) {
             let batch;
             try {
                 batch = await listPages(config, { page, pageSize: 100 });
@@ -128,7 +130,7 @@ export function createPageStaticParams(config: PressConfig) {
                 break;
             }
             for (const p of batch.pages) if (p.slug) slugs.push({ slug: p.slug });
-            if (!batch.hasNextPage) break;
+            if (!batch.hasNextPage || batch.pages.length === 0) break;
         }
         return slugs;
     };

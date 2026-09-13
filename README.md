@@ -138,7 +138,7 @@ them for an editor, so the two cannot drift.
 ```tsx
 import { createBlockRegistry, defineBlock } from "barakopress";
 
-const pricing = defineBlock<{ plan: string; price: number }>({
+const pricing = defineBlock<{ plan: string; price?: number }>({
   type: "pricing",
   label: "Pricing",
   fields: [
@@ -155,7 +155,11 @@ Field kinds are `text`, `markdown`, `url`, `number`, `boolean`, `select` (with `
 (lists of nested blocks, handed to the component already rendered). The list is editor input, so a
 block renders only when its type is registered and every prop passes its field. A present but wrong
 value fails the whole block, a `url` must pass the same check markdown links do, and a component
-never receives a prop its fields did not declare. Lists are capped at 100 blocks and four levels.
+never receives a prop its fields did not declare. A page reads at most 100 blocks in total, nested
+ones included, and four levels deep.
+
+`defineBlock<Props, SlotNames>` checks the fields against the props at compile time: every field
+names a prop, its kind suits the prop's type, and a prop that is not optional must be `required`.
 
 A component gets `props`, `slots` and `theme`, not the config, because a client component's props
 are serialised into the page and the config holds the CMS address. A server block that needs the
