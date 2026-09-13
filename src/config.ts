@@ -16,6 +16,14 @@
 
 import { resolveTheme, type PressTheme, type PressThemeInput } from "./theme.js";
 
+/*
+ * The attributes the markdown renderer puts on a link. The browser entry, barakopress/markdown,
+ * imports these, so this file must keep importing nothing from next/* or node:* and must not read
+ * process.env at module scope.
+ */
+export const LINK_REL = "noopener noreferrer";
+export const NEW_TAB_TARGET = "_blank";
+
 export interface TypeNames {
     /** The content type holding posts. */
     post: string;

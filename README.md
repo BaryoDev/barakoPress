@@ -336,7 +336,7 @@ trade is that an author cannot embed raw HTML or an iframe. When you want that, 
 content field your frontend renders deliberately, not a hole here.
 
 The same renderer is its own entry, `barakopress/markdown`, for code that runs in the browser, such
-as an editor previewing a post. It imports `marked` and nothing else, where the main entry also
+as an editor previewing a post. The only package it reaches is `marked`, where the main entry also
 pulls in `next/cache`, `next/server` and `node:crypto`.
 
 ```ts

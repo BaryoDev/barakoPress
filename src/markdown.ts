@@ -1,4 +1,5 @@
 import { Marked, type Tokens } from "marked";
+import { LINK_REL, NEW_TAB_TARGET } from "./config.js";
 
 /*
  * Markdown to HTML, treating the markdown as untrusted.
@@ -20,8 +21,8 @@ import { Marked, type Tokens } from "marked";
  * that is wanted, the answer is a content field the frontend renders deliberately, not a hole here.
  *
  * This file is also the `barakopress/markdown` entry, which an editor loads in the browser to
- * preview a post with the same rules. So it imports `marked` and nothing else: no next/*, no
- * node:*, and no other file in src, since those reach both.
+ * preview a post with the same rules. So it imports `marked` and `./config.js` only, and nothing it
+ * reaches may import next/* or node:*. The entry test checks that on the built file.
  */
 
 const SAFE_SCHEMES = ["http:", "https:", "mailto:"];
@@ -80,8 +81,8 @@ function buildRenderer(headingIds: boolean, newTab: boolean) {
                 }
                 const t = title ? ` title="${escapeHtml(title)}"` : "";
                 const external = /^https?:/.test(href.trim());
-                const rel = external || newTab ? ' rel="noopener noreferrer"' : "";
-                const target = newTab ? ' target="_blank"' : "";
+                const rel = external || newTab ? ` rel="${LINK_REL}"` : "";
+                const target = newTab ? ` target="${NEW_TAB_TARGET}"` : "";
                 return `<a href="${escapeHtml(href.trim())}"${t}${target}${rel}>${label}</a>`;
             },
             image({ href, title, text }) {
