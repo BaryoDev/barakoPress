@@ -91,6 +91,8 @@ decision, not the engine's.
 | `app/sitemap.ts` | `default` | `createSitemap(config)` |
 | `app/robots.ts` | `default` | `createRobots(config)` |
 | `app/api/revalidate/route.ts` | `POST`, `GET` | `createRevalidateRoute(config)` |
+| `app/[slug]/page.tsx` | `default`, `generateMetadata` | `createPage(config, blocks)`, `createPageMetadata(config)` |
+| `app/api/blocks/route.ts` | `GET` | `createBlockSchemaRoute(blocks)` |
 
 Mount only what you want. Nothing requires anything else. The paths only have to agree with the
 `routes` in your config, which is what every generated link is built from.
@@ -101,6 +103,72 @@ It reads `searchParams`, which forces the route dynamic, so a site using `output
 for that static case.
 
 `Card` and `PostView` are exported too, for a site that wants its own page but the engine's markup.
+
+### Pages built from blocks
+
+A page can hold an ordered list of blocks in a json field, each `{ "type": ..., "props": { ... } }`.
+The blueprint's `page` type has no such field, so add one:
+
+```bash
+curl -X POST "$CMS_URL/api/content-types/page/fields" -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' -d '{"fieldName":"Blocks","displayName":"Blocks","type":"json"}'
+```
+
+A page with a non-empty list renders its blocks. A page without one renders its `Body` as before.
+Field names come from `pageFields` in the config, and the type from `types.page`.
+
+```json
+[
+  { "type": "richText", "props": { "markdown": "## Hello" } },
+  { "type": "columns", "props": { "columns": [
+      [{ "type": "image", "props": { "src": "https://example.com/a.png", "alt": "A" } }],
+      [{ "type": "callToAction", "props": { "heading": "Talk to us", "label": "Contact", "href": "/contact" } }]
+  ] } },
+  { "type": "collection", "props": { "collection": "post", "limit": 3, "heading": "Latest" } }
+]
+```
+
+Built in: `richText` (markdown), `image`, `columns` (up to four lists of blocks), `callToAction` and
+`collection` (the newest posts, or authors or categories when the site has those routes).
+
+A site adds its own blocks, or replaces a built-in, by registering a definition. The fields are the
+only description of the props: the renderer reads props through them, and `app/api/blocks` publishes
+them for an editor, so the two cannot drift.
+
+```tsx
+import { createBlockRegistry, defineBlock } from "barakopress";
+
+const pricing = defineBlock<{ plan: string; price?: number }>({
+  type: "pricing",
+  label: "Pricing",
+  fields: [
+    { name: "plan", kind: "text", required: true },
+    { name: "price", kind: "number", min: 0 },
+  ],
+  component: ({ props, theme }) => <p style={{ color: theme.colors.ink }}>{props.plan}: {props.price}</p>,
+});
+
+export const blocks = createBlockRegistry(config, [pricing]);
+```
+
+Field kinds are `text`, `markdown`, `url`, `number`, `boolean`, `select` (with `options`) and `slots`
+(lists of nested blocks, handed to the component already rendered). The list is editor input, so a
+block renders only when its type is registered and every prop passes its field. A present but wrong
+value fails the whole block, a `url` must pass the same check markdown links do, and a component
+never receives a prop its fields did not declare. A page reads at most 100 blocks in total, nested
+ones included, and four levels deep.
+
+`defineBlock<Props, SlotNames>` checks the fields against the props at compile time: every field
+names a prop, its kind suits the prop's type, and a prop that is not optional must be `required`.
+
+A component gets `props`, `slots` and `theme`, not the config, because a client component's props
+are serialised into the page and the config holds the CMS address. A server block that needs the
+config closes over it.
+
+A block that shows something depending on who is looking sets `perViewer: true`. `createPage` leaves
+such blocks out, because its output is cached and shared. `createViewerPage` renders them and calls
+`connection()` first, so that route is always dynamic. Signing a viewer in, and gating a block by
+role, is issue #7.
 
 ## Configuring it
 
@@ -329,5 +397,4 @@ Releasing is in [RELEASING.md](RELEASING.md). No npm token is stored anywhere.
 ## Status
 
 Early. The blog works end to end against a real instance. Known gaps, all tracked upstream: no media
-picker, no rich editor, no site settings object, and a content type's fields cannot be changed after
-it is created.
+picker, no rich editor, and no site settings object.

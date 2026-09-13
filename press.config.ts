@@ -1,4 +1,4 @@
-import { defineConfig } from "barakopress";
+import { createBlockRegistry, defineConfig } from "barakopress";
 
 /*
  * This site's configuration, and the one file a new site edits.
@@ -25,3 +25,9 @@ export const config = defineConfig({
     url: "http://localhost:3000",
   },
 });
+
+/*
+ * The blocks this site's pages can hold: the built-ins, and any the site adds as a second argument.
+ * app/api/blocks publishes the same registry, so an editor offers exactly what renders here.
+ */
+export const blocks = createBlockRegistry(config);

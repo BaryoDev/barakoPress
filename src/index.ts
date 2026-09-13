@@ -41,6 +41,7 @@ export type {
     PressConfigInput,
     TypeNames,
     FieldMap,
+    PageFieldMap,
     RouteMap,
     PageSizes,
     SiteIdentity,
@@ -65,10 +66,14 @@ export {
     getPostPreview,
     listPostsBy,
     getTerm,
+    listTerms,
     toPost,
+    getPage,
+    listPages,
+    toPage,
     formatDate,
 } from "./cms.js";
-export type { Post, Ref, Term } from "./cms.js";
+export type { Post, Ref, Term, Page } from "./cms.js";
 
 export { renderMarkdown, isSafeHref, anchor } from "./markdown.js";
 
@@ -82,6 +87,39 @@ export {
 export { createArchive, createArchiveStaticParams } from "./screens/archive.js";
 export { PostView } from "./screens/post-view.js";
 export type { PostViewProps } from "./screens/post-view.js";
+
+export {
+    defineBlock,
+    resolveBlocks,
+    readProps,
+    blockSchema,
+    MAX_BLOCKS,
+    MAX_DEPTH,
+} from "./blocks/schema.js";
+export type {
+    BlockDefinition,
+    BlockField,
+    BlockProps,
+    BlockComponentProps,
+    BlockRegistry,
+    BlockSchema,
+    FieldKind,
+    ResolvedBlock,
+    ResolveOptions,
+} from "./blocks/schema.js";
+export { createBlockRegistry } from "./blocks/registry.js";
+export { builtInBlocks, collectionItems, BLOCK_PROSE_CLASS } from "./blocks/built-in.js";
+export type { CollectionItem } from "./blocks/built-in.js";
+export { BlockList } from "./blocks/render.js";
+export {
+    createPage,
+    createViewerPage,
+    createPageMetadata,
+    createPageStaticParams,
+    PageView,
+} from "./screens/page.js";
+export type { PageViewProps } from "./screens/page.js";
+export { createBlockSchemaRoute } from "./routes/block-schema.js";
 
 export { createRevalidateRoute } from "./routes/revalidate.js";
 export type { RevalidateOptions } from "./routes/revalidate.js";

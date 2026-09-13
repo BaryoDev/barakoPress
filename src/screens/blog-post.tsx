@@ -98,7 +98,9 @@ export function createPostStaticParams(config: PressConfig) {
         const slugs: { slug: string }[] = [];
         const pageSize = 100;
 
-        for (let page = 1; page <= 200; page++) {
+        // No page cap, for the reason in the comment above. The loop ends on the API's hasNextPage,
+        // or on an empty page if that were ever wrong.
+        for (let page = 1; ; page++) {
             let batch;
             try {
                 batch = await listPosts(config, { page, pageSize });
@@ -109,7 +111,7 @@ export function createPostStaticParams(config: PressConfig) {
                 break;
             }
             for (const p of batch.posts) if (p.slug) slugs.push({ slug: p.slug });
-            if (!batch.hasNextPage) break;
+            if (!batch.hasNextPage || batch.posts.length === 0) break;
         }
 
         return slugs;
