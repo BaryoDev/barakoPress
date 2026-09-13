@@ -169,6 +169,26 @@ jobs:
                       "Story":"## It renders\n\nThe engine was told the names, not taught them.",
                       "RunDate":"2026-01-01T00:00:00Z"}}'
 
+          # A page type that is not the blueprint's either, with its blocks in a json field.
+          curl --fail --silent -o /dev/null -X POST http://localhost:5099/api/content-types \
+            -H 'content-type: application/json' -H "authorization: Bearer $TOKEN" -d '{
+              "name":"landing","displayName":"Landing","isPubliclyDeliverable":true,
+              "fields":[
+                {"name":"Heading","displayName":"Heading","type":"string","isRequired":true},
+                {"name":"Path","displayName":"Path","type":"slug","isRequired":true},
+                {"name":"Sections","displayName":"Sections","type":"json"}]}'
+
+          curl --fail --silent -o /dev/null -X POST http://localhost:5099/api/contents \
+            -H 'content-type: application/json' -H "authorization: Bearer $TOKEN" -d '{
+              "contentType":"landing","status":"Published",
+              "data":{"Heading":"A landing page","Path":"ci-landing","Sections":[
+                {"type":"richText","props":{"markdown":"Blocks in *order*."}},
+                {"type":"columns","props":{"columns":[
+                  [{"type":"callToAction","props":{"heading":"Nested call","label":"Go","href":"/contact-from-a-block"}}],
+                  [{"type":"callToAction","props":{"heading":"Unsafe call","label":"No","href":"javascript:alert(1)"}}]]}},
+                {"type":"collection","props":{"collection":"post","limit":3,"heading":"Latest writing"}},
+                {"type":"notRegistered","props":{}}]}}'
+
       - name: Build a consumer against it
         run: |
           mkdir -p /tmp/consumer/app/writing/'[slug]' && cd /tmp/consumer
@@ -193,9 +213,9 @@ jobs:
             "include":["next-env.d.ts","**/*.ts","**/*.tsx",".next/types/**/*.ts"] }
           JSON
           cat > press.config.ts <<'TS'
-          import { defineConfig } from "barakopress";
+          import { createBlockRegistry, defineConfig } from "barakopress";
           export const config = defineConfig({
-            types: { post: "article", author: undefined, category: undefined },
+            types: { post: "article", author: undefined, category: undefined, page: "landing" },
             fields: { title: "Headline", slug: "Permalink", excerpt: "Standfirst",
                       body: "Story", publishedAt: "RunDate",
                       coverImage: undefined, coverImageAlt: undefined, featured: undefined,
@@ -203,10 +223,15 @@ jobs:
             routes: { post: "/writing" },
             site: { name: "CI", url: "https://ci.example" },
             cmsUrl: "http://localhost:5099",
+            pageFields: { title: "Heading", slug: "Path", blocks: "Sections", summary: undefined, body: undefined },
           });
+          export const blocks = createBlockRegistry(config);
           TS
           printf 'import { createBlogIndex } from "barakopress";\nimport { config } from "@/press.config";\nexport default createBlogIndex(config);\nexport const revalidate = 300;\n' > app/page.tsx
           printf 'import { createBlogPost, createPostMetadata } from "barakopress";\nimport { config } from "@/press.config";\nexport default createBlogPost(config);\nexport const generateMetadata = createPostMetadata(config);\nexport const revalidate = 300;\n' > "app/writing/[slug]/page.tsx"
+          mkdir -p app/pages/'[slug]' app/api/blocks
+          printf 'import { createPage } from "barakopress";\nimport { blocks, config } from "@/press.config";\nexport default createPage(config, blocks);\nexport const revalidate = 300;\n' > "app/pages/[slug]/page.tsx"
+          printf 'import { createBlockSchemaRoute } from "barakopress";\nimport { blocks } from "@/press.config";\nexport const GET = createBlockSchemaRoute(blocks);\n' > app/api/blocks/route.ts
           mkdir -p app/feed.xml
           printf 'import { createFeed } from "barakopress";\nimport { config } from "@/press.config";\nexport const GET = createFeed(config);\nexport const revalidate = 300;\n' > app/feed.xml/route.ts
           cat > app/layout.tsx <<'TSX'
@@ -231,6 +256,23 @@ jobs:
           # The feed carries the consumer's identity and its route, not the engine's defaults.
           curl -s http://localhost:3000/feed.xml | grep -q "https://ci.example/writing/ci-article"
           curl -s http://localhost:3000/feed.xml | grep -q "<title>CI</title>"
+
+          # A page from blocks stored in the client's own json field, rendered in order, nested, with
+          # the unsafe block and the unregistered one left out.
+          curl -s http://localhost:3000/pages/ci-landing > /tmp/landing.html
+          grep -q "A landing page" /tmp/landing.html
+          grep -q "Blocks in <em>order</em>" /tmp/landing.html
+          grep -q "Nested call" /tmp/landing.html
+          grep -q 'href="/contact-from-a-block"' /tmp/landing.html
+          grep -q "Latest writing" /tmp/landing.html
+          grep -q "An article, not a post" /tmp/landing.html
+          # Not `! grep`: a negated command never trips errexit, so it could not fail this step.
+          if grep -q -e "Unsafe call" -e "javascript:" /tmp/landing.html; then
+            echo "the unsafe block rendered"
+            exit 1
+          fi
+          # The schema an editor reads is the registry the page rendered with.
+          curl -s http://localhost:3000/api/blocks | grep -q '"type":"callToAction"'
 
       - name: Stack logs on failure
         if: failure()

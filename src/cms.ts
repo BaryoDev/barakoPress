@@ -174,8 +174,10 @@ export async function getTerm(
     const type = config.types[which];
     if (!type) return null;
     const c = await bySlug(config, type, slug);
-    if (!c) return null;
+    return c ? toTerm(config, c) : null;
+}
 
+function toTerm(config: PressConfig, c: PublicContent): Term {
     const d = c.data;
     return {
         id: c.id,
@@ -185,6 +187,66 @@ export async function getTerm(
         photo: str(d.Photo) || undefined,
         website: str(d.Website) || undefined,
     };
+}
+
+/** Authors or categories, for a collection block. Empty when the site has no such type. */
+export async function listTerms(
+    config: PressConfig,
+    which: "author" | "category",
+    pageSize: number,
+): Promise<Term[]> {
+    const type = config.types[which];
+    if (!type) return [];
+    const res = await list(config, type, { pageSize });
+    return res.items.map((c) => toTerm(config, c));
+}
+
+export interface Page {
+    id: string;
+    slug: string;
+    title: string;
+    summary?: string;
+    body: string;
+    /*
+     * Unknown on purpose. It is whatever an editor typed into a json field, so nothing here trusts
+     * its shape; `resolveBlocks` in src/blocks is the one place that reads it.
+     */
+    blocks?: unknown;
+    seo?: Seo;
+}
+
+export function toPage(config: PressConfig, c: PublicContent): Page {
+    const d = c.data;
+    const f = config.pageFields;
+    return {
+        id: c.id,
+        slug: c.slug ?? str(field(d, f.slug)),
+        title: str(field(d, f.title)) || "Untitled",
+        summary: str(field(d, f.summary)) || undefined,
+        body: str(field(d, f.body)),
+        blocks: field(d, f.blocks),
+        seo: c.seo ?? undefined,
+    };
+}
+
+export async function getPage(config: PressConfig, slug: string): Promise<Page | null> {
+    const type = config.types.page;
+    if (!type) return null;
+    const c = await bySlug(config, type, slug);
+    return c ? toPage(config, c) : null;
+}
+
+export async function listPages(
+    config: PressConfig,
+    opts: { page?: number; pageSize?: number } = {},
+): Promise<{ pages: Page[]; hasNextPage: boolean }> {
+    const type = config.types.page;
+    if (!type) return { pages: [], hasNextPage: false };
+    const res = await list(config, type, {
+        page: opts.page ?? 1,
+        pageSize: opts.pageSize ?? config.pageSizes.index,
+    });
+    return { pages: res.items.map((c) => toPage(config, c)), hasNextPage: res.hasNextPage };
 }
 
 export function formatDate(config: PressConfig, value?: string): string {

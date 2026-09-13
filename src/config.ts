@@ -23,6 +23,8 @@ export interface TypeNames {
     author?: string;
     /** The type a category reference points at. Omit if the model has no categories. */
     category?: string;
+    /** The type holding standalone pages. Omit if the site mounts no page route. */
+    page?: string;
 }
 
 /**
@@ -46,6 +48,20 @@ export interface FieldMap {
     author?: string;
     /** The reference field pointing at the category type. */
     category?: string;
+}
+
+/**
+ * Which field on the page type holds what. Its own map because a page is not a post: it has no
+ * author, date or tags, and a post has no block list.
+ */
+export interface PageFieldMap {
+    title: string;
+    slug?: string;
+    summary?: string;
+    /** Markdown, rendered when the page has no blocks. */
+    body?: string;
+    /** A json field holding an ordered list of `{ type, props }`. See src/blocks. */
+    blocks?: string;
 }
 
 /** Where the consumer mounted each route, so generated links match the app's real shape. */
@@ -73,6 +89,7 @@ export interface SiteIdentity {
 export interface PressConfig {
     types: TypeNames;
     fields: FieldMap;
+    pageFields: PageFieldMap;
     routes: RouteMap;
     site: SiteIdentity;
     pageSizes: PageSizes;
@@ -93,6 +110,7 @@ export interface PressConfig {
 export type PressConfigInput = {
     types?: Partial<TypeNames>;
     fields?: Partial<FieldMap>;
+    pageFields?: Partial<PageFieldMap>;
     routes?: Partial<RouteMap>;
     site?: Partial<SiteIdentity>;
     pageSizes?: Partial<PageSizes>;
@@ -102,11 +120,16 @@ export type PressConfigInput = {
      * means every consumer pastes the full palette to change an accent.
      */
     theme?: PressThemeInput;
-} & Partial<Omit<PressConfig, "types" | "fields" | "routes" | "site" | "pageSizes" | "theme">>;
+} & Partial<Omit<PressConfig, "types" | "fields" | "pageFields" | "routes" | "site" | "pageSizes" | "theme">>;
 
-/** The `blog` blueprint, which is what `POST /api/content-types/blueprints/blog` creates. */
-const BLOG_BLUEPRINT: Pick<PressConfig, "types" | "fields"> = {
-    types: { post: "post", author: "author", category: "category" },
+/**
+ * The `blog` blueprint, which is what `POST /api/content-types/blueprints/blog` creates.
+ *
+ * `Blocks` is the one name here the blueprint does not create. A json field has to be added to the
+ * page type with `POST /api/content-types/page/fields`, and until it is, a page renders its Body.
+ */
+const BLOG_BLUEPRINT: Pick<PressConfig, "types" | "fields" | "pageFields"> = {
+    types: { post: "post", author: "author", category: "category", page: "page" },
     fields: {
         title: "Title",
         slug: "Slug",
@@ -119,6 +142,13 @@ const BLOG_BLUEPRINT: Pick<PressConfig, "types" | "fields"> = {
         tags: "Tags",
         author: "Author",
         category: "Category",
+    },
+    pageFields: {
+        title: "Title",
+        slug: "Slug",
+        summary: "Summary",
+        body: "Body",
+        blocks: "Blocks",
     },
 };
 
@@ -138,6 +168,7 @@ export function defineConfig(input: PressConfigInput & { site: SiteIdentity }): 
     return {
         types: { ...BLOG_BLUEPRINT.types, ...input.types },
         fields: { ...BLOG_BLUEPRINT.fields, ...input.fields },
+        pageFields: { ...BLOG_BLUEPRINT.pageFields, ...input.pageFields },
         routes: {
             post: trimSlash(routes.post),
             author: routes.author ? trimSlash(routes.author) : undefined,
