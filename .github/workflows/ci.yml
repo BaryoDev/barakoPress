@@ -54,6 +54,8 @@ jobs:
           npm run build:package
           test -f dist/index.js
           test -f dist/index.d.ts
+          test -f dist/markdown.js
+          test -f dist/markdown.d.ts
 
       - name: Typecheck
         run: npx tsc --noEmit
