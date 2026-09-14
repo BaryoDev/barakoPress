@@ -15,8 +15,8 @@ import { siteConfigOrNull } from "../site.js";
 export function createSitemap(base: PressConfig) {
     return async function sitemap(): Promise<MetadataRoute.Sitemap> {
         const config = await siteConfigOrNull(base);
-        // Not served while coming soon is on, preview key or not.
-        if (!config || config.comingSoon) notFound();
+        // Not served while holding, session or not.
+        if (!config || config.holding) notFound();
         let indexable: Awaited<ReturnType<typeof listPosts>>["posts"] = [];
         try {
             const { posts } = await listPosts(config, { pageSize: config.pageSizes.sitemap });

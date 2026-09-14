@@ -16,8 +16,8 @@ export function createRobots(base: PressConfig) {
     return async function robots(): Promise<MetadataRoute.Robots> {
         const config = await siteConfigOrNull(base);
         if (!config) notFound();
-        // Reachable while coming soon is on, but asking for nothing to be crawled and naming no sitemap.
-        if (config.comingSoon) return { rules: { userAgent: "*", disallow: "/" } };
+        // Reachable while holding, but asking for nothing to be crawled and naming no sitemap.
+        if (config.holding) return { rules: { userAgent: "*", disallow: "/" } };
         return {
             rules: { userAgent: "*", allow: "/" },
             sitemap: `${config.site.url}/sitemap.xml`,

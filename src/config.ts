@@ -153,15 +153,14 @@ export interface SitesConfig {
 }
 
 /**
- * A tenant's coming soon mode, read from its site settings. Present only while it is on.
+ * A tenant's holding mode, read from its site settings (`Mode: "Holding"`). Present only while holding.
  *
- * The settings entry is publicly delivered, so it holds a hash of the preview key and never the key.
+ * Nothing secret lives here. A share link is redeemed through barakoCMS, and barakoPress never sees
+ * a hash of its key.
  */
-export interface ComingSoon {
-    /** The holding page's blocks as stored. Empty or unreadable renders the default holding page. */
-    blocks?: unknown;
-    /** Lowercase hex SHA-256 of the preview key. Absent means nobody sees the real site. */
-    previewKeyHash?: string;
+export interface Holding {
+    /** `HoldingPath`: the site path of the page shown on every route. Absent renders the default holding page. */
+    path?: string;
 }
 
 export interface PressConfig {
@@ -185,8 +184,8 @@ export interface PressConfig {
     theme: PressTheme;
     /** Set when identity and theme are read per request from the tenant's site settings. */
     sites?: SitesConfig;
-    /** Set by the tenant's settings on a request-time site while coming soon is on. Never set by hand. */
-    comingSoon?: ComingSoon;
+    /** Set by the tenant's settings on a request-time site while it is holding. Never set by hand. */
+    holding?: Holding;
 }
 
 export type PressConfigInput = {
@@ -203,7 +202,7 @@ export type PressConfigInput = {
      */
     theme?: PressThemeInput;
     sites?: Partial<SitesConfig>;
-} & Partial<Omit<PressConfig, "types" | "fields" | "pageFields" | "routes" | "site" | "pageSizes" | "theme" | "sites" | "comingSoon">>;
+} & Partial<Omit<PressConfig, "types" | "fields" | "pageFields" | "routes" | "site" | "pageSizes" | "theme" | "sites" | "holding">>;
 
 /**
  * The `blog` blueprint, which is what `POST /api/content-types/blueprints/blog` creates.

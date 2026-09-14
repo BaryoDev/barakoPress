@@ -1,6 +1,6 @@
 import type { PressConfig } from "./config.js";
 import { includesFor } from "./config.js";
-import { bySlug, bySlugPreview, list, type PublicContent, type Seo } from "./delivery.js";
+import { bySlug, bySlugPreview, list, pageAtPath, type PublicContent, type Seo } from "./delivery.js";
 
 export type { Seo };
 
@@ -234,6 +234,12 @@ export async function getPage(config: PressConfig, slug: string): Promise<Page |
     if (!type) return null;
     const c = await bySlug(config, type, slug);
     return c ? toPage(config, c) : null;
+}
+
+/** The page the Pages module serves at a site path, or null. Needs no page type in the config. */
+export async function getPageAtPath(config: PressConfig, path: string): Promise<Page | null> {
+    const resolved = await pageAtPath(config, path);
+    return resolved ? toPage(config, resolved.entry) : null;
 }
 
 export async function listPages(
