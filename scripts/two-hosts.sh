@@ -14,7 +14,7 @@ APP="http://127.0.0.1:$APP_PORT"
 
 node scripts/fake-cms.mjs "$CMS_PORT" &
 CMS_PID=$!
-CMS_URL="http://127.0.0.1:$CMS_PORT" REVALIDATE_SECRET=$SECRET npx next start --port "$APP_PORT" > /tmp/two-hosts-app.log 2>&1 &
+CMS_URL="http://127.0.0.1:$CMS_PORT" REVALIDATE_SECRET=$SECRET PRESS_CONSOLE_ORIGINS=https://brew.example npx next start --port "$APP_PORT" > /tmp/two-hosts-app.log 2>&1 &
 APP_PID=$!
 trap 'kill $CMS_PID $APP_PID 2>/dev/null || true' EXIT
 
@@ -47,6 +47,14 @@ echo "ok: feed, sitemap and robots per tenant"
 [ "$(status unknown.example /)" = "404" ] || fail "a host with no tenant is not a 404"
 [ "$(status unknown.example /feed.xml)" = "404" ] || fail "the feed for a host with no tenant is not a 404"
 echo "ok: a host with no tenant is a 404"
+
+cors() { curl -s -o /dev/null -D - -X "$1" -H "Host: baryo.dev" -H "Origin: $2" "$APP/api/blocks" | tr -d '\r'; }
+cors GET https://brew.example | grep -qi '^access-control-allow-origin: https://brew.example$' || fail "the console origin cannot read /api/blocks"
+cors OPTIONS https://brew.example | grep -qi '^access-control-allow-methods: GET, OPTIONS$' || fail "the preflight from the console origin is not answered"
+cors GET https://brew.example | grep -qi '^vary:.*origin' || fail "/api/blocks does not vary on Origin"
+if cors GET https://evil.example | grep -qi '^access-control-allow-origin'; then fail "an unlisted origin can read /api/blocks"; fi
+if cors GET https://brew.example | grep -qi '^access-control-allow-credentials'; then fail "/api/blocks allows credentials"; fi
+echo "ok: /api/blocks answers the console origin only"
 
 purge() {
   local body='{"event":"Published"}' ts sig

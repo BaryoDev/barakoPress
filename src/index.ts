@@ -137,7 +137,8 @@ export {
     PageView,
 } from "./screens/page.js";
 export type { PageViewProps } from "./screens/page.js";
-export { createBlockSchemaRoute } from "./routes/block-schema.js";
+export { createBlockSchemaRoute, createBlockSchemaPreflight, parseOrigins } from "./routes/block-schema.js";
+export type { BlockSchemaRouteOptions } from "./routes/block-schema.js";
 
 export { createRevalidateRoute } from "./routes/revalidate.js";
 export type { RevalidateOptions } from "./routes/revalidate.js";

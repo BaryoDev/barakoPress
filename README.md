@@ -92,7 +92,7 @@ decision, not the engine's.
 | `app/robots.ts` | `default` | `createRobots(config)` |
 | `app/api/revalidate/route.ts` | `POST`, `GET` | `createRevalidateRoute(config)` |
 | `app/[slug]/page.tsx` | `default`, `generateMetadata` | `createPage(config, blocks)`, `createPageMetadata(config)` |
-| `app/api/blocks/route.ts` | `GET` | `createBlockSchemaRoute(blocks)` |
+| `app/api/blocks/route.ts` | `GET`, `OPTIONS` | `createBlockSchemaRoute(blocks)`, `createBlockSchemaPreflight()` |
 | `app/layout.tsx` | `default`, `generateMetadata` | `createSiteLayout(config)`, `createSiteMetadata(config)` |
 
 Mount only what you want. Nothing requires anything else. The paths only have to agree with the
@@ -151,6 +151,14 @@ const pricing = defineBlock<{ plan: string; price?: number }>({
 
 export const blocks = createBlockRegistry(config, [pricing]);
 ```
+
+**Reading the schema from barakoBrew.** The console usually runs on another origin than the site, so
+a browser only lets its block editor read `app/api/blocks` when the site names that origin. Set
+`PRESS_CONSOLE_ORIGINS` to a comma separated list, for example
+`PRESS_CONSOLE_ORIGINS=https://brew.example.com`. It is read per request. Unset, no origin is
+allowed. A listed origin gets `Access-Control-Allow-Origin` echoed back on `GET` and on the `OPTIONS`
+preflight, never `*` and never credentials, and every answer carries `Vary: Origin`. Pass
+`{ consoleOrigins: [...] }` to both factories to set the list in code instead.
 
 Field kinds are `text`, `markdown`, `url`, `number`, `boolean`, `select` (with `options`) and `slots`
 (lists of nested blocks, handed to the component already rendered). The list is editor input, so a
