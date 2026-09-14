@@ -93,6 +93,7 @@ decision, not the engine's.
 | `app/api/revalidate/route.ts` | `POST`, `GET` | `createRevalidateRoute(config)` |
 | `app/[slug]/page.tsx` | `default`, `generateMetadata` | `createPage(config, blocks)`, `createPageMetadata(config)` |
 | `app/api/blocks/route.ts` | `GET` | `createBlockSchemaRoute(blocks)` |
+| `app/layout.tsx` | `default`, `generateMetadata` | `createSiteLayout(config)`, `createSiteMetadata(config)` |
 
 Mount only what you want. Nothing requires anything else. The paths only have to agree with the
 `routes` in your config, which is what every generated link is built from.
@@ -204,14 +205,64 @@ for a post type with no such field.
 | `backstopSeconds` | 300 | How long a cached read may live with no webhook. 0 disables it |
 | `locale` | `en-GB` | Passed to `toLocaleDateString` |
 | `cmsUrl` | `CMS_URL`, or `http://localhost:5005` | Where the CMS is, from this server |
-| `tenant` | `CMS_TENANT` | Tenant slug, for a multi-tenant deployment |
+| `tenant` | `CMS_TENANT` | Tenant slug, for a multi-tenant deployment. On a request-time site, pins every host to it |
+| `sites` | off | Request-time identity and theme from the tenant's site settings. See below |
 | `theme` | the barakoCMS palette | Colours, faces, radii and column widths. See below |
 
-**Identity is build time.** The index, the feed, the sitemap and robots are prerendered, so anything
-`press.config.ts` reads from `process.env` is baked when you build, not when the server starts. Write
-per-site values as literals in that file. Only per-environment values (`CMS_URL`,
-`REVALIDATE_SECRET`) come from the environment, and neither of those is rendered. Getting this wrong
-is how a client site ships with the vendor's name in its masthead.
+**A site is build time or request time.** Without `sites`, identity is build time: the index, the
+feed, the sitemap and robots are prerendered, so anything `press.config.ts` reads from `process.env`
+is baked when you build, not when the server starts. Write per-site values as literals in that file.
+Getting this wrong is how a client site ships with the vendor's name in its masthead. With `sites`,
+identity is data in the CMS and read per request, which is the next section.
+
+### One build, many sites
+
+barakoCMS D22 reverses "identity is build time" for the shared renderer: every site runs the same
+image, and what makes a site that site is its tenant's `site` settings entry, edited in barakoBrew.
+
+```ts
+export const config = defineConfig({ sites: {} });
+```
+
+On each request the engine resolves the tenant, reads that tenant's settings, and renders with them:
+
+1. `CMS_TENANT` (or `tenant`) set: every host is that tenant, with no lookup.
+2. `sites.tenantHeader` set and the request carries a valid handle in it: that tenant. Off by default.
+3. The host, from `sites.hostHeader` (default `host`), looked up with `GET /api/tenants/by-host/{host}`.
+4. `sites.defaultTenant`, or `CMS_DEFAULT_TENANT` read at request time.
+5. None of those: a 404. Never another tenant's site.
+
+A handle is only ever read from the request through a header the operator named. `X-Tenant` and
+`X-Forwarded-Host` sent by a caller are ignored unless you configure them, and you should configure
+them only behind a proxy that sets the header and strips a caller's value.
+
+The settings are the singleton `site` type from barakoCMS `docs/site-settings.md`
+(`POST /api/content-types/blueprints/site`, then publish its one entry). The engine reads `Name`,
+`Tagline`, `Url`, `Locale`, `Logo`, `LogoAlt`, `FooterLogo`, `Favicon`, `ShareImage`, `Copyright`,
+`Colors` (the theme slots), `Fonts` (Google Fonts family names), `Radii`, `Layout`, `TopBar`,
+`HeaderLinks`, `FooterColumns` and `SocialLinks`. `OptionColors`, `Variants` and colour names outside
+the theme slots are not rendered yet. Every value is checked for shape; one that fails, and any the
+entry leaves out, keeps the configured value, so a half-filled theme renders. A link is a path on the
+site or an absolute http or https URL. Set `Url`: without it the feed and sitemap fall back to the
+host the tenant was found by.
+
+`createSiteLayout` and `createSiteMetadata` render the root layout from all of this: `lang`, the
+faces, the palette, the top bar, header links, footer columns, social links and the copyright line.
+
+**Caching per tenant.** Every read carries the tenant in `X-Tenant` and in its cache tag,
+`<cacheTag>:<tenant>`. The webhook purges the tag of the tenant its host resolves to, so point each
+tenant's webhook at `https://<that tenant's domain>/api/revalidate`. A publish on one tenant leaves
+every other tenant's cached reads in place.
+
+**When the CMS is down.** Each successful read is also kept in process, keyed by CMS, tenant and path.
+A read that fails with a network error or a 5xx answers from the last good copy and logs a warning;
+the next successful read replaces it. Known hosts keep resolving the same way. A page that was cached
+for a tenant keeps answering 200 with that tenant's identity and theme. A tenant never gets another
+tenant's kept answer.
+
+`generateStaticParams` factories return nothing on a request-time site, since there is no tenant at
+build. `scripts/two-hosts.sh` runs the built reference app against a stand-in CMS with two tenants
+and checks all of the above; CI runs it on every push.
 
 ### The look is configuration too
 
@@ -411,4 +462,4 @@ Releasing is in [RELEASING.md](RELEASING.md). No npm token is stored anywhere.
 ## Status
 
 Early. The blog works end to end against a real instance. Known gaps, all tracked upstream: no media
-picker, no rich editor, and no site settings object.
+picker, no rich editor, and no visitor theme variants.

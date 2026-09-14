@@ -1,5 +1,6 @@
 import type { PressConfig } from "../config.js";
 import { listPosts } from "../cms.js";
+import { siteConfigOrNull } from "../site.js";
 
 /*
  * RSS, built here rather than proxied from the CMS.
@@ -20,8 +21,12 @@ function xml(value: string): string {
         .replace(/'/g, "&apos;");
 }
 
-export function createFeed(config: PressConfig) {
+export function createFeed(base: PressConfig) {
     return async function GET() {
+        // Outside the try below: resolving reads the request, and Next signals that with a throw.
+        const config = await siteConfigOrNull(base);
+        if (!config) return new Response("Not found", { status: 404 });
+
         let posts: Awaited<ReturnType<typeof listPosts>>["posts"] = [];
         try {
             ({ posts } = await listPosts(config, { pageSize: config.pageSizes.feed }));

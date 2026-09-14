@@ -2,6 +2,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { revalidateTag } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import type { PressConfig } from "../config.js";
+import { cacheTagFor } from "../delivery.js";
+import { tenantFromHeaders } from "../site.js";
 
 /*
  * The endpoint that makes the cache correct.
@@ -135,13 +137,25 @@ export function createRevalidateRoute(config: PressConfig, options: RevalidateOp
          * the response, and triple the work an attacker gets from one captured signature, for
          * nothing.
          */
-        revalidateTag(config.cacheTag, { expire: 0 });
+        /*
+         * A request-time site purges only the tenant this delivery came to. The webhook URL is on the
+         * tenant's own domain, so the host resolves it exactly as it resolves a page, and a host with no
+         * tenant purges nothing.
+         */
+        let tag = config.cacheTag;
+        if (config.sites) {
+            const found = await tenantFromHeaders(config, request.headers);
+            if (!found) return NextResponse.json({ error: "no site for this host" }, { status: 404 });
+            tag = cacheTagFor({ ...config, tenant: found.tenant });
+        }
+
+        revalidateTag(tag, { expire: 0 });
 
         // The delivery id is echoed only after the signature verified, so an anonymous caller
         // cannot put text of their choosing into this server's log.
         const delivery = request.headers.get("x-barako-delivery") ?? "unknown";
-        console.log(`revalidate: dropped tag "${config.cacheTag}" for delivery ${delivery}`);
-        return NextResponse.json({ revalidated: true, tag: config.cacheTag, delivery });
+        console.log(`revalidate: dropped tag "${tag}" for delivery ${delivery}`);
+        return NextResponse.json({ revalidated: true, tag, delivery });
     }
 
     /*

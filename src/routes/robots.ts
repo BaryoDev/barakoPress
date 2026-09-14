@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import type { PressConfig } from "../config.js";
+import { siteConfig } from "../site.js";
 
 /*
  * Generated, because the Sitemap line has to be an absolute URL and the domain is per deployment.
@@ -10,8 +11,9 @@ import type { PressConfig } from "../config.js";
  * machine's value in permanently, and production advertised a localhost sitemap that no cache
  * purge could ever correct.
  */
-export function createRobots(config: PressConfig) {
-    return function robots(): MetadataRoute.Robots {
+export function createRobots(base: PressConfig) {
+    return async function robots(): Promise<MetadataRoute.Robots> {
+        const config = await siteConfig(base);
         return {
             rules: { userAgent: "*", allow: "/" },
             sitemap: `${config.site.url}/sitemap.xml`,

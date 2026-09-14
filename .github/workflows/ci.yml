@@ -96,6 +96,13 @@ jobs:
           CMS_URL: http://127.0.0.1:1
         run: npm run build
 
+      - name: One container answers two hosts, and keeps answering with the CMS stopped
+        # The reference app is a request-time site, built above with no CMS and no site values. This
+        # starts it against a stand-in CMS holding two tenants and checks each host renders as itself,
+        # a host with no tenant is a 404, a purge stays inside its tenant, and a purged tenant still
+        # answers 200 as itself once the CMS is gone.
+        run: scripts/two-hosts.sh
+
   consumer:
     # The test that matters: can somebody else install this and render their own content model.
     runs-on: ubuntu-latest

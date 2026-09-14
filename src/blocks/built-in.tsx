@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { PressConfig } from "../config.js";
+import { siteConfig } from "../site.js";
 import { formatDate, listPosts, listTerms } from "../cms.js";
 import { renderMarkdown } from "../markdown.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
@@ -205,7 +206,9 @@ function collection(config: PressConfig): BlockDefinition {
             { name: "heading", kind: "text", label: "Heading" },
         ],
         component: async ({ props, theme }) => {
-            const items = await collectionItems(config, props.collection, props.limit ?? 6);
+            // The registry is built once at module scope, so the tenant is resolved here, per request.
+            const site = await siteConfig(config);
+            const items = await collectionItems(site, props.collection, props.limit ?? 6);
             if (items.length === 0) return null;
             const c = theme.colors;
             return (

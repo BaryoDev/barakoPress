@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { PressConfig } from "../config.js";
 import { getTerm, listPostsBy, type Post } from "../cms.js";
 import { renderMarkdown } from "../markdown.js";
+import { siteConfig } from "../site.js";
 import { Card } from "./blog-index.js";
 
 type SlugParams = { params: Promise<{ slug: string }> };
@@ -14,9 +15,10 @@ type SlugParams = { params: Promise<{ slug: string }> };
  * filtered on, and both of those are in the config. A site with no author type simply never
  * mounts the route; the factory still refuses cleanly if it is mounted anyway.
  */
-export function createArchive(config: PressConfig, which: "author" | "category") {
+export function createArchive(base: PressConfig, which: "author" | "category") {
     return async function ArchivePage({ params }: SlugParams) {
-        if (!config.types[which]) notFound();
+        if (!base.types[which]) notFound();
+        const config = await siteConfig(base);
 
         const { slug } = await params;
         const [term, posts] = await Promise.all([
@@ -63,7 +65,7 @@ export function createArchive(config: PressConfig, which: "author" | "category")
 export function createArchiveStaticParams(config: PressConfig, which: "author" | "category") {
     return async function generateStaticParams(): Promise<{ slug: string }[]> {
         const type = config.types[which];
-        if (!type) return [];
+        if (!type || config.sites) return [];
 
         const { list } = await import("../delivery.js");
         try {

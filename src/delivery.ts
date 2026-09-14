@@ -44,22 +44,121 @@ export interface Paged<T> {
     hasNextPage: boolean;
 }
 
+/** A CMS answer that was not a success. The message keeps the form callers already match on. */
+export class CmsError extends Error {
+    constructor(
+        readonly path: string,
+        readonly status: number,
+    ) {
+        super(`${path} answered ${status}`);
+    }
+}
+
 function headers(config: PressConfig): HeadersInit {
     return config.tenant ? { "X-Tenant": config.tenant } : {};
 }
 
+/**
+ * The cache tag a read carries and the webhook purges.
+ *
+ * A build-time site keeps its one configured tag. A request-time site adds the tenant, so one
+ * tenant's publish drops only that tenant's reads. A request-time config with no tenant has not
+ * been resolved, and reading with it would store an answer no tenant owns, so that refuses.
+ */
+export function cacheTagFor(config: PressConfig): string {
+    if (!config.sites) return config.cacheTag;
+    if (!config.tenant) throw new Error("a request-time site has to be resolved before it reads");
+    return `${config.cacheTag}:${config.tenant}`;
+}
+
+/*
+ * The last good answer per read, for a request-time site only.
+ *
+ * baryo.dev moved onto the shared renderer on the condition that a brief API outage does not take
+ * it down (barakoCMS D22). Next's data cache cannot promise that: a purge expires the entry, and the
+ * next read then blocks on a CMS that is not there. So every successful read is kept here, keyed by
+ * CMS, tenant and path, and a read that fails for a reason worth retrying answers from it instead.
+ * The next successful read replaces it.
+ *
+ * The tenant is in the key, and that is the property that matters: tenant b asking for a path
+ * tenant a has cached gets a's answer never, and an error if it has none of its own.
+ *
+ * Bounded by the characters held, oldest out first, so a site with a large sitemap cannot grow the
+ * process without limit. In-process, like the cache it backs.
+ */
+const STALE_MAX_CHARS = 32 * 1024 * 1024;
+const stale = new Map<string, string>();
+let staleChars = 0;
+
+function remember(key: string, text: string) {
+    const old = stale.get(key);
+    if (old !== undefined) {
+        staleChars -= old.length;
+        stale.delete(key);
+    }
+    if (text.length > STALE_MAX_CHARS) return;
+    stale.set(key, text);
+    staleChars += text.length;
+    for (const [k, v] of stale) {
+        if (staleChars <= STALE_MAX_CHARS) break;
+        stale.delete(k);
+        staleChars -= v.length;
+    }
+}
+
+/** For tests: forget every kept answer and every host lookup. */
+export function forgetCachedReads() {
+    stale.clear();
+    staleChars = 0;
+    hosts.clear();
+}
+
+/** A failure the last good answer may stand in for. A 404 or a 400 is an answer, not an outage. */
+function worthServingStale(e: unknown): boolean {
+    if (e instanceof CmsError) return e.status >= 500 || e.status === 408 || e.status === 429;
+    // Next signals its own control flow (dynamic usage, not found) with errors that carry a digest.
+    // Those are not outages and must keep travelling.
+    return !(e && typeof e === "object" && "digest" in e);
+}
+
+interface ReadOptions {
+    headers: HeadersInit;
+    tag: string;
+    /** Set for a request-time site. The key the last good answer is kept under. */
+    staleKey?: string;
+}
+
+async function read<T>(config: PressConfig, path: string, opts: ReadOptions): Promise<T> {
+    try {
+        const res = await fetch(`${config.cmsUrl}${path}`, {
+            headers: opts.headers,
+            next: {
+                tags: [opts.tag],
+                // Zero means no backstop, which Next spells as false.
+                revalidate: config.backstopSeconds > 0 ? config.backstopSeconds : false,
+            },
+        });
+        if (!res.ok) throw new CmsError(path, res.status);
+        const text = await res.text();
+        const value = JSON.parse(text) as T;
+        if (opts.staleKey) remember(opts.staleKey, text);
+        return value;
+    } catch (e) {
+        const kept = opts.staleKey ? stale.get(opts.staleKey) : undefined;
+        if (kept === undefined || !worthServingStale(e)) throw e;
+        const why = e instanceof Error ? e.message : String(e);
+        console.warn(`cms: ${path} for tenant "${config.tenant ?? ""}" failed (${why}), serving the last good answer`);
+        return JSON.parse(kept) as T;
+    }
+}
+
 /** A cached, tagged read. Everything a visitor sees comes through here. */
 async function get<T>(config: PressConfig, path: string): Promise<T> {
-    const res = await fetch(`${config.cmsUrl}${path}`, {
+    return read<T>(config, path, {
         headers: headers(config),
-        next: {
-            tags: [config.cacheTag],
-            // Zero means no backstop, which Next spells as false.
-            revalidate: config.backstopSeconds > 0 ? config.backstopSeconds : false,
-        },
+        tag: cacheTagFor(config),
+        staleKey: config.sites ? `${config.cmsUrl}|t:${config.tenant}|${path}` : undefined,
     });
-    if (!res.ok) throw new Error(`${path} answered ${res.status}`);
-    return (await res.json()) as T;
 }
 
 /** An uncached read, for a draft. A cached draft would be served to the next visitor. */
@@ -69,8 +168,56 @@ async function getFresh<T>(config: PressConfig, path: string): Promise<T | null>
         cache: "no-store",
     });
     if (res.status === 404) return null;
-    if (!res.ok) throw new Error(`${path} answered ${res.status}`);
+    if (!res.ok) throw new CmsError(path, res.status);
     return (await res.json()) as T;
+}
+
+/*
+ * Which tenant a host belongs to.
+ *
+ * Answers are held in process for a minute rather than in Next's data cache, because the host is
+ * whatever a caller put in the request: a data cache entry per invented host is disk anyone can
+ * fill. This map is bounded instead, and an unknown host is remembered as unknown for the same
+ * minute so a flood of one name costs one lookup.
+ *
+ * A known host keeps its answer past the minute, so when the lookup fails the site still resolves.
+ * An unknown one never does: failing closed there is a 404, not someone else's site.
+ */
+const HOST_TTL_MS = 60_000;
+const HOSTS_MAX = 1000;
+const hosts = new Map<string, { tenant: string | null; at: number }>();
+const HANDLE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$/;
+
+export function isTenantHandle(value: string | null | undefined): value is string {
+    return typeof value === "string" && HANDLE.test(value);
+}
+
+export async function tenantForHost(config: PressConfig, host: string): Promise<string | null> {
+    const known = hosts.get(host);
+    if (known && Date.now() - known.at < HOST_TTL_MS) return known.tenant;
+
+    const path = `/api/tenants/by-host/${encodeURIComponent(host)}`;
+    let tenant: string | null;
+    try {
+        const res = await fetch(`${config.cmsUrl}${path}`, { cache: "no-store" });
+        if (res.status === 404) tenant = null;
+        else if (!res.ok) throw new CmsError(path, res.status);
+        else {
+            const body = (await res.json()) as { handle?: unknown };
+            tenant = typeof body.handle === "string" && isTenantHandle(body.handle) ? body.handle : null;
+        }
+    } catch (e) {
+        if (known?.tenant && worthServingStale(e)) {
+            console.warn(`cms: tenant lookup for ${host} failed, keeping "${known.tenant}"`);
+            return known.tenant;
+        }
+        throw e;
+    }
+
+    hosts.delete(host);
+    hosts.set(host, { tenant, at: Date.now() });
+    while (hosts.size > HOSTS_MAX) hosts.delete(hosts.keys().next().value as string);
+    return tenant;
 }
 
 export interface ListOptions {
@@ -110,7 +257,8 @@ export async function bySlug(
         );
     } catch (e) {
         // A missing entry is a not-found page, not a broken site.
-        if (e instanceof Error && e.message.includes("404")) return null;
+        if (e instanceof CmsError ? e.status === 404 : e instanceof Error && e.message.includes("404"))
+            return null;
         throw e;
     }
 }

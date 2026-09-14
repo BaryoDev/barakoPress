@@ -32,6 +32,7 @@ way a consumer's are.
 
 ```
 src/config.ts        the seam. Type names, field map, routes, page sizes, identity, cache tag
+src/site.ts          request-time sites: host to tenant, settings to identity and theme
 src/delivery.ts      HTTP against the public delivery API. Takes config, reads no globals
 src/cms.ts           maps a stored entry onto what a page renders. The only place field names live
 src/markdown.ts      markdown to HTML, treating the input as untrusted
@@ -97,9 +98,16 @@ Each of these is here because it broke, not because it sounded right.
 
 **Nothing reads `process.env` at module scope.** A value read there is baked into a prerender at
 build time. Site identity did exactly that, so a client's masthead said "barakoPress" until
-something revalidated it. Per-site values are literals in the consumer's `press.config.ts`; only
-per-environment values (`CMS_URL`, `REVALIDATE_SECRET`) come from the environment, and neither is
-rendered.
+something revalidated it. A build-time site keeps per-site values as literals in its
+`press.config.ts`. A request-time site (`sites` in the config, barakoCMS D22) reads them from the
+tenant's settings inside the render, in `src/site.ts`, and every factory resolves that first. Only
+per-environment values (`CMS_URL`, `REVALIDATE_SECRET`, `CMS_TENANT`, `CMS_DEFAULT_TENANT`) come from
+the environment.
+
+**A request-time read carries its tenant, or does not happen.** The tenant goes in the header, the
+cache tag and the key of the last good answer. `cacheTagFor` throws for a request-time config that
+was never resolved, so a new call site that forgets `siteConfig` fails loudly instead of caching an
+answer no tenant owns. A handle is never read from the request unless the operator named the header.
 
 **Route segment config belongs to the consumer.** Next reads `export const revalidate` from the
 file that owns the route and does not reliably follow a re-export.

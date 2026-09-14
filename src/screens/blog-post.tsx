@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import type { PressConfig } from "../config.js";
 import { getPost, getPostPreview, listPosts } from "../cms.js";
 import { listRelated } from "../related.js";
+import { siteConfig } from "../site.js";
 import { PostView } from "./post-view.js";
 
 type SlugParams = { params: Promise<{ slug: string }> };
@@ -18,8 +19,9 @@ type PreviewParams = SlugParams & { searchParams: Promise<{ preview?: string }> 
  * preview, which is the honest trade and the reason these are two exports rather than a flag.
  */
 
-export function createBlogPost(config: PressConfig) {
+export function createBlogPost(base: PressConfig) {
     return async function PostPage({ params }: SlugParams) {
+        const config = await siteConfig(base);
         const { slug } = await params;
         const post = await getPost(config, slug);
         if (!post) notFound();
@@ -28,8 +30,9 @@ export function createBlogPost(config: PressConfig) {
     };
 }
 
-export function createBlogPostPreview(config: PressConfig) {
+export function createBlogPostPreview(base: PressConfig) {
     return async function PostPreviewPage({ params, searchParams }: PreviewParams) {
+        const config = await siteConfig(base);
         const { slug } = await params;
         const { preview } = await searchParams;
 
@@ -53,8 +56,9 @@ export function createBlogPostPreview(config: PressConfig) {
  * every public response, with the title already falling back to the entry's title. So this maps,
  * and an editor changing the meta description in the console changes the page.
  */
-export function createPostMetadata(config: PressConfig) {
+export function createPostMetadata(base: PressConfig) {
     return async function generateMetadata({ params }: SlugParams): Promise<Metadata> {
+        const config = await siteConfig(base);
         const { slug } = await params;
         const post = await getPost(config, slug);
         if (!post) return { title: "Not found" };
@@ -95,6 +99,8 @@ export function createPostMetadata(config: PressConfig) {
  */
 export function createPostStaticParams(config: PressConfig) {
     return async function generateStaticParams(): Promise<{ slug: string }[]> {
+        // A request-time site has no tenant at build, so it lists nothing and renders on request.
+        if (config.sites) return [];
         const slugs: { slug: string }[] = [];
         const pageSize = 100;
 
