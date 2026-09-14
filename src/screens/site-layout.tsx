@@ -2,8 +2,11 @@ import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { PressConfig } from "../config.js";
-import { siteConfigOrNull, themeFamilies } from "../site.js";
-import { themeVariablesCss } from "../theme.js";
+import { showsHoldingPage, siteConfigOrNull, themeFamilies } from "../site.js";
+import { proseCss, themeVariablesCss, type PressTheme } from "../theme.js";
+import { BLOCK_PROSE_CLASS } from "../blocks/built-in.js";
+import { BlockList } from "../blocks/render.js";
+import { resolveBlocks, type BlockRegistry } from "../blocks/schema.js";
 
 /*
  * The root layout and its metadata, from the site's identity and theme.
@@ -22,7 +25,72 @@ function fontHref(family: string): string {
     return `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, "+")}:wght@400;600;700&display=swap`;
 }
 
-export function createSiteLayout(config: PressConfig, options: { loadFonts?: boolean } = {}) {
+function ThemeHead({ theme, loadFonts }: { theme: PressTheme; loadFonts: boolean }) {
+    return (
+        <head>
+            <style dangerouslySetInnerHTML={{ __html: themeVariablesCss(theme) }} />
+            {loadFonts && (
+                <>
+                    <link rel="preconnect" href="https://fonts.googleapis.com" />
+                    <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+                    {themeFamilies(theme).map((family) => (
+                        <link key={family} rel="stylesheet" href={fontHref(family)} />
+                    ))}
+                </>
+            )}
+        </head>
+    );
+}
+
+export interface SiteLayoutOptions {
+    loadFonts?: boolean;
+    /** The registry a coming soon holding page's blocks render with. Without it, the default page renders. */
+    blocks?: BlockRegistry;
+}
+
+/*
+ * The holding page, rendered in place of the whole site while coming soon is on (#28). The page
+ * under it has already stopped at a 404 in `siteConfig`, so `children` holds nothing of the site and
+ * is not rendered either. No header, footer or feed link: those would name the site's structure.
+ */
+function HoldingDocument({ cfg, registry, loadFonts }: { cfg: PressConfig; registry?: BlockRegistry; loadFonts: boolean }) {
+    const t = cfg.theme;
+    const s = cfg.site;
+    const blocks = registry ? resolveBlocks(cfg.comingSoon?.blocks, registry, { perViewer: false }) : [];
+
+    return (
+        <html lang={cfg.locale}>
+            <ThemeHead theme={t} loadFonts={loadFonts} />
+            <body style={{ margin: 0, background: t.colors.pageBg, color: t.colors.ink, fontFamily: t.fonts.body }}>
+                <main
+                    data-press="coming-soon"
+                    style={{ maxWidth: t.layout.wide, margin: "0 auto", padding: `80px ${t.layout.gutter}` }}
+                >
+                    {blocks.length > 0 ? (
+                        <>
+                            <style dangerouslySetInnerHTML={{ __html: proseCss(t, BLOCK_PROSE_CLASS) }} />
+                            <BlockList blocks={blocks} theme={t} />
+                        </>
+                    ) : (
+                        <div style={{ maxWidth: t.layout.prose }}>
+                            {s.logo && (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={s.logo} alt={s.logoAlt ?? s.name} style={{ height: "48px", width: "auto" }} />
+                            )}
+                            <h1 style={{ margin: "24px 0 0", fontFamily: t.fonts.heading, fontSize: "clamp(32px, 4.4vw, 52px)", lineHeight: 1.08 }}>
+                                {s.name}
+                            </h1>
+                            {s.tagline && <p style={{ margin: "12px 0 0", color: t.colors.secondaryInk }}>{s.tagline}</p>}
+                            <p style={{ margin: "32px 0 0", fontFamily: t.fonts.mono, color: t.colors.accent }}>Coming soon.</p>
+                        </div>
+                    )}
+                </main>
+            </body>
+        </html>
+    );
+}
+
+export function createSiteLayout(config: PressConfig, options: SiteLayoutOptions = {}) {
     const loadFonts = options.loadFonts ?? true;
 
     return async function SiteLayout({ children }: LayoutProps) {
@@ -34,6 +102,9 @@ export function createSiteLayout(config: PressConfig, options: { loadFonts?: boo
                 </html>
             );
         }
+        if (await showsHoldingPage(cfg)) {
+            return <HoldingDocument cfg={cfg} registry={options.blocks} loadFonts={loadFonts} />;
+        }
 
         const t = cfg.theme;
         const c = t.colors;
@@ -43,18 +114,7 @@ export function createSiteLayout(config: PressConfig, options: { loadFonts?: boo
 
         return (
             <html lang={cfg.locale}>
-                <head>
-                    <style dangerouslySetInnerHTML={{ __html: themeVariablesCss(t) }} />
-                    {loadFonts && (
-                        <>
-                            <link rel="preconnect" href="https://fonts.googleapis.com" />
-                            <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-                            {themeFamilies(t).map((family) => (
-                                <link key={family} rel="stylesheet" href={fontHref(family)} />
-                            ))}
-                        </>
-                    )}
-                </head>
+                <ThemeHead theme={t} loadFonts={loadFonts} />
                 <body style={{ margin: 0, background: c.pageBg, color: c.ink, fontFamily: t.fonts.body }}>
                     {s.topBar && (
                         <div style={{ background: c.darkPanel, color: c.darkPanelInk, fontSize: "13px" }}>
@@ -99,9 +159,11 @@ export function createSiteLayout(config: PressConfig, options: { loadFonts?: boo
                                         {l.label}
                                     </a>
                                 ))}
-                                <a href="/feed.xml" style={{ ...linkStyle, fontFamily: t.fonts.mono, fontSize: "13px", color: c.muted }}>
-                                    RSS
-                                </a>
+                                {!cfg.comingSoon && (
+                                    <a href="/feed.xml" style={{ ...linkStyle, fontFamily: t.fonts.mono, fontSize: "13px", color: c.muted }}>
+                                        RSS
+                                    </a>
+                                )}
                             </span>
                         </nav>
                     </header>
@@ -171,7 +233,9 @@ export function createSiteMetadata(config: PressConfig) {
             description: s.tagline,
             icons: s.favicon ? { icon: s.favicon } : undefined,
             openGraph: { siteName: s.name, images: s.shareImage ? [s.shareImage] : undefined },
-            alternates: s.url ? { types: { "application/rss+xml": `${s.url}/feed.xml` } } : undefined,
+            // While coming soon is on nothing is indexed, key or not, and there is no feed to point at.
+            alternates: s.url && !cfg.comingSoon ? { types: { "application/rss+xml": `${s.url}/feed.xml` } } : undefined,
+            robots: cfg.comingSoon ? { index: false, follow: false } : undefined,
         };
     };
 }

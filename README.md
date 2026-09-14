@@ -93,7 +93,8 @@ decision, not the engine's.
 | `app/api/revalidate/route.ts` | `POST`, `GET` | `createRevalidateRoute(config)` |
 | `app/[slug]/page.tsx` | `default`, `generateMetadata` | `createPage(config, blocks)`, `createPageMetadata(config)` |
 | `app/api/blocks/route.ts` | `GET`, `OPTIONS` | `createBlockSchemaRoute(blocks)`, `createBlockSchemaPreflight()` |
-| `app/layout.tsx` | `default`, `generateMetadata` | `createSiteLayout(config)`, `createSiteMetadata(config)` |
+| `app/layout.tsx` | `default`, `generateMetadata` | `createSiteLayout(config, { blocks })`, `createSiteMetadata(config)` |
+| `app/api/coming-soon/route.ts` | `GET` | `createPreviewKeyRoute(config)` |
 
 Mount only what you want. Nothing requires anything else. The paths only have to agree with the
 `routes` in your config, which is what every generated link is built from.
@@ -267,6 +268,47 @@ A read that fails with a network error or a 5xx answers from the last good copy 
 the next successful read replaces it. Known hosts keep resolving the same way. A page that was cached
 for a tenant keeps answering 200 with that tenant's identity and theme. A tenant never gets another
 tenant's kept answer.
+
+**Coming soon.** A tenant can show a holding page in place of its site, with a preview key that lets
+the people building it see the real thing. It is three fields on the `site` entry, which the
+blueprint does not have yet, so add them to the tenant's `site` type:
+
+| Field | Type | What |
+| --- | --- | --- |
+| `ComingSoon` | boolean | On or off. Absent is off |
+| `ComingSoonBlocks` | json | The holding page, as a block list. Empty renders the name, tagline and "Coming soon." in the theme |
+| `PreviewKeyHash` | string | Lowercase hex SHA-256 of the preview key. Never the key: this entry is publicly delivered |
+
+While it is on, for that tenant only:
+
+- every page answers the holding page with `noindex` and `Cache-Control: private, no-store`. A page
+  stops in `siteConfig` with a not-found before it reads anything, so its content and its title never
+  reach the response. Next has already sent the status by then, so it is 200, the same for a path
+  that exists and one that does not;
+- `feed.xml` and `sitemap.xml` are 404 for everyone, key or not, and `robots.txt` answers
+  `Disallow: /` with no sitemap line;
+- route handlers under `app/api` (revalidate, blocks, the key route) and `/_next/static` are served as
+  usual.
+
+Turning it off is a publish: the webhook purges the tenant's tag and the next request reads the new
+settings. No deploy.
+
+A previewer opens `https://<domain>/api/coming-soon?key=<key>&to=/a/path` once. A valid key becomes a
+`__Host-press-preview` cookie (HttpOnly, Secure, SameSite=Lax, Path=/, no Domain, so only that host
+gets it), and every answer, valid key or not, is a 303 to `to` so the key leaves the address bar. The
+key is compared as a SHA-256 digest in constant time and never logged, though a proxy in front that
+logs query strings will have it. A key is 16 to 256 characters of `A-Z a-z 0-9 . _ ~ -`; a shorter one
+never matches, because the hash is public. Changing the hash signs every previewer out.
+
+```bash
+KEY=$(openssl rand -base64 24 | tr '+/' '-_' | tr -d '=')
+printf %s "$KEY" | sha256sum | cut -d' ' -f1   # PreviewKeyHash
+```
+
+The mode is decided per request from the cookie, and a request-time site renders every route
+dynamically, so no cached render made for one visitor is served to the other. A page you write by hand
+must call `siteConfig(config)` before it reads or renders anything, which is what keeps it behind the
+holding page. A build-time site has no settings entry and no coming soon mode.
 
 `generateStaticParams` factories return nothing on a request-time site, since there is no tenant at
 build. `scripts/two-hosts.sh` runs the built reference app against a stand-in CMS with two tenants

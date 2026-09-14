@@ -1,5 +1,6 @@
 /*
- * A stand-in barakoCMS with two tenants on two domains, for scripts/two-hosts.sh.
+ * A stand-in barakoCMS with three tenants on three domains, for scripts/two-hosts.sh. The third is
+ * coming soon, so the other two show it leaves them alone.
  *
  * It answers only what the renderer asks: the host lookup, each tenant's site settings and its posts.
  * GET /__reads returns how many content reads each tenant has made, which is how the script shows a
@@ -20,9 +21,21 @@ const tenants = {
         settings: { Name: "BaryoDev", Url: "https://baryo.dev", Colors: { accent: "#1A6B41" }, Fonts: { heading: "Sora" } },
         post: "shipping-notes",
     },
+    soon: {
+        host: "soon.example",
+        settings: {
+            Name: "Soon Club",
+            Url: "https://soon.example",
+            ComingSoon: true,
+            ComingSoonBlocks: [{ type: "richText", props: { markdown: "## Opening in October" } }],
+            // SHA-256 of soon-preview-key-0123456789, the key scripts/two-hosts.sh uses.
+            PreviewKeyHash: "6094507b4726fb79bd38d2b3d966548a707966fbbd00f743c6c9b140487f3550",
+        },
+        post: "launch-plans",
+    },
 };
 
-const reads = { rckoronadal: 0, baryo: 0 };
+const reads = { rckoronadal: 0, baryo: 0, soon: 0 };
 
 function send(res, status, body) {
     res.writeHead(status, { "content-type": "application/json" });

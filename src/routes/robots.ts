@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import type { PressConfig } from "../config.js";
-import { siteConfig } from "../site.js";
+import { notFound } from "next/navigation";
+import { siteConfigOrNull } from "../site.js";
 
 /*
  * Generated, because the Sitemap line has to be an absolute URL and the domain is per deployment.
@@ -13,7 +14,10 @@ import { siteConfig } from "../site.js";
  */
 export function createRobots(base: PressConfig) {
     return async function robots(): Promise<MetadataRoute.Robots> {
-        const config = await siteConfig(base);
+        const config = await siteConfigOrNull(base);
+        if (!config) notFound();
+        // Reachable while coming soon is on, but asking for nothing to be crawled and naming no sitemap.
+        if (config.comingSoon) return { rules: { userAgent: "*", disallow: "/" } };
         return {
             rules: { userAgent: "*", allow: "/" },
             sitemap: `${config.site.url}/sitemap.xml`,
