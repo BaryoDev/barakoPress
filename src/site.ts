@@ -1,6 +1,8 @@
-import { headers } from "next/headers";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
 import type {
+    ComingSoon,
     FooterColumn,
     PressConfig,
     SiteIdentity,
@@ -89,11 +91,47 @@ export async function resolveSite(
     return applySiteSettings(scoped, await readSettings(scoped), found.host);
 }
 
-/** The config for this request in a server component or route handler. A request with no tenant is a 404. */
+/**
+ * The config for this request in a server component or route handler.
+ *
+ * A request with no tenant is a not-found, and so is one the tenant's coming soon mode holds back.
+ * That second one is what keeps a page's content and its metadata out of the response: the page
+ * stops here, before it reads anything, and the layout renders the holding page in its place.
+ */
 export async function siteConfig(config: PressConfig): Promise<PressConfig> {
     const resolved = await siteConfigOrNull(config);
-    if (!resolved) notFound();
+    if (!resolved || (await showsHoldingPage(resolved))) notFound();
     return resolved;
+}
+
+/*
+ * Coming soon (barakoPress #28).
+ *
+ * The mode is decided per request from the cookie and the tenant's settings, and is never part of
+ * anything cached: the settings read is the same for every visitor, and reading the cookie makes
+ * the render dynamic. So a visitor without the key cannot be handed a render made for one with it.
+ */
+
+/** Host-only by its prefix: a browser refuses it with a Domain, without Secure, or off Path=/. */
+export const PREVIEW_COOKIE = "__Host-press-preview";
+
+const PREVIEW_KEY = /^[A-Za-z0-9._~-]{16,256}$/;
+const SHA256_HEX = /^[0-9a-f]{64}$/;
+
+/** Whether a key is the tenant's preview key. Compared as SHA-256 digests, in constant time. */
+export function previewKeyMatches(comingSoon: ComingSoon, key: string | null | undefined): boolean {
+    if (!comingSoon.previewKeyHash || !SHA256_HEX.test(comingSoon.previewKeyHash)) return false;
+    if (typeof key !== "string" || !PREVIEW_KEY.test(key)) return false;
+    const expected = Buffer.from(comingSoon.previewKeyHash, "hex");
+    const actual = createHash("sha256").update(key, "utf8").digest();
+    return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+/** True when this request gets the holding page: coming soon is on and it carries no valid key. */
+export async function showsHoldingPage(config: PressConfig): Promise<boolean> {
+    if (!config.comingSoon) return false;
+    const jar = await cookies();
+    return !previewKeyMatches(config.comingSoon, jar.get(PREVIEW_COOKIE)?.value);
 }
 
 /** As `siteConfig`, but null rather than a 404, for a layout or a handler that answers for itself. */
@@ -251,6 +289,17 @@ function locale(base: string, v: unknown): string {
     }
 }
 
+function comingSoon(d: Record<string, unknown>): ComingSoon | undefined {
+    const flag = d.ComingSoon;
+    const on = flag === true || (typeof flag === "string" && flag.trim().toLowerCase() === "true");
+    if (!on) return undefined;
+    const hash = str(d.PreviewKeyHash)?.toLowerCase();
+    return {
+        blocks: json(d.ComingSoonBlocks),
+        previewKeyHash: hash && SHA256_HEX.test(hash) ? hash : undefined,
+    };
+}
+
 export function applySiteSettings(
     config: PressConfig,
     data: Record<string, unknown> | undefined,
@@ -283,7 +332,10 @@ export function applySiteSettings(
         layout: tokens<ThemeLayout>(config.theme.layout, d.Layout, LENGTH),
     };
 
-    return { ...config, site, theme, locale: locale(config.locale, d.Locale) };
+    const { comingSoon: _ignored, ...rest } = config;
+    void _ignored;
+    const soon = comingSoon(d);
+    return { ...rest, site, theme, locale: locale(config.locale, d.Locale), ...(soon ? { comingSoon: soon } : {}) };
 }
 
 /** The first family of each role's stack, for a site that loads its faces from Google Fonts. */

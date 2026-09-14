@@ -1,7 +1,8 @@
 import type { MetadataRoute } from "next";
 import type { PressConfig } from "../config.js";
 import { listPosts } from "../cms.js";
-import { siteConfig } from "../site.js";
+import { notFound } from "next/navigation";
+import { siteConfigOrNull } from "../site.js";
 
 /*
  * Built from the same cached read as every other page, so it costs nothing in the steady state
@@ -13,7 +14,9 @@ import { siteConfig } from "../site.js";
  */
 export function createSitemap(base: PressConfig) {
     return async function sitemap(): Promise<MetadataRoute.Sitemap> {
-        const config = await siteConfig(base);
+        const config = await siteConfigOrNull(base);
+        // Not served while coming soon is on, preview key or not.
+        if (!config || config.comingSoon) notFound();
         let indexable: Awaited<ReturnType<typeof listPosts>>["posts"] = [];
         try {
             const { posts } = await listPosts(config, { pageSize: config.pageSizes.sitemap });

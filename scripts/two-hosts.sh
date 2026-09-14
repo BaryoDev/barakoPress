@@ -56,6 +56,57 @@ if cors GET https://evil.example | grep -qi '^access-control-allow-origin'; then
 if cors GET https://brew.example | grep -qi '^access-control-allow-credentials'; then fail "/api/blocks allows credentials"; fi
 echo "ok: /api/blocks answers the console origin only"
 
+# soon.example is coming soon. KEY is what its settings hold the SHA-256 of.
+KEY=soon-preview-key-0123456789
+COOKIE="__Host-press-preview=$KEY"
+held() { grep -q 'data-press="coming-soon"' "$1" && grep -q "Opening in October" "$1" && grep -q 'name="robots" content="noindex' "$1"; }
+real() { grep -q "launch-plans" "$1" && ! grep -q 'data-press="coming-soon"' "$1"; }
+curl -s -D /tmp/soon-head.txt -H "Host: soon.example" "$APP/" > /tmp/soon.html
+held /tmp/soon.html || fail "soon.example does not answer the holding page with noindex"
+# Next streams the page, so the status is sent before the page stops. What must hold is that a path
+# that exists and one that does not answer alike.
+[ "$(status soon.example /blog/launch-plans)" = "$(status soon.example /no-such-page)" ] || fail "the holding page tells an existing path from a missing one"
+grep -q "launch-plans" /tmp/soon.html && fail "the holding page carries soon.example content"
+tr -d '\r' < /tmp/soon-head.txt | grep -qi '^cache-control:.*no-store' || fail "the holding page may be stored by a cache"
+page soon.example /blog/launch-plans > /tmp/soon-post.html
+held /tmp/soon-post.html || fail "a post on soon.example does not answer the holding page"
+grep -q "Soon Club post" /tmp/soon-post.html && fail "the holding page carries the post's title"
+[ "$(status soon.example /feed.xml)" = "404" ] || fail "soon.example serves its feed while coming soon"
+[ "$(status soon.example /sitemap.xml)" = "404" ] || fail "soon.example serves its sitemap while coming soon"
+page soon.example /robots.txt | grep -q "Disallow: /" || fail "soon.example robots does not disallow while coming soon"
+asset=$(grep -o '/_next/static/[^"]*\.js' /tmp/soon.html | head -1)
+[ -n "$asset" ] && [ "$(status soon.example "$asset")" = "200" ] || fail "static assets are not reachable while coming soon"
+[ "$(status soon.example /api/revalidate)" != "404" ] || fail "the revalidate endpoint is not reachable while coming soon"
+echo "ok: soon.example answers the holding page, no feed or sitemap, robots and assets reachable"
+
+keyroute() { curl -s -o /dev/null -D - -H "Host: soon.example" "$APP/api/coming-soon?key=$1&to=/blog/launch-plans" | tr -d '\r'; }
+keyroute wrong-key-but-long-enough-000 > /tmp/soon-wrong.txt
+grep -q '^HTTP/1.1 303' /tmp/soon-wrong.txt || fail "a wrong key is not redirected"
+grep -qi '^set-cookie:' /tmp/soon-wrong.txt && fail "a wrong key was given a cookie"
+keyroute "$KEY" > /tmp/soon-key.txt
+grep -q '^HTTP/1.1 303' /tmp/soon-key.txt || fail "the preview key is not redirected"
+grep -qiE '^location: (https?://[^/]+)?/blog/launch-plans$' /tmp/soon-key.txt || fail "the key redirect does not drop the query"
+cookie=$(grep -i '^set-cookie: __Host-press-preview=' /tmp/soon-key.txt) || fail "the preview key did not set its cookie"
+for part in HttpOnly Secure SameSite=Lax "Path=/"; do
+  echo "$cookie" | grep -qi "; $part" || fail "the preview cookie is missing $part"
+done
+echo "$cookie" | grep -qi "domain=" && fail "the preview cookie names a domain"
+echo "ok: the preview key sets a host-only HttpOnly, Secure, SameSite=Lax cookie and redirects the key away"
+
+visit() { curl -s -D "$2.head" ${3:+-H "Cookie: $3"} -H "Host: soon.example" "$APP$1" > "$2"; }
+visit / /tmp/soon-1.html "$COOKIE"; real /tmp/soon-1.html || fail "the preview cookie does not show the real site"
+tr -d '\r' < /tmp/soon-1.html.head | grep -qi '^cache-control:.*no-store' || fail "the real site behind coming soon may be stored by a cache"
+visit / /tmp/soon-2.html; held /tmp/soon-2.html || fail "a visitor without the key got the real site after one with it"
+visit / /tmp/soon-3.html "$COOKIE"; real /tmp/soon-3.html || fail "a visitor with the key got the holding page after one without it"
+visit / /tmp/soon-4.html "__Host-press-preview=wrong-key-but-long-enough-000"; held /tmp/soon-4.html || fail "a wrong cookie shows the real site"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -H "Cookie: $COOKIE" -H "Host: soon.example" "$APP/sitemap.xml")" = "404" ] || fail "the sitemap is served to a previewer"
+page baryo.dev / > /tmp/baryo-beside-soon.html
+grep -q "shipping-notes" /tmp/baryo-beside-soon.html || fail "baryo.dev is not its real site beside a coming soon tenant"
+grep -q 'data-press="coming-soon"' /tmp/baryo-beside-soon.html && fail "baryo.dev got a holding page"
+[ "$(status baryo.dev /feed.xml)" = "200" ] || fail "baryo.dev lost its feed beside a coming soon tenant"
+grep -q "$KEY" /tmp/two-hosts-app.log && fail "the preview key reached the log"
+echo "ok: key and no key alternate without crossing, and baryo.dev is unaffected"
+
 purge() {
   local body='{"event":"Published"}' ts sig
   ts=$(date +%s)

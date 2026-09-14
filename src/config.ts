@@ -152,6 +152,18 @@ export interface SitesConfig {
     defaultTenant?: string;
 }
 
+/**
+ * A tenant's coming soon mode, read from its site settings. Present only while it is on.
+ *
+ * The settings entry is publicly delivered, so it holds a hash of the preview key and never the key.
+ */
+export interface ComingSoon {
+    /** The holding page's blocks as stored. Empty or unreadable renders the default holding page. */
+    blocks?: unknown;
+    /** Lowercase hex SHA-256 of the preview key. Absent means nobody sees the real site. */
+    previewKeyHash?: string;
+}
+
 export interface PressConfig {
     types: TypeNames;
     fields: FieldMap;
@@ -173,6 +185,8 @@ export interface PressConfig {
     theme: PressTheme;
     /** Set when identity and theme are read per request from the tenant's site settings. */
     sites?: SitesConfig;
+    /** Set by the tenant's settings on a request-time site while coming soon is on. Never set by hand. */
+    comingSoon?: ComingSoon;
 }
 
 export type PressConfigInput = {
@@ -189,7 +203,7 @@ export type PressConfigInput = {
      */
     theme?: PressThemeInput;
     sites?: Partial<SitesConfig>;
-} & Partial<Omit<PressConfig, "types" | "fields" | "pageFields" | "routes" | "site" | "pageSizes" | "theme" | "sites">>;
+} & Partial<Omit<PressConfig, "types" | "fields" | "pageFields" | "routes" | "site" | "pageSizes" | "theme" | "sites" | "comingSoon">>;
 
 /**
  * The `blog` blueprint, which is what `POST /api/content-types/blueprints/blog` creates.

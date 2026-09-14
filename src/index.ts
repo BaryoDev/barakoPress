@@ -29,6 +29,9 @@ export { defineConfig, includesFor } from "./config.js";
 export {
     siteConfig,
     siteConfigOrNull,
+    showsHoldingPage,
+    previewKeyMatches,
+    PREVIEW_COOKIE,
     resolveSite,
     tenantFromHeaders,
     applySiteSettings,
@@ -58,6 +61,7 @@ export type {
     PageSizes,
     SiteIdentity,
     SitesConfig,
+    ComingSoon,
     SiteLink,
     FooterColumn,
     SocialLink,
@@ -141,6 +145,7 @@ export { createBlockSchemaRoute, createBlockSchemaPreflight, parseOrigins } from
 export type { BlockSchemaRouteOptions } from "./routes/block-schema.js";
 
 export { createRevalidateRoute } from "./routes/revalidate.js";
+export { createPreviewKeyRoute } from "./routes/preview-key.js";
 export type { RevalidateOptions } from "./routes/revalidate.js";
 export { createFeed } from "./routes/feed.js";
 export { createSitemap } from "./routes/sitemap.js";
