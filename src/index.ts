@@ -30,8 +30,11 @@ export {
     siteConfig,
     siteConfigOrNull,
     showsHoldingPage,
-    previewKeyMatches,
-    PREVIEW_COOKIE,
+    shareCookieValid,
+    signShareCookie,
+    shareSecret,
+    SHARE_COOKIE,
+    SHARE_SESSION_MAX_SECONDS,
     resolveSite,
     tenantFromHeaders,
     applySiteSettings,
@@ -61,14 +64,14 @@ export type {
     PageSizes,
     SiteIdentity,
     SitesConfig,
-    ComingSoon,
+    Holding,
     SiteLink,
     FooterColumn,
     SocialLink,
     TopBar,
 } from "./config.js";
 
-export { list, bySlug, bySlugPreview, semantic, tenantForHost, cacheTagFor, CmsError } from "./delivery.js";
+export { list, bySlug, bySlugPreview, redeemShareLink, semantic, tenantForHost, cacheTagFor, CmsError } from "./delivery.js";
 export type {
     PublicContent,
     Seo,
@@ -76,6 +79,7 @@ export type {
     Paged,
     SemanticHit,
     SemanticResponse,
+    ShareRedeemAnswer,
 } from "./delivery.js";
 
 export { listRelated, pickRelated } from "./related.js";
@@ -145,7 +149,8 @@ export { createBlockSchemaRoute, createBlockSchemaPreflight, parseOrigins } from
 export type { BlockSchemaRouteOptions } from "./routes/block-schema.js";
 
 export { createRevalidateRoute } from "./routes/revalidate.js";
-export { createPreviewKeyRoute } from "./routes/preview-key.js";
+export { createSharePage, createShareRedeemRoute, SHARE_INVALID_FRAGMENT } from "./routes/share.js";
+export type { SharePageOptions } from "./routes/share.js";
 export type { RevalidateOptions } from "./routes/revalidate.js";
 export { createFeed } from "./routes/feed.js";
 export { createSitemap } from "./routes/sitemap.js";
