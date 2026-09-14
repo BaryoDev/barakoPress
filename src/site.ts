@@ -165,9 +165,16 @@ export function siteHref(v: unknown): string | undefined {
     }
 }
 
+/** Drops trailing slashes without a regular expression, which CodeQL flags as slow on long runs of '/'. */
+function withoutTrailingSlashes(value: string): string {
+    let end = value.length;
+    while (end > 0 && value.charCodeAt(end - 1) === 47) end--;
+    return value.slice(0, end);
+}
+
 function origin(v: unknown): string | undefined {
     const href = siteHref(v);
-    return href && !href.startsWith("/") ? href.replace(/\/+$/, "") : undefined;
+    return href && !href.startsWith("/") ? withoutTrailingSlashes(href) : undefined;
 }
 
 function links(v: unknown, max = 24): SiteLink[] {

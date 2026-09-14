@@ -222,7 +222,9 @@ const BLOG_BLUEPRINT: Pick<PressConfig, "types" | "fields" | "pageFields"> = {
 };
 
 function trimSlash(path: string): string {
-    return path.replace(/\/+$/, "");
+    let end = path.length;
+    while (end > 0 && path.charCodeAt(end - 1) === 47) end--;
+    return path.slice(0, end);
 }
 
 /**
