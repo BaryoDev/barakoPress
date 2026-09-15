@@ -456,6 +456,17 @@ other. It needs one setting:
 | Variable | What |
 | --- | --- |
 | `PRESS_PREVIEW_SECRET` | The HMAC key, at least 32 characters, for example `openssl rand -base64 48`. Read per request. Unset or shorter, no session is issued or accepted and everyone gets the holding page. Every instance behind one domain needs the same value |
+| `CMS_RENDERER_KEY` | Optional. Sent to barakoCMS as `X-Barako-Renderer-Key` when a link is redeemed, and must match the renderer key barakoCMS is configured with. Read per request and never logged. Unset, no key header is sent |
+
+**Redemption is rate limited per tenant and visitor.** Every redemption leaves this container from the
+same address, so barakoCMS needs the visitor's address to tell visitors apart. Name the header a
+proxy in front sets it in, `sites: { visitorIpHeader: "x-real-ip" }`, and it is sent on as
+`X-Barako-Visitor-IP`. Name it only behind a proxy that sets that header and strips a caller's value,
+the same rule as `hostHeader` and `tenantHeader`. A value that is not exactly one IPv4 or IPv6
+address, a comma separated list included, is not sent. barakoCMS trusts the address only when
+`CMS_RENDERER_KEY` matches, so both are needed for a per visitor limit. With no header named nothing
+is sent: a Next route handler never sees the socket's address, and the `X-Forwarded-For` Next adds
+keeps whatever a caller put there.
 
 **A session lasts until the link expires or for 24 hours, whichever is sooner.** Opening the link
 again starts a new one while the link is valid. **A revoked link can keep working for up to 24

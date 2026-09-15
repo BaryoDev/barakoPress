@@ -157,6 +157,13 @@ export interface SitesConfig {
      */
     tenantHeader?: string;
     /**
+     * A request header carrying the visitor's IP address, sent on to barakoCMS when a share link is
+     * redeemed so its rate limit counts that visitor rather than this container. Off unless named,
+     * and only safe when a proxy in front sets it and strips any value a caller sent. A value that
+     * is not exactly one IP address is not sent.
+     */
+    visitorIpHeader?: string;
+    /**
      * The tenant a host with no tenant of its own falls back to. Unset, such a host is a 404.
      * `CMS_DEFAULT_TENANT` is read at request time when this is not set.
      */
@@ -484,6 +491,7 @@ export function defineConfig(
                       settingsType: input.sites.settingsType ?? SETTINGS_TYPE,
                       hostHeader: (input.sites.hostHeader ?? "host").toLowerCase(),
                       tenantHeader: input.sites.tenantHeader?.toLowerCase(),
+                      visitorIpHeader: input.sites.visitorIpHeader?.toLowerCase(),
                       defaultTenant: input.sites.defaultTenant,
                   },
               }

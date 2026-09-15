@@ -60,6 +60,17 @@ function sameOrigin(request: Request, hostHeader: string): boolean {
     }
 }
 
+/*
+ * The visitor's address, for barakoCMS to rate limit by. It is read only from a header the operator
+ * named, the same trust as the host and tenant headers: a proxy in front sets it and strips a
+ * caller's value. A route handler is never given the socket's address, and the X-Forwarded-For Next
+ * adds keeps whatever a caller sent, so with no header named nothing is sent.
+ */
+function visitorIp(config: PressConfig, request: Request): string | undefined {
+    const named = config.sites?.visitorIpHeader;
+    return named ? (request.headers.get(named) ?? undefined) : undefined;
+}
+
 async function readKey(request: Request): Promise<string | null> {
     const declared = Number(request.headers.get("content-length") ?? "0");
     if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return null;
@@ -98,7 +109,10 @@ export function createShareRedeemRoute(base: PressConfig) {
         }
 
         const now = Date.now();
-        const answer = await redeemShareLink(config, key, now);
+        const answer = await redeemShareLink(config, key, now, {
+            rendererKey: process.env.CMS_RENDERER_KEY?.trim() || undefined,
+            visitorIp: visitorIp(config, request),
+        });
         if (answer.kind !== "valid") return refused();
 
         const expires = Math.floor(Math.min(answer.expiresAt, now + SHARE_SESSION_MAX_SECONDS * 1000) / 1000);
