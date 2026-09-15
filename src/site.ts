@@ -2,6 +2,9 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
 import {
+    AUTHOR_COLLECTION,
+    CATEGORY_COLLECTION,
+    POST_COLLECTION,
     SETTINGS_TYPE,
     type CollectionConfig,
     type CollectionReference,
@@ -198,6 +201,8 @@ export async function siteConfigOrNull(config: PressConfig): Promise<PressConfig
  * in it was typed by an editor, so a caller checks the shape of whatever it reads.
  */
 export async function getGlobals(config: PressConfig): Promise<Record<string, unknown>> {
+    // The read below swallows its own failures, so a config nobody resolved has to be refused here.
+    if (config.sites && !config.tenant) throw new Error("a request-time site has to be resolved before it reads");
     return (await readSettings(config, config.sites?.settingsType ?? SETTINGS_TYPE)) ?? {};
 }
 
@@ -403,10 +408,13 @@ function withoutHoldingPage(site: SiteIdentity, path: string): SiteIdentity {
 /*
  * `Collections`: the content types this tenant's site renders as lists and detail pages, keyed by name,
  * each in the shape of `CollectionConfig`. An entry that does not read as one is left out whole rather
- * than half applied, and one keyed like a configured collection replaces it. Every name ends up in an
+ * than half applied, and one keyed like a configured collection replaces it. The blog's own three keys
+ * are refused: the blog factories map posts through `types` and `fields`, so a replaced `post` entry
+ * would render its list one way and its pages another. Every name ends up in an
  * API query or a link, so each is held to a plain identifier or a plain site path.
  */
 const COLLECTION_KEY = /^[A-Za-z][A-Za-z0-9_-]{0,40}$/;
+const BLOG_KEYS = new Set([POST_COLLECTION, AUTHOR_COLLECTION, CATEGORY_COLLECTION]);
 const TYPE_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,62}$/;
 const FIELD_NAME = /^@?[A-Za-z][A-Za-z0-9_]{0,62}$/;
 const DATA_FIELD = /^[A-Za-z][A-Za-z0-9_]{0,62}$/;
@@ -467,6 +475,7 @@ function collectionFrom(v: unknown): CollectionConfig | undefined {
         sort: sort && SORT.test(sort) ? sort : undefined,
         feed: c.feed === true,
         sitemap: c.sitemap !== false,
+        index: c.index !== false,
         pageSize: typeof pageSize === "number" && Number.isInteger(pageSize) && pageSize >= 1 && pageSize <= 100 ? pageSize : undefined,
         label: short(c.label, 80),
         noun: noun[0] && noun[1] ? [noun[0], noun[1]] : undefined,
@@ -480,7 +489,7 @@ function collectionsFrom(base: Record<string, CollectionConfig>, v: unknown): Re
     const read = Object.entries(input)
         .slice(0, 24)
         .flatMap(([key, raw]): [string, CollectionConfig][] => {
-            const collection = COLLECTION_KEY.test(key) ? collectionFrom(raw) : undefined;
+            const collection = COLLECTION_KEY.test(key) && !BLOG_KEYS.has(key) ? collectionFrom(raw) : undefined;
             return collection ? [[key, collection]] : [];
         });
     return { ...base, ...Object.fromEntries(read) };
@@ -488,7 +497,8 @@ function collectionsFrom(base: Record<string, CollectionConfig>, v: unknown): Re
 
 /*
  * `OptionColors`, keyed by `type.field` and then by option, each naming a colour in `Colors`, a theme
- * slot, or a colour written out. A name that resolves to nothing readable as a colour is dropped.
+ * slot, or a colour written out. A name that resolves to nothing readable as a colour is dropped. The
+ * tenant's options merge over the configured ones, so setting one option keeps the rest.
  */
 const OPTION_KEY = /^[A-Za-z][A-Za-z0-9_-]{0,62}\.[A-Za-z][A-Za-z0-9_]{0,62}$/;
 
@@ -521,9 +531,10 @@ function optionColorsFrom(
                     const color = option.length <= 200 && colorName ? resolve(colorName) : undefined;
                     return color ? [[option, color]] : [];
                 });
-            return [[key, Object.fromEntries(colors)]];
+            const configured = Object.hasOwn(base, key) ? base[key] : {};
+            return [[key, { ...configured, ...Object.fromEntries(colors) }]];
         });
-    return Object.fromEntries(read);
+    return { ...base, ...Object.fromEntries(read) };
 }
 
 export function applySiteSettings(

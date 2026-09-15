@@ -203,5 +203,6 @@ export { createSharePage, createShareRedeemRoute, SHARE_INVALID_FRAGMENT } from 
 export type { SharePageOptions } from "./routes/share.js";
 export type { RevalidateOptions } from "./routes/revalidate.js";
 export { createFeed } from "./routes/feed.js";
+export type { FeedOptions } from "./routes/feed.js";
 export { createSitemap } from "./routes/sitemap.js";
 export { createRobots } from "./routes/robots.js";

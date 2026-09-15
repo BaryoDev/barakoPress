@@ -39,7 +39,7 @@ vi.mock("next/link", () => ({
 const { defineConfig } = await import("./config.js");
 const { forgetCachedReads } = await import("./delivery.js");
 const { isReservedPath } = await import("./cms.js");
-const { listCollection } = await import("./collections.js");
+const { collectionAt, listCollection, toItem } = await import("./collections.js");
 const { listRelated } = await import("./related.js");
 const { applySiteSettings, getGlobals, siteConfig } = await import("./site.js");
 const { createPage } = await import("./screens/page.js");
@@ -308,6 +308,27 @@ describe("collections from a tenant's settings", () => {
             "project.AreaOfFocus": { "Providing clean water": "#00A2E0", "Supporting education": "#F7A81B" },
         });
 
+        const merged = applySiteSettings(
+            {
+                ...config,
+                tenant: "t",
+                optionColors: {
+                    "project.AreaOfFocus": { "Promoting peace": "#0000AA", "Providing clean water": "#999999" },
+                    "doctor.Specialty": { Children: "#00AA00" },
+                },
+            },
+            TENANTS.rckoronadal.settings,
+            null,
+        );
+        expect(merged.optionColors).toEqual({
+            "project.AreaOfFocus": {
+                "Promoting peace": "#0000AA",
+                "Providing clean water": "#00A2E0",
+                "Supporting education": "#F7A81B",
+            },
+            "doctor.Specialty": { Children: "#00AA00" },
+        });
+
         const buildTime = defineConfig({
             site: { name: "R", url: "https://r.example" },
             cmsUrl: CMS,
@@ -338,7 +359,8 @@ describe("collections from a tenant's settings", () => {
                     badType: { type: "a thing", fields: { title: "Name" } },
                     noTitle: { type: "thing", fields: {} },
                     badRoute: { type: "thing", route: "//evil.example", fields: { title: "Name" } },
-                    post: { type: "post", route: "javascript:alert(1)", fields: { title: "Title" } },
+                    post: { type: "article", route: "/blog", fields: { title: "Headline" } },
+                    author: { type: "person", route: "/people", fields: { title: "Name" } },
                     badValues: { type: "thing", fields: { title: "Name" }, sort: "Name; drop", pageSize: 5000, colorBy: "@createdAt" },
                 },
             },
@@ -356,6 +378,7 @@ describe("collections from a tenant's settings", () => {
         });
         expect(Object.keys(out.collections.good.references ?? {})).toEqual(["Owner"]);
         expect(out.collections.post).toEqual(config.collections.post);
+        expect(out.collections.author).toEqual(config.collections.author);
         expect(out.collections.badValues).toMatchObject({ sort: undefined, pageSize: undefined, colorBy: undefined });
     });
 
@@ -376,8 +399,20 @@ describe("collections from a tenant's settings", () => {
         expect(feed).toContain("<link>https://rckoronadal.org/projects/clean-water</link>");
         expect(feed).toContain("<description>Wells for barangays</description>");
 
+        expect(feed).toContain('<atom:link href="https://rckoronadal.org/feed.xml"');
+        const mounted = await (await createFeed(config, "projects", { path: "/projects/feed.xml" })()).text();
+        expect(mounted).toContain('<atom:link href="https://rckoronadal.org/projects/feed.xml"');
+
         visit("hospital.example");
         expect((await createFeed(config, "doctors")()).status).toBe(404);
+
+        const routeless = defineConfig({
+            site: { name: "R", url: "https://r.example" },
+            cmsUrl: CMS,
+            tenant: "rckoronadal",
+            collections: { projects: { ...PROJECTS_COLLECTION, route: undefined } },
+        });
+        expect((await createFeed(routeless, "projects")()).status).toBe(404);
     });
 
     it("lists a filtered collection in the collection block, with its colours", async () => {
@@ -436,6 +471,26 @@ describe("collections from a tenant's settings", () => {
         expect(await createCollectionStaticParams(config, "doctors")()).toEqual([]);
     });
 
+    it("fails a static export whose later page cannot be read, rather than shipping part of it", async () => {
+        const buildTime = defineConfig({
+            site: { name: "H", url: "https://h.example" },
+            cmsUrl: CMS,
+            collections: { doctors: { type: "doctor", route: "/doctors", fields: { title: "Name" } } },
+        });
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async (input: string | URL | Request) => {
+                const page = Number(new URL(String(input)).searchParams.get("page"));
+                if (page > 1) throw new Error("ECONNRESET");
+                return Response.json({ items: [DOCTORS[0]], page, pageSize: 100, totalItems: 2, totalPages: 2, hasNextPage: true });
+            }),
+        );
+        await expect(createCollectionStaticParams(buildTime, "doctors")()).rejects.toThrow("ECONNRESET");
+
+        vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("ECONNREFUSED"); }));
+        expect(await createCollectionStaticParams(buildTime, "doctors")()).toEqual([]);
+    });
+
     it("finds the items that reference an item through listRelated", async () => {
         const hospital = await site("hospital.example");
         const doctors = await listRelated(hospital, "doctors", { id: "d1" }, { via: "Department" });
@@ -443,9 +498,75 @@ describe("collections from a tenant's settings", () => {
         expect(doctors.map((d) => d.title)).toEqual(["Dr Reyes"]);
     });
 
-    it("reads the tenant's settings entry through getGlobals", async () => {
+    it("reads the tenant's settings entry through getGlobals, and refuses a config nobody resolved", async () => {
         const hospital = await site("hospital.example");
         const globals = await getGlobals(hospital);
         expect(globals.Name).toBe("City Hospital");
+        await expect(getGlobals(config)).rejects.toThrow("resolved");
+    });
+
+    it("lists no author or category index through the catch-all, and answers 404 for a type the CMS does not have", async () => {
+        visit("hospital.example");
+        expect(await route(config, ["authors"])).toBe("NEXT_NOT_FOUND");
+        expect(await route(config, ["categories"])).toBe("NEXT_NOT_FOUND");
+        expect(calls.some((c) => c.path.startsWith("/api/public/author?"))).toBe(false);
+
+        const missingType = defineConfig({
+            site: { name: "H", url: "https://h.example" },
+            cmsUrl: CMS,
+            tenant: "hospital",
+            collections: { nurses: { type: "nurse", route: "/nurses", fields: { title: "Name" } } },
+        });
+        expect(await outcome(() => createCollectionIndex(missingType, "nurses")())).toBe("NEXT_NOT_FOUND");
+    });
+
+    it("prefers the longest matching route, and refuses a collection mounted at the site root", async () => {
+        const nested = defineConfig({
+            sites: {},
+            collections: { featured: { type: "feature", route: "/blog/featured", fields: { title: "Title" } } },
+        });
+        expect(collectionAt(nested, "/blog/featured")).toEqual({ key: "featured" });
+        expect(collectionAt(nested, "/blog/featured/one")).toEqual({ key: "featured", slug: "one" });
+        expect(collectionAt(nested, "/blog/other")).toEqual({ key: "post", slug: "other" });
+        expect(collectionAt(nested, "/authors")).toBeNull();
+        expect(collectionAt(nested, "/authors/ada")).toEqual({ key: "author", slug: "ada" });
+
+        expect(() =>
+            defineConfig({ sites: {}, collections: { things: { type: "thing", route: "/", fields: { title: "Title" } } } }),
+        ).toThrow("site root");
+    });
+
+    it("resolves only references into a configured collection", async () => {
+        const owned = defineConfig({
+            site: { name: "H", url: "https://h.example" },
+            cmsUrl: CMS,
+            tenant: "hospital",
+            collections: {
+                departments: { type: "department", route: "/departments", fields: { title: "Name" } },
+                doctors: {
+                    type: "doctor",
+                    route: "/doctors",
+                    fields: { title: "Name" },
+                    references: { Department: { collection: "departments" }, Clinic: { collection: "clinics" } },
+                },
+            },
+        });
+        await listCollection(owned, "doctors");
+        expect(listed("doctor").map((c) => c.path)).toEqual(["/api/public/doctor?page=1&pageSize=20&include=Department"]);
+    });
+
+    it("gives no colour to an option named like an object member", () => {
+        const coloured = defineConfig({
+            site: { name: "R", url: "https://r.example" },
+            collections: { projects: PROJECTS_COLLECTION },
+            optionColors: { "project.AreaOfFocus": { "Providing clean water": "#00A2E0" } },
+        });
+        const item = (option: string) =>
+            toItem(coloured, "projects", { id: "x", slug: "x", data: { Title: "X", AreaOfFocus: option } });
+        expect(item("Providing clean water").color).toBe("#00A2E0");
+        for (const option of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+            expect(item(option).option).toBe(option);
+            expect(item(option).color).toBeUndefined();
+        }
     });
 });

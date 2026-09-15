@@ -262,15 +262,25 @@ export function referencedBy(config: PressConfig, key: string): { collection: st
     return undefined;
 }
 
-/** Which collection a site path is: its index at the route, or an item one segment below. */
+/**
+ * Which collection a site path is: its index at the route, or an item one segment below. The longest
+ * matching route wins, so a collection at /blog/featured is not read as a post slugged "featured". A
+ * collection whose `index` is false answers only for its items.
+ */
 export function collectionAt(config: PressConfig, path: string): { key: string; slug?: string } | null {
     const parts = path.split("/").filter(Boolean);
-    for (const [key, col] of Object.entries(config.collections)) {
-        const route = col.route?.split("/").filter(Boolean);
-        if (!route || route.length === 0) continue;
+    const routes = Object.entries(config.collections)
+        .map(([key, col]) => ({ key, col, route: col.route?.split("/").filter(Boolean) ?? [] }))
+        .filter((r) => r.route.length > 0)
+        .sort((a, b) => b.route.length - a.route.length);
+    for (const { key, col, route } of routes) {
         if (parts.length < route.length || parts.length > route.length + 1) continue;
         if (!route.every((segment, i) => segment.toLowerCase() === parts[i].toLowerCase())) continue;
-        return parts.length === route.length ? { key } : { key, slug: parts[route.length] };
+        if (parts.length === route.length) {
+            if (col.index === false) continue;
+            return { key };
+        }
+        return { key, slug: parts[route.length] };
     }
     return null;
 }

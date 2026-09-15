@@ -226,6 +226,11 @@ export interface CollectionConfig {
     feed?: boolean;
     /** Whether its items are in the sitemap. On unless false. */
     sitemap?: boolean;
+    /**
+     * Whether the root catch-all serves an index at the route. On unless false. An item page below the
+     * route is served either way, and a route file calling `createCollectionIndex` ignores this.
+     */
+    index?: boolean;
     /** Items on its index. `pageSizes.index` when unset. */
     pageSize?: number;
     /** The heading of its index. The site's name and tagline when unset. */
@@ -383,6 +388,9 @@ function blogCollections(types: TypeNames, fields: FieldMap, routes: RouteMap): 
             ...(url ? { url } : {}),
         },
         sitemap: false,
+        // Never listed at /authors or /categories unless a site mounts that route file itself, since no
+        // blog site ever had those pages and a public list of either is a decision, not a default.
+        index: false,
     });
     if (types.author) collections[AUTHOR_COLLECTION] = term(types.author, routes.author, "Website");
     if (types.category) collections[CATEGORY_COLLECTION] = term(types.category, routes.category);
@@ -391,7 +399,13 @@ function blogCollections(types: TypeNames, fields: FieldMap, routes: RouteMap): 
 
 function ownCollections(input: Record<string, CollectionConfig> | undefined): Record<string, CollectionConfig> {
     return Object.fromEntries(
-        Object.entries(input ?? {}).map(([key, c]) => [key, c.route === undefined ? c : { ...c, route: mountPath(c.route) }]),
+        Object.entries(input ?? {}).map(([key, c]) => {
+            if (c.route === undefined) return [key, c];
+            const route = mountPath(c.route);
+            // At the root an item would sit at /slug, where pages and every other route already are.
+            if (!route) throw new Error(`collection "${key}" cannot be mounted at the site root`);
+            return [key, { ...c, route }];
+        }),
     );
 }
 

@@ -10,8 +10,14 @@ import { siteConfigOrNull, tenantVary } from "../site.js";
  * here, the routes have one owner: the collection's route. It also costs nothing, because it is the
  * same cached, tagged read the index uses.
  *
- * The posts by default; `createFeed(config, key)` serves any collection whose `feed` is on.
+ * The posts by default; `createFeed(config, key)` serves any collection whose `feed` is on and that has a
+ * route, since an item without a route has no page to link to.
  */
+
+export interface FeedOptions {
+    /** Where this feed is mounted, for its self link. `/feed.xml` unless given. */
+    path?: string;
+}
 
 /** XML text escaping. Every value below is content someone typed, so none of it is trusted. */
 function xml(value: string): string {
@@ -23,14 +29,14 @@ function xml(value: string): string {
         .replace(/'/g, "&apos;");
 }
 
-export function createFeed(base: PressConfig, collection: string = POST_COLLECTION) {
+export function createFeed(base: PressConfig, collection: string = POST_COLLECTION, options: FeedOptions = {}) {
     return async function GET() {
         // Outside the try below: resolving reads the request, and Next signals that with a throw.
         const config = await siteConfigOrNull(base);
         // Not served while holding, to anyone, session or not: a feed is public and cached in front of the site.
         if (!config || config.holding) return new Response("Not found", { status: 404 });
         const col = collectionOf(config, collection);
-        if (!col?.feed) return new Response("Not found", { status: 404 });
+        if (!col?.feed || col.route === undefined) return new Response("Not found", { status: 404 });
 
         let items: Item[] = [];
         try {
@@ -48,7 +54,7 @@ export function createFeed(base: PressConfig, collection: string = POST_COLLECTI
 
         const entries = items
             .map((item) => {
-                const url = `${config.site.url}${col.route ?? ""}/${item.slug}`;
+                const url = `${config.site.url}${col.route}/${item.slug}`;
                 const date = item.date ? new Date(item.date) : null;
                 const pubDate =
                     date && !Number.isNaN(date.getTime())
@@ -80,7 +86,7 @@ export function createFeed(base: PressConfig, collection: string = POST_COLLECTI
     <title>${xml(config.site.name)}</title>
     <link>${xml(config.site.url)}</link>
     <description>${xml(config.site.tagline ?? config.site.name)}</description>
-    <atom:link href="${xml(`${config.site.url}/feed.xml`)}" rel="self" type="application/rss+xml"/>
+    <atom:link href="${xml(`${config.site.url}${options.path ?? "/feed.xml"}`)}" rel="self" type="application/rss+xml"/>
 ${entries}
   </channel>
 </rss>

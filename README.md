@@ -149,11 +149,15 @@ merged over the configured collections by key. A build-time site passes `collect
 | `sort` | Sent to the API, for example `-PublishedAt` |
 | `feed` | Whether `createFeed(config, key)` serves it |
 | `sitemap` | On unless `false` |
+| `index` | Whether the root catch-all serves an index at the route. On unless `false`; the derived `author` and `category` have it off, so `/authors` stays a 404 unless a route file mounts it |
 | `pageSize`, `label`, `noun` | Items on the index, its heading, and how a count reads |
 | `colorBy` | A choice field whose option colours the item. See below |
 
 A settings entry that does not read as a collection is left out whole: a type or field that is not a
-plain identifier, a route that is not a plain site path, or no title field.
+plain identifier, a route that is not a plain site path, or no title field. The keys `post`, `author`
+and `category` are refused from settings, because the blog factories map posts through `types` and
+`fields`. A build-time collection mounted at `/` throws in `defineConfig`. When two routes match, the
+longer one wins.
 
 A request-time site cannot add a route file per tenant, so the root catch-all from the pages section
 also serves every collection with a route: its index at the route, and an item one segment below. A

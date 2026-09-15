@@ -13,6 +13,7 @@ import {
     referencedBy,
     type Item,
 } from "../collections.js";
+import { CmsError } from "../delivery.js";
 import { renderMarkdown } from "../markdown.js";
 import { siteConfig } from "../site.js";
 
@@ -199,6 +200,8 @@ export async function CollectionIndexView({
         ({ items } = await listCollection(config, collection, { filter }));
     } catch (e) {
         if (e && typeof e === "object" && "digest" in e) throw e;
+        // The type is not there, or not publicly deliverable, so nothing lives at this route.
+        if (e instanceof CmsError && e.status === 404) notFound();
         // An unreachable CMS is the likeliest thing to be wrong, so it gets a readable page rather than
         // a stack trace. This render is not cached, so the next request retries.
         failure = true;
@@ -363,7 +366,10 @@ export function createCollectionStaticParams(config: PressConfig, collection: st
             let batch;
             try {
                 batch = await listCollection(config, collection, { page, pageSize: 100 });
-            } catch {
+            } catch (e) {
+                // A read that fails after earlier pages succeeded would ship an export missing the rest,
+                // each a 404, so it fails the build instead.
+                if (slugs.length > 0) throw e;
                 // A build with no CMS reachable produces no routes. Under `output: "export"` Next then
                 // refuses the build, which is the correct outcome for a static site with no content.
                 break;
