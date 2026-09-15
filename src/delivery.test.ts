@@ -2,7 +2,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defineConfig } from "./config.js";
-import { redeemShareLink, semantic } from "./delivery.js";
+import { forgetCachedReads, list, pageAtPath, redeemShareLink, semantic, tenantForHost } from "./delivery.js";
 
 const config = defineConfig({
     site: { name: "Test", url: "https://test.example" },
@@ -148,5 +148,95 @@ describe("redeemShareLink", () => {
         expect(timeout).toHaveBeenCalledTimes(1);
         expect(timeout.mock.calls[0][0]).toBeGreaterThan(0);
         expect(timeout.mock.calls[0][0]).toBeLessThanOrEqual(10_000);
+    });
+});
+
+describe("reading from a CMS that stops answering", () => {
+    const tenantConfig = { ...defineConfig({ sites: {}, cmsUrl: "http://cms.test", cmsTimeoutMs: 50 }), tenant: "baryo" };
+    const posts = { items: [{ id: "p", data: { Title: "Kept" } }], page: 1, pageSize: 20, totalItems: 1, totalPages: 1, hasNextPage: false };
+
+    afterEach(() => {
+        forgetCachedReads();
+        vi.restoreAllMocks();
+    });
+
+    /** A fetch that never answers, and gives up only when its signal aborts. */
+    const hanging = () =>
+        vi.fn(
+            (_input: string | URL | Request, init?: RequestInit) =>
+                new Promise<Response>((_resolve, reject) => {
+                    init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+                }),
+        );
+
+    it("answers from the last good copy once the timeout passes, rather than waiting on the CMS", async () => {
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        vi.stubGlobal("fetch", answer(200, posts));
+        await list(tenantConfig, "post");
+
+        vi.stubGlobal("fetch", hanging());
+        const started = Date.now();
+        const read = await list(tenantConfig, "post");
+
+        expect(read.items[0].data.Title).toBe("Kept");
+        expect(Date.now() - started).toBeLessThan(1_000);
+    }, 2_000);
+
+    it("does not ask the CMS again for a read that just failed, until the marker expires", async () => {
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        vi.stubGlobal("fetch", answer(200, posts));
+        await list(tenantConfig, "post");
+
+        const down = vi.fn(async () => {
+            throw new Error("ECONNREFUSED");
+        });
+        vi.stubGlobal("fetch", down);
+        const first = await list(tenantConfig, "post");
+        const second = await list(tenantConfig, "post");
+
+        expect(first.items[0].data.Title).toBe("Kept");
+        expect(second.items[0].data.Title).toBe("Kept");
+        expect(down).toHaveBeenCalledTimes(1);
+
+        const now = Date.now();
+        vi.spyOn(Date, "now").mockReturnValue(now + 60_000);
+        await list(tenantConfig, "post");
+        expect(down).toHaveBeenCalledTimes(2);
+    });
+
+    it("sends one visitor to a CMS that still hangs after the marker expires, and answers the rest from the copy", async () => {
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        vi.stubGlobal("fetch", answer(200, posts));
+        await list(tenantConfig, "post");
+        vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("ECONNREFUSED"); }));
+        await list(tenantConfig, "post");
+
+        const later = Date.now() + 60_000;
+        vi.spyOn(Date, "now").mockReturnValue(later);
+        const hang = hanging();
+        vi.stubGlobal("fetch", hang);
+        const reads = await Promise.all(Array.from({ length: 5 }, () => list(tenantConfig, "post")));
+
+        expect(reads.map((r) => r.items[0].data.Title)).toEqual(["Kept", "Kept", "Kept", "Kept", "Kept"]);
+        expect(hang).toHaveBeenCalledTimes(1);
+    }, 2_000);
+
+    it("falls back to the default timeout for a value AbortSignal.timeout would refuse", () => {
+        for (const cmsTimeoutMs of [Infinity, 2.5, 1e10, -1, 0, Number.NaN]) {
+            expect(defineConfig({ site: { name: "T", url: "https://t.example" }, cmsTimeoutMs }).cmsTimeoutMs).toBe(5_000);
+        }
+        expect(defineConfig({ site: { name: "T", url: "https://t.example" }, cmsTimeoutMs: 1_500 }).cmsTimeoutMs).toBe(1_500);
+    });
+
+    it("gives up on a host lookup that never answers", async () => {
+        vi.stubGlobal("fetch", hanging());
+        await expect(tenantForHost(tenantConfig, "stalls.example")).rejects.toThrow();
+    }, 2_000);
+});
+
+describe("pageAtPath", () => {
+    it("reads a resolve body whose entry has no data as no page, rather than failing the render", async () => {
+        vi.stubGlobal("fetch", answer(200, { contract: 1, path: "/x", entry: { contentType: "page" } }));
+        await expect(pageAtPath(config, "/x")).resolves.toBeNull();
     });
 });
