@@ -179,6 +179,8 @@ export interface SitesConfig {
 export interface Holding {
     /** `HoldingPath`: the site path of the page shown on every route. Absent renders the default holding page. */
     path?: string;
+    /** `HoldingMessage`: the line the default holding page shows under the name and tagline. Absent shows no line. */
+    message?: string;
 }
 
 /**

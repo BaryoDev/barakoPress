@@ -93,6 +93,11 @@ const TENANTS: Record<string, Tenant> = {
         post: "later-plans",
         shareLinks: { [KEY]: 30 * DAY },
     },
+    closed: {
+        host: "closed.example",
+        settings: { Name: "Corner Bakery", Url: "https://closed.example", Tagline: "Bread since 1962", Mode: "Holding", HoldingMessage: "  Closed until 6 January.  " },
+        post: "january-menu",
+    },
     baryo: {
         host: "baryo.dev",
         settings: { Name: "BaryoDev", Url: "https://baryo.dev", Mode: "Live" },
@@ -198,6 +203,15 @@ describe("reading the site mode from the settings", () => {
         for (const d of [undefined, { Name: "X" }, { Mode: "Live" }, { Mode: "live", HoldingPath: "/soon" }, { Mode: "Private" }, { Mode: true }]) {
             expect(applySiteSettings(base, d, null).holding).toBeUndefined();
         }
+    });
+
+    it("reads HoldingMessage while holding, trimmed, and not at all while live or when blank", () => {
+        expect(applySiteSettings(base, { Mode: "Holding", HoldingMessage: " Closed until 6 January. " }, null).holding).toEqual({ message: "Closed until 6 January." });
+        expect(applySiteSettings(base, { Mode: "Holding", HoldingPath: "/soon", HoldingMessage: "Back soon." }, null).holding).toEqual({ path: "/soon", message: "Back soon." });
+        for (const blank of ["", "   ", 5, null, { text: "x" }]) {
+            expect(applySiteSettings(base, { Mode: "Holding", HoldingMessage: blank }, null).holding).toEqual({});
+        }
+        expect(applySiteSettings(base, { Mode: "Live", HoldingMessage: "Closed until 6 January." }, null).holding).toBeUndefined();
     });
 
     it("ignores the ComingSoon fields of the earlier design", () => {
@@ -349,9 +363,41 @@ describe("a tenant in holding mode", () => {
         expect(html).toContain('data-press="holding"');
         expect(html).toContain("Later Club");
         expect(html).toContain("Not yet");
-        expect(html).toContain("Coming soon.");
+        // No HoldingMessage, so no line under the name and tagline.
+        expect(html).not.toContain("Coming soon.");
+        expect(html.match(/<p/g)).toHaveLength(2);
         expect(html).not.toContain("later-plans");
         expect(calls.some((c) => c.path.startsWith("/api/public/pages/resolve"))).toBe(false);
+    });
+
+    it("shows the tenant's HoldingMessage in place of a fixed line", async () => {
+        visit("closed.example");
+        const html = await layoutHtml();
+        expect(html).toContain('data-press="holding"');
+        expect(html).toContain("Corner Bakery");
+        expect(html).toContain("Bread since 1962");
+        expect(html).toContain(">Closed until 6 January.</p>");
+        expect(html).not.toContain("Coming soon.");
+        expect(html).not.toContain("january-menu");
+
+        // Rendered right after, in the same process: another holding tenant never gets this line.
+        visit("later.example");
+        const other = await layoutHtml();
+        expect(other).toContain("Later Club");
+        expect(other).not.toContain("Closed until 6 January.");
+    });
+
+    it("renders HoldingMessage as text, never as markup", async () => {
+        const saved = TENANTS.closed.settings.HoldingMessage;
+        TENANTS.closed.settings.HoldingMessage = '<img src=x onerror="alert(1)">Closed';
+        try {
+            visit("closed.example");
+            const html = await layoutHtml();
+            expect(html).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;Closed");
+            expect(html).not.toContain("<img src=x");
+        } finally {
+            TENANTS.closed.settings.HoldingMessage = saved;
+        }
     });
 
     it("falls back to the default holding page when HoldingPath does not resolve", async () => {
@@ -363,7 +409,7 @@ describe("a tenant in holding mode", () => {
             expect(calls.some((c) => c.path === "/api/public/pages/resolve?path=%2Fno-such-page")).toBe(true);
             expect(html).toContain('data-press="holding"');
             expect(html).toContain("Soon Club");
-            expect(html).toContain("Coming soon.");
+            expect(html).not.toContain("Coming soon.");
             expect(html).not.toContain("Opening in October");
             expect(html).not.toContain("launch-plans");
         } finally {

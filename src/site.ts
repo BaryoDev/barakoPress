@@ -371,7 +371,8 @@ function sitePath(v: unknown): string | undefined {
 function holding(d: Record<string, unknown>): Holding | undefined {
     if (str(d.Mode)?.toLowerCase() !== "holding") return undefined;
     const path = sitePath(d.HoldingPath);
-    return path ? { path } : {};
+    const message = str(d.HoldingMessage);
+    return { ...(path ? { path } : {}), ...(message ? { message } : {}) };
 }
 
 export function samePath(a: string, b: string): boolean {

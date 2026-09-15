@@ -93,7 +93,9 @@ function withoutPath(cfg: PressConfig, items: NavItem[], path: string): NavItem[
  * is not rendered either. No header, footer or feed link: those would name the site's structure.
  *
  * With `HoldingPath` set it is that page, rendered as the page route renders it. Unset, or not
- * served there, it is the name, tagline and "Coming soon." in the tenant's theme.
+ * served there, it is the name, the tagline and the tenant's `HoldingMessage`, in the tenant's theme.
+ * No message shows no line: a fixed one would tell a site closed for a break that it is coming soon,
+ * and in English whatever the tenant's locale.
  *
  * A share link that did not redeem lands on `/#share-invalid`. The notice is shown by CSS `:target`
  * alone, so nothing is stored and no script runs for it.
@@ -133,7 +135,9 @@ async function HoldingDocument({ cfg, registry, loadFonts }: { cfg: PressConfig;
                                 {s.name}
                             </h1>
                             {s.tagline && <p style={{ margin: "12px 0 0", color: t.colors.secondaryInk }}>{s.tagline}</p>}
-                            <p style={{ margin: "32px 0 0", fontFamily: t.fonts.mono, color: t.colors.accent }}>Coming soon.</p>
+                            {cfg.holding?.message && (
+                                <p style={{ margin: "32px 0 0", fontFamily: t.fonts.mono, color: t.colors.accent }}>{cfg.holding.message}</p>
+                            )}
                         </div>
                     </main>
                 )}
