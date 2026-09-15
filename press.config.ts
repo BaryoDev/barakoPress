@@ -6,7 +6,7 @@ import { createBlockRegistry, defineConfig } from "barakopress";
  * `sites` turns on request-time identity (barakoCMS D22): the host a request came to is resolved to
  * a tenant through the CMS, and that tenant's `site` settings entry supplies the name, the palette,
  * the faces, the header and the footer. One container answers every domain the CMS knows. What stays
- * in the environment is per deployment only: CMS_URL, REVALIDATE_SECRET, and optionally CMS_TENANT
+ * in the environment is per deployment only: CMS_URL, PRESS_SECRET, and optionally CMS_TENANT
  * to pin the container to one tenant or CMS_DEFAULT_TENANT for a host that has no tenant.
  *
  * A site that wants identity written here instead leaves `sites` out and passes `site`, as

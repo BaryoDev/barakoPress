@@ -30,7 +30,7 @@
   "sudo": true,
   "preDeploy": [
     "test -f /opt/barakopress/.env || { echo 'no .env on the VM: copy .env.example, fill it in, and keep it out of the sync'; exit 1; }",
-    "grep -q '^REVALIDATE_SECRET=.\\+' /opt/barakopress/.env || { echo 'REVALIDATE_SECRET is empty, the cache would never be invalidated'; exit 1; }"
+    "grep -Eq '^(PRESS_SECRET|REVALIDATE_SECRET)=.+' /opt/barakopress/.env || { echo 'PRESS_SECRET is empty, the cache would never be invalidated'; exit 1; }"
   ],
   "verify": [
     "d=$(grep -m1 '^SITE_DOMAIN=' .env | cut -d= -f2- | tr -d '\"'\"'\\r'\"'\"') && test -n \"$d\" && curl --fail --silent --show-error --max-time 15 -o /dev/null \"https://$d/\"",

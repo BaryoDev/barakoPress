@@ -188,6 +188,7 @@ beforeEach(() => {
     redeemHeaders = [];
     vi.stubGlobal("fetch", cms());
     vi.stubEnv("PRESS_PREVIEW_SECRET", SECRET);
+    vi.stubEnv("PRESS_SECRET", undefined);
 });
 afterEach(() => {
     vi.unstubAllGlobals();
@@ -728,6 +729,62 @@ describe("redeeming a share link", () => {
         const logged = spies.flatMap((spy) => spy.mock.calls);
         expect(logged.length).toBeGreaterThan(0);
         for (const args of logged) expect(JSON.stringify(args)).not.toContain(KEY);
+    });
+});
+
+describe("one PRESS_SECRET for share sessions", () => {
+    const OTHER = "a-press-secret-for-tests-only-abcdefghijk";
+    const redeem = () =>
+        createShareRedeemRoute(config)(
+            new Request("http://internal:3000/api/share/redeem", {
+                method: "POST",
+                headers: { host: "soon.example", "content-type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({ key: KEY }).toString(),
+            }),
+        );
+    const cookieOf = (res: Response) => {
+        const cookie = res.headers.get("set-cookie") ?? "";
+        return cookie.slice(SHARE_COOKIE.length + 1, cookie.indexOf(";"));
+    };
+
+    it("issues and honours a session with only PRESS_SECRET set", async () => {
+        vi.stubEnv("PRESS_PREVIEW_SECRET", undefined);
+        vi.stubEnv("PRESS_SECRET", OTHER);
+
+        const res = await redeem();
+        expect(res.headers.get("location")).toBe("/");
+        const value = cookieOf(res);
+        expect(shareCookieValid(value, "soon", OTHER)).toBe(true);
+
+        visit("soon.example", value);
+        await expect(siteConfig(config)).resolves.toMatchObject({ tenant: "soon" });
+    });
+
+    it("takes PRESS_SECRET over PRESS_PREVIEW_SECRET when both are set", async () => {
+        vi.stubEnv("PRESS_PREVIEW_SECRET", SECRET);
+        vi.stubEnv("PRESS_SECRET", OTHER);
+
+        visit("soon.example", signShareCookie("soon", inAnHour(), SECRET));
+        await expect(siteConfig(config)).rejects.toThrow("NEXT_NOT_FOUND");
+        visit("soon.example", signShareCookie("soon", inAnHour(), OTHER));
+        await expect(siteConfig(config)).resolves.toMatchObject({ tenant: "soon" });
+    });
+
+    it("opens nothing with a PRESS_SECRET shorter than 32 characters, whatever PRESS_PREVIEW_SECRET holds", async () => {
+        vi.stubEnv("PRESS_PREVIEW_SECRET", SECRET);
+        vi.stubEnv("PRESS_SECRET", "short-press-secret");
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+
+        for (const signedWith of [SECRET, "short-press-secret"]) {
+            visit("soon.example", signShareCookie("soon", inAnHour(), signedWith));
+            await expect(siteConfig(config)).rejects.toThrow("NEXT_NOT_FOUND");
+        }
+        expect((await redeem()).headers.get("set-cookie")).toBeNull();
+    });
+
+    it("signs the cookie byte for byte as before", () => {
+        // openssl dgst -sha256 -hmac SECRET -binary over "press-share.soon.2000000000", base64url.
+        expect(signShareCookie("soon", 2_000_000_000, SECRET)).toBe("2000000000.y3IurHO0YKCEWZ3DaZzy6gQK5BA_ITMK4Q1IaetVWlI");
     });
 });
 

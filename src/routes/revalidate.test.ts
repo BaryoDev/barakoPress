@@ -11,6 +11,9 @@ const { createRevalidateRoute } = await import("./revalidate.js");
 const { revalidateKeyFor, runCli } = await import("../revalidate-key.js");
 
 const SECRET = "revalidate-secret-for-tests";
+const PRESS_SECRET = "one-press-secret-for-tests-0123456789abcdef";
+/** What `barakopress revalidate-key baryo` printed on 1cdcdc2 with REVALIDATE_SECRET=SECRET, and what openssl prints. */
+const BARYO_KEY_FROM_0_3 = "e1854345942be5d0b9ddb88d4a0df29bfe7cf80cd23d22de51304e7fd29a2eeb";
 const BODY = '{"event":"Published"}';
 const HOSTS: Record<string, string> = { "baryo.dev": "baryo", "rckoronadal.org": "rckoronadal" };
 
@@ -40,9 +43,12 @@ beforeEach(() => {
     forgetCachedReads();
     revalidateTag.mockClear();
     vi.spyOn(console, "log").mockImplementation(() => {});
+    // A PRESS_SECRET in the shell running these would win over every older name a test sets.
+    vi.stubEnv("PRESS_SECRET", undefined);
 });
 afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
 });
 
@@ -157,13 +163,119 @@ describe("barakopress revalidate-key", () => {
         }
     });
 
-    it("matches the openssl one-liner the README gives", async () => {
+    it("matches the openssl one-liner the README gives, from PRESS_SECRET or the older name", async () => {
         const { execFileSync } = await import("node:child_process");
-        const viaOpenssl = execFileSync("sh", ["-c", `printf 'revalidate.%s' "$1" | openssl dgst -sha256 -hmac "$REVALIDATE_SECRET" | sed 's/^.* //'`, "sh", "baryo"], {
-            env: { ...process.env, REVALIDATE_SECRET: SECRET },
-        })
-            .toString()
-            .trim();
-        expect(viaOpenssl).toBe(revalidateKeyFor(SECRET, "baryo"));
+        const oneLiner = `printf 'revalidate.%s' "$1" | openssl dgst -sha256 -hmac "\${PRESS_SECRET:-$REVALIDATE_SECRET}" | sed 's/^.* //'`;
+        const run = (env: Record<string, string>) => {
+            const clean = { ...process.env };
+            delete clean.PRESS_SECRET;
+            delete clean.REVALIDATE_SECRET;
+            return execFileSync("sh", ["-c", oneLiner, "sh", "baryo"], { env: { ...clean, ...env } }).toString().trim();
+        };
+        expect(run({ PRESS_SECRET: PRESS_SECRET })).toBe(revalidateKeyFor(PRESS_SECRET, "baryo"));
+        expect(run({ REVALIDATE_SECRET: SECRET })).toBe(revalidateKeyFor(SECRET, "baryo"));
+    });
+});
+
+describe("one PRESS_SECRET", () => {
+    const fromEnv = () => createRevalidateRoute(defineConfig({ sites: {}, cmsUrl: "http://cms.test" }));
+    const onlyEnv = (env: Record<string, string | undefined>) => {
+        for (const name of ["PRESS_SECRET", "REVALIDATE_SECRET", "PRESS_PREVIEW_SECRET"]) vi.stubEnv(name, env[name]);
+    };
+    afterEach(() => vi.unstubAllEnvs());
+
+    it("verifies a request-time delivery with only PRESS_SECRET set", async () => {
+        onlyEnv({ PRESS_SECRET });
+        cmsWithTwoTenants();
+        const { POST } = fromEnv();
+
+        const res = await POST(delivery("baryo.dev", revalidateKeyFor(PRESS_SECRET, "baryo")));
+        expect(res.status).toBe(200);
+        expect(revalidateTag.mock.calls).toEqual([["cms:baryo", { expire: 0 }]]);
+    });
+
+    it("verifies a build-time delivery signed with PRESS_SECRET itself", async () => {
+        onlyEnv({ PRESS_SECRET });
+        vi.stubGlobal("fetch", vi.fn());
+        const { POST } = createRevalidateRoute(defineConfig({ site: { name: "Test", url: "https://example.com" }, cmsUrl: "http://cms.test" }));
+
+        expect((await POST(delivery("example.com", PRESS_SECRET))).status).toBe(200);
+    });
+
+    it("still verifies a key revalidate-key printed on master, with only REVALIDATE_SECRET set", async () => {
+        onlyEnv({ REVALIDATE_SECRET: SECRET });
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        cmsWithTwoTenants();
+        const { POST } = fromEnv();
+
+        expect(revalidateKeyFor(SECRET, "baryo")).toBe(BARYO_KEY_FROM_0_3);
+        const res = await POST(delivery("baryo.dev", BARYO_KEY_FROM_0_3));
+        expect(res.status).toBe(200);
+        expect(revalidateTag.mock.calls).toEqual([["cms:baryo", { expire: 0 }]]);
+    });
+
+    it("takes PRESS_SECRET over REVALIDATE_SECRET when both are set", async () => {
+        onlyEnv({ PRESS_SECRET, REVALIDATE_SECRET: SECRET });
+        cmsWithTwoTenants();
+        const { POST } = fromEnv();
+
+        expect((await POST(delivery("baryo.dev", BARYO_KEY_FROM_0_3))).status).toBe(401);
+        expect((await POST(delivery("baryo.dev", revalidateKeyFor(PRESS_SECRET, "baryo")))).status).toBe(200);
+    });
+
+    it("warns once, without the secret, when REVALIDATE_SECRET is shorter than 32 characters, and keeps verifying", async () => {
+        onlyEnv({ REVALIDATE_SECRET: SECRET });
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        cmsWithTwoTenants();
+        const { POST } = fromEnv();
+
+        expect(SECRET.length).toBeLessThan(32);
+        expect((await POST(delivery("baryo.dev", BARYO_KEY_FROM_0_3, String(Math.floor(Date.now() / 1000))))).status).toBe(200);
+        expect((await POST(delivery("baryo.dev", BARYO_KEY_FROM_0_3, String(Math.floor(Date.now() / 1000) - 1)))).status).toBe(200);
+
+        expect(warn).toHaveBeenCalledTimes(1);
+        const message = warn.mock.calls[0].join(" ");
+        expect(message).toContain("REVALIDATE_SECRET");
+        expect(message).toContain("32");
+        expect(message).not.toContain(SECRET);
+    });
+
+    it("does not warn about a REVALIDATE_SECRET of 32 characters or more", async () => {
+        onlyEnv({ REVALIDATE_SECRET: PRESS_SECRET });
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        cmsWithTwoTenants();
+
+        expect((await fromEnv().POST(delivery("baryo.dev", revalidateKeyFor(PRESS_SECRET, "baryo")))).status).toBe(200);
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("refuses every delivery when PRESS_SECRET is shorter than 32 characters, and logs no secret", async () => {
+        onlyEnv({ PRESS_SECRET: "short-press-secret", REVALIDATE_SECRET: PRESS_SECRET });
+        const logged: unknown[][] = [];
+        for (const level of ["log", "warn", "error"] as const) {
+            vi.spyOn(console, level).mockImplementation((...args: unknown[]) => void logged.push(args));
+        }
+        cmsWithTwoTenants();
+
+        const res = await fromEnv().POST(delivery("baryo.dev", revalidateKeyFor("short-press-secret", "baryo")));
+        expect(res.status).toBe(503);
+        expect(revalidateTag).not.toHaveBeenCalled();
+        expect(logged.length).toBeGreaterThan(0);
+        for (const args of logged) {
+            expect(args.join(" ")).not.toContain("short-press-secret");
+            expect(args.join(" ")).not.toContain(PRESS_SECRET);
+        }
+    });
+
+    it("prints the key from PRESS_SECRET, falls back to REVALIDATE_SECRET, and refuses a short PRESS_SECRET", () => {
+        expect(runCli(["revalidate-key", "baryo"], { PRESS_SECRET })).toEqual({ code: 0, out: revalidateKeyFor(PRESS_SECRET, "baryo") });
+        expect(runCli(["revalidate-key", "baryo"], { PRESS_SECRET, REVALIDATE_SECRET: SECRET }).out).toBe(revalidateKeyFor(PRESS_SECRET, "baryo"));
+        expect(runCli(["revalidate-key", "baryo"], { REVALIDATE_SECRET: SECRET }).out).toBe(BARYO_KEY_FROM_0_3);
+
+        const short = runCli(["revalidate-key", "baryo"], { PRESS_SECRET: "short-press-secret" });
+        expect(short.code).toBe(1);
+        expect(short.out).toBeUndefined();
+        expect(short.err).toContain("32");
+        expect(short.err).not.toContain("short-press-secret");
     });
 });

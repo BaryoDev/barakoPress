@@ -212,6 +212,7 @@ beforeEach(() => {
     calls = [];
     vi.stubGlobal("fetch", cms());
     vi.stubEnv("PRESS_PREVIEW_SECRET", SECRET);
+    vi.stubEnv("PRESS_SECRET", undefined);
 });
 afterEach(() => {
     vi.unstubAllGlobals();
