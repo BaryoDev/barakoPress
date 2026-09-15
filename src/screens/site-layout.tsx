@@ -2,11 +2,12 @@ import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { PressConfig } from "../config.js";
-import { showsHoldingPage, siteConfigOrNull, themeFamilies } from "../site.js";
+import { samePath, showsHoldingPage, siteConfigOrNull, themeFamilies } from "../site.js";
 import { SHARE_INVALID_FRAGMENT } from "../routes/share.js";
 import { themeVariablesCss, type PressTheme } from "../theme.js";
 import type { BlockRegistry } from "../blocks/schema.js";
-import { getPageAtPath, type Page } from "../cms.js";
+import { getNavigation, getPageAtPath, pageHref, type NavItem, type Page } from "../cms.js";
+import { Navigation } from "./navigation.js";
 import { PageView } from "./page.js";
 
 /*
@@ -59,6 +60,31 @@ async function holdingPage(cfg: PressConfig, registry?: BlockRegistry): Promise<
         if (e && typeof e === "object" && "digest" in e) throw e;
         return null;
     }
+}
+
+/*
+ * The page menu, when the site mounts pages. A menu that cannot be read is no menu rather than a broken
+ * page. While holding, the holding page leaves it, as it leaves the header links.
+ */
+async function menu(cfg: PressConfig): Promise<NavItem[]> {
+    if (cfg.pages === undefined) return [];
+    let items: NavItem[];
+    try {
+        items = await getNavigation(cfg);
+    } catch (e) {
+        if (e && typeof e === "object" && "digest" in e) throw e;
+        const why = e instanceof Error ? e.message : String(e);
+        console.warn(`pages: navigation for tenant "${cfg.tenant ?? ""}" could not be read (${why})`);
+        return [];
+    }
+    const held = cfg.holding?.path;
+    return held ? withoutPath(cfg, items, held) : items;
+}
+
+function withoutPath(cfg: PressConfig, items: NavItem[], path: string): NavItem[] {
+    return items
+        .filter((item) => !samePath(pageHref(cfg, item.path), path))
+        .map((item) => ({ ...item, children: withoutPath(cfg, item.children, path) }));
 }
 
 /*
@@ -132,6 +158,7 @@ export function createSiteLayout(config: PressConfig, options: SiteLayoutOptions
             return await HoldingDocument({ cfg, registry: options.blocks, loadFonts });
         }
 
+        const nav = await menu(cfg);
         const t = cfg.theme;
         const c = t.colors;
         const s = cfg.site;
@@ -179,6 +206,7 @@ export function createSiteLayout(config: PressConfig, options: SiteLayoutOptions
                                     s.name
                                 )}
                             </Link>
+                            <Navigation config={cfg} items={nav} />
                             <span style={{ display: "flex", flexWrap: "wrap", gap: "8px 22px", fontSize: "15px" }}>
                                 {(s.headerLinks ?? []).map((l) => (
                                     <a key={l.href} href={l.href} style={linkStyle}>

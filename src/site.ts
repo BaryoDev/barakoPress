@@ -353,7 +353,7 @@ function holding(d: Record<string, unknown>): Holding | undefined {
     return path ? { path } : {};
 }
 
-function samePath(a: string, b: string): boolean {
+export function samePath(a: string, b: string): boolean {
     const trim = (p: string) => withoutTrailingSlashes(p).toLowerCase() || "/";
     return trim(a) === trim(b);
 }

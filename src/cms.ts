@@ -1,6 +1,16 @@
 import type { PressConfig } from "./config.js";
 import { includesFor } from "./config.js";
-import { bySlug, bySlugPreview, list, pageAtPath, type PublicContent, type Seo } from "./delivery.js";
+import {
+    bySlug,
+    bySlugPreview,
+    list,
+    navigationTree,
+    pageAtPath,
+    redirectAt,
+    type PublicContent,
+    type Seo,
+} from "./delivery.js";
+import { siteHref } from "./site.js";
 
 export type { Seo };
 
@@ -236,10 +246,143 @@ export async function getPage(config: PressConfig, slug: string): Promise<Page |
     return c ? toPage(config, c) : null;
 }
 
-/** The page the Pages module serves at a site path, or null. Needs no page type in the config. */
-export async function getPageAtPath(config: PressConfig, path: string): Promise<Page | null> {
+/*
+ * The page tree, from the Pages module.
+ *
+ * The CMS decides everything about it: which pages are in the menu, their order, their nesting and
+ * their paths. Nothing here sorts, nests, filters or derives a path. What is checked is shape, since
+ * the body crosses a process boundary: an item whose path is not a plain site path is dropped rather
+ * than repaired, and the tree is capped so a broken body cannot make an unbounded menu.
+ */
+
+export interface NavItem {
+    id: string;
+    title: string;
+    slug: string;
+    /** The page's path as the Pages module gave it. `pageHref` puts it under the mount. */
+    path: string;
+    order?: number;
+    children: NavItem[];
+}
+
+export interface Breadcrumb {
+    id: string;
+    title: string;
+    slug: string;
+    path: string;
+}
+
+const NAV_MAX_DEPTH = 9;
+const NAV_MAX_ITEMS = 500;
+
+function pagePath(v: unknown): string | undefined {
+    if (typeof v !== "string" || v.length > 2048 || !v.startsWith("/") || v.startsWith("//")) return undefined;
+    return /^\/[^\s\\<>"'?#]*$/.test(v) ? v : undefined;
+}
+
+function navItems(raw: unknown, depth: number, budget: { left: number }): NavItem[] {
+    if (!Array.isArray(raw) || depth > NAV_MAX_DEPTH) return [];
+    const out: NavItem[] = [];
+    for (const item of raw) {
+        if (budget.left <= 0) break;
+        if (!item || typeof item !== "object") continue;
+        const d = item as Record<string, unknown>;
+        const path = pagePath(d.path);
+        if (!path) continue;
+        budget.left--;
+        const slug = str(d.slug);
+        out.push({
+            id: str(d.id),
+            title: str(d.title) || slug || path,
+            slug,
+            path,
+            order: typeof d.order === "number" ? d.order : undefined,
+            children: navItems(d.children, depth + 1, budget),
+        });
+    }
+    return out;
+}
+
+function breadcrumbs(raw: unknown): Breadcrumb[] {
+    if (!Array.isArray(raw)) return [];
+    return raw.slice(0, NAV_MAX_DEPTH + 1).flatMap((item) => {
+        if (!item || typeof item !== "object") return [];
+        const d = item as Record<string, unknown>;
+        const path = pagePath(d.path);
+        if (!path) return [];
+        const slug = str(d.slug);
+        return [{ id: str(d.id), title: str(d.title) || slug || path, slug, path }];
+    });
+}
+
+/**
+ * The site menu, in the order the CMS gave it. Empty when the site mounts no pages, when the module is
+ * not installed, or when its body speaks a contract this renderer does not read. A failed read throws,
+ * so a caller that must not fail catches it.
+ */
+export async function getNavigation(config: PressConfig): Promise<NavItem[]> {
+    if (config.pages === undefined) return [];
+    const tree = await navigationTree(config);
+    return tree ? navItems(tree.items, 0, { left: NAV_MAX_ITEMS }) : [];
+}
+
+/** Every path in a menu, parents before their children. */
+export function flattenNavigation(items: NavItem[]): string[] {
+    return items.flatMap((item) => [item.path, ...flattenNavigation(item.children)]);
+}
+
+export interface PageAtPath {
+    page: Page;
+    /** The path the CMS says the page lives at. */
+    path: string;
+    /** From the root down to the page itself. */
+    breadcrumbs: Breadcrumb[];
+}
+
+/** The page the Pages module serves at a path, with its breadcrumbs, or null. Needs no page type in the config. */
+export async function getPageByPath(config: PressConfig, path: string): Promise<PageAtPath | null> {
     const resolved = await pageAtPath(config, path);
-    return resolved ? toPage(config, resolved.entry) : null;
+    if (!resolved) return null;
+    return {
+        page: toPage(config, resolved.entry),
+        path: pagePath(resolved.path) ?? path,
+        breadcrumbs: breadcrumbs(resolved.breadcrumbs),
+    };
+}
+
+/** The page the Pages module serves at a site path, or null. */
+export async function getPageAtPath(config: PressConfig, path: string): Promise<Page | null> {
+    return (await getPageByPath(config, path))?.page ?? null;
+}
+
+/** The site path a page is served at: its path under the configured mount. */
+export function pageHref(config: PressConfig, path: string): string {
+    const mount = config.pages ?? "";
+    if (!mount) return path;
+    return path === "/" ? mount : `${mount}${path}`;
+}
+
+/** True when the site mounts pages at the root and this path starts with a reserved slug. */
+export function isReservedPath(config: PressConfig, path: string): boolean {
+    if (config.pages !== "") return false;
+    const first = path.split("/").find(Boolean)?.toLowerCase();
+    return first !== undefined && config.reservedSlugs.includes(first);
+}
+
+export interface Redirect {
+    to: string;
+    permanent: boolean;
+}
+
+/**
+ * Where the CMS redirects map sends a site path, or null when nothing moved. A destination that is not
+ * a site path or an http or https URL is ignored, as is one that points back at the path asked about.
+ */
+export async function getRedirect(config: PressConfig, path: string): Promise<Redirect | null> {
+    const answer = await redirectAt(config, path);
+    const to = answer ? siteHref(answer.toPath) : undefined;
+    if (!answer || !to || to === path) return null;
+    return { to, permanent: answer.status === 301 || answer.status === 308 };
 }
 
 export async function listPages(

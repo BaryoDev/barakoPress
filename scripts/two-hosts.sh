@@ -51,6 +51,32 @@ page rckoronadal.org /sitemap.xml | grep -q "https://rckoronadal.org/blog/club-n
 page baryo.dev /robots.txt | grep -q "https://baryo.dev/sitemap.xml" || fail "robots is not baryo.dev's"
 echo "ok: feed, sitemap and robots per tenant"
 
+grep -q 'data-press="navigation"' "$TMP/baryo.html" || fail "baryo.dev does not draw its page menu"
+about_at=$(grep -bo 'href="/about"' "$TMP/baryo.html" | head -1 | cut -d: -f1)
+docs_at=$(grep -bo 'href="/docs"' "$TMP/baryo.html" | head -1 | cut -d: -f1)
+[ -n "$about_at" ] && [ -n "$docs_at" ] && [ "$about_at" -lt "$docs_at" ] || fail "baryo.dev does not draw its menu in the order the CMS gave"
+grep -q 'href="/projects"' "$TMP/rotary.html" || fail "rckoronadal.org does not draw its own page menu"
+if grep -q 'href="/about/team"' "$TMP/rotary.html"; then fail "rckoronadal.org draws baryo.dev's page menu"; fi
+page baryo.dev /about/team > "$TMP/team.html"
+grep -q "Meet the team" "$TMP/team.html" || fail "the page at /about/team does not render"
+grep -q 'data-press="breadcrumbs"' "$TMP/team.html" || fail "the page at /about/team has no breadcrumbs"
+[ "$(status rckoronadal.org /about/team)" = "404" ] || fail "rckoronadal.org serves baryo.dev's page"
+echo "ok: each tenant draws its own menu in the CMS order, and renders only its own pages, with breadcrumbs"
+
+[ "$(status baryo.dev /blog/shipping-notes)" = "200" ] || fail "a page slugged blog shadows the post route"
+[ "$(status baryo.dev /blog)" = "404" ] || fail "a page under a reserved slug is not a 404"
+if page baryo.dev /blog | grep -q "must never render"; then fail "a page under a reserved slug renders"; fi
+page baryo.dev /sitemap.xml > "$TMP/baryo-sitemap.xml"
+grep -q "<loc>https://baryo.dev/about/team</loc>" "$TMP/baryo-sitemap.xml" || fail "the sitemap does not list baryo.dev's pages"
+if grep -q "<loc>https://baryo.dev/blog</loc>" "$TMP/baryo-sitemap.xml"; then fail "the sitemap lists a page under a reserved slug"; fi
+echo "ok: a page under a reserved slug neither renders nor shadows the post route, and is left out of the sitemap"
+
+curl -s -o /dev/null -D - -H "Host: baryo.dev" "$APP/old-about" | tr -d '\r' > "$TMP/redirect.txt"
+grep -qE '^HTTP/1.1 30[178]' "$TMP/redirect.txt" || fail "a legacy path is not redirected ($(head -1 "$TMP/redirect.txt"))"
+grep -qi '^location: /about$' "$TMP/redirect.txt" || fail "a legacy path is not redirected to where the CMS says"
+[ "$(status rckoronadal.org /old-about)" = "404" ] || fail "rckoronadal.org follows baryo.dev's redirect"
+echo "ok: a miss asks the tenant's redirects map before it is a 404 ($(head -1 "$TMP/redirect.txt"))"
+
 [ "$(status unknown.example /)" = "404" ] || fail "a host with no tenant is not a 404"
 [ "$(status unknown.example /feed.xml)" = "404" ] || fail "the feed for a host with no tenant is not a 404"
 echo "ok: a host with no tenant is a 404"

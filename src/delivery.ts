@@ -283,11 +283,34 @@ export async function bySlugPreview(
     );
 }
 
-/** What `GET /api/public/pages/resolve` answers (BarakoCMS.Pages, contract 1). */
+/**
+ * The BarakoCMS.Pages body contracts this renderer reads. The module puts `contract` in every body and
+ * moves it only on a breaking change, so a body outside this range is read as absent: no menu, no
+ * page. A public site should not refuse to render because a menu shape moved.
+ */
+export const PAGES_CONTRACT = { min: 1, max: 1 } as const;
+
+export function speaksPagesContract(contract: unknown): boolean {
+    return (
+        typeof contract === "number" &&
+        Number.isInteger(contract) &&
+        contract >= PAGES_CONTRACT.min &&
+        contract <= PAGES_CONTRACT.max
+    );
+}
+
+function warnContract(config: PressConfig, what: string, contract: unknown) {
+    console.warn(
+        `pages: ${what} for tenant "${config.tenant ?? ""}" speaks contract ${String(contract)}, this renderer reads ${PAGES_CONTRACT.min} to ${PAGES_CONTRACT.max}`,
+    );
+}
+
+/** What `GET /api/public/pages/resolve` answers. Everything past `contract` is checked by the caller. */
 export interface ResolvedPage {
     contract: number;
     path: string;
     entry: PublicContent;
+    breadcrumbs?: unknown;
 }
 
 /**
@@ -297,7 +320,44 @@ export interface ResolvedPage {
 export async function pageAtPath(config: PressConfig, path: string): Promise<ResolvedPage | null> {
     try {
         const res = await get<ResolvedPage>(config, `/api/public/pages/resolve?${new URLSearchParams({ path })}`);
-        return res && res.contract === 1 && res.entry && typeof res.entry === "object" ? res : null;
+        if (!res || typeof res !== "object") return null;
+        if (!speaksPagesContract(res.contract)) {
+            warnContract(config, `the page at ${path}`, res.contract);
+            return null;
+        }
+        return res.entry && typeof res.entry === "object" ? res : null;
+    } catch (e) {
+        if (e instanceof CmsError && e.status === 404) return null;
+        throw e;
+    }
+}
+
+/**
+ * The menu tree from `GET /api/public/pages/navigation`, unchecked past its contract. Null when the
+ * module is not installed or the body speaks a contract this does not know.
+ */
+export async function navigationTree(config: PressConfig): Promise<{ contract: number; items: unknown } | null> {
+    try {
+        const res = await get<{ contract: number; items: unknown }>(config, "/api/public/pages/navigation");
+        if (!res || typeof res !== "object") return null;
+        if (!speaksPagesContract(res.contract)) {
+            warnContract(config, "navigation", res.contract);
+            return null;
+        }
+        return res;
+    } catch (e) {
+        if (e instanceof CmsError && e.status === 404) return null;
+        throw e;
+    }
+}
+
+/** What `GET /api/public/redirects/resolve` answers, unchecked. Null when nothing moved (a 404). */
+export async function redirectAt(
+    config: PressConfig,
+    path: string,
+): Promise<{ fromPath?: unknown; toPath?: unknown; status?: unknown } | null> {
+    try {
+        return await get(config, `/api/public/redirects/resolve?${new URLSearchParams({ path })}`);
     } catch (e) {
         if (e instanceof CmsError && e.status === 404) return null;
         throw e;
