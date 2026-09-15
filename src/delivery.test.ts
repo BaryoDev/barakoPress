@@ -204,6 +204,30 @@ describe("reading from a CMS that stops answering", () => {
         expect(down).toHaveBeenCalledTimes(2);
     });
 
+    it("sends one visitor to a CMS that still hangs after the marker expires, and answers the rest from the copy", async () => {
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        vi.stubGlobal("fetch", answer(200, posts));
+        await list(tenantConfig, "post");
+        vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("ECONNREFUSED"); }));
+        await list(tenantConfig, "post");
+
+        const later = Date.now() + 60_000;
+        vi.spyOn(Date, "now").mockReturnValue(later);
+        const hang = hanging();
+        vi.stubGlobal("fetch", hang);
+        const reads = await Promise.all(Array.from({ length: 5 }, () => list(tenantConfig, "post")));
+
+        expect(reads.map((r) => r.items[0].data.Title)).toEqual(["Kept", "Kept", "Kept", "Kept", "Kept"]);
+        expect(hang).toHaveBeenCalledTimes(1);
+    }, 2_000);
+
+    it("falls back to the default timeout for a value AbortSignal.timeout would refuse", () => {
+        for (const cmsTimeoutMs of [Infinity, 2.5, 1e10, -1, 0, Number.NaN]) {
+            expect(defineConfig({ site: { name: "T", url: "https://t.example" }, cmsTimeoutMs }).cmsTimeoutMs).toBe(5_000);
+        }
+        expect(defineConfig({ site: { name: "T", url: "https://t.example" }, cmsTimeoutMs: 1_500 }).cmsTimeoutMs).toBe(1_500);
+    });
+
     it("gives up on a host lookup that never answers", async () => {
         vi.stubGlobal("fetch", hanging());
         await expect(tenantForHost(tenantConfig, "stalls.example")).rejects.toThrow();

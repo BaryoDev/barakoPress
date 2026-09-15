@@ -321,7 +321,8 @@ cached reads in place.
 A read that fails with a network error, a 5xx, or no answer within `cmsTimeoutMs` answers from the
 last good copy and logs a warning; the next successful read replaces it. For ten seconds after such a
 failure that read answers from the copy without asking the CMS, so an outage costs one request per
-read every ten seconds rather than one per visitor. Known hosts keep resolving the same way. A page that was cached
+read every ten seconds rather than one per visitor. The same holds after a purge: a publish that lands
+within those ten seconds shows once the ten seconds are up. Known hosts keep resolving the same way. A page that was cached
 for a tenant keeps answering 200 with that tenant's identity and theme. A tenant never gets another
 tenant's kept answer.
 

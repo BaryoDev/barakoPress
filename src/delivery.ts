@@ -149,7 +149,12 @@ async function read<T>(config: PressConfig, path: string, opts: ReadOptions): Pr
     if (opts.staleKey) {
         const at = failedAt.get(opts.staleKey);
         const kept = stale.get(opts.staleKey);
-        if (at !== undefined && Date.now() - at < FAILED_READ_TTL_MS && kept !== undefined) return JSON.parse(kept) as T;
+        if (at !== undefined && kept !== undefined) {
+            if (Date.now() - at < FAILED_READ_TTL_MS) return JSON.parse(kept) as T;
+            // This request asks the CMS again. Renewed before the fetch, so the visitors who arrive while
+            // it waits out a hung CMS keep answering from the copy instead of each waiting too.
+            markFailed(opts.staleKey);
+        }
     }
     try {
         const res = await fetch(`${config.cmsUrl}${path}`, {

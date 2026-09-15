@@ -282,6 +282,11 @@ function reservedSlugs(routes: (string | undefined)[], extra: string[] | undefin
  * The one exception is a request-time site (`sites`), whose identity is the tenant's settings. What
  * `site` holds there is only the fallback for a field the settings leave out.
  */
+/** AbortSignal.timeout takes a whole number of milliseconds up to 2^32 - 1 and throws on anything else. */
+function timeoutMs(value: number | undefined): number {
+    return Number.isInteger(value) && value! > 0 && value! <= 0xffff_ffff ? value! : 5_000;
+}
+
 export function defineConfig(
     input: PressConfigInput & ({ site: SiteIdentity } | { sites: Partial<SitesConfig> }),
 ): PressConfig {
@@ -301,7 +306,7 @@ export function defineConfig(
         pageSizes: { index: 20, feed: 50, sitemap: 1000, archive: 50, ...input.pageSizes },
         cacheTag: input.cacheTag ?? "cms",
         backstopSeconds: input.backstopSeconds ?? 300,
-        cmsTimeoutMs: input.cmsTimeoutMs && input.cmsTimeoutMs > 0 ? input.cmsTimeoutMs : 5_000,
+        cmsTimeoutMs: timeoutMs(input.cmsTimeoutMs),
         locale: input.locale ?? "en-GB",
         cmsUrl: trimSlash(input.cmsUrl ?? process.env.CMS_URL ?? "http://localhost:5005"),
         tenant: input.tenant ?? process.env.CMS_TENANT ?? undefined,
