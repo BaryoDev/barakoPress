@@ -94,7 +94,8 @@ decision, not the engine's.
 | `app/[slug]/page.tsx` | `default`, `generateMetadata` | `createPage(config, blocks)`, `createPageMetadata(config)` |
 | `app/api/blocks/route.ts` | `GET`, `OPTIONS` | `createBlockSchemaRoute(blocks)`, `createBlockSchemaPreflight()` |
 | `app/layout.tsx` | `default`, `generateMetadata` | `createSiteLayout(config, { blocks })`, `createSiteMetadata(config)` |
-| `app/api/coming-soon/route.ts` | `GET` | `createPreviewKeyRoute(config)` |
+| `app/%5Fshare/route.ts` | `GET` | `createSharePage()` |
+| `app/api/share/redeem/route.ts` | `POST` | `createShareRedeemRoute(config)` |
 
 Mount only what you want. Nothing requires anything else. The paths only have to agree with the
 `routes` in your config, which is what every generated link is built from.
@@ -269,46 +270,69 @@ the next successful read replaces it. Known hosts keep resolving the same way. A
 for a tenant keeps answering 200 with that tenant's identity and theme. A tenant never gets another
 tenant's kept answer.
 
-**Coming soon.** A tenant can show a holding page in place of its site, with a preview key that lets
-the people building it see the real thing. It is three fields on the `site` entry, which the
-blueprint does not have yet, so add them to the tenant's `site` type:
+**Holding mode.** A tenant can show a holding page on every route in place of its site, for a launch,
+maintenance or a seasonal break, and share the real site with a few people through site share links.
+Two fields on the `site` entry control it:
 
 | Field | Type | What |
 | --- | --- | --- |
-| `ComingSoon` | boolean | On or off. Absent is off |
-| `ComingSoonBlocks` | json | The holding page, as a block list. Empty renders the name, tagline and "Coming soon." in the theme |
-| `PreviewKeyHash` | string | Lowercase hex SHA-256 of the preview key. Never the key: this entry is publicly delivered |
+| `Mode` | string | `Live` or `Holding`. Unset, or anything else, is `Live` |
+| `HoldingPath` | string | A site path such as `/coming-soon`. The page the Pages module serves there is the holding page. Empty, or nothing served there, renders the name, tagline and "Coming soon." in the theme |
 
-While it is on, for that tenant only:
+Holding is presentation, not access control: the API still delivers every published entry. Content
+that must stay hidden before launch stays unpublished with a scheduled publish.
+
+While a tenant is holding, for that tenant only:
 
 - every page answers the holding page with `noindex` and `Cache-Control: private, no-store`. A page
   stops in `siteConfig` with a not-found before it reads anything, so its content and its title never
   reach the response. Next has already sent the status by then, so it is 200, the same for a path
   that exists and one that does not;
-- `feed.xml` and `sitemap.xml` are 404 for everyone, key or not, and `robots.txt` answers
-  `Disallow: /` with no sitemap line;
-- route handlers under `app/api` (revalidate, blocks, the key route) and `/_next/static` are served as
-  usual.
+- the holding page is read with `GET /api/public/pages/resolve?path=<HoldingPath>` and rendered with
+  the page renderer and the registry passed to `createSiteLayout(config, { blocks })`;
+- a link to `HoldingPath` is left out of the header, top bar and footer. `feed.xml` and `sitemap.xml`
+  are 404 for everyone, session or not, and `robots.txt` answers `Disallow: /` with no sitemap line;
+- route handlers (revalidate, blocks, `/_share`, `/api/share/redeem`) and `/_next/static` are served
+  as usual.
 
-Turning it off is a publish: the webhook purges the tenant's tag and the next request reads the new
+Switching `Mode` is a publish: the webhook purges the tenant's tag and the next request reads the new
 settings. No deploy.
 
-A previewer opens `https://<domain>/api/coming-soon?key=<key>&to=/a/path` once. A valid key becomes a
-`__Host-press-preview` cookie (HttpOnly, Secure, SameSite=Lax, Path=/, no Domain, so only that host
-gets it), and every answer, valid key or not, is a 303 to `to` so the key leaves the address bar. The
-key is compared as a SHA-256 digest in constant time and never logged, though a proxy in front that
-logs query strings will have it. A key is 16 to 256 characters of `A-Z a-z 0-9 . _ ~ -`; a shorter one
-never matches, because the hash is public. Changing the hash signs every previewer out.
+**Site share links.** barakoCMS creates, lists and revokes them; anyone who may update the `site` type
+can. A client is given `{site Url}/_share#{key}`. The key is in the fragment, so no server log, proxy
+or referrer sees it:
 
-```bash
-KEY=$(openssl rand -base64 24 | tr '+/' '-_' | tr -d '=')
-printf %s "$KEY" | sha256sum | cut -d' ' -f1   # PreviewKeyHash
-```
+1. `/_share` is a tiny page. Its script reads the fragment, removes it from the address and history,
+   and posts the key in a form to `/api/share/redeem`. Without JavaScript it says the link needs
+   JavaScript. No key is ever accepted in a query string.
+2. `/api/share/redeem` asks barakoCMS once, `POST /api/public/site/share-links/redeem` with the key in
+   the body and the tenant header. On 200 it sets `__Host-press-share` (HttpOnly, Secure,
+   SameSite=Lax, Path=/, no Domain, so only that host gets it) and answers a `no-store` 303 to `/`.
+   On 404, 429 or any failure it sets nothing and sends the visitor to `/#share-invalid`, the holding
+   page with "This link is not valid or has expired." A post whose `Origin` or `Sec-Fetch-Site` names
+   another site is refused the same way. The key is never logged.
+3. With a valid cookie that visitor sees the real site for that tenant. A forged, expired or
+   other-tenant cookie is ignored.
 
-The mode is decided per request from the cookie, and a request-time site renders every route
-dynamically, so no cached render made for one visitor is served to the other. A page you write by hand
-must call `siteConfig(config)` before it reads or renders anything, which is what keeps it behind the
-holding page. A build-time site has no settings entry and no coming soon mode.
+The cookie holds no key. It is an expiry and an HMAC-SHA256 over the tenant and that expiry, so each
+later request is checked in process without asking the CMS, and a cookie made for one tenant opens no
+other. It needs one setting:
+
+| Variable | What |
+| --- | --- |
+| `PRESS_PREVIEW_SECRET` | The HMAC key, at least 32 characters, for example `openssl rand -base64 48`. Read per request. Unset or shorter, no session is issued or accepted and everyone gets the holding page. Every instance behind one domain needs the same value |
+
+**A session lasts until the link expires or for 24 hours, whichever is sooner.** Opening the link
+again starts a new one while the link is valid. **A revoked link can keep working for up to 24
+hours** for someone who already opened it, because the session is checked here, not in barakoCMS. To
+end every session now, change `PRESS_PREVIEW_SECRET`, which does it for every tenant on that
+deployment.
+
+Whether a request gets the holding page is decided per request from the cookie, and a request-time
+site renders every route dynamically, so a cached render made for a visitor with a session is never
+served to one without, or the reverse. A page you write by hand must call `siteConfig(config)` before
+it reads or renders anything, which is what keeps it behind the holding page. A build-time site has
+no settings entry and no holding mode.
 
 `generateStaticParams` factories return nothing on a request-time site, since there is no tenant at
 build. `scripts/two-hosts.sh` runs the built reference app against a stand-in CMS with two tenants

@@ -281,6 +281,61 @@ export async function bySlugPreview(
     );
 }
 
+/** What `GET /api/public/pages/resolve` answers (BarakoCMS.Pages, contract 1). */
+export interface ResolvedPage {
+    contract: number;
+    path: string;
+    entry: PublicContent;
+}
+
+/**
+ * The published page at a site path, from the Pages module. Null when nothing is served there, when
+ * the module is not installed (also a 404), or when the body speaks a contract this does not know.
+ */
+export async function pageAtPath(config: PressConfig, path: string): Promise<ResolvedPage | null> {
+    try {
+        const res = await get<ResolvedPage>(config, `/api/public/pages/resolve?${new URLSearchParams({ path })}`);
+        return res && res.contract === 1 && res.entry && typeof res.entry === "object" ? res : null;
+    } catch (e) {
+        if (e instanceof CmsError && e.status === 404) return null;
+        throw e;
+    }
+}
+
+export type ShareRedeemAnswer =
+    | { kind: "valid"; expiresAt: number }
+    | { kind: "invalid" }
+    | { kind: "throttled" }
+    | { kind: "failed" };
+
+/**
+ * Redeems a site share link with barakoCMS: `POST /api/public/site/share-links/redeem`, 200 with
+ * `{ expiresAt }` for a link that is valid now, 404 otherwise, 429 when throttled.
+ *
+ * One uncached request, never retried, since a retry would spend the caller's throttle allowance.
+ * The key goes in the body, not the URL, so no access log records it. Nothing here logs it either.
+ * A 200 whose expiry is missing, unreadable or already past counts as a failure: there is nothing
+ * safe to sign.
+ */
+export async function redeemShareLink(config: PressConfig, key: string, now: number = Date.now()): Promise<ShareRedeemAnswer> {
+    try {
+        const res = await fetch(`${config.cmsUrl}/api/public/site/share-links/redeem`, {
+            method: "POST",
+            headers: { ...headers(config), "content-type": "application/json" },
+            body: JSON.stringify({ key }),
+            cache: "no-store",
+        });
+        if (res.status === 404) return { kind: "invalid" };
+        if (res.status === 429) return { kind: "throttled" };
+        if (res.status !== 200) return { kind: "failed" };
+        const body = (await res.json()) as { expiresAt?: unknown };
+        const expiresAt = typeof body?.expiresAt === "string" ? Date.parse(body.expiresAt) : Number.NaN;
+        return Number.isFinite(expiresAt) && expiresAt > now ? { kind: "valid", expiresAt } : { kind: "failed" };
+    } catch {
+        return { kind: "failed" };
+    }
+}
+
 /*
  * Semantic search, from the optional BarakoCMS.AI module.
  *

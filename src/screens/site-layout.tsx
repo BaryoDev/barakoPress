@@ -3,10 +3,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type { PressConfig } from "../config.js";
 import { showsHoldingPage, siteConfigOrNull, themeFamilies } from "../site.js";
-import { proseCss, themeVariablesCss, type PressTheme } from "../theme.js";
-import { BLOCK_PROSE_CLASS } from "../blocks/built-in.js";
-import { BlockList } from "../blocks/render.js";
-import { resolveBlocks, type BlockRegistry } from "../blocks/schema.js";
+import { SHARE_INVALID_FRAGMENT } from "../routes/share.js";
+import { themeVariablesCss, type PressTheme } from "../theme.js";
+import type { BlockRegistry } from "../blocks/schema.js";
+import { getPageAtPath, type Page } from "../cms.js";
+import { PageView } from "./page.js";
 
 /*
  * The root layout and its metadata, from the site's identity and theme.
@@ -44,34 +45,59 @@ function ThemeHead({ theme, loadFonts }: { theme: PressTheme; loadFonts: boolean
 
 export interface SiteLayoutOptions {
     loadFonts?: boolean;
-    /** The registry a coming soon holding page's blocks render with. Without it, the default page renders. */
+    /** The registry a holding page renders with. Without it, the default holding page renders. */
     blocks?: BlockRegistry;
 }
 
+/** The page at `HoldingPath`, or null for the default holding page. A failed read is the default too. */
+async function holdingPage(cfg: PressConfig, registry?: BlockRegistry): Promise<Page | null> {
+    const path = cfg.holding?.path;
+    if (!path || !registry) return null;
+    try {
+        return await getPageAtPath(cfg, path);
+    } catch (e) {
+        if (e && typeof e === "object" && "digest" in e) throw e;
+        return null;
+    }
+}
+
 /*
- * The holding page, rendered in place of the whole site while coming soon is on (#28). The page
+ * The holding page, rendered in place of the whole site while holding (#28). The page
  * under it has already stopped at a 404 in `siteConfig`, so `children` holds nothing of the site and
  * is not rendered either. No header, footer or feed link: those would name the site's structure.
+ *
+ * With `HoldingPath` set it is that page, rendered as the page route renders it. Unset, or not
+ * served there, it is the name, tagline and "Coming soon." in the tenant's theme.
+ *
+ * A share link that did not redeem lands on `/#share-invalid`. The notice is shown by CSS `:target`
+ * alone, so nothing is stored and no script runs for it.
  */
-function HoldingDocument({ cfg, registry, loadFonts }: { cfg: PressConfig; registry?: BlockRegistry; loadFonts: boolean }) {
+async function HoldingDocument({ cfg, registry, loadFonts }: { cfg: PressConfig; registry?: BlockRegistry; loadFonts: boolean }) {
     const t = cfg.theme;
     const s = cfg.site;
-    const blocks = registry ? resolveBlocks(cfg.comingSoon?.blocks, registry, { perViewer: false }) : [];
+    const page = await holdingPage(cfg, registry);
 
     return (
         <html lang={cfg.locale}>
             <ThemeHead theme={t} loadFonts={loadFonts} />
             <body style={{ margin: 0, background: t.colors.pageBg, color: t.colors.ink, fontFamily: t.fonts.body }}>
-                <main
-                    data-press="coming-soon"
-                    style={{ maxWidth: t.layout.wide, margin: "0 auto", padding: `80px ${t.layout.gutter}` }}
+                <style dangerouslySetInnerHTML={{ __html: `#${SHARE_INVALID_FRAGMENT}{display:none}#${SHARE_INVALID_FRAGMENT}:target{display:block}` }} />
+                <p
+                    id={SHARE_INVALID_FRAGMENT}
+                    role="status"
+                    style={{ margin: 0, padding: `12px ${t.layout.gutter}`, background: t.colors.darkPanel, color: t.colors.darkPanelInk }}
                 >
-                    {blocks.length > 0 ? (
-                        <>
-                            <style dangerouslySetInnerHTML={{ __html: proseCss(t, BLOCK_PROSE_CLASS) }} />
-                            <BlockList blocks={blocks} theme={t} />
-                        </>
-                    ) : (
+                    This link is not valid or has expired.
+                </p>
+                {page && registry ? (
+                    <div data-press="holding">
+                        <PageView config={cfg} page={page} registry={registry} />
+                    </div>
+                ) : (
+                    <main
+                        data-press="holding"
+                        style={{ maxWidth: t.layout.wide, margin: "0 auto", padding: `80px ${t.layout.gutter}` }}
+                    >
                         <div style={{ maxWidth: t.layout.prose }}>
                             {s.logo && (
                                 // eslint-disable-next-line @next/next/no-img-element
@@ -83,8 +109,8 @@ function HoldingDocument({ cfg, registry, loadFonts }: { cfg: PressConfig; regis
                             {s.tagline && <p style={{ margin: "12px 0 0", color: t.colors.secondaryInk }}>{s.tagline}</p>}
                             <p style={{ margin: "32px 0 0", fontFamily: t.fonts.mono, color: t.colors.accent }}>Coming soon.</p>
                         </div>
-                    )}
-                </main>
+                    </main>
+                )}
             </body>
         </html>
     );
@@ -103,7 +129,7 @@ export function createSiteLayout(config: PressConfig, options: SiteLayoutOptions
             );
         }
         if (await showsHoldingPage(cfg)) {
-            return <HoldingDocument cfg={cfg} registry={options.blocks} loadFonts={loadFonts} />;
+            return await HoldingDocument({ cfg, registry: options.blocks, loadFonts });
         }
 
         const t = cfg.theme;
@@ -159,7 +185,7 @@ export function createSiteLayout(config: PressConfig, options: SiteLayoutOptions
                                         {l.label}
                                     </a>
                                 ))}
-                                {!cfg.comingSoon && (
+                                {!cfg.holding && (
                                     <a href="/feed.xml" style={{ ...linkStyle, fontFamily: t.fonts.mono, fontSize: "13px", color: c.muted }}>
                                         RSS
                                     </a>
@@ -233,9 +259,9 @@ export function createSiteMetadata(config: PressConfig) {
             description: s.tagline,
             icons: s.favicon ? { icon: s.favicon } : undefined,
             openGraph: { siteName: s.name, images: s.shareImage ? [s.shareImage] : undefined },
-            // While coming soon is on nothing is indexed, key or not, and there is no feed to point at.
-            alternates: s.url && !cfg.comingSoon ? { types: { "application/rss+xml": `${s.url}/feed.xml` } } : undefined,
-            robots: cfg.comingSoon ? { index: false, follow: false } : undefined,
+            // While holding nothing is indexed, session or not, and there is no feed to point at.
+            alternates: s.url && !cfg.holding ? { types: { "application/rss+xml": `${s.url}/feed.xml` } } : undefined,
+            robots: cfg.holding ? { index: false, follow: false } : undefined,
         };
     };
 }

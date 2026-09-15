@@ -1,9 +1,9 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
 import type {
-    ComingSoon,
     FooterColumn,
+    Holding,
     PressConfig,
     SiteIdentity,
     SiteLink,
@@ -94,7 +94,7 @@ export async function resolveSite(
 /**
  * The config for this request in a server component or route handler.
  *
- * A request with no tenant is a not-found, and so is one the tenant's coming soon mode holds back.
+ * A request with no tenant is a not-found, and so is one the tenant's holding mode holds back.
  * That second one is what keeps a page's content and its metadata out of the response: the page
  * stops here, before it reads anything, and the layout renders the holding page in its place.
  */
@@ -105,33 +105,70 @@ export async function siteConfig(config: PressConfig): Promise<PressConfig> {
 }
 
 /*
- * Coming soon (barakoPress #28).
+ * Holding mode and site share links (barakoPress #28).
  *
- * The mode is decided per request from the cookie and the tenant's settings, and is never part of
- * anything cached: the settings read is the same for every visitor, and reading the cookie makes
- * the render dynamic. So a visitor without the key cannot be handed a render made for one with it.
+ * Whether a request gets the holding page is decided per request from the cookie and the tenant's
+ * settings, and is never part of anything cached: the settings read is the same for every visitor,
+ * and reading the cookie makes the render dynamic. So a visitor without a session cannot be handed a
+ * render made for one with it, or the reverse.
+ *
+ * barakoCMS checks a share link once, when it is redeemed. What that check buys is a cookie this
+ * process can verify on every later request without asking the CMS again: an expiry and an
+ * HMAC-SHA256 over the tenant and that expiry, keyed with PRESS_PREVIEW_SECRET. The tenant is in the
+ * signature, so a cookie made for one tenant opens no other. The cost is that revoking a link in the
+ * CMS does not end a session already made from it; the 24 hour cap bounds that. Rotating the secret
+ * ends every session, for every tenant at once.
  */
 
 /** Host-only by its prefix: a browser refuses it with a Domain, without Secure, or off Path=/. */
-export const PREVIEW_COOKIE = "__Host-press-preview";
+export const SHARE_COOKIE = "__Host-press-share";
 
-const PREVIEW_KEY = /^[A-Za-z0-9._~-]{16,256}$/;
-const SHA256_HEX = /^[0-9a-f]{64}$/;
+/** The longest a session made from a share link lasts, whatever the link's own expiry. */
+export const SHARE_SESSION_MAX_SECONDS = 24 * 60 * 60;
 
-/** Whether a key is the tenant's preview key. Compared as SHA-256 digests, in constant time. */
-export function previewKeyMatches(comingSoon: ComingSoon, key: string | null | undefined): boolean {
-    if (!comingSoon.previewKeyHash || !SHA256_HEX.test(comingSoon.previewKeyHash)) return false;
-    if (typeof key !== "string" || !PREVIEW_KEY.test(key)) return false;
-    const expected = Buffer.from(comingSoon.previewKeyHash, "hex");
-    const actual = createHash("sha256").update(key, "utf8").digest();
-    return expected.length === actual.length && timingSafeEqual(expected, actual);
+/** Below this the secret is a guess away, so it counts as unset. */
+const MIN_SECRET_LENGTH = 32;
+const SHARE_VALUE = /^(\d{1,12})\.([A-Za-z0-9_-]{43})$/;
+
+/** PRESS_PREVIEW_SECRET, read per request. Null when unset or too short, which turns sessions off. */
+export function shareSecret(): string | null {
+    const secret = process.env.PRESS_PREVIEW_SECRET;
+    return secret && secret.length >= MIN_SECRET_LENGTH ? secret : null;
 }
 
-/** True when this request gets the holding page: coming soon is on and it carries no valid key. */
+function shareSignature(tenant: string, expires: number, secret: string): Buffer {
+    return createHmac("sha256", secret).update(`press-share.${tenant}.${expires}`).digest();
+}
+
+/** The cookie value for a tenant: `<expiry in unix seconds>.<base64url HMAC>`. */
+export function signShareCookie(tenant: string, expires: number, secret: string): string {
+    return `${expires}.${shareSignature(tenant, expires, secret).toString("base64url")}`;
+}
+
+/** Whether a cookie value was signed with this secret for this tenant and has not expired. */
+export function shareCookieValid(
+    value: string | null | undefined,
+    tenant: string | undefined,
+    secret: string | null,
+    now: number = Date.now(),
+): boolean {
+    if (!secret || !tenant || typeof value !== "string") return false;
+    const m = SHARE_VALUE.exec(value);
+    if (!m) return false;
+    const expires = Number(m[1]);
+    if (expires * 1000 <= now) return false;
+    // A signed expiry past the cap was not made here, whatever the signature says.
+    if (expires * 1000 > now + SHARE_SESSION_MAX_SECONDS * 1000 + 60_000) return false;
+    const actual = Buffer.from(m[2], "base64url");
+    const expected = shareSignature(tenant, expires, secret);
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+/** True when this request gets the holding page: the tenant is holding and the request has no valid session. */
 export async function showsHoldingPage(config: PressConfig): Promise<boolean> {
-    if (!config.comingSoon) return false;
+    if (!config.holding) return false;
     const jar = await cookies();
-    return !previewKeyMatches(config.comingSoon, jar.get(PREVIEW_COOKIE)?.value);
+    return !shareCookieValid(jar.get(SHARE_COOKIE)?.value, config.tenant, shareSecret());
 }
 
 /** As `siteConfig`, but null rather than a 404, for a layout or a handler that answers for itself. */
@@ -289,14 +326,50 @@ function locale(base: string, v: unknown): string {
     }
 }
 
-function comingSoon(d: Record<string, unknown>): ComingSoon | undefined {
-    const flag = d.ComingSoon;
-    const on = flag === true || (typeof flag === "string" && flag.trim().toLowerCase() === "true");
-    if (!on) return undefined;
-    const hash = str(d.PreviewKeyHash)?.toLowerCase();
+/** A path on this site for a page: `/` and segments, no query, fragment, backslash or `//`. */
+function sitePath(v: unknown): string | undefined {
+    const value = str(v);
+    if (!value || value.length > 512 || !value.startsWith("/") || value.startsWith("//")) return undefined;
+    return /^\/[A-Za-z0-9._~\/-]*$/.test(value) ? value : undefined;
+}
+
+/** `Mode: "Holding"` holds the site. Unset, `Live` or anything else is live. */
+function holding(d: Record<string, unknown>): Holding | undefined {
+    if (str(d.Mode)?.toLowerCase() !== "holding") return undefined;
+    const path = sitePath(d.HoldingPath);
+    return path ? { path } : {};
+}
+
+function samePath(a: string, b: string): boolean {
+    const trim = (p: string) => withoutTrailingSlashes(p).toLowerCase() || "/";
+    return trim(a) === trim(b);
+}
+
+/** The path a link opens on this site, or null when it goes elsewhere. */
+function localPathOf(href: string, siteUrl: string): string | null {
+    try {
+        const url = new URL(href, siteUrl || "http://site.invalid");
+        const base = siteUrl ? new URL(siteUrl).origin : "http://site.invalid";
+        return url.origin === base ? url.pathname : null;
+    } catch {
+        return null;
+    }
+}
+
+/*
+ * While holding, a link to the holding page leaves the header, the top bar and the footer. Someone
+ * browsing the real site through a share link would otherwise find the page that stands in for it.
+ */
+function withoutHoldingPage(site: SiteIdentity, path: string): SiteIdentity {
+    const keep = (l: SiteLink) => {
+        const local = localPathOf(l.href, site.url);
+        return local === null || !samePath(local, path);
+    };
     return {
-        blocks: json(d.ComingSoonBlocks),
-        previewKeyHash: hash && SHA256_HEX.test(hash) ? hash : undefined,
+        ...site,
+        topBar: site.topBar ? { ...site.topBar, links: site.topBar.links.filter(keep) } : site.topBar,
+        headerLinks: site.headerLinks?.filter(keep),
+        footerColumns: site.footerColumns?.map((c) => ({ ...c, links: c.links.filter(keep) })),
     };
 }
 
@@ -332,10 +405,16 @@ export function applySiteSettings(
         layout: tokens<ThemeLayout>(config.theme.layout, d.Layout, LENGTH),
     };
 
-    const { comingSoon: _ignored, ...rest } = config;
+    const { holding: _ignored, ...rest } = config;
     void _ignored;
-    const soon = comingSoon(d);
-    return { ...rest, site, theme, locale: locale(config.locale, d.Locale), ...(soon ? { comingSoon: soon } : {}) };
+    const held = holding(d);
+    return {
+        ...rest,
+        site: held?.path ? withoutHoldingPage(site, held.path) : site,
+        theme,
+        locale: locale(config.locale, d.Locale),
+        ...(held ? { holding: held } : {}),
+    };
 }
 
 /** The first family of each role's stack, for a site that loads its faces from Google Fonts. */
