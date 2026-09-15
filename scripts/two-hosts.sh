@@ -103,6 +103,7 @@ grep -q 'id="share-invalid"' "$TMP/soon.html" || fail "the holding page has no n
 # that exists and one that does not answer alike.
 [ "$(status soon.example /blog/launch-plans)" = "$(status soon.example /no-such-page)" ] || fail "the holding page tells an existing path from a missing one"
 grep -q "launch-plans" "$TMP/soon.html" && fail "the holding page carries soon.example content"
+grep -q -e "Latest from the club" -e "Soon Club post" "$TMP/soon.html" && fail "the collection block on the holding page lists the site's posts"
 tr -d '\r' < "$TMP/soon-head.txt" | grep -qi '^cache-control:.*no-store' || fail "the holding page may be stored by a cache"
 page soon.example /blog/launch-plans > "$TMP/soon-post.html"
 held "$TMP/soon-post.html" || fail "a post on soon.example does not answer the holding page"
@@ -113,7 +114,7 @@ page soon.example /robots.txt | grep -q "Disallow: /" || fail "soon.example robo
 asset=$(grep -o '/_next/static/[^"]*\.js' "$TMP/soon.html" | head -1)
 [ -n "$asset" ] && [ "$(status soon.example "$asset")" = "200" ] || fail "static assets are not reachable while holding"
 [ "$(status soon.example /api/revalidate)" != "404" ] || fail "the revalidate endpoint is not reachable while holding"
-echo "ok: soon.example answers the page at /coming-soon as its holding page, no feed or sitemap, robots and assets reachable"
+echo "ok: soon.example answers the page at /coming-soon as its holding page, collection block and all with no posts listed, no feed or sitemap, robots and assets reachable"
 
 curl -s -D "$TMP/share-head.txt" -H "Host: soon.example" "$APP/_share?key=$KEY" > "$TMP/share.html"
 tr -d '\r' < "$TMP/share-head.txt" | grep -q '^HTTP/1.1 200' || fail "/_share is not served while holding"

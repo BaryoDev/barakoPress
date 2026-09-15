@@ -66,7 +66,19 @@ const tenants = {
         throttledKey: "soon-throttled-key-0123456789",
         navigation: [nav("c", "Opening", "/coming-soon", 1), nav("a", "About Soon", "/about", 2)],
         pages: {
-            "/coming-soon": { id: "cs", slug: "coming-soon", data: { Title: "Opening soon", Slug: "coming-soon", Blocks: [{ type: "richText", props: { markdown: "## Opening in October" } }] } },
+            // A collection block on the holding page, which must render the holding page and none of the posts.
+            "/coming-soon": {
+                id: "cs",
+                slug: "coming-soon",
+                data: {
+                    Title: "Opening soon",
+                    Slug: "coming-soon",
+                    Blocks: [
+                        { type: "richText", props: { markdown: "## Opening in October" } },
+                        { type: "collection", props: { collection: "post", heading: "Latest from the club" } },
+                    ],
+                },
+            },
             "/about": pageAt("about", "About Soon", "The real about page"),
         },
     },

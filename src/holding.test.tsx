@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { prerender } from "react-dom/static";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /*
@@ -149,7 +150,7 @@ function visit(host: string, cookie?: string) {
     requestCookies = cookie === undefined ? {} : { [SHARE_COOKIE]: cookie };
 }
 
-async function layoutHtml(): Promise<string> {
+async function layoutHtml(render: (node: ReactNode) => Promise<string> | string = renderToStaticMarkup): Promise<string> {
     const Layout = createSiteLayout(config, { blocks: registry, loadFonts: false });
     const Index = createBlogIndex(config);
     // As Next does it: the page renders first, and a 404 from it leaves the layout nothing but a fallback.
@@ -160,7 +161,15 @@ async function layoutHtml(): Promise<string> {
         if ((e as Error).message !== "NEXT_NOT_FOUND") throw e;
         children = <p>not found fallback</p>;
     }
-    return renderToStaticMarkup(await Layout({ children }));
+    return render(await Layout({ children }));
+}
+
+/** A render that waits on async components, as a block like the collection is. A render error is thrown, not streamed past. */
+async function asyncRender(node: ReactNode): Promise<string> {
+    const errors: unknown[] = [];
+    const { prelude } = await prerender(node, { onError: (e) => void errors.push(e) });
+    if (errors.length > 0) throw errors[0];
+    return new Response(prelude).text();
 }
 
 beforeEach(() => {
@@ -302,6 +311,31 @@ describe("a tenant in holding mode", () => {
         expect(html).toContain('id="share-invalid"');
         expect(html).toContain("This link is not valid or has expired.");
         expect(html).toContain("#share-invalid{display:none}#share-invalid:target{display:block}");
+    });
+
+    it("renders a holding page that contains a collection block, with none of the collection in it", async () => {
+        const page = TENANTS.soon.pages!["/coming-soon"];
+        const saved = page.data;
+        page.data = {
+            Title: "Opening soon",
+            Blocks: [
+                { type: "richText", props: { markdown: "## Opening in October" } },
+                { type: "collection", props: { collection: "post", heading: "Latest from the club" } },
+            ],
+        };
+        try {
+            visit("soon.example");
+            const html = await layoutHtml(asyncRender);
+
+            expect(html).toContain('data-press="holding"');
+            expect(html).toContain("Opening in October");
+            expect(html).not.toContain("not found fallback");
+            expect(html).not.toContain("Latest from the club");
+            expect(html).not.toContain("Soon Club post");
+            expect(html).not.toContain("launch-plans");
+        } finally {
+            page.data = saved;
+        }
     });
 
     it("renders the default holding page from the theme when HoldingPath is empty, without asking for a page", async () => {

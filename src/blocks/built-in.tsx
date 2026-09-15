@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { PressConfig } from "../config.js";
-import { siteConfig } from "../site.js";
+import { showsHoldingPage, siteConfigOrNull } from "../site.js";
 import { formatDate, listPosts, listTerms } from "../cms.js";
 import { renderMarkdown } from "../markdown.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
@@ -207,7 +207,10 @@ function collection(config: PressConfig): BlockDefinition {
         ],
         component: async ({ props, theme }) => {
             // The registry is built once at module scope, so the tenant is resolved here, per request.
-            const site = await siteConfig(config);
+            // Not siteConfig: its notFound() while holding would replace a holding page that contains
+            // this block with a 404. A holding page lists nothing from the site behind it.
+            const site = await siteConfigOrNull(config);
+            if (!site || (await showsHoldingPage(site))) return null;
             const items = await collectionItems(site, props.collection, props.limit ?? 6);
             if (items.length === 0) return null;
             const c = theme.colors;
