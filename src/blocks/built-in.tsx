@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { PressConfig } from "../config.js";
 import { showsHoldingPage, siteConfigOrNull } from "../site.js";
-import { formatDate, listPosts, listTerms } from "../cms.js";
+import { formatDate } from "../cms.js";
+import { collectionOf, listCollection } from "../collections.js";
 import { renderMarkdown } from "../markdown.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
 
@@ -146,64 +147,77 @@ const callToAction = defineBlock<{ heading: string; text?: string; label: string
     },
 });
 
-type CollectionName = "post" | "author" | "category";
-
 export interface CollectionItem {
     href: string;
     title: string;
     date?: string;
     summary?: string;
+    /** From the collection's `colorBy` option, when the site maps that option to a colour. */
+    color?: string;
 }
 
 /** The most a collection block lists. The API caps a page anyway; this keeps the schema honest. */
 export const MAX_COLLECTION_ITEMS = 24;
 
 /*
- * What a collection block lists. Never throws: a block is part of a page, and a page must not fail
- * because one embed could not reach the CMS.
+ * What a collection block lists: the items of a collection with a route, filtered by a field when the
+ * block names one. Never throws: a block is part of a page, and a page must not fail because one embed
+ * could not reach the CMS.
  */
 export async function collectionItems(
     config: PressConfig,
-    which: CollectionName,
+    which: string,
     limit: number,
+    filter?: Record<string, string>,
 ): Promise<CollectionItem[]> {
     try {
-        if (which === "post") {
-            const { posts } = await listPosts(config, { pageSize: limit });
-            return posts
-                .filter((p) => p.slug)
-                .map((p) => ({
-                    href: `${config.routes.post}/${p.slug}`,
-                    title: p.title,
-                    date: p.publishedAt ? formatDate(config, p.publishedAt) : undefined,
-                    summary: p.excerpt,
-                }));
-        }
-        const route = config.routes[which];
-        if (!route) return [];
-        const terms = await listTerms(config, which, limit);
-        return terms.filter((t) => t.slug).map((t) => ({ href: `${route}/${t.slug}`, title: t.name }));
+        const route = collectionOf(config, which)?.route;
+        if (route === undefined) return [];
+        const { items } = await listCollection(config, which, { pageSize: limit, filter });
+        return items
+            .filter((item) => item.slug)
+            .map((item) => ({
+                href: `${route}/${item.slug}`,
+                title: item.title,
+                date: item.date ? formatDate(config, item.date) : undefined,
+                summary: item.summary,
+                ...(item.color ? { color: item.color } : {}),
+            }));
     } catch {
         return [];
     }
 }
 
+type CollectionBlockProps = {
+    collection: string;
+    limit?: number;
+    heading?: string;
+    filterField?: string;
+    filterValue?: string;
+};
+
 /*
- * The collections offered are the ones this site has a type and a route for, so an editor cannot
- * pick one that renders nothing. The names are the config's keys, not content type names.
+ * The collections offered are the ones this site has a route for, so an editor cannot pick one that
+ * renders nothing. The names are the config's keys, not content type names. A request-time site takes
+ * any name instead: each tenant's collections come from its own settings, a registry is built once for
+ * all of them, and a name the tenant does not have renders nothing.
  */
 function collection(config: PressConfig): BlockDefinition {
-    const options: CollectionName[] = ["post"];
-    if (config.types.author && config.routes.author) options.push("author");
-    if (config.types.category && config.routes.category) options.push("category");
+    const options = Object.entries(config.collections)
+        .filter(([, c]) => c.route !== undefined)
+        .map(([key]) => key);
 
-    return defineBlock<{ collection: CollectionName; limit?: number; heading?: string }>({
+    return defineBlock<CollectionBlockProps>({
         type: "collection",
         label: "Collection",
         fields: [
-            { name: "collection", kind: "select", label: "Collection", required: true, options },
+            config.sites
+                ? { name: "collection", kind: "text", label: "Collection", required: true }
+                : { name: "collection", kind: "select", label: "Collection", required: true, options },
             { name: "limit", kind: "number", label: "How many", min: 1, max: MAX_COLLECTION_ITEMS },
             { name: "heading", kind: "text", label: "Heading" },
+            { name: "filterField", kind: "text", label: "Only items whose field" },
+            { name: "filterValue", kind: "text", label: "Holds the value" },
         ],
         component: async ({ props, theme }) => {
             // The registry is built once at module scope, so the tenant is resolved here, per request.
@@ -211,7 +225,9 @@ function collection(config: PressConfig): BlockDefinition {
             // this block with a 404. A holding page lists nothing from the site behind it.
             const site = await siteConfigOrNull(config);
             if (!site || (await showsHoldingPage(site))) return null;
-            const items = await collectionItems(site, props.collection, props.limit ?? 6);
+            const filter =
+                props.filterField && props.filterValue ? { [props.filterField]: props.filterValue } : undefined;
+            const items = await collectionItems(site, props.collection, props.limit ?? 6, filter);
             if (items.length === 0) return null;
             const c = theme.colors;
             return (
@@ -248,6 +264,7 @@ function collection(config: PressConfig): BlockDefinition {
                                     borderRadius: theme.radii.panel,
                                     background: c.surface,
                                     border: `1px solid ${c.hairline}`,
+                                    ...(item.color ? { borderLeft: `4px solid ${item.color}` } : {}),
                                 }}
                             >
                                 <Link

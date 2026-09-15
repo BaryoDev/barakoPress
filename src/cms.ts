@@ -362,11 +362,17 @@ export function pageHref(config: PressConfig, path: string): string {
     return path === "/" ? mount : `${mount}${path}`;
 }
 
-/** True when the site mounts pages at the root and this path starts with a reserved slug. */
+/**
+ * True when the site mounts pages at the root and this path's first segment is taken: by a reserved
+ * slug, or by the route of a collection, which the catch-all serves in place of a page. A tenant's
+ * collections come from its settings, so this reads the resolved config's collections every time.
+ */
 export function isReservedPath(config: PressConfig, path: string): boolean {
     if (config.pages !== "") return false;
     const first = path.split("/").find(Boolean)?.toLowerCase();
-    return first !== undefined && config.reservedSlugs.includes(first);
+    if (first === undefined) return false;
+    if (config.reservedSlugs.includes(first)) return true;
+    return Object.values(config.collections).some((c) => c.route?.split("/").find(Boolean)?.toLowerCase() === first);
 }
 
 export interface Redirect {

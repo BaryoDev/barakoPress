@@ -92,6 +92,8 @@ decision, not the engine's.
 | `app/robots.ts` | `default` | `createRobots(config)` |
 | `app/api/revalidate/route.ts` | `POST`, `GET` | `createRevalidateRoute(config)` |
 | `app/[...path]/page.tsx` | `default`, `generateMetadata` | `createPage(config, blocks)`, `createPageMetadata(config)` |
+| `app/doctors/page.tsx` | `default` | `createCollectionIndex(config, "doctors")` |
+| `app/doctors/[slug]/page.tsx` | `default`, `generateMetadata`, `generateStaticParams` | `createCollectionDetail(config, "doctors")`, `createCollectionMetadata(config, "doctors")`, `createCollectionStaticParams(config, "doctors")` |
 | `app/api/blocks/route.ts` | `GET`, `OPTIONS` | `createBlockSchemaRoute(blocks)`, `createBlockSchemaPreflight()` |
 | `app/layout.tsx` | `default`, `generateMetadata` | `createSiteLayout(config, { blocks })`, `createSiteMetadata(config)` |
 | `app/%5Fshare/route.ts` | `GET` | `createSharePage()` |
@@ -106,6 +108,77 @@ It reads `searchParams`, which forces the route dynamic, so a site using `output
 for that static case.
 
 `Card` and `PostView` are exported too, for a site that wants its own page but the engine's markup.
+
+### Collections: any content type as a list and a detail page
+
+A hospital has departments and doctors, a law firm practice areas and people. Each is a collection: a
+content type with a route, a field map, references to other collections, a sort, and whether it has a
+feed. The blog is three collections that `defineConfig` derives from `types`, `fields` and `routes`
+(`post`, `author` and `category`), and `createBlogIndex`, `createBlogPost` and `createArchive` are thin
+wrappers over the collection screens. A site configured the old way changes nothing:
+`src/blog-wrappers.test.tsx` renders every blog factory, the feed, the sitemap and the metadata, and
+compares them and the requests they make with `test/blog-wrappers.golden.json`, which was written
+before collections existed.
+
+On a request-time site the map is the tenant's, from a json field `Collections` on its site settings,
+merged over the configured collections by key. A build-time site passes `collections` to
+`defineConfig` in the same shape:
+
+```json
+{
+  "departments": {
+    "type": "department", "route": "/departments",
+    "fields": { "title": "Name", "body": "About" },
+    "noun": ["department", "departments"]
+  },
+  "doctors": {
+    "type": "doctor", "route": "/doctors", "sort": "Name",
+    "fields": { "title": "Name", "summary": "Specialty", "image": "Photo" },
+    "references": { "Department": { "collection": "departments", "label": "in" } },
+    "noun": ["doctor", "doctors"]
+  }
+}
+```
+
+| Key | What |
+| --- | --- |
+| `type` | The content type. Required |
+| `route` | The index is served at the route and an item at `route/slug`. Absent, items are listed and never linked |
+| `fields` | `title` (required), `slug`, `summary`, `body` (markdown), `date`, `image`, `imageAlt`, `featured`, `tags`, `url`. Each is a field name or a list tried in order; `@createdAt` and `@updatedAt` read the entry itself |
+| `references` | Reference fields, each naming the collection it points into and the word a card puts before the link. Resolved in the same request |
+| `sort` | Sent to the API, for example `-PublishedAt` |
+| `feed` | Whether `createFeed(config, key)` serves it |
+| `sitemap` | On unless `false` |
+| `pageSize`, `label`, `noun` | Items on the index, its heading, and how a count reads |
+| `colorBy` | A choice field whose option colours the item. See below |
+
+A settings entry that does not read as a collection is left out whole: a type or field that is not a
+plain identifier, a route that is not a plain site path, or no title field.
+
+A request-time site cannot add a route file per tenant, so the root catch-all from the pages section
+also serves every collection with a route: its index at the route, and an item one segment below. A
+route file wins where there is one. A collection's first segment is reserved from pages at the root.
+
+A detail page lists the items of the first collection that references it, so `/departments/cardiology`
+lists its doctors, the way an author's archive lists their posts. `listRelated(config, "doctors",
+department, { via: "Department" })` returns the same list; `listRelated(config, post)` still returns
+related posts by semantic search.
+
+**Filtering.** `listCollection(config, "doctors", { filter: { Department: "cardiology" } })` takes a
+reference field by the target's slug and any other field by the value it holds, a choice field by its
+option. The API takes five filters. `createCollectionIndex(config, key, { filter })` takes the same,
+and the `collection` block has `filterField` and `filterValue`.
+
+**A colour per option.** With `colorBy: "AreaOfFocus"` on a `project` collection, the site settings
+`OptionColors` entry `{ "project.AreaOfFocus": { "Providing clean water": "sky" } }` names a colour
+from `Colors` (a theme slot or a colour written out also works). Each card, item page and collection
+block item carries it as a left border, with the option beside it. A name that does not resolve to
+something readable as a colour is dropped. A build-time site passes `optionColors` with the colours
+written out.
+
+`Card` and `ItemView` are exported for a site that wants its own page, and `Card` still takes a `post`.
+`getItem`, `listCollection` and `getGlobals(config)`, the tenant's settings entry as stored, are
+exported too.
 
 ### Pages and navigation from the Pages module
 
@@ -268,6 +341,8 @@ for a post type with no such field.
 | `sites` | off | Request-time identity and theme from the tenant's site settings. See below |
 | `pages` | off | Where the Pages module's pages are mounted. `""` is the site root |
 | `reservedSlugs` | the routes and the engine's files | First path segments a root-mounted page may not take. Adds to the defaults |
+| `collections` | the blog's `post`, `author` and `category` | Content types rendered as lists and detail pages. See Collections |
+| `optionColors` | none | CSS colours by `type.field` and option, for `colorBy` |
 | `theme` | the barakoCMS palette | Colours, faces, radii and column widths. See below |
 
 **A site is build time or request time.** Without `sites`, identity is build time: the index, the
@@ -301,8 +376,8 @@ The settings are the singleton `site` type from barakoCMS `docs/site-settings.md
 (`POST /api/content-types/blueprints/site`, then publish its one entry). The engine reads `Name`,
 `Tagline`, `Url`, `Locale`, `Logo`, `LogoAlt`, `FooterLogo`, `Favicon`, `ShareImage`, `Copyright`,
 `Colors` (the theme slots), `Fonts` (Google Fonts family names), `Radii`, `Layout`, `TopBar`,
-`HeaderLinks`, `FooterColumns` and `SocialLinks`. `OptionColors`, `Variants` and colour names outside
-the theme slots are not rendered yet. Every value is checked for shape; one that fails, and any the
+`HeaderLinks`, `FooterColumns` and `SocialLinks`. `Collections` and `OptionColors` are read as the collections section
+describes. `Variants` are not rendered yet. Every value is checked for shape; one that fails, and any the
 entry leaves out, keeps the configured value, so a half-filled theme renders. A link is a path on the
 site or an absolute http or https URL. Set `Url`: without it the feed and sitemap fall back to the
 host the tenant was found by.

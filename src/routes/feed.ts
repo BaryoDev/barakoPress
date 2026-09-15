@@ -1,5 +1,5 @@
-import type { PressConfig } from "../config.js";
-import { listPosts } from "../cms.js";
+import { POST_COLLECTION, type PressConfig } from "../config.js";
+import { collectionOf, listCollection, type Item } from "../collections.js";
 import { siteConfigOrNull, tenantVary } from "../site.js";
 
 /*
@@ -7,8 +7,10 @@ import { siteConfigOrNull, tenantVary } from "../site.js";
  *
  * barakoCMS serves /api/public/{type}/feed.xml and it is correct, but its item links come from a
  * server-side config template that has to be kept in step with the site's routes by hand. Built
- * here, the routes have one owner: config.routes. It also costs nothing, because it is the same
- * cached, tagged read the index uses.
+ * here, the routes have one owner: the collection's route. It also costs nothing, because it is the
+ * same cached, tagged read the index uses.
+ *
+ * The posts by default; `createFeed(config, key)` serves any collection whose `feed` is on.
  */
 
 /** XML text escaping. Every value below is content someone typed, so none of it is trusted. */
@@ -21,41 +23,50 @@ function xml(value: string): string {
         .replace(/'/g, "&apos;");
 }
 
-export function createFeed(base: PressConfig) {
+export function createFeed(base: PressConfig, collection: string = POST_COLLECTION) {
     return async function GET() {
         // Outside the try below: resolving reads the request, and Next signals that with a throw.
         const config = await siteConfigOrNull(base);
         // Not served while holding, to anyone, session or not: a feed is public and cached in front of the site.
         if (!config || config.holding) return new Response("Not found", { status: 404 });
+        const col = collectionOf(config, collection);
+        if (!col?.feed) return new Response("Not found", { status: 404 });
 
-        let posts: Awaited<ReturnType<typeof listPosts>>["posts"] = [];
+        let items: Item[] = [];
         try {
-            ({ posts } = await listPosts(config, { pageSize: config.pageSizes.feed }));
+            ({ items } = await listCollection(config, collection, { pageSize: config.pageSizes.feed }));
         } catch {
             // An unreachable CMS yields an empty channel, not a failure. This route is prerendered
             // when the consumer gives it a revalidate window, so a throw fails their build, and at
             // runtime it would hand a feed reader a 500.
-            posts = [];
+            items = [];
         }
 
-        const items = posts
-            .map((p) => {
-                const url = `${config.site.url}${config.routes.post}/${p.slug}`;
-                const date = p.publishedAt ? new Date(p.publishedAt) : null;
+        const categories = Object.entries(col.references ?? {})
+            .filter(([, ref]) => ref.inFeed)
+            .map(([field]) => field);
+
+        const entries = items
+            .map((item) => {
+                const url = `${config.site.url}${col.route ?? ""}/${item.slug}`;
+                const date = item.date ? new Date(item.date) : null;
                 const pubDate =
                     date && !Number.isNaN(date.getTime())
                         ? `      <pubDate>${date.toUTCString()}</pubDate>`
                         : "";
                 return [
                     "    <item>",
-                    `      <title>${xml(p.title)}</title>`,
+                    `      <title>${xml(item.title)}</title>`,
                     `      <link>${xml(url)}</link>`,
                     `      <guid isPermaLink="true">${xml(url)}</guid>`,
                     // Plain text, not rendered HTML: a feed reader that trusts markup is not this
                     // site's problem to create.
-                    p.excerpt ? `      <description>${xml(p.excerpt)}</description>` : "",
+                    item.summary ? `      <description>${xml(item.summary)}</description>` : "",
                     pubDate,
-                    p.category ? `      <category>${xml(p.category.name)}</category>` : "",
+                    ...categories.map((field) => {
+                        const ref = item.refs[field];
+                        return ref ? `      <category>${xml(ref.name)}</category>` : "";
+                    }),
                     "    </item>",
                 ]
                     .filter(Boolean)
@@ -70,7 +81,7 @@ export function createFeed(base: PressConfig) {
     <link>${xml(config.site.url)}</link>
     <description>${xml(config.site.tagline ?? config.site.name)}</description>
     <atom:link href="${xml(`${config.site.url}/feed.xml`)}" rel="self" type="application/rss+xml"/>
-${items}
+${entries}
   </channel>
 </rss>
 `;

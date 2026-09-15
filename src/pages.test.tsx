@@ -377,12 +377,16 @@ describe("the page route", () => {
 
     it("renders no page under a reserved slug at the root, without asking for it", async () => {
         visit("baryo.dev");
-        for (const path of [["blog"], ["Blog"], ["feed.xml"], ["api", "anything"]]) {
+        for (const path of [["blog", "a", "b"], ["Blog", "x", "y"], ["feed.xml"], ["api", "anything"]]) {
             expect(await outcome(config, path)).toBe("NEXT_NOT_FOUND");
         }
         expect(calls.some((c) => c.path.startsWith("/api/public/pages/resolve"))).toBe(false);
         expect(isReservedPath(config, "/blog")).toBe(true);
         expect(isReservedPath(config, "/blogger")).toBe(false);
+
+        // The post collection's own route answers its index through the catch-all, never a page there.
+        expect(await outcome(config, ["blog"])).toContain('class="masthead"');
+        expect(resolves("/blog")).toHaveLength(0);
     });
 
     it("resolves a reserved slug under a mount, where it shadows nothing", async () => {

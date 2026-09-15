@@ -1,6 +1,7 @@
 import type { PressConfig } from "./config.js";
 import { bySlug, semantic, type SemanticHit } from "./delivery.js";
 import { toPost, type Post } from "./cms.js";
+import { listReferencing, type Item } from "./collections.js";
 
 /*
  * Related posts, computed rather than curated.
@@ -49,11 +50,32 @@ export function pickRelated(
         .map((h) => ({ slug: h.slug, title: h.title, score: h.score }));
 }
 
+/**
+ * Two lists share this name. Given a post, the posts closest to it by semantic search. Given a
+ * collection key, an item and the reference field `via`, the items of that collection pointing at the
+ * item, such as a department's doctors.
+ */
+export function listRelated(config: PressConfig, post: Post, limit?: number): Promise<RelatedPost[]>;
+export function listRelated(
+    config: PressConfig,
+    collection: string,
+    item: Pick<Item, "id">,
+    options: { via: string; pageSize?: number },
+): Promise<Item[]>;
 export async function listRelated(
     config: PressConfig,
-    post: Post,
-    limit = 3,
-): Promise<RelatedPost[]> {
+    target: Post | string,
+    second?: number | Pick<Item, "id">,
+    options?: { via: string; pageSize?: number },
+): Promise<RelatedPost[] | Item[]> {
+    if (typeof target === "string") {
+        if (!second || typeof second !== "object" || !options) return [];
+        return listReferencing(config, target, second.id, options.via, options.pageSize);
+    }
+    return relatedPosts(config, target, typeof second === "number" ? second : 3);
+}
+
+async function relatedPosts(config: PressConfig, post: Post, limit: number): Promise<RelatedPost[]> {
     const hits = await semantic(config, config.types.post, post.title, limit + OVERFETCH);
     const candidates = pickRelated(hits, post.slug, limit);
 
