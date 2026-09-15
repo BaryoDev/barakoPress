@@ -103,6 +103,7 @@ export type {
     SemanticHit,
     SemanticResponse,
     ShareRedeemAnswer,
+    ShareRedeemCaller,
 } from "./delivery.js";
 
 export { listRelated, pickRelated } from "./related.js";

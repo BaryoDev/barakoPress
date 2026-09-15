@@ -102,6 +102,8 @@ const TENANTS: Record<string, Tenant> = {
 
 type Call = { method: string; path: string; tenant: string | null; body?: string };
 let calls: Call[] = [];
+/** The headers each redemption reached the CMS with. */
+let redeemHeaders: Headers[] = [];
 
 function cms() {
     return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -118,6 +120,7 @@ function cms() {
         const t = tenant ? TENANTS[tenant] : undefined;
         if (!t) return new Response("", { status: 404 });
         if (method === "POST" && url.pathname === "/api/public/site/share-links/redeem") {
+            redeemHeaders.push(new Headers(init?.headers));
             const key = JSON.parse(String(init?.body)).key;
             if (key === THROTTLED) return new Response("", { status: 429 });
             const left = t.shareLinks?.[key];
@@ -177,6 +180,7 @@ beforeEach(() => {
     requestHeaders = null;
     requestCookies = null;
     calls = [];
+    redeemHeaders = [];
     vi.stubGlobal("fetch", cms());
     vi.stubEnv("PRESS_PREVIEW_SECRET", SECRET);
 });
@@ -554,6 +558,89 @@ describe("redeeming a share link", () => {
         const res = await ask("soon.example", { body: form(KEY) });
         expect(res.headers.get("set-cookie")).toBeNull();
         expect(redeems()).toHaveLength(0);
+    });
+
+    const RENDERER_KEY = "renderer-key-for-tests-0123456789abcdef";
+    const behindProxy = createShareRedeemRoute({ ...config, sites: { ...config.sites!, visitorIpHeader: "X-Real-IP" } });
+    const askBehindProxy = (headers: HeadersInit) => {
+        const sent = new Headers(headers);
+        sent.set("host", "soon.example");
+        sent.set("content-type", "application/x-www-form-urlencoded");
+        return behindProxy(new Request("http://internal:3000/api/share/redeem", { method: "POST", headers: sent, body: form(KEY) }));
+    };
+
+    it("sends the renderer key and the visitor's IP when both are known", async () => {
+        vi.stubEnv("CMS_RENDERER_KEY", RENDERER_KEY);
+        for (const ip of ["203.0.113.7", "2001:db8::1"]) {
+            redeemHeaders = [];
+            const res = await askBehindProxy({ "x-real-ip": ip });
+            expect(res.headers.get("location")).toBe("/");
+            expect(redeemHeaders).toHaveLength(1);
+            expect(redeemHeaders[0].get("x-barako-renderer-key")).toBe(RENDERER_KEY);
+            expect(redeemHeaders[0].get("x-barako-visitor-ip")).toBe(ip);
+        }
+    });
+
+    it("sends no renderer key when CMS_RENDERER_KEY is unset", async () => {
+        vi.stubEnv("CMS_RENDERER_KEY", undefined);
+        await askBehindProxy({ "x-real-ip": "203.0.113.7" });
+        vi.stubEnv("CMS_RENDERER_KEY", "   ");
+        await askBehindProxy({ "x-real-ip": "203.0.113.7" });
+        expect(redeemHeaders).toHaveLength(2);
+        for (const sent of redeemHeaders) {
+            expect(sent.has("x-barako-renderer-key")).toBe(false);
+            expect(sent.get("x-barako-visitor-ip")).toBe("203.0.113.7");
+        }
+    });
+
+    it("sends no visitor IP for a value that is not exactly one address, or when no header is named", async () => {
+        vi.stubEnv("CMS_RENDERER_KEY", RENDERER_KEY);
+        const twice = new Headers();
+        twice.append("x-real-ip", "203.0.113.7");
+        twice.append("x-real-ip", "198.51.100.2");
+        const refusedValues: HeadersInit[] = [
+            twice,
+            { "x-real-ip": "203.0.113.7, 198.51.100.2" },
+            { "x-real-ip": "not-an-address" },
+            { "x-real-ip": "203.0.113.7:443" },
+            { "x-real-ip": "[2001:db8::1]" },
+            { "x-real-ip": "fe80::1%eth0" },
+            { "x-real-ip": "" },
+            {},
+        ];
+        for (const headers of refusedValues) await askBehindProxy(headers);
+        // With no header named, a forwarded value a caller sent is not trusted either.
+        await ask("soon.example", { body: form(KEY), headers: { "x-forwarded-for": "203.0.113.7", "x-real-ip": "203.0.113.7" } });
+
+        expect(redeemHeaders).toHaveLength(refusedValues.length + 1);
+        for (const sent of redeemHeaders) {
+            expect(sent.has("x-barako-visitor-ip")).toBe(false);
+            expect(sent.get("x-barako-renderer-key")).toBe(RENDERER_KEY);
+        }
+    });
+
+    it("never logs the renderer key", async () => {
+        vi.stubEnv("CMS_RENDERER_KEY", RENDERER_KEY);
+        const logged: unknown[][] = [];
+        for (const level of ["log", "info", "warn", "error", "debug"] as const) {
+            vi.spyOn(console, level).mockImplementation((...args: unknown[]) => void logged.push(args));
+        }
+        await askBehindProxy({ "x-real-ip": "203.0.113.7" });
+        await ask("soon.example", { body: form("wrong-key-but-long-enough-000") });
+        const inner = cms();
+        vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+            if (String(input).endsWith("/api/public/site/share-links/redeem")) throw new Error("ECONNREFUSED");
+            return inner(input, init);
+        }));
+        await askBehindProxy({ "x-real-ip": "203.0.113.7" });
+        vi.stubEnv("PRESS_PREVIEW_SECRET", "");
+        await askBehindProxy({ "x-real-ip": "203.0.113.7" });
+
+        expect(redeemHeaders.length).toBeGreaterThan(0);
+        expect(logged.length).toBeGreaterThan(0);
+        for (const args of logged) {
+            expect(args.map((a) => (a instanceof Error ? `${a.message} ${a.stack}` : String(a))).join(" ")).not.toContain(RENDERER_KEY);
+        }
     });
 
     it("refuses a post from another site", async () => {

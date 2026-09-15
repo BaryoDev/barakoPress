@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import type { PressConfig } from "./config.js";
 
 /*
@@ -410,6 +411,21 @@ export type ShareRedeemAnswer =
     | { kind: "throttled" }
     | { kind: "failed" };
 
+/** Who is redeeming, so barakoCMS can rate limit the visitor rather than the renderer's own address. */
+export interface ShareRedeemCaller {
+    /** `CMS_RENDERER_KEY`. barakoCMS trusts the visitor IP only when this matches its own. */
+    rendererKey?: string;
+    /** The visitor's IP address. Anything but exactly one IP literal is dropped. */
+    visitorIp?: string;
+}
+
+/** One IPv4 or IPv6 literal, or null. A list, a port, a zone or anything else is not an address. */
+export function singleIp(raw: string | null | undefined): string | null {
+    const value = raw?.trim();
+    if (!value || value.length > 45 || value.includes("%")) return null;
+    return isIP(value) === 0 ? null : value;
+}
+
 /**
  * Redeems a site share link with barakoCMS: `POST /api/public/site/share-links/redeem`, 200 with
  * `{ expiresAt }` for a link that is valid now, 404 otherwise, 429 when throttled.
@@ -418,13 +434,22 @@ export type ShareRedeemAnswer =
  * The key goes in the body, not the URL, so no access log records it. Nothing here logs it either.
  * A 200 whose expiry is missing, unreadable or already past counts as a failure: there is nothing
  * safe to sign. A redirect is refused rather than followed, because a 307 or 308 would send the key
- * on to wherever it points.
+ * on to wherever it points. The renderer key rides along for the same reason, and is never logged.
  */
-export async function redeemShareLink(config: PressConfig, key: string, now: number = Date.now()): Promise<ShareRedeemAnswer> {
+export async function redeemShareLink(
+    config: PressConfig,
+    key: string,
+    now: number = Date.now(),
+    caller: ShareRedeemCaller = {},
+): Promise<ShareRedeemAnswer> {
+    const sent: Record<string, string> = { ...(headers(config) as Record<string, string>), "content-type": "application/json" };
+    if (caller.rendererKey) sent["X-Barako-Renderer-Key"] = caller.rendererKey;
+    const visitorIp = singleIp(caller.visitorIp);
+    if (visitorIp) sent["X-Barako-Visitor-IP"] = visitorIp;
     try {
         const res = await fetch(`${config.cmsUrl}/api/public/site/share-links/redeem`, {
             method: "POST",
-            headers: { ...headers(config), "content-type": "application/json" },
+            headers: sent,
             body: JSON.stringify({ key }),
             cache: "no-store",
             redirect: "error",
