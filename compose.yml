@@ -74,7 +74,11 @@ services:
       SITE_URL: "https://${SITE_DOMAIN}"
       SITE_NAME: ${SITE_NAME:-barakoPress}
       SITE_TAGLINE: ${SITE_TAGLINE:-A blog on barakoCMS}
-      REVALIDATE_SECRET: ${REVALIDATE_SECRET:?set REVALIDATE_SECRET in .env}
+      # One secret for webhook keys and share sessions, at least 32 characters. An older .env with
+      # only REVALIDATE_SECRET keeps working: it is passed on, and read while PRESS_SECRET is empty.
+      # Compose refuses to start with neither.
+      PRESS_SECRET: ${PRESS_SECRET:-}
+      REVALIDATE_SECRET: ${REVALIDATE_SECRET:-${PRESS_SECRET:?set PRESS_SECRET in .env}}
 
   caddy:
     image: caddy:2-alpine

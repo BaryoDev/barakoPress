@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { PressConfig } from "../config.js";
 import { cacheTagFor } from "../delivery.js";
 import { revalidateKeyFor } from "../revalidate-key.js";
+import { MIN_SECRET_LENGTH, readSecret, type PressSecret } from "../secret.js";
 import { tenantFromHeaders } from "../site.js";
 
 /*
@@ -37,9 +38,10 @@ const MAX_BODY_BYTES = 64 * 1024;
 
 export interface RevalidateOptions {
     /**
-     * Defaults to REVALIDATE_SECRET. A build-time site verifies with it as it is. A request-time site
-     * verifies each delivery with the key `revalidateKeyFor(secret, tenant)` derives for the tenant
-     * its host resolves to, so no tenant ever holds a key that verifies for another.
+     * Defaults to PRESS_SECRET, else REVALIDATE_SECRET. A build-time site verifies with it as it is. A
+     * request-time site verifies each delivery with the key `revalidateKeyFor(secret, tenant)` derives
+     * for the tenant its host resolves to, so no tenant ever holds a key that verifies for another.
+     * Shorter than 32 characters still verifies and warns once, as REVALIDATE_SECRET does.
      */
     secret?: string;
     /** Seconds a signature stays valid. Shorter is safer; the sender's clock has to be close. */
@@ -77,19 +79,41 @@ function makeReplayGuard(windowSeconds: number) {
     };
 }
 
+function configuredSecret(option: string | undefined): PressSecret | null {
+    if (option === undefined) return readSecret("revalidate");
+    return option ? { value: option, name: "the secret option", short: option.length < MIN_SECRET_LENGTH } : null;
+}
+
 export function createRevalidateRoute(config: PressConfig, options: RevalidateOptions = {}) {
     const tolerance = options.toleranceSeconds ?? TOLERANCE_SECONDS;
     const maxBody = options.maxBodyBytes ?? MAX_BODY_BYTES;
     const alreadyHonoured = makeReplayGuard(tolerance);
+    let warnedShort = false;
 
     async function POST(request: NextRequest) {
-        const secret = options.secret ?? process.env.REVALIDATE_SECRET;
-        if (!secret) {
+        const found = configuredSecret(options.secret);
+        if (!found) {
             // Refuse rather than accept unsigned. An unconfigured deployment that quietly accepts
             // anything is an open cache-purge endpoint, which is a free denial of service.
             console.error("revalidate: no secret configured, refusing every delivery");
             return NextResponse.json({ error: "not configured" }, { status: 503 });
         }
+        if (found.short) {
+            // PRESS_SECRET is new, so it gets the rule outright. REVALIDATE_SECRET shipped in 0.3.0 with
+            // no minimum, and refusing it would stop purges on a site that works today, so it warns
+            // until 1.0.0. Once per route, since anyone can reach this line without a signature.
+            if (found.name === "PRESS_SECRET") {
+                console.error(`revalidate: PRESS_SECRET is shorter than ${MIN_SECRET_LENGTH} characters, refusing every delivery`);
+                return NextResponse.json({ error: "not configured" }, { status: 503 });
+            }
+            if (!warnedShort) {
+                warnedShort = true;
+                console.warn(
+                    `revalidate: ${found.name} is shorter than ${MIN_SECRET_LENGTH} characters. It still verifies until 1.0.0; set PRESS_SECRET to at least ${MIN_SECRET_LENGTH} characters instead`,
+                );
+            }
+        }
+        const secret = found.value;
 
         const timestamp = request.headers.get("x-barako-timestamp");
         const signature = request.headers.get("x-barako-signature");

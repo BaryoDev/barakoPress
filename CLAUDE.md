@@ -101,7 +101,7 @@ build time. Site identity did exactly that, so a client's masthead said "barakoP
 something revalidated it. A build-time site keeps per-site values as literals in its
 `press.config.ts`. A request-time site (`sites` in the config, barakoCMS D22) reads them from the
 tenant's settings inside the render, in `src/site.ts`, and every factory resolves that first. Only
-per-environment values (`CMS_URL`, `REVALIDATE_SECRET`, `CMS_TENANT`, `CMS_DEFAULT_TENANT`) come from
+per-environment values (`CMS_URL`, `PRESS_SECRET`, `CMS_TENANT`, `CMS_DEFAULT_TENANT`) come from
 the environment.
 
 **A request-time read carries its tenant, or does not happen.** The tenant goes in the header, the
@@ -132,7 +132,8 @@ It is the only writer to the cache and it is reachable by anyone who finds the U
 of the checks is part of the design: cheap checks first, body read last and bounded, signature
 compared in constant time, timestamp refused outside the window, each signature honoured once per
 tenant. A request-time site verifies with the key derived for the tenant its host resolves to, never
-with `REVALIDATE_SECRET` itself (`src/revalidate-key.ts`).
+with `PRESS_SECRET` itself (`src/revalidate-key.ts`). Every secret is read through `readSecret` in
+`src/secret.ts`, one length rule for every purpose, with the older names as fallbacks.
 
 The signing recipe is barakoCMS `docs/webhooks.md`. The signature covers the **raw body bytes**:
 parse the JSON first and you have re-serialised it into something that will never verify.

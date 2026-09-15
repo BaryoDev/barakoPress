@@ -455,7 +455,7 @@ other. It needs one setting:
 
 | Variable | What |
 | --- | --- |
-| `PRESS_PREVIEW_SECRET` | The HMAC key, at least 32 characters, for example `openssl rand -base64 48`. Read per request. Unset or shorter, no session is issued or accepted and everyone gets the holding page. Every instance behind one domain needs the same value |
+| `PRESS_SECRET` | The HMAC key, at least 32 characters, for example `openssl rand -base64 48`. Read per request. Unset or shorter, no session is issued or accepted and everyone gets the holding page. Every instance behind one domain needs the same value. `PRESS_PREVIEW_SECRET` is read in its place when `PRESS_SECRET` is unset. See [One secret](#one-secret) |
 | `CMS_RENDERER_KEY` | Optional. Sent to barakoCMS as `X-Barako-Renderer-Key` when a link is redeemed, and must match the renderer key barakoCMS is configured with. Read per request and never logged. Unset, no key header is sent |
 
 **Redemption is rate limited per tenant and visitor.** Every redemption leaves this container from the
@@ -471,8 +471,8 @@ keeps whatever a caller put there.
 **A session lasts until the link expires or for 24 hours, whichever is sooner.** Opening the link
 again starts a new one while the link is valid. **A revoked link can keep working for up to 24
 hours** for someone who already opened it, because the session is checked here, not in barakoCMS. To
-end every session now, change `PRESS_PREVIEW_SECRET`, which does it for every tenant on that
-deployment.
+end every session now, change `PRESS_SECRET`, which does it for every tenant on that
+deployment, and changes every tenant's webhook key with it.
 
 Whether a request gets the holding page is decided per request from the cookie, and a request-time
 site renders every route dynamically, so a cached render made for a visitor with a session is never
@@ -564,9 +564,31 @@ nothing would say why. With it, a missing webhook degrades publishing from insta
 type, trigger `Published`, one Webhook action with the URL and a shared secret. Nothing is deployed
 to change it.
 
+### One secret
+
+`PRESS_SECRET` keys everything this renderer signs: each tenant's webhook key and each share session
+cookie. Every signature puts its purpose first in what it signs (`revalidate.` or `press-share.`), so
+one made for one purpose never verifies as another. It is read per request and has one rule for every
+purpose: at least 32 characters, for example `openssl rand -base64 48`.
+
+| When `PRESS_SECRET` is | Webhooks | Share sessions |
+| --- | --- | --- |
+| 32 characters or more | verified with it | signed with it |
+| set but shorter | refused with 503 | none issued or accepted |
+| unset | `REVALIDATE_SECRET`, as in 0.3.0 | `PRESS_PREVIEW_SECRET` |
+
+The older names are read only when `PRESS_SECRET` is unset, so a site that set them keeps working, and
+the keys derive byte for byte as before, so a key already pasted into a tenant's workflow keeps
+verifying. A `REVALIDATE_SECRET` shorter than 32 characters still verifies and logs a warning once,
+until 1.0.0. A `PRESS_PREVIEW_SECRET` shorter than 32 characters opens no session, as before.
+
+Moving to the new name is copying the value: `PRESS_SECRET` set to what `REVALIDATE_SECRET` held
+derives the same tenant keys, provided it is 32 characters or more. A shorter one has to be replaced,
+and each tenant given its new key.
+
 ### Wiring the webhook
 
-1. Put a long random value in `REVALIDATE_SECRET` where your app runs.
+1. Put a random value of at least 32 characters in `PRESS_SECRET` where your app runs.
 2. In barakoBrew, create a workflow on your post content type, event `Published`.
 3. Add a Webhook action with `Url` set to `https://your-site/api/revalidate` and `Secret` set to the
    same value. On a site with `sites` configured, the `Secret` is the tenant's key instead, below.
@@ -574,32 +596,33 @@ to change it.
 ### One key per tenant
 
 With `sites` configured, one app serves many tenants, and each tenant's admin can read and edit its
-own workflows. So no tenant is given `REVALIDATE_SECRET`. Each delivery is verified with a key derived
+own workflows. So no tenant is given `PRESS_SECRET`. Each delivery is verified with a key derived
 for the tenant its host resolves to:
 
 ```
-key = lowercase hex HMAC-SHA256(REVALIDATE_SECRET, "revalidate." + tenant handle)
+key = lowercase hex HMAC-SHA256(PRESS_SECRET, "revalidate." + tenant handle)
 ```
 
 A delivery signed with one tenant's key gets a 401 on every other tenant's host, and so does one
-signed with `REVALIDATE_SECRET` itself. Print a tenant's key where `REVALIDATE_SECRET` is set:
+signed with `PRESS_SECRET` itself. Print a tenant's key where `PRESS_SECRET` (or `REVALIDATE_SECRET`) is set:
 
 ```bash
 npx barakopress revalidate-key baryo
 # or, with no Node:
-printf 'revalidate.%s' baryo | openssl dgst -sha256 -hmac "$REVALIDATE_SECRET" | sed 's/^.* //'
+printf 'revalidate.%s' baryo | openssl dgst -sha256 -hmac "${PRESS_SECRET:-$REVALIDATE_SECRET}" | sed 's/^.* //'
 ```
 
 Both read the secret from the environment and print only the key. Paste it into the `Secret` of that
 tenant's Webhook action, with `Url` on that tenant's domain. A new tenant needs nothing on the
-renderer. Changing `REVALIDATE_SECRET` changes every tenant's key, so each workflow needs its new one.
+renderer. Changing `PRESS_SECRET` changes every tenant's key, so each workflow needs its new one.
 
-A site without `sites` (one build, one site) verifies with `REVALIDATE_SECRET` itself, as before.
+A site without `sites` (one build, one site) verifies with `PRESS_SECRET` itself, as it did with
+`REVALIDATE_SECRET`. Its workflow holds that value, so give it a value no other deployment uses.
 
 **Upgrading a multi-tenant site to 0.4.0 is a breaking change.** Every tenant's workflow holds
 `REVALIDATE_SECRET` today, and after the upgrade that value verifies for no tenant: deliveries get a
 401 and purges stop, with the backstop the only refresh. Before or right after deploying, print each
-tenant's key and put it in that tenant's Webhook `Secret`. Then change `REVALIDATE_SECRET` and print
+tenant's key and put it in that tenant's Webhook `Secret`. Then set a new `PRESS_SECRET` and print
 the keys again, because every tenant admin has seen the old value and could derive any tenant's key
 from it.
 
@@ -621,7 +644,8 @@ way.
 Verification follows the recipe in the API's `docs/webhooks.md`: HMAC-SHA256 over
 `"<timestamp>.<raw body>"`, compared in constant time, with a 300 second tolerance so a captured
 delivery cannot be replayed later, and each signature honoured once per tenant. An unsigned, missigned or stale
-delivery gets a 401. If `REVALIDATE_SECRET` is unset the endpoint answers 503 and purges nothing,
+delivery gets a 401. If neither `PRESS_SECRET` nor `REVALIDATE_SECRET` is set, or `PRESS_SECRET` is
+shorter than 32 characters, the endpoint answers 503 and purges nothing,
 because an open cache-purge endpoint is a free denial of service.
 
 ## What it reads
@@ -674,7 +698,7 @@ does, so the package cannot quietly depend on something only its own repository 
 container, a compose stack with Caddy terminating TLS, and a BaryoVM release manifest.
 
 ```bash
-cp .env.example .env      # point CMS_URL at your instance, set REVALIDATE_SECRET
+cp .env.example .env      # point CMS_URL at your instance, set PRESS_SECRET
 npm install
 npm run build && npm start
 ```
@@ -691,7 +715,7 @@ baryovm stack release blog
 
 Before the first release, three DNS names have to point at the machine (`SITE_DOMAIN`, `API_DOMAIN`,
 `CONSOLE_DOMAIN`) and a `.env` has to exist on it at `/opt/barakopress/.env`. The release refuses to
-start without that file, and refuses again if `REVALIDATE_SECRET` is empty, because a stack that
+start without that file, and refuses again if `PRESS_SECRET` and `REVALIDATE_SECRET` are both empty, because a stack that
 comes up with no secret can never be told that content changed. Only ports 80 and 443 are published:
 the API, the console and the site are reachable only through Caddy on the compose network.
 
