@@ -1,0 +1,286 @@
+import { REFERENCE_FIELDS, type CollectionConfig, type FieldNames, type PressConfig } from "./config.js";
+import { bySlug, bySlugPreview, list, type PublicContent, type Seo } from "./delivery.js";
+import type { Ref } from "./cms.js";
+import { siteHref } from "./site.js";
+
+/*
+ * Collections: any content type rendered as a list and a detail page, from configuration.
+ *
+ * A hospital's Departments and Doctors, a law firm's Practice areas and People, and the blog's own
+ * posts, authors and categories are the same shape: a type, a route, a field map, references to other
+ * collections and a sort. So they are one abstraction. Every name comes from `config.collections`,
+ * which a request-time site reads from the tenant's settings, and every read goes through the same
+ * tagged, cached, per tenant `list` and `bySlug` as the rest of the site.
+ */
+
+export interface Item {
+    id: string;
+    /** The key of the collection it was read as. */
+    collection: string;
+    slug: string;
+    title: string;
+    summary?: string;
+    /** Markdown. */
+    body: string;
+    date?: string;
+    image?: string;
+    imageAlt?: string;
+    /** A checked http or https link, or a site path. */
+    url?: string;
+    featured: boolean;
+    tags: string[];
+    /** Resolved references, by field name. Undefined for one that did not come back resolved. */
+    refs: Record<string, Ref | undefined>;
+    /** The option the `colorBy` field holds. */
+    option?: string;
+    /** The colour the site maps that option to. */
+    color?: string;
+    seo?: Seo;
+    /** The entry as the API returned it, for a site's own component. */
+    content: PublicContent;
+}
+
+const str = (v: unknown): string => (typeof v === "string" ? v : "");
+
+/** A configured collection by key. Own keys only, so a name taken from input cannot reach the prototype. */
+export function collectionOf(config: PressConfig, key: string): CollectionConfig | undefined {
+    return Object.hasOwn(config.collections, key) ? config.collections[key] : undefined;
+}
+
+function names(n: FieldNames | undefined): string[] {
+    if (n === undefined) return [];
+    return Array.isArray(n) ? n : [n];
+}
+
+function read(c: PublicContent, name: string): unknown {
+    if (name === "@createdAt") return c.createdAt;
+    if (name === "@updatedAt") return c.updatedAt;
+    return Object.hasOwn(c.data, name) ? c.data[name] : undefined;
+}
+
+/** The first of the names holding a non-empty string, or "". */
+function text(c: PublicContent, n: FieldNames | undefined): string {
+    for (const name of names(n)) {
+        const v = str(read(c, name));
+        if (v) return v;
+    }
+    return "";
+}
+
+/** The first of the names holding any value. */
+function value(c: PublicContent, n: FieldNames | undefined): unknown {
+    for (const name of names(n)) {
+        const v = read(c, name);
+        if (v !== undefined && v !== null) return v;
+    }
+    return undefined;
+}
+
+/*
+ * A resolved reference. `include` gives back the whole target entry, so this handles that and a bare
+ * object, and gives up rather than inventing a label when neither a name nor a slug is there. The
+ * target's own field map says where its name and slug are.
+ */
+function toRef(config: PressConfig, target: string, v: unknown): Ref | undefined {
+    if (!v || typeof v !== "object") return undefined;
+    const d = v as Record<string, unknown>;
+    const data = (d.data && typeof d.data === "object" ? d.data : d) as Record<string, unknown>;
+    const entry: PublicContent = { id: str(d.id), data };
+    const fields = collectionOf(config, target)?.fields;
+    const name = text(entry, fields?.title ?? REFERENCE_FIELDS.title);
+    const slug = str(d.slug) || text(entry, fields?.slug ?? REFERENCE_FIELDS.slug);
+    if (!name && !slug) return undefined;
+    return { id: str(d.id), slug, name: name || slug };
+}
+
+function optionOf(c: PublicContent, col: CollectionConfig): string | undefined {
+    if (!col.colorBy) return undefined;
+    const v = read(c, col.colorBy);
+    if (typeof v === "string") return v || undefined;
+    if (Array.isArray(v)) return v.find((x): x is string => typeof x === "string" && x.length > 0);
+    return undefined;
+}
+
+function colorOf(config: PressConfig, col: CollectionConfig, option: string | undefined): string | undefined {
+    if (!option || !col.colorBy) return undefined;
+    const byOption = config.optionColors[`${col.type}.${col.colorBy}`];
+    return byOption && Object.hasOwn(byOption, option) ? byOption[option] : undefined;
+}
+
+export function toItem(config: PressConfig, key: string, c: PublicContent): Item {
+    const col = collectionOf(config, key);
+    if (!col) throw new Error(`no collection "${key}" is configured`);
+    const f = col.fields;
+    const tags = value(c, f.tags);
+    const option = optionOf(c, col);
+    const refs: Record<string, Ref | undefined> = {};
+    for (const [field, ref] of Object.entries(col.references ?? {})) {
+        refs[field] = toRef(config, ref.collection, read(c, field));
+    }
+    return {
+        id: c.id,
+        collection: key,
+        slug: c.slug ?? text(c, f.slug),
+        title: text(c, f.title) || "Untitled",
+        summary: text(c, f.summary) || undefined,
+        body: text(c, f.body),
+        date: text(c, f.date) || undefined,
+        image: text(c, f.image) || undefined,
+        imageAlt: text(c, f.imageAlt) || undefined,
+        url: siteHref(text(c, f.url)),
+        featured: value(c, f.featured) === true,
+        tags: Array.isArray(tags) ? tags.filter((t): t is string => typeof t === "string") : [],
+        refs,
+        option,
+        color: colorOf(config, col, option),
+        seo: c.seo ?? undefined,
+        content: c,
+    };
+}
+
+/*
+ * The reference fields worth resolving in the same request: those pointing into a collection this
+ * site has. The API caps `include` at five and answers 400 for a field the type does not have.
+ */
+function includesOf(config: PressConfig, col: CollectionConfig): string[] {
+    return Object.entries(col.references ?? {})
+        .filter(([, ref]) => collectionOf(config, ref.collection))
+        .map(([field]) => field)
+        .slice(0, 5);
+}
+
+export interface ListCollectionOptions {
+    page?: number;
+    pageSize?: number;
+    /**
+     * Field name to the value it must hold. A reference field takes the target's slug; any other
+     * field, a choice field included, is matched exactly. The API takes at most five.
+     */
+    filter?: Record<string, string>;
+}
+
+export interface CollectionPage {
+    items: Item[];
+    total: number;
+    hasNextPage: boolean;
+}
+
+const MAX_FILTERS = 5;
+
+type Triple = [string, string, string];
+
+/*
+ * Ordering is asked of the API, not done here, for the reason posts are: sorting the page that came
+ * back only orders those rows.
+ */
+async function listWith(
+    config: PressConfig,
+    key: string,
+    col: CollectionConfig,
+    opts: { page?: number; pageSize?: number; filter: Triple[] },
+): Promise<CollectionPage> {
+    const res = await list(config, col.type, {
+        page: opts.page ?? 1,
+        pageSize: opts.pageSize ?? col.pageSize ?? config.pageSizes.index,
+        include: includesOf(config, col),
+        filter: opts.filter.length > 0 ? opts.filter : undefined,
+        sort: col.sort,
+    });
+    return {
+        items: res.items.map((c) => toItem(config, key, c)),
+        total: res.totalItems,
+        hasNextPage: res.hasNextPage,
+    };
+}
+
+export async function listCollection(
+    config: PressConfig,
+    key: string,
+    opts: ListCollectionOptions = {},
+): Promise<CollectionPage> {
+    const col = collectionOf(config, key);
+    if (!col) return { items: [], total: 0, hasNextPage: false };
+
+    const wanted = Object.entries(opts.filter ?? {});
+    if (wanted.length > MAX_FILTERS) throw new Error(`a list takes at most ${MAX_FILTERS} filters, got ${wanted.length}`);
+
+    const filter: Triple[] = [];
+    for (const [field, want] of wanted) {
+        const ref = col.references && Object.hasOwn(col.references, field) ? col.references[field] : undefined;
+        const target = ref ? collectionOf(config, ref.collection) : undefined;
+        if (!target) {
+            filter.push([field, "eq", want]);
+            continue;
+        }
+        // A reference is filtered by the target's id, and a slug nobody has matches nothing.
+        const found = await bySlug(config, target.type, want);
+        if (!found) return { items: [], total: 0, hasNextPage: false };
+        filter.push([field, "eq", found.id]);
+    }
+    return listWith(config, key, col, { page: opts.page, pageSize: opts.pageSize, filter });
+}
+
+export async function getItem(config: PressConfig, key: string, slug: string): Promise<Item | null> {
+    const col = collectionOf(config, key);
+    if (!col) return null;
+    const c = await bySlug(config, col.type, slug);
+    return c ? toItem(config, key, c) : null;
+}
+
+/** A draft, read uncached with a preview token, as `bySlugPreview` does for any type. */
+export async function getItemPreview(config: PressConfig, key: string, slug: string, token: string): Promise<Item | null> {
+    const col = collectionOf(config, key);
+    if (!col) return null;
+    const c = await bySlugPreview(config, col.type, slug, token);
+    return c ? toItem(config, key, c) : null;
+}
+
+/** Items of `key` whose reference field `via` points at the entry `id`. `pageSizes.archive` of them unless told. */
+export async function listReferencing(
+    config: PressConfig,
+    key: string,
+    id: string,
+    via: string,
+    pageSize?: number,
+): Promise<Item[]> {
+    const col = collectionOf(config, key);
+    if (!col || !id) return [];
+    const { items } = await listWith(config, key, col, {
+        pageSize: pageSize ?? config.pageSizes.archive,
+        filter: [[via, "eq", id]],
+    });
+    return items;
+}
+
+/** The first collection with a reference into `key`, and the field it uses: what a detail page lists. */
+export function referencedBy(config: PressConfig, key: string): { collection: string; via: string } | undefined {
+    for (const [other, col] of Object.entries(config.collections)) {
+        for (const [field, ref] of Object.entries(col.references ?? {})) {
+            if (ref.collection === key) return { collection: other, via: field };
+        }
+    }
+    return undefined;
+}
+
+/**
+ * Which collection a site path is: its index at the route, or an item one segment below. The longest
+ * matching route wins, so a collection at /blog/featured is not read as a post slugged "featured". A
+ * collection whose `index` is false answers only for its items.
+ */
+export function collectionAt(config: PressConfig, path: string): { key: string; slug?: string } | null {
+    const parts = path.split("/").filter(Boolean);
+    const routes = Object.entries(config.collections)
+        .map(([key, col]) => ({ key, col, route: col.route?.split("/").filter(Boolean) ?? [] }))
+        .filter((r) => r.route.length > 0)
+        .sort((a, b) => b.route.length - a.route.length);
+    for (const { key, col, route } of routes) {
+        if (parts.length < route.length || parts.length > route.length + 1) continue;
+        if (!route.every((segment, i) => segment.toLowerCase() === parts[i].toLowerCase())) continue;
+        if (parts.length === route.length) {
+            if (col.index === false) continue;
+            return { key };
+        }
+        return { key, slug: parts[route.length] };
+    }
+    return null;
+}

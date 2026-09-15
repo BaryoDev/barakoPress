@@ -1,14 +1,21 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
-import type {
-    FooterColumn,
-    Holding,
-    PressConfig,
-    SiteIdentity,
-    SiteLink,
-    SocialLink,
-    TopBar,
+import {
+    AUTHOR_COLLECTION,
+    CATEGORY_COLLECTION,
+    POST_COLLECTION,
+    SETTINGS_TYPE,
+    type CollectionConfig,
+    type CollectionReference,
+    type FieldNames,
+    type FooterColumn,
+    type Holding,
+    type PressConfig,
+    type SiteIdentity,
+    type SiteLink,
+    type SocialLink,
+    type TopBar,
 } from "./config.js";
 import { CmsError, isTenantHandle, list, tenantForHost } from "./delivery.js";
 import type { PressTheme, ThemeColors, ThemeFonts, ThemeLayout, ThemeRadii } from "./theme.js";
@@ -189,8 +196,20 @@ export async function siteConfigOrNull(config: PressConfig): Promise<PressConfig
     return resolveSite(config, await headers());
 }
 
-async function readSettings(config: PressConfig): Promise<Record<string, unknown> | undefined> {
-    const type = config.sites?.settingsType;
+/**
+ * The tenant's site settings entry as it is stored, or an empty object when there is none. Every value
+ * in it was typed by an editor, so a caller checks the shape of whatever it reads.
+ */
+export async function getGlobals(config: PressConfig): Promise<Record<string, unknown>> {
+    // The read below swallows its own failures, so a config nobody resolved has to be refused here.
+    if (config.sites && !config.tenant) throw new Error("a request-time site has to be resolved before it reads");
+    return (await readSettings(config, config.sites?.settingsType ?? SETTINGS_TYPE)) ?? {};
+}
+
+async function readSettings(
+    config: PressConfig,
+    type: string | undefined = config.sites?.settingsType,
+): Promise<Record<string, unknown> | undefined> {
     if (!type) return undefined;
     try {
         const res = await list(config, type, { pageSize: 1 });
@@ -386,6 +405,138 @@ function withoutHoldingPage(site: SiteIdentity, path: string): SiteIdentity {
     };
 }
 
+/*
+ * `Collections`: the content types this tenant's site renders as lists and detail pages, keyed by name,
+ * each in the shape of `CollectionConfig`. An entry that does not read as one is left out whole rather
+ * than half applied, and one keyed like a configured collection replaces it. The blog's own three keys
+ * are refused: the blog factories map posts through `types` and `fields`, so a replaced `post` entry
+ * would render its list one way and its pages another. Every name ends up in an
+ * API query or a link, so each is held to a plain identifier or a plain site path.
+ */
+const COLLECTION_KEY = /^[A-Za-z][A-Za-z0-9_-]{0,40}$/;
+const BLOG_KEYS = new Set([POST_COLLECTION, AUTHOR_COLLECTION, CATEGORY_COLLECTION]);
+const TYPE_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,62}$/;
+const FIELD_NAME = /^@?[A-Za-z][A-Za-z0-9_]{0,62}$/;
+const DATA_FIELD = /^[A-Za-z][A-Za-z0-9_]{0,62}$/;
+const SORT = /^-?[A-Za-z][A-Za-z0-9_]{0,62}$/;
+const FIELD_ROLES = ["slug", "summary", "body", "date", "image", "imageAlt", "featured", "tags", "url"] as const;
+
+function fieldNames(v: unknown): FieldNames | undefined {
+    if (typeof v === "string") return FIELD_NAME.test(v) ? v : undefined;
+    if (!Array.isArray(v) || v.length === 0 || v.length > 5) return undefined;
+    return v.every((n) => typeof n === "string" && FIELD_NAME.test(n)) ? (v as string[]) : undefined;
+}
+
+function short(v: unknown, max: number): string | undefined {
+    const s = str(v);
+    return s && s.length <= max ? s : undefined;
+}
+
+function collectionFrom(v: unknown): CollectionConfig | undefined {
+    const c = record(v);
+    const fieldsIn = record(c?.fields);
+    const type = str(c?.type);
+    const title = fieldNames(fieldsIn?.title);
+    if (!c || !fieldsIn || !type || !TYPE_NAME.test(type) || !title) return undefined;
+
+    let route: string | undefined;
+    if (c.route !== undefined) {
+        const path = sitePath(c.route);
+        route = path ? withoutTrailingSlashes(path) : undefined;
+        if (!route) return undefined;
+    }
+
+    const fields: CollectionConfig["fields"] = { title };
+    for (const role of FIELD_ROLES) {
+        const names = fieldNames(fieldsIn[role]);
+        if (names) fields[role] = names;
+    }
+
+    const references = Object.fromEntries(
+        Object.entries(record(c.references) ?? {})
+            .slice(0, 5)
+            .flatMap(([field, raw]): [string, CollectionReference][] => {
+                const ref = typeof raw === "string" ? { collection: raw } : record(raw);
+                const target = str(ref?.collection);
+                if (!DATA_FIELD.test(field) || !target || !COLLECTION_KEY.test(target)) return [];
+                return [[field, { collection: target, label: short(ref?.label, 40), inFeed: ref?.inFeed === true }]];
+            }),
+    );
+
+    const sort = str(c.sort);
+    const colorBy = str(c.colorBy);
+    const pageSize = c.pageSize;
+    const noun = Array.isArray(c.noun) && c.noun.length === 2 ? [short(c.noun[0], 40), short(c.noun[1], 40)] : [];
+    return {
+        type,
+        route,
+        fields,
+        references,
+        sort: sort && SORT.test(sort) ? sort : undefined,
+        feed: c.feed === true,
+        sitemap: c.sitemap !== false,
+        index: c.index !== false,
+        pageSize: typeof pageSize === "number" && Number.isInteger(pageSize) && pageSize >= 1 && pageSize <= 100 ? pageSize : undefined,
+        label: short(c.label, 80),
+        noun: noun[0] && noun[1] ? [noun[0], noun[1]] : undefined,
+        colorBy: colorBy && DATA_FIELD.test(colorBy) ? colorBy : undefined,
+    };
+}
+
+function collectionsFrom(base: Record<string, CollectionConfig>, v: unknown): Record<string, CollectionConfig> {
+    const input = record(v);
+    if (!input) return base;
+    const read = Object.entries(input)
+        .slice(0, 24)
+        .flatMap(([key, raw]): [string, CollectionConfig][] => {
+            const collection = COLLECTION_KEY.test(key) && !BLOG_KEYS.has(key) ? collectionFrom(raw) : undefined;
+            return collection ? [[key, collection]] : [];
+        });
+    return { ...base, ...Object.fromEntries(read) };
+}
+
+/*
+ * `OptionColors`, keyed by `type.field` and then by option, each naming a colour in `Colors`, a theme
+ * slot, or a colour written out. A name that resolves to nothing readable as a colour is dropped. The
+ * tenant's options merge over the configured ones, so setting one option keeps the rest.
+ */
+const OPTION_KEY = /^[A-Za-z][A-Za-z0-9_-]{0,62}\.[A-Za-z][A-Za-z0-9_]{0,62}$/;
+
+function optionColorsFrom(
+    base: Record<string, Record<string, string>>,
+    theme: PressTheme,
+    colorsIn: unknown,
+    v: unknown,
+): Record<string, Record<string, string>> {
+    const input = record(v);
+    if (!input) return base;
+    const named = record(colorsIn) ?? {};
+    const slots = theme.colors as unknown as Record<string, string>;
+    const resolve = (name: string): string | undefined => {
+        const own = Object.hasOwn(named, name) ? str(named[name]) : undefined;
+        if (own) return COLOR.test(own) ? own : undefined;
+        if (Object.hasOwn(slots, name)) return slots[name];
+        return COLOR.test(name) ? name : undefined;
+    };
+
+    const read = Object.entries(input)
+        .slice(0, 50)
+        .flatMap(([key, raw]): [string, Record<string, string>][] => {
+            const options = record(raw);
+            if (!OPTION_KEY.test(key) || !options) return [];
+            const colors = Object.entries(options)
+                .slice(0, 100)
+                .flatMap(([option, name]): [string, string][] => {
+                    const colorName = str(name);
+                    const color = option.length <= 200 && colorName ? resolve(colorName) : undefined;
+                    return color ? [[option, color]] : [];
+                });
+            const configured = Object.hasOwn(base, key) ? base[key] : {};
+            return [[key, { ...configured, ...Object.fromEntries(colors) }]];
+        });
+    return { ...base, ...Object.fromEntries(read) };
+}
+
 export function applySiteSettings(
     config: PressConfig,
     data: Record<string, unknown> | undefined,
@@ -427,6 +578,8 @@ export function applySiteSettings(
         site: held?.path ? withoutHoldingPage(site, held.path) : site,
         theme,
         locale: locale(config.locale, d.Locale),
+        collections: collectionsFrom(config.collections, d.Collections),
+        optionColors: optionColorsFrom(config.optionColors, theme, d.Colors, d.OptionColors),
         ...(held ? { holding: held } : {}),
     };
 }

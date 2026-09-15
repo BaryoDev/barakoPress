@@ -25,7 +25,14 @@
  * router.
  */
 
-export { defineConfig, includesFor } from "./config.js";
+export {
+    defineConfig,
+    includesFor,
+    POST_COLLECTION,
+    AUTHOR_COLLECTION,
+    CATEGORY_COLLECTION,
+    SETTINGS_TYPE,
+} from "./config.js";
 export {
     siteConfig,
     siteConfigOrNull,
@@ -41,6 +48,7 @@ export {
     normaliseHost,
     siteHref,
     themeFamilies,
+    getGlobals,
 } from "./site.js";
 export type { ResolvedTenant } from "./site.js";
 export { createSiteLayout, createSiteMetadata } from "./screens/site-layout.js";
@@ -69,6 +77,10 @@ export type {
     FooterColumn,
     SocialLink,
     TopBar,
+    CollectionConfig,
+    CollectionFields,
+    CollectionReference,
+    FieldNames,
 } from "./config.js";
 
 export {
@@ -132,6 +144,23 @@ export {
 } from "./screens/blog-post.js";
 export { createArchive, createArchiveStaticParams } from "./screens/archive.js";
 export { PostView } from "./screens/post-view.js";
+
+export { listCollection, getItem, getItemPreview, toItem, collectionOf, referencedBy } from "./collections.js";
+export type { Item, ListCollectionOptions, CollectionPage } from "./collections.js";
+export {
+    createCollectionIndex,
+    createCollectionDetail,
+    createCollectionMetadata,
+    createCollectionStaticParams,
+    ItemView,
+    itemMetadata,
+} from "./screens/collection.js";
+export type {
+    CardProps,
+    ItemViewProps,
+    CollectionIndexOptions,
+    CollectionDetailOptions,
+} from "./screens/collection.js";
 export type { PostViewProps } from "./screens/post-view.js";
 
 export {
@@ -174,5 +203,6 @@ export { createSharePage, createShareRedeemRoute, SHARE_INVALID_FRAGMENT } from 
 export type { SharePageOptions } from "./routes/share.js";
 export type { RevalidateOptions } from "./routes/revalidate.js";
 export { createFeed } from "./routes/feed.js";
+export type { FeedOptions } from "./routes/feed.js";
 export { createSitemap } from "./routes/sitemap.js";
 export { createRobots } from "./routes/robots.js";

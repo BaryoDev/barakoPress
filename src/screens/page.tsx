@@ -21,6 +21,8 @@ import { BLOCK_PROSE_CLASS } from "../blocks/built-in.js";
 import { BlockList } from "../blocks/render.js";
 import { createBlockRegistry } from "../blocks/registry.js";
 import { resolveBlocks, type BlockRegistry } from "../blocks/schema.js";
+import { collectionAt, collectionOf, getItem } from "../collections.js";
+import { CollectionIndexView, itemMetadata, renderCollectionDetail } from "./collection.js";
 import { Breadcrumbs } from "./navigation.js";
 
 /*
@@ -116,6 +118,25 @@ interface Found {
     breadcrumbs: Breadcrumb[];
 }
 
+/*
+ * At the root, the catch-all also serves every collection with a route: its index at the route and an
+ * item one segment below. That is how a tenant's collections, which come from its settings, render with
+ * no route file each. A route file for a collection still wins, since Next resolves it first.
+ */
+function collectionHit(config: PressConfig, p: PageRouteParams): { key: string; slug?: string } | null {
+    if (bySlugRoute(p) || (config.pages ?? "") !== "") return null;
+    return collectionAt(config, pathOf(p.path));
+}
+
+async function collectionMetadata(config: PressConfig, hit: { key: string; slug?: string }): Promise<Metadata> {
+    if (hit.slug === undefined) {
+        const label = collectionOf(config, hit.key)?.label;
+        return label ? { title: label } : {};
+    }
+    const item = await getItem(config, hit.key, hit.slug);
+    return item ? itemMetadata(item) : { title: "Not found" };
+}
+
 async function findPage(config: PressConfig, p: PageRouteParams): Promise<Found | null> {
     if (bySlugRoute(p)) {
         const page = await getPage(config, p.slug as string);
@@ -163,6 +184,12 @@ export function createPage(base: PressConfig, registry?: BlockRegistry) {
     return async function BlockPage({ params }: PageParams) {
         const config = await siteConfig(base);
         const p = await params;
+        const hit = collectionHit(config, p);
+        if (hit) {
+            return hit.slug === undefined
+                ? CollectionIndexView({ config, collection: hit.key })
+                : renderCollectionDetail(config, hit.key, hit.slug);
+        }
         const found = await findPage(config, p);
         if (!found) return missing(config, p);
         blocks ??= createBlockRegistry(base);
@@ -176,6 +203,12 @@ export function createViewerPage(base: PressConfig, registry?: BlockRegistry) {
         await connection();
         const config = await siteConfig(base);
         const p = await params;
+        const hit = collectionHit(config, p);
+        if (hit) {
+            return hit.slug === undefined
+                ? CollectionIndexView({ config, collection: hit.key })
+                : renderCollectionDetail(config, hit.key, hit.slug);
+        }
         const found = await findPage(config, p);
         if (!found) return missing(config, p);
         blocks ??= createBlockRegistry(base);
@@ -188,7 +221,10 @@ export function createViewerPage(base: PressConfig, registry?: BlockRegistry) {
 export function createPageMetadata(base: PressConfig) {
     return async function generateMetadata({ params }: PageParams): Promise<Metadata> {
         const config = await siteConfig(base);
-        const found = await findPage(config, await params);
+        const p = await params;
+        const hit = collectionHit(config, p);
+        if (hit) return collectionMetadata(config, hit);
+        const found = await findPage(config, p);
         if (!found) return { title: "Not found" };
 
         const page = found.page;

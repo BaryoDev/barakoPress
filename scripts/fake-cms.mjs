@@ -11,6 +11,13 @@ import { createServer } from "node:http";
 
 const port = Number(process.argv[2] ?? 5098);
 
+// rckoronadal's projects, a collection from its settings, coloured by area of focus.
+const PROJECTS = [
+    { id: "pw", slug: "clean-water", data: { Title: "Clean water", Slug: "clean-water", Summary: "Wells for barangays", AreaOfFocus: "Providing clean water" } },
+    { id: "pe", slug: "school-books", data: { Title: "School books", Slug: "school-books", Summary: "Books for schools", AreaOfFocus: "Supporting education" } },
+];
+const PROJECTS_COLLECTION = { type: "project", route: "/projects", label: "Projects", sort: "Title", colorBy: "AreaOfFocus", fields: { title: "Title", slug: "Slug", summary: "Summary" } };
+
 function nav(id, title, path, order, children = []) {
     return { id, title, slug: path.split("/").pop(), path, order, children };
 }
@@ -27,10 +34,18 @@ function pageAt(slug, title, markdown, crumbs = [[title, `/${slug}`]]) {
 const tenants = {
     rckoronadal: {
         host: "rckoronadal.org",
-        settings: { Name: "Rotary Club of Koronadal", Url: "https://rckoronadal.org", Locale: "en-PH", Colors: { accent: "#17458F" }, Fonts: { heading: "Zilla Slab" } },
+        settings: {
+            Name: "Rotary Club of Koronadal",
+            Url: "https://rckoronadal.org",
+            Locale: "en-PH",
+            Colors: { accent: "#17458F", sky: "#00A2E0", gold: "#F7A81B" },
+            Fonts: { heading: "Zilla Slab" },
+            Collections: { projects: PROJECTS_COLLECTION },
+            OptionColors: { "project.AreaOfFocus": { "Providing clean water": "sky", "Supporting education": "gold" } },
+        },
         post: "club-news",
         navigation: [nav("p", "Projects", "/projects", 1)],
-        pages: { "/projects": pageAt("projects", "Projects", "Club projects") },
+        content: { project: PROJECTS },
     },
     baryo: {
         host: "baryo.dev",
@@ -59,7 +74,9 @@ const tenants = {
             Mode: "Holding",
             HoldingPath: "/coming-soon",
             HeaderLinks: [{ label: "Opening", href: "/coming-soon" }, { label: "About", href: "/about" }],
+            Collections: { projects: PROJECTS_COLLECTION },
         },
+        content: { project: PROJECTS },
         post: "launch-plans",
         // Share links barakoCMS would redeem for this tenant, with how long each has left, and one it throttles.
         shareLinks: { "soon-share-key-0123456789": 30 * 24 * 3600, "soon-short-key-0123456789": 3600 },
@@ -144,6 +161,13 @@ createServer((req, res) => {
     if (url.pathname === "/api/public/redirects/resolve") {
         const moved = tenant.redirects?.[url.searchParams.get("path") ?? ""];
         return moved ? send(res, 200, moved) : send(res, 404);
+    }
+    const [, type, slug] = url.pathname.match(/^\/api\/public\/([^/]+)(?:\/([^/]+))?$/) ?? [];
+    const entries = type ? tenant.content?.[type] : undefined;
+    if (entries) {
+        if (!slug) return send(res, 200, page(entries));
+        const found = entries.find((e) => e.slug === decodeURIComponent(slug));
+        return found ? send(res, 200, found) : send(res, 404);
     }
     return send(res, 404);
 }).listen(port, "127.0.0.1");

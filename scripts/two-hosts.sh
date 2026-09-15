@@ -64,18 +64,30 @@ grep -q 'data-press="breadcrumbs"' "$TMP/team.html" || fail "the page at /about/
 echo "ok: each tenant draws its own menu in the CMS order, and renders only its own pages, with breadcrumbs"
 
 [ "$(status baryo.dev /blog/shipping-notes)" = "200" ] || fail "a page slugged blog shadows the post route"
-[ "$(status baryo.dev /blog)" = "404" ] || fail "a page under a reserved slug is not a 404"
+[ "$(status baryo.dev /blog)" = "200" ] || fail "/blog does not answer the post collection's index"
 if page baryo.dev /blog | grep -q "must never render"; then fail "a page under a reserved slug renders"; fi
 page baryo.dev /sitemap.xml > "$TMP/baryo-sitemap.xml"
 grep -q "<loc>https://baryo.dev/about/team</loc>" "$TMP/baryo-sitemap.xml" || fail "the sitemap does not list baryo.dev's pages"
 if grep -q "<loc>https://baryo.dev/blog</loc>" "$TMP/baryo-sitemap.xml"; then fail "the sitemap lists a page under a reserved slug"; fi
-echo "ok: a page under a reserved slug neither renders nor shadows the post route, and is left out of the sitemap"
+echo "ok: a page under a reserved slug neither renders nor shadows the post route, /blog is the post index, and the page is left out of the sitemap"
 
 curl -s -o /dev/null -D - -H "Host: baryo.dev" "$APP/old-about" | tr -d '\r' > "$TMP/redirect.txt"
 grep -qE '^HTTP/1.1 30[178]' "$TMP/redirect.txt" || fail "a legacy path is not redirected ($(head -1 "$TMP/redirect.txt"))"
 grep -qi '^location: /about$' "$TMP/redirect.txt" || fail "a legacy path is not redirected to where the CMS says"
 [ "$(status rckoronadal.org /old-about)" = "404" ] || fail "rckoronadal.org follows baryo.dev's redirect"
 echo "ok: a miss asks the tenant's redirects map before it is a 404 ($(head -1 "$TMP/redirect.txt"))"
+
+page rckoronadal.org /projects > "$TMP/projects.html"
+grep -q "Clean water" "$TMP/projects.html" || fail "rckoronadal.org does not render the projects collection from its settings"
+grep -q 'href="/projects/clean-water"' "$TMP/projects.html" || fail "a project card does not link to its page"
+grep -q 'border-left:4px solid #00A2E0' "$TMP/projects.html" || fail "a project is not coloured by its area of focus"
+grep -q 'border-left:4px solid #F7A81B' "$TMP/projects.html" || fail "a second option does not get its own colour"
+page rckoronadal.org /projects/clean-water > "$TMP/project.html"
+grep -q "Wells for barangays" "$TMP/project.html" || fail "a project page does not render"
+[ "$(status baryo.dev /projects)" = "404" ] || fail "baryo.dev serves rckoronadal.org's collection"
+page rckoronadal.org /sitemap.xml > "$TMP/rotary-sitemap.xml"
+grep -q "<loc>https://rckoronadal.org/projects/clean-water</loc>" "$TMP/rotary-sitemap.xml" || fail "the sitemap does not list rckoronadal.org's projects"
+echo "ok: rckoronadal.org renders its projects collection from its settings, coloured by option, and baryo.dev does not"
 
 [ "$(status unknown.example /)" = "404" ] || fail "a host with no tenant is not a 404"
 [ "$(status unknown.example /feed.xml)" = "404" ] || fail "the feed for a host with no tenant is not a 404"
@@ -115,6 +127,10 @@ asset=$(grep -o '/_next/static/[^"]*\.js' "$TMP/soon.html" | head -1)
 [ -n "$asset" ] && [ "$(status soon.example "$asset")" = "200" ] || fail "static assets are not reachable while holding"
 [ "$(status soon.example /api/revalidate)" != "404" ] || fail "the revalidate endpoint is not reachable while holding"
 echo "ok: soon.example answers the page at /coming-soon as its holding page, collection block and all with no posts listed, no feed or sitemap, robots and assets reachable"
+page soon.example /projects > "$TMP/soon-projects.html"
+held "$TMP/soon-projects.html" || fail "soon.example's projects collection does not answer the holding page"
+if grep -q "Clean water" "$TMP/soon-projects.html"; then fail "the holding page carries soon.example's projects"; fi
+echo "ok: holding mode wins over a collection"
 
 curl -s -D "$TMP/share-head.txt" -H "Host: soon.example" "$APP/_share?key=$KEY" > "$TMP/share.html"
 tr -d '\r' < "$TMP/share-head.txt" | grep -q '^HTTP/1.1 200' || fail "/_share is not served while holding"

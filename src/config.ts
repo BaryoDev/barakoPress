@@ -24,6 +24,17 @@ import { resolveTheme, type PressTheme, type PressThemeInput } from "./theme.js"
 export const LINK_REL = "noopener noreferrer";
 export const NEW_TAB_TARGET = "_blank";
 
+/** The singleton content type a tenant's site settings live in, unless `sites.settingsType` names another. */
+export const SETTINGS_TYPE = "site";
+
+/** The keys of the blog's own collections, which the blog factories render. */
+export const POST_COLLECTION = "post";
+export const AUTHOR_COLLECTION = "author";
+export const CATEGORY_COLLECTION = "category";
+
+/** Where a reference into a type that is no configured collection keeps its name and slug. */
+export const REFERENCE_FIELDS: { title: FieldNames; slug: FieldNames } = { title: ["Name", "Title"], slug: ["Slug"] };
+
 export interface TypeNames {
     /** The content type holding posts. */
     post: string;
@@ -163,6 +174,73 @@ export interface Holding {
     path?: string;
 }
 
+/**
+ * A field name, or several tried in order until one holds a value. A name starting with "@" reads the
+ * entry itself rather than its data: "@createdAt" or "@updatedAt".
+ */
+export type FieldNames = string | string[];
+
+/** Which field on a collection's type holds what. Only `title` is required. */
+export interface CollectionFields {
+    title: FieldNames;
+    slug?: FieldNames;
+    /** Plain text under the title. */
+    summary?: FieldNames;
+    /** Markdown. */
+    body?: FieldNames;
+    date?: FieldNames;
+    image?: FieldNames;
+    imageAlt?: FieldNames;
+    /** A boolean. A featured item leads its list. */
+    featured?: FieldNames;
+    /** A list of strings. */
+    tags?: FieldNames;
+    /** A link shown on the item's page. Only a site path or an http or https URL is shown. */
+    url?: FieldNames;
+}
+
+export interface CollectionReference {
+    /** The key of the collection the reference points into. */
+    collection: string;
+    /** The word a card puts before the link, for example "by". */
+    label?: string;
+    /** Whether the feed names the target as the item's category. */
+    inFeed?: boolean;
+}
+
+/**
+ * A content type the site renders as a list and a detail page. A hospital's doctors, a law firm's
+ * people and the blog's posts are each one of these.
+ */
+export interface CollectionConfig {
+    /** The content type holding the items. */
+    type: string;
+    /** The index is served at the route and an item at `${route}/${slug}`. Absent, items are listed and never linked. */
+    route?: string;
+    fields: CollectionFields;
+    /** Reference fields on the type, by field name, in the order a card shows them. */
+    references?: Record<string, CollectionReference>;
+    /** Sent to the API, so ordering covers every row. For example "-PublishedAt". */
+    sort?: string;
+    /** Whether `createFeed(config, key)` serves it. */
+    feed?: boolean;
+    /** Whether its items are in the sitemap. On unless false. */
+    sitemap?: boolean;
+    /**
+     * Whether the root catch-all serves an index at the route. On unless false. An item page below the
+     * route is served either way, and a route file calling `createCollectionIndex` ignores this.
+     */
+    index?: boolean;
+    /** Items on its index. `pageSizes.index` when unset. */
+    pageSize?: number;
+    /** The heading of its index. The site's name and tagline when unset. */
+    label?: string;
+    /** How a count of its items reads, singular then plural. */
+    noun?: [string, string];
+    /** A choice field whose option picks the item's colour from `optionColors`. */
+    colorBy?: string;
+}
+
 export interface PressConfig {
     types: TypeNames;
     fields: FieldMap;
@@ -201,6 +279,17 @@ export interface PressConfig {
      * `reservedSlugs` in the input adds to them.
      */
     reservedSlugs: string[];
+    /**
+     * Every collection the site renders, by key. `post`, `author` and `category` are derived from
+     * `types`, `fields` and `routes`; `collections` in the input adds to them or replaces one by key,
+     * and a request-time site's `Collections` setting does the same per tenant.
+     */
+    collections: Record<string, CollectionConfig>;
+    /**
+     * Colours by `type.field`, then by option value, as CSS colours. A request-time site reads them from
+     * the tenant's `OptionColors` setting.
+     */
+    optionColors: Record<string, Record<string, string>>;
 }
 
 export type PressConfigInput = {
@@ -255,6 +344,73 @@ function trimSlash(path: string): string {
     return path.slice(0, end);
 }
 
+/*
+ * The blog as collections. A site that sets types, fields and routes the way it always did gets these
+ * three and the blog factories render them, so nothing about such a site changes. The term types keep
+ * the names the archive always fell back through, and a reference is resolved only when its type exists,
+ * because `include` names a field the API answers 400 for otherwise.
+ */
+function blogCollections(types: TypeNames, fields: FieldMap, routes: RouteMap): Record<string, CollectionConfig> {
+    const names = (...list: (string | undefined)[]) => list.filter((n): n is string => Boolean(n));
+    const references: Record<string, CollectionReference> = {};
+    if (types.author && fields.author) references[fields.author] = { collection: AUTHOR_COLLECTION, label: "by" };
+    if (types.category && fields.category) {
+        references[fields.category] = { collection: CATEGORY_COLLECTION, label: "in", inFeed: true };
+    }
+
+    const collections: Record<string, CollectionConfig> = {
+        [POST_COLLECTION]: {
+            type: types.post,
+            route: routes.post,
+            fields: {
+                title: fields.title,
+                slug: fields.slug,
+                summary: fields.excerpt,
+                body: fields.body,
+                date: names(fields.publishedAt, "@createdAt"),
+                image: fields.coverImage,
+                imageAlt: fields.coverImageAlt,
+                featured: fields.featured,
+                tags: fields.tags,
+            },
+            references,
+            sort: fields.publishedAt ? `-${fields.publishedAt}` : undefined,
+            feed: true,
+            noun: ["post", "posts"],
+        },
+    };
+
+    const term = (type: string, route: string | undefined, url?: string): CollectionConfig => ({
+        type,
+        route,
+        fields: {
+            title: names("Name", "Title", fields.title),
+            slug: names(fields.slug, "Slug"),
+            body: names("Description", "Bio"),
+            ...(url ? { url } : {}),
+        },
+        sitemap: false,
+        // Never listed at /authors or /categories unless a site mounts that route file itself, since no
+        // blog site ever had those pages and a public list of either is a decision, not a default.
+        index: false,
+    });
+    if (types.author) collections[AUTHOR_COLLECTION] = term(types.author, routes.author, "Website");
+    if (types.category) collections[CATEGORY_COLLECTION] = term(types.category, routes.category);
+    return collections;
+}
+
+function ownCollections(input: Record<string, CollectionConfig> | undefined): Record<string, CollectionConfig> {
+    return Object.fromEntries(
+        Object.entries(input ?? {}).map(([key, c]) => {
+            if (c.route === undefined) return [key, c];
+            const route = mountPath(c.route);
+            // At the root an item would sit at /slug, where pages and every other route already are.
+            if (!route) throw new Error(`collection "${key}" cannot be mounted at the site root`);
+            return [key, { ...c, route }];
+        }),
+    );
+}
+
 /** Paths the engine's own route files answer, which a page at the site root must not take. */
 const RESERVED_AT_ROOT = ["api", "feed.xml", "sitemap.xml", "robots.txt", "_next", "_share", "%5fshare", "favicon.ico"];
 
@@ -292,16 +448,20 @@ export function defineConfig(
 ): PressConfig {
     const routes = { post: "/blog", author: "/authors", category: "/categories", ...input.routes };
     const site = input.site ?? {};
+    const types = { ...BLOG_BLUEPRINT.types, ...input.types };
+    const fields = { ...BLOG_BLUEPRINT.fields, ...input.fields };
+    const routeMap: RouteMap = {
+        post: trimSlash(routes.post),
+        author: routes.author ? trimSlash(routes.author) : undefined,
+        category: routes.category ? trimSlash(routes.category) : undefined,
+    };
+    const collections = { ...blogCollections(types, fields, routeMap), ...ownCollections(input.collections) };
 
     return {
-        types: { ...BLOG_BLUEPRINT.types, ...input.types },
-        fields: { ...BLOG_BLUEPRINT.fields, ...input.fields },
+        types,
+        fields,
         pageFields: { ...BLOG_BLUEPRINT.pageFields, ...input.pageFields },
-        routes: {
-            post: trimSlash(routes.post),
-            author: routes.author ? trimSlash(routes.author) : undefined,
-            category: routes.category ? trimSlash(routes.category) : undefined,
-        },
+        routes: routeMap,
         site: { ...site, name: site.name ?? "", url: trimSlash(site.url ?? "") },
         pageSizes: { index: 20, feed: 50, sitemap: 1000, archive: 50, ...input.pageSizes },
         cacheTag: input.cacheTag ?? "cms",
@@ -311,12 +471,17 @@ export function defineConfig(
         cmsUrl: trimSlash(input.cmsUrl ?? process.env.CMS_URL ?? "http://localhost:5005"),
         tenant: input.tenant ?? process.env.CMS_TENANT ?? undefined,
         theme: resolveTheme(input.theme),
-        reservedSlugs: reservedSlugs([routes.post, routes.author, routes.category], input.reservedSlugs),
+        collections,
+        optionColors: input.optionColors ?? {},
+        reservedSlugs: reservedSlugs(
+            [routes.post, routes.author, routes.category, ...Object.values(collections).map((c) => c.route)],
+            input.reservedSlugs,
+        ),
         ...(input.pages !== undefined ? { pages: mountPath(input.pages) } : {}),
         ...(input.sites
             ? {
                   sites: {
-                      settingsType: input.sites.settingsType ?? "site",
+                      settingsType: input.sites.settingsType ?? SETTINGS_TYPE,
                       hostHeader: (input.sites.hostHeader ?? "host").toLowerCase(),
                       tenantHeader: input.sites.tenantHeader?.toLowerCase(),
                       defaultTenant: input.sites.defaultTenant,
