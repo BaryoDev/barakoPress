@@ -1,5 +1,6 @@
 import type { PressConfig } from "../config.js";
 import { listPosts } from "../cms.js";
+import { siteConfigOrNull, tenantVary } from "../site.js";
 
 /*
  * RSS, built here rather than proxied from the CMS.
@@ -20,8 +21,13 @@ function xml(value: string): string {
         .replace(/'/g, "&apos;");
 }
 
-export function createFeed(config: PressConfig) {
+export function createFeed(base: PressConfig) {
     return async function GET() {
+        // Outside the try below: resolving reads the request, and Next signals that with a throw.
+        const config = await siteConfigOrNull(base);
+        // Not served while holding, to anyone, session or not: a feed is public and cached in front of the site.
+        if (!config || config.holding) return new Response("Not found", { status: 404 });
+
         let posts: Awaited<ReturnType<typeof listPosts>>["posts"] = [];
         try {
             ({ posts } = await listPosts(config, { pageSize: config.pageSizes.feed }));
@@ -69,11 +75,13 @@ ${items}
 </rss>
 `;
 
-        return new Response(body, {
-            headers: {
-                "content-type": "application/rss+xml; charset=utf-8",
-                "cache-control": "public, max-age=300",
-            },
+        const headers = new Headers({
+            "content-type": "application/rss+xml; charset=utf-8",
+            "cache-control": "public, max-age=300",
         });
+        // The URL names the host, but not a tenant picked by a header, so a shared cache has to key on it.
+        const vary = tenantVary(config);
+        if (vary) headers.set("vary", vary);
+        return new Response(body, { headers });
     };
 }

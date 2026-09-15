@@ -201,3 +201,31 @@ export function relatedCss(theme: PressTheme, scope: string): string {
         `@media (prefers-reduced-motion: reduce){${s}{transition:none}${s}:hover{transform:none}}`,
     ].join("");
 }
+
+/*
+ * The theme as the custom properties `barakopress/styles.css` reads, so the screens styled by class
+ * (the index and the archives) take a site's palette as well as the ones styled inline. Emitted by
+ * the site layout after the stylesheet, so these win over its defaults.
+ */
+export function themeVariablesCss(theme: PressTheme): string {
+    const c = theme.colors;
+    const f = theme.fonts;
+    const r = theme.radii;
+    const vars: [string, string][] = [
+        ["--background", c.pageBg],
+        ["--foreground", c.ink],
+        ["--muted", c.accentTint],
+        ["--muted-foreground", c.secondaryInk],
+        ["--card", c.surface],
+        ["--border", c.hairline],
+        ["--primary", c.accent],
+        ["--primary-foreground", c.surface],
+        ["--radius-chip", r.control],
+        ["--radius-control", r.control],
+        ["--radius-card", r.panel],
+        ["--font-sans", f.body],
+        ["--font-display", f.heading],
+        ["--font-mono", f.mono],
+    ];
+    return `:root{${vars.map(([name, value]) => `${name}:${css(value).replace(/[;{}]/g, "")}`).join(";")}}`;
+}

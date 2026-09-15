@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { PressConfig } from "../config.js";
 import { formatDate, listPosts, type Post } from "../cms.js";
+import { siteConfig } from "../site.js";
 
 /*
  * The post list.
@@ -67,8 +68,9 @@ export function Card({
     );
 }
 
-export function createBlogIndex(config: PressConfig) {
+export function createBlogIndex(base: PressConfig) {
     return async function BlogIndex() {
+        const config = await siteConfig(base);
         let posts: Post[] = [];
         let failure: string | null = null;
 

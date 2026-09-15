@@ -5,6 +5,7 @@ import type { PressConfig } from "../config.js";
 import { getPage, listPages, type Page } from "../cms.js";
 import { renderMarkdown } from "../markdown.js";
 import { proseCss } from "../theme.js";
+import { siteConfig } from "../site.js";
 import { BLOCK_PROSE_CLASS } from "../blocks/built-in.js";
 import { BlockList } from "../blocks/render.js";
 import { resolveBlocks, type BlockRegistry } from "../blocks/schema.js";
@@ -78,8 +79,9 @@ export function PageView({ config, page, registry, perViewer = false, showTitle 
  * dynamic whatever its segment config says, and then renders every block. A site mounts the second
  * only where a page holds such a block, and gives up caching for that route.
  */
-export function createPage(config: PressConfig, registry: BlockRegistry) {
+export function createPage(base: PressConfig, registry: BlockRegistry) {
     return async function BlockPage({ params }: SlugParams) {
+        const config = await siteConfig(base);
         const { slug } = await params;
         const page = await getPage(config, slug);
         if (!page) notFound();
@@ -87,9 +89,10 @@ export function createPage(config: PressConfig, registry: BlockRegistry) {
     };
 }
 
-export function createViewerPage(config: PressConfig, registry: BlockRegistry) {
+export function createViewerPage(base: PressConfig, registry: BlockRegistry) {
     return async function ViewerPage({ params }: SlugParams) {
         await connection();
+        const config = await siteConfig(base);
         const { slug } = await params;
         const page = await getPage(config, slug);
         if (!page) notFound();
@@ -97,8 +100,9 @@ export function createViewerPage(config: PressConfig, registry: BlockRegistry) {
     };
 }
 
-export function createPageMetadata(config: PressConfig) {
+export function createPageMetadata(base: PressConfig) {
     return async function generateMetadata({ params }: SlugParams): Promise<Metadata> {
+        const config = await siteConfig(base);
         const { slug } = await params;
         const page = await getPage(config, slug);
         if (!page) return { title: "Not found" };
@@ -119,6 +123,7 @@ export function createPageMetadata(config: PressConfig) {
 /** Slugs for a static export, paged to the end. Empty with no CMS reachable, like the post one. */
 export function createPageStaticParams(config: PressConfig) {
     return async function generateStaticParams(): Promise<{ slug: string }[]> {
+        if (config.sites) return [];
         const slugs: { slug: string }[] = [];
         // No page cap: a static export has no fallback, so a slug not listed here is a 404. The
         // loop ends on the API's hasNextPage, or on an empty page if that were ever wrong.

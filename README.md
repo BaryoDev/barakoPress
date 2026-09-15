@@ -92,7 +92,10 @@ decision, not the engine's.
 | `app/robots.ts` | `default` | `createRobots(config)` |
 | `app/api/revalidate/route.ts` | `POST`, `GET` | `createRevalidateRoute(config)` |
 | `app/[slug]/page.tsx` | `default`, `generateMetadata` | `createPage(config, blocks)`, `createPageMetadata(config)` |
-| `app/api/blocks/route.ts` | `GET` | `createBlockSchemaRoute(blocks)` |
+| `app/api/blocks/route.ts` | `GET`, `OPTIONS` | `createBlockSchemaRoute(blocks)`, `createBlockSchemaPreflight()` |
+| `app/layout.tsx` | `default`, `generateMetadata` | `createSiteLayout(config, { blocks })`, `createSiteMetadata(config)` |
+| `app/%5Fshare/route.ts` | `GET` | `createSharePage()` |
+| `app/api/share/redeem/route.ts` | `POST` | `createShareRedeemRoute(config)` |
 
 Mount only what you want. Nothing requires anything else. The paths only have to agree with the
 `routes` in your config, which is what every generated link is built from.
@@ -151,6 +154,14 @@ const pricing = defineBlock<{ plan: string; price?: number }>({
 export const blocks = createBlockRegistry(config, [pricing]);
 ```
 
+**Reading the schema from barakoBrew.** The console usually runs on another origin than the site, so
+a browser only lets its block editor read `app/api/blocks` when the site names that origin. Set
+`PRESS_CONSOLE_ORIGINS` to a comma separated list, for example
+`PRESS_CONSOLE_ORIGINS=https://brew.example.com`. It is read per request. Unset, no origin is
+allowed. A listed origin gets `Access-Control-Allow-Origin` echoed back on `GET` and on the `OPTIONS`
+preflight, never `*` and never credentials, and every answer carries `Vary: Origin`. Pass
+`{ consoleOrigins: [...] }` to both factories to set the list in code instead.
+
 Field kinds are `text`, `markdown`, `url`, `number`, `boolean`, `select` (with `options`) and `slots`
 (lists of nested blocks, handed to the component already rendered). The list is editor input, so a
 block renders only when its type is registered and every prop passes its field. A present but wrong
@@ -204,14 +215,128 @@ for a post type with no such field.
 | `backstopSeconds` | 300 | How long a cached read may live with no webhook. 0 disables it |
 | `locale` | `en-GB` | Passed to `toLocaleDateString` |
 | `cmsUrl` | `CMS_URL`, or `http://localhost:5005` | Where the CMS is, from this server |
-| `tenant` | `CMS_TENANT` | Tenant slug, for a multi-tenant deployment |
+| `tenant` | `CMS_TENANT` | Tenant slug, for a multi-tenant deployment. On a request-time site, pins every host to it |
+| `sites` | off | Request-time identity and theme from the tenant's site settings. See below |
 | `theme` | the barakoCMS palette | Colours, faces, radii and column widths. See below |
 
-**Identity is build time.** The index, the feed, the sitemap and robots are prerendered, so anything
-`press.config.ts` reads from `process.env` is baked when you build, not when the server starts. Write
-per-site values as literals in that file. Only per-environment values (`CMS_URL`,
-`REVALIDATE_SECRET`) come from the environment, and neither of those is rendered. Getting this wrong
-is how a client site ships with the vendor's name in its masthead.
+**A site is build time or request time.** Without `sites`, identity is build time: the index, the
+feed, the sitemap and robots are prerendered, so anything `press.config.ts` reads from `process.env`
+is baked when you build, not when the server starts. Write per-site values as literals in that file.
+Getting this wrong is how a client site ships with the vendor's name in its masthead. With `sites`,
+identity is data in the CMS and read per request, which is the next section.
+
+### One build, many sites
+
+barakoCMS D22 reverses "identity is build time" for the shared renderer: every site runs the same
+image, and what makes a site that site is its tenant's `site` settings entry, edited in barakoBrew.
+
+```ts
+export const config = defineConfig({ sites: {} });
+```
+
+On each request the engine resolves the tenant, reads that tenant's settings, and renders with them:
+
+1. `CMS_TENANT` (or `tenant`) set: every host is that tenant, with no lookup.
+2. `sites.tenantHeader` set and the request carries a valid handle in it: that tenant. Off by default.
+3. The host, from `sites.hostHeader` (default `host`), looked up with `GET /api/tenants/by-host/{host}`.
+4. `sites.defaultTenant`, or `CMS_DEFAULT_TENANT` read at request time.
+5. None of those: a 404. Never another tenant's site.
+
+A handle is only ever read from the request through a header the operator named. `X-Tenant` and
+`X-Forwarded-Host` sent by a caller are ignored unless you configure them, and you should configure
+them only behind a proxy that sets the header and strips a caller's value.
+
+The settings are the singleton `site` type from barakoCMS `docs/site-settings.md`
+(`POST /api/content-types/blueprints/site`, then publish its one entry). The engine reads `Name`,
+`Tagline`, `Url`, `Locale`, `Logo`, `LogoAlt`, `FooterLogo`, `Favicon`, `ShareImage`, `Copyright`,
+`Colors` (the theme slots), `Fonts` (Google Fonts family names), `Radii`, `Layout`, `TopBar`,
+`HeaderLinks`, `FooterColumns` and `SocialLinks`. `OptionColors`, `Variants` and colour names outside
+the theme slots are not rendered yet. Every value is checked for shape; one that fails, and any the
+entry leaves out, keeps the configured value, so a half-filled theme renders. A link is a path on the
+site or an absolute http or https URL. Set `Url`: without it the feed and sitemap fall back to the
+host the tenant was found by.
+
+`createSiteLayout` and `createSiteMetadata` render the root layout from all of this: `lang`, the
+faces, the palette, the top bar, header links, footer columns, social links and the copyright line.
+
+**Caching per tenant.** Every read carries the tenant in `X-Tenant` and in its cache tag,
+`<cacheTag>:<tenant>`. The webhook purges the tag of the tenant its host resolves to, so point each
+tenant's webhook at `https://<that tenant's domain>/api/revalidate`. A publish on one tenant leaves
+every other tenant's cached reads in place.
+
+**When the CMS is down.** Each successful read is also kept in process, keyed by CMS, tenant and path.
+A read that fails with a network error or a 5xx answers from the last good copy and logs a warning;
+the next successful read replaces it. Known hosts keep resolving the same way. A page that was cached
+for a tenant keeps answering 200 with that tenant's identity and theme. A tenant never gets another
+tenant's kept answer.
+
+**Holding mode.** A tenant can show a holding page on every route in place of its site, for a launch,
+maintenance or a seasonal break, and share the real site with a few people through site share links.
+Two fields on the `site` entry control it:
+
+| Field | Type | What |
+| --- | --- | --- |
+| `Mode` | string | `Live` or `Holding`. Unset, or anything else, is `Live` |
+| `HoldingPath` | string | A site path such as `/coming-soon`. The page the Pages module serves there is the holding page. Empty, or nothing served there, renders the name, tagline and "Coming soon." in the theme |
+
+Holding is presentation, not access control: the API still delivers every published entry. Content
+that must stay hidden before launch stays unpublished with a scheduled publish.
+
+While a tenant is holding, for that tenant only:
+
+- every page answers the holding page with `noindex` and `Cache-Control: private, no-store`. A page
+  stops in `siteConfig` with a not-found before it reads anything, so its content and its title never
+  reach the response. Next has already sent the status by then, so it is 200, the same for a path
+  that exists and one that does not;
+- the holding page is read with `GET /api/public/pages/resolve?path=<HoldingPath>` and rendered with
+  the page renderer and the registry passed to `createSiteLayout(config, { blocks })`;
+- a link to `HoldingPath` is left out of the header, top bar and footer. `feed.xml` and `sitemap.xml`
+  are 404 for everyone, session or not, and `robots.txt` answers `Disallow: /` with no sitemap line;
+- route handlers (revalidate, blocks, `/_share`, `/api/share/redeem`) and `/_next/static` are served
+  as usual.
+
+Switching `Mode` is a publish: the webhook purges the tenant's tag and the next request reads the new
+settings. No deploy.
+
+**Site share links.** barakoCMS creates, lists and revokes them; anyone who may update the `site` type
+can. A client is given `{site Url}/_share#{key}`. The key is in the fragment, so no server log, proxy
+or referrer sees it:
+
+1. `/_share` is a tiny page. Its script reads the fragment, removes it from the address and history,
+   and posts the key in a form to `/api/share/redeem`. Without JavaScript it says the link needs
+   JavaScript. No key is ever accepted in a query string.
+2. `/api/share/redeem` asks barakoCMS once, `POST /api/public/site/share-links/redeem` with the key in
+   the body and the tenant header. On 200 it sets `__Host-press-share` (HttpOnly, Secure,
+   SameSite=Lax, Path=/, no Domain, so only that host gets it) and answers a `no-store` 303 to `/`.
+   On 404, 429 or any failure it sets nothing and sends the visitor to `/#share-invalid`, the holding
+   page with "This link is not valid or has expired." A post whose `Origin` or `Sec-Fetch-Site` names
+   another site is refused the same way. The key is never logged.
+3. With a valid cookie that visitor sees the real site for that tenant. A forged, expired or
+   other-tenant cookie is ignored.
+
+The cookie holds no key. It is an expiry and an HMAC-SHA256 over the tenant and that expiry, so each
+later request is checked in process without asking the CMS, and a cookie made for one tenant opens no
+other. It needs one setting:
+
+| Variable | What |
+| --- | --- |
+| `PRESS_PREVIEW_SECRET` | The HMAC key, at least 32 characters, for example `openssl rand -base64 48`. Read per request. Unset or shorter, no session is issued or accepted and everyone gets the holding page. Every instance behind one domain needs the same value |
+
+**A session lasts until the link expires or for 24 hours, whichever is sooner.** Opening the link
+again starts a new one while the link is valid. **A revoked link can keep working for up to 24
+hours** for someone who already opened it, because the session is checked here, not in barakoCMS. To
+end every session now, change `PRESS_PREVIEW_SECRET`, which does it for every tenant on that
+deployment.
+
+Whether a request gets the holding page is decided per request from the cookie, and a request-time
+site renders every route dynamically, so a cached render made for a visitor with a session is never
+served to one without, or the reverse. A page you write by hand must call `siteConfig(config)` before
+it reads or renders anything, which is what keeps it behind the holding page. A build-time site has
+no settings entry and no holding mode.
+
+`generateStaticParams` factories return nothing on a request-time site, since there is no tenant at
+build. `scripts/two-hosts.sh` runs the built reference app against a stand-in CMS with two tenants
+and checks all of the above; CI runs it on every push.
 
 ### The look is configuration too
 
@@ -411,4 +536,4 @@ Releasing is in [RELEASING.md](RELEASING.md). No npm token is stored anywhere.
 ## Status
 
 Early. The blog works end to end against a real instance. Known gaps, all tracked upstream: no media
-picker, no rich editor, and no site settings object.
+picker, no rich editor, and no visitor theme variants.

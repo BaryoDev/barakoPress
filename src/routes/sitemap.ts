@@ -1,6 +1,8 @@
 import type { MetadataRoute } from "next";
 import type { PressConfig } from "../config.js";
 import { listPosts } from "../cms.js";
+import { notFound } from "next/navigation";
+import { siteConfigOrNull } from "../site.js";
 
 /*
  * Built from the same cached read as every other page, so it costs nothing in the steady state
@@ -10,8 +12,11 @@ import { listPosts } from "../cms.js";
  * own sitemap honours it, so a site that ignored it here would contradict the CMS on the one
  * signal an editor set deliberately.
  */
-export function createSitemap(config: PressConfig) {
+export function createSitemap(base: PressConfig) {
     return async function sitemap(): Promise<MetadataRoute.Sitemap> {
+        const config = await siteConfigOrNull(base);
+        // Not served while holding, session or not.
+        if (!config || config.holding) notFound();
         let indexable: Awaited<ReturnType<typeof listPosts>>["posts"] = [];
         try {
             const { posts } = await listPosts(config, { pageSize: config.pageSizes.sitemap });

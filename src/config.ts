@@ -87,11 +87,80 @@ export interface PageSizes {
     archive: number;
 }
 
+/** A link a site shows. `href` is a path on the site or an absolute http or https URL. */
+export interface SiteLink {
+    label: string;
+    href: string;
+}
+
+export interface FooterColumn {
+    heading: string;
+    links: SiteLink[];
+}
+
+export interface SocialLink {
+    network: string;
+    href: string;
+}
+
+export interface TopBar {
+    text?: string;
+    links: SiteLink[];
+}
+
 export interface SiteIdentity {
     name: string;
     tagline?: string;
     /** Absolute origin, used for every absolute link in the feed, sitemap and robots. */
     url: string;
+    logo?: string;
+    logoAlt?: string;
+    footerLogo?: string;
+    favicon?: string;
+    shareImage?: string;
+    copyright?: string;
+    topBar?: TopBar;
+    headerLinks?: SiteLink[];
+    footerColumns?: FooterColumn[];
+    socialLinks?: SocialLink[];
+}
+
+/**
+ * Request-time sites: one build serving several tenants, each read from its own site settings.
+ *
+ * Present means on. Absent, the engine behaves exactly as a build-time site: identity and theme
+ * come from this file and nothing reads the request. See src/site.ts.
+ */
+export interface SitesConfig {
+    /** The singleton content type holding a tenant's identity and theme. */
+    settingsType: string;
+    /**
+     * The request header the host is read from. `host` unless a proxy in front rewrites it, in which
+     * case the operator names the header that proxy sets. Never a forwarded header by default,
+     * because any caller can send one.
+     */
+    hostHeader: string;
+    /**
+     * A request header carrying the tenant handle directly. Off unless named, and only safe when a
+     * proxy in front sets it and strips any value a caller sent.
+     */
+    tenantHeader?: string;
+    /**
+     * The tenant a host with no tenant of its own falls back to. Unset, such a host is a 404.
+     * `CMS_DEFAULT_TENANT` is read at request time when this is not set.
+     */
+    defaultTenant?: string;
+}
+
+/**
+ * A tenant's holding mode, read from its site settings (`Mode: "Holding"`). Present only while holding.
+ *
+ * Nothing secret lives here. A share link is redeemed through barakoCMS, and barakoPress never sees
+ * a hash of its key.
+ */
+export interface Holding {
+    /** `HoldingPath`: the site path of the page shown on every route. Absent renders the default holding page. */
+    path?: string;
 }
 
 export interface PressConfig {
@@ -113,6 +182,10 @@ export interface PressConfig {
     tenant?: string;
     /** What the screens look like. See theme.ts for why appearance is config and not a stylesheet. */
     theme: PressTheme;
+    /** Set when identity and theme are read per request from the tenant's site settings. */
+    sites?: SitesConfig;
+    /** Set by the tenant's settings on a request-time site while it is holding. Never set by hand. */
+    holding?: Holding;
 }
 
 export type PressConfigInput = {
@@ -128,7 +201,8 @@ export type PressConfigInput = {
      * means every consumer pastes the full palette to change an accent.
      */
     theme?: PressThemeInput;
-} & Partial<Omit<PressConfig, "types" | "fields" | "pageFields" | "routes" | "site" | "pageSizes" | "theme">>;
+    sites?: Partial<SitesConfig>;
+} & Partial<Omit<PressConfig, "types" | "fields" | "pageFields" | "routes" | "site" | "pageSizes" | "theme" | "sites" | "holding">>;
 
 /**
  * The `blog` blueprint, which is what `POST /api/content-types/blueprints/blog` creates.
@@ -161,7 +235,9 @@ const BLOG_BLUEPRINT: Pick<PressConfig, "types" | "fields" | "pageFields"> = {
 };
 
 function trimSlash(path: string): string {
-    return path.replace(/\/+$/, "");
+    let end = path.length;
+    while (end > 0 && path.charCodeAt(end - 1) === 47) end--;
+    return path.slice(0, end);
 }
 
 /**
@@ -169,9 +245,14 @@ function trimSlash(path: string): string {
  *
  * Site name and URL have no sensible default: a fallback of the engine's own name is how a client
  * site ends up with the vendor's brand in its masthead, so they are required and the type says so.
+ * The one exception is a request-time site (`sites`), whose identity is the tenant's settings. What
+ * `site` holds there is only the fallback for a field the settings leave out.
  */
-export function defineConfig(input: PressConfigInput & { site: SiteIdentity }): PressConfig {
+export function defineConfig(
+    input: PressConfigInput & ({ site: SiteIdentity } | { sites: Partial<SitesConfig> }),
+): PressConfig {
     const routes = { post: "/blog", author: "/authors", category: "/categories", ...input.routes };
+    const site = input.site ?? {};
 
     return {
         types: { ...BLOG_BLUEPRINT.types, ...input.types },
@@ -182,7 +263,7 @@ export function defineConfig(input: PressConfigInput & { site: SiteIdentity }): 
             author: routes.author ? trimSlash(routes.author) : undefined,
             category: routes.category ? trimSlash(routes.category) : undefined,
         },
-        site: { ...input.site, url: trimSlash(input.site.url) },
+        site: { ...site, name: site.name ?? "", url: trimSlash(site.url ?? "") },
         pageSizes: { index: 20, feed: 50, sitemap: 1000, archive: 50, ...input.pageSizes },
         cacheTag: input.cacheTag ?? "cms",
         backstopSeconds: input.backstopSeconds ?? 300,
@@ -190,6 +271,16 @@ export function defineConfig(input: PressConfigInput & { site: SiteIdentity }): 
         cmsUrl: trimSlash(input.cmsUrl ?? process.env.CMS_URL ?? "http://localhost:5005"),
         tenant: input.tenant ?? process.env.CMS_TENANT ?? undefined,
         theme: resolveTheme(input.theme),
+        ...(input.sites
+            ? {
+                  sites: {
+                      settingsType: input.sites.settingsType ?? "site",
+                      hostHeader: (input.sites.hostHeader ?? "host").toLowerCase(),
+                      tenantHeader: input.sites.tenantHeader?.toLowerCase(),
+                      defaultTenant: input.sites.defaultTenant,
+                  },
+              }
+            : {}),
     };
 }
 

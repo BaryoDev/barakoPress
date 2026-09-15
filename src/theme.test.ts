@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defineConfig } from "./config.js";
-import { DEFAULT_THEME, proseCss, resolveTheme } from "./theme.js";
+import { DEFAULT_THEME, proseCss, resolveTheme, themeVariablesCss } from "./theme.js";
 
 const SITE = { name: "Test", url: "https://test.example" };
 
@@ -55,5 +55,22 @@ describe("proseCss", () => {
         // Only `<`. A `>` is legitimate here: the scoping rules use child selectors.
         expect(css).not.toContain("<");
         expect(css).toContain("/style");
+    });
+});
+
+describe("themeVariablesCss", () => {
+    it("sets the stylesheet's variables from the theme", () => {
+        const css = themeVariablesCss(resolveTheme({ colors: { accent: "#17458F" } }));
+
+        expect(css.startsWith(":root{")).toBe(true);
+        expect(css).toContain("--primary:#17458F");
+        expect(css).not.toContain(DEFAULT_THEME.colors.accent);
+    });
+
+    it("cannot be made to close the rule or the style element", () => {
+        const css = themeVariablesCss(resolveTheme({ colors: { accent: "red;}</style><script>x()" } }));
+
+        expect(css).not.toContain("<");
+        expect(css.match(/[{}]/g)).toEqual(["{", "}"]);
     });
 });

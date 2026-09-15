@@ -26,7 +26,25 @@
  */
 
 export { defineConfig, includesFor } from "./config.js";
-export { DEFAULT_THEME, resolveTheme, proseCss, relatedCss } from "./theme.js";
+export {
+    siteConfig,
+    siteConfigOrNull,
+    showsHoldingPage,
+    shareCookieValid,
+    signShareCookie,
+    shareSecret,
+    SHARE_COOKIE,
+    SHARE_SESSION_MAX_SECONDS,
+    resolveSite,
+    tenantFromHeaders,
+    applySiteSettings,
+    normaliseHost,
+    siteHref,
+    themeFamilies,
+} from "./site.js";
+export type { ResolvedTenant } from "./site.js";
+export { createSiteLayout, createSiteMetadata } from "./screens/site-layout.js";
+export { DEFAULT_THEME, resolveTheme, proseCss, relatedCss, themeVariablesCss } from "./theme.js";
 export type {
     PressTheme,
     PressThemeInput,
@@ -45,9 +63,15 @@ export type {
     RouteMap,
     PageSizes,
     SiteIdentity,
+    SitesConfig,
+    Holding,
+    SiteLink,
+    FooterColumn,
+    SocialLink,
+    TopBar,
 } from "./config.js";
 
-export { list, bySlug, bySlugPreview, semantic } from "./delivery.js";
+export { list, bySlug, bySlugPreview, redeemShareLink, semantic, tenantForHost, cacheTagFor, CmsError } from "./delivery.js";
 export type {
     PublicContent,
     Seo,
@@ -55,6 +79,7 @@ export type {
     Paged,
     SemanticHit,
     SemanticResponse,
+    ShareRedeemAnswer,
 } from "./delivery.js";
 
 export { listRelated, pickRelated } from "./related.js";
@@ -120,9 +145,12 @@ export {
     PageView,
 } from "./screens/page.js";
 export type { PageViewProps } from "./screens/page.js";
-export { createBlockSchemaRoute } from "./routes/block-schema.js";
+export { createBlockSchemaRoute, createBlockSchemaPreflight, parseOrigins } from "./routes/block-schema.js";
+export type { BlockSchemaRouteOptions } from "./routes/block-schema.js";
 
 export { createRevalidateRoute } from "./routes/revalidate.js";
+export { createSharePage, createShareRedeemRoute, SHARE_INVALID_FRAGMENT } from "./routes/share.js";
+export type { SharePageOptions } from "./routes/share.js";
 export type { RevalidateOptions } from "./routes/revalidate.js";
 export { createFeed } from "./routes/feed.js";
 export { createSitemap } from "./routes/sitemap.js";
