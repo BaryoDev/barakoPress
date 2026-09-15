@@ -25,7 +25,8 @@ export function createFeed(base: PressConfig) {
     return async function GET() {
         // Outside the try below: resolving reads the request, and Next signals that with a throw.
         const config = await siteConfigOrNull(base);
-        if (!config) return new Response("Not found", { status: 404 });
+        // Not served while holding, to anyone, session or not: a feed is public and cached in front of the site.
+        if (!config || config.holding) return new Response("Not found", { status: 404 });
 
         let posts: Awaited<ReturnType<typeof listPosts>>["posts"] = [];
         try {

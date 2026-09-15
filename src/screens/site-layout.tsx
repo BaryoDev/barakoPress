@@ -2,8 +2,12 @@ import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { PressConfig } from "../config.js";
-import { siteConfigOrNull, themeFamilies } from "../site.js";
-import { themeVariablesCss } from "../theme.js";
+import { showsHoldingPage, siteConfigOrNull, themeFamilies } from "../site.js";
+import { SHARE_INVALID_FRAGMENT } from "../routes/share.js";
+import { themeVariablesCss, type PressTheme } from "../theme.js";
+import type { BlockRegistry } from "../blocks/schema.js";
+import { getPageAtPath, type Page } from "../cms.js";
+import { PageView } from "./page.js";
 
 /*
  * The root layout and its metadata, from the site's identity and theme.
@@ -22,7 +26,97 @@ function fontHref(family: string): string {
     return `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, "+")}:wght@400;600;700&display=swap`;
 }
 
-export function createSiteLayout(config: PressConfig, options: { loadFonts?: boolean } = {}) {
+function ThemeHead({ theme, loadFonts }: { theme: PressTheme; loadFonts: boolean }) {
+    return (
+        <head>
+            <style dangerouslySetInnerHTML={{ __html: themeVariablesCss(theme) }} />
+            {loadFonts && (
+                <>
+                    <link rel="preconnect" href="https://fonts.googleapis.com" />
+                    <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+                    {themeFamilies(theme).map((family) => (
+                        <link key={family} rel="stylesheet" href={fontHref(family)} />
+                    ))}
+                </>
+            )}
+        </head>
+    );
+}
+
+export interface SiteLayoutOptions {
+    loadFonts?: boolean;
+    /** The registry a holding page renders with. Without it, the default holding page renders. */
+    blocks?: BlockRegistry;
+}
+
+/** The page at `HoldingPath`, or null for the default holding page. A failed read is the default too. */
+async function holdingPage(cfg: PressConfig, registry?: BlockRegistry): Promise<Page | null> {
+    const path = cfg.holding?.path;
+    if (!path || !registry) return null;
+    try {
+        return await getPageAtPath(cfg, path);
+    } catch (e) {
+        if (e && typeof e === "object" && "digest" in e) throw e;
+        return null;
+    }
+}
+
+/*
+ * The holding page, rendered in place of the whole site while holding (#28). The page
+ * under it has already stopped at a 404 in `siteConfig`, so `children` holds nothing of the site and
+ * is not rendered either. No header, footer or feed link: those would name the site's structure.
+ *
+ * With `HoldingPath` set it is that page, rendered as the page route renders it. Unset, or not
+ * served there, it is the name, tagline and "Coming soon." in the tenant's theme.
+ *
+ * A share link that did not redeem lands on `/#share-invalid`. The notice is shown by CSS `:target`
+ * alone, so nothing is stored and no script runs for it.
+ */
+async function HoldingDocument({ cfg, registry, loadFonts }: { cfg: PressConfig; registry?: BlockRegistry; loadFonts: boolean }) {
+    const t = cfg.theme;
+    const s = cfg.site;
+    const page = await holdingPage(cfg, registry);
+
+    return (
+        <html lang={cfg.locale}>
+            <ThemeHead theme={t} loadFonts={loadFonts} />
+            <body style={{ margin: 0, background: t.colors.pageBg, color: t.colors.ink, fontFamily: t.fonts.body }}>
+                <style dangerouslySetInnerHTML={{ __html: `#${SHARE_INVALID_FRAGMENT}{display:none}#${SHARE_INVALID_FRAGMENT}:target{display:block}` }} />
+                <p
+                    id={SHARE_INVALID_FRAGMENT}
+                    role="status"
+                    style={{ margin: 0, padding: `12px ${t.layout.gutter}`, background: t.colors.darkPanel, color: t.colors.darkPanelInk }}
+                >
+                    This link is not valid or has expired.
+                </p>
+                {page && registry ? (
+                    <div data-press="holding">
+                        <PageView config={cfg} page={page} registry={registry} />
+                    </div>
+                ) : (
+                    <main
+                        data-press="holding"
+                        style={{ maxWidth: t.layout.wide, margin: "0 auto", padding: `80px ${t.layout.gutter}` }}
+                    >
+                        <div style={{ maxWidth: t.layout.prose }}>
+                            {s.logo && (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={s.logo} alt={s.logoAlt ?? s.name} style={{ height: "48px", width: "auto" }} />
+                            )}
+                            <h1 style={{ margin: "24px 0 0", fontFamily: t.fonts.heading, fontSize: "clamp(32px, 4.4vw, 52px)", lineHeight: 1.08 }}>
+                                {s.name}
+                            </h1>
+                            {s.tagline && <p style={{ margin: "12px 0 0", color: t.colors.secondaryInk }}>{s.tagline}</p>}
+                            <p style={{ margin: "32px 0 0", fontFamily: t.fonts.mono, color: t.colors.accent }}>Coming soon.</p>
+                        </div>
+                    </main>
+                )}
+            </body>
+        </html>
+    );
+}
+
+export function createSiteLayout(config: PressConfig, options: SiteLayoutOptions = {}) {
     const loadFonts = options.loadFonts ?? true;
 
     return async function SiteLayout({ children }: LayoutProps) {
@@ -34,6 +128,9 @@ export function createSiteLayout(config: PressConfig, options: { loadFonts?: boo
                 </html>
             );
         }
+        if (await showsHoldingPage(cfg)) {
+            return await HoldingDocument({ cfg, registry: options.blocks, loadFonts });
+        }
 
         const t = cfg.theme;
         const c = t.colors;
@@ -43,18 +140,7 @@ export function createSiteLayout(config: PressConfig, options: { loadFonts?: boo
 
         return (
             <html lang={cfg.locale}>
-                <head>
-                    <style dangerouslySetInnerHTML={{ __html: themeVariablesCss(t) }} />
-                    {loadFonts && (
-                        <>
-                            <link rel="preconnect" href="https://fonts.googleapis.com" />
-                            <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-                            {themeFamilies(t).map((family) => (
-                                <link key={family} rel="stylesheet" href={fontHref(family)} />
-                            ))}
-                        </>
-                    )}
-                </head>
+                <ThemeHead theme={t} loadFonts={loadFonts} />
                 <body style={{ margin: 0, background: c.pageBg, color: c.ink, fontFamily: t.fonts.body }}>
                     {s.topBar && (
                         <div style={{ background: c.darkPanel, color: c.darkPanelInk, fontSize: "13px" }}>
@@ -99,9 +185,11 @@ export function createSiteLayout(config: PressConfig, options: { loadFonts?: boo
                                         {l.label}
                                     </a>
                                 ))}
-                                <a href="/feed.xml" style={{ ...linkStyle, fontFamily: t.fonts.mono, fontSize: "13px", color: c.muted }}>
-                                    RSS
-                                </a>
+                                {!cfg.holding && (
+                                    <a href="/feed.xml" style={{ ...linkStyle, fontFamily: t.fonts.mono, fontSize: "13px", color: c.muted }}>
+                                        RSS
+                                    </a>
+                                )}
                             </span>
                         </nav>
                     </header>
@@ -171,7 +259,9 @@ export function createSiteMetadata(config: PressConfig) {
             description: s.tagline,
             icons: s.favicon ? { icon: s.favicon } : undefined,
             openGraph: { siteName: s.name, images: s.shareImage ? [s.shareImage] : undefined },
-            alternates: s.url ? { types: { "application/rss+xml": `${s.url}/feed.xml` } } : undefined,
+            // While holding nothing is indexed, session or not, and there is no feed to point at.
+            alternates: s.url && !cfg.holding ? { types: { "application/rss+xml": `${s.url}/feed.xml` } } : undefined,
+            robots: cfg.holding ? { index: false, follow: false } : undefined,
         };
     };
 }

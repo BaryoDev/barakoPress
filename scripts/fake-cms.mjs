@@ -1,7 +1,9 @@
 /*
- * A stand-in barakoCMS with two tenants on two domains, for scripts/two-hosts.sh.
+ * A stand-in barakoCMS with three tenants on three domains, for scripts/two-hosts.sh. The third is
+ * holding, so the other two show it leaves them alone.
  *
- * It answers only what the renderer asks: the host lookup, each tenant's site settings and its posts.
+ * It answers only what the renderer asks: the host lookup, each tenant's site settings and its posts,
+ * the Pages module's path resolve, and share link redeem.
  * GET /__reads returns how many content reads each tenant has made, which is how the script shows a
  * purge on one tenant leaves the other's cached reads alone.
  */
@@ -20,9 +22,26 @@ const tenants = {
         settings: { Name: "BaryoDev", Url: "https://baryo.dev", Colors: { accent: "#1A6B41" }, Fonts: { heading: "Sora" } },
         post: "shipping-notes",
     },
+    soon: {
+        host: "soon.example",
+        settings: {
+            Name: "Soon Club",
+            Url: "https://soon.example",
+            Mode: "Holding",
+            HoldingPath: "/coming-soon",
+            HeaderLinks: [{ label: "Opening", href: "/coming-soon" }, { label: "About", href: "/about" }],
+        },
+        post: "launch-plans",
+        // Share links barakoCMS would redeem for this tenant, with how long each has left, and one it throttles.
+        shareLinks: { "soon-share-key-0123456789": 30 * 24 * 3600, "soon-short-key-0123456789": 3600 },
+        throttledKey: "soon-throttled-key-0123456789",
+        pages: {
+            "/coming-soon": { id: "cs", slug: "coming-soon", data: { Title: "Opening soon", Slug: "coming-soon", Blocks: [{ type: "richText", props: { markdown: "## Opening in October" } }] } },
+        },
+    },
 };
 
-const reads = { rckoronadal: 0, baryo: 0 };
+const reads = { rckoronadal: 0, baryo: 0, soon: 0 };
 
 function send(res, status, body) {
     res.writeHead(status, { "content-type": "application/json" });
@@ -45,11 +64,34 @@ createServer((req, res) => {
     const handle = req.headers["x-tenant"];
     const tenant = typeof handle === "string" ? tenants[handle] : undefined;
     if (!tenant) return send(res, 404);
+
+    if (req.method === "POST" && url.pathname === "/api/public/site/share-links/redeem") {
+        let body = "";
+        req.on("data", (chunk) => (body += chunk));
+        req.on("end", () => {
+            let key;
+            try {
+                key = JSON.parse(body).key;
+            } catch {
+                key = undefined;
+            }
+            if (tenant.throttledKey && key === tenant.throttledKey) return send(res, 429);
+            const left = tenant.shareLinks && typeof key === "string" ? tenant.shareLinks[key] : undefined;
+            if (left) return send(res, 200, { expiresAt: new Date(Date.now() + left * 1000).toISOString() });
+            return send(res, 404);
+        });
+        return;
+    }
     reads[handle] += 1;
 
     const post = { id: tenant.post, slug: tenant.post, data: { Title: `${tenant.settings.Name} post`, Slug: tenant.post, Body: "Hello." } };
     if (url.pathname === "/api/public/site") return send(res, 200, page([{ id: "site", data: tenant.settings }]));
     if (url.pathname === "/api/public/post") return send(res, 200, page([post]));
     if (url.pathname === `/api/public/post/${tenant.post}`) return send(res, 200, post);
+    if (url.pathname === "/api/public/pages/resolve") {
+        const path = url.searchParams.get("path") ?? "/";
+        const entry = tenant.pages?.[path];
+        return entry ? send(res, 200, { contract: 1, path, entry: { contentType: "page", ...entry }, breadcrumbs: [] }) : send(res, 404);
+    }
     return send(res, 404);
 }).listen(port, "127.0.0.1");

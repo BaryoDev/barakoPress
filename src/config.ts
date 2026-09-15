@@ -152,6 +152,17 @@ export interface SitesConfig {
     defaultTenant?: string;
 }
 
+/**
+ * A tenant's holding mode, read from its site settings (`Mode: "Holding"`). Present only while holding.
+ *
+ * Nothing secret lives here. A share link is redeemed through barakoCMS, and barakoPress never sees
+ * a hash of its key.
+ */
+export interface Holding {
+    /** `HoldingPath`: the site path of the page shown on every route. Absent renders the default holding page. */
+    path?: string;
+}
+
 export interface PressConfig {
     types: TypeNames;
     fields: FieldMap;
@@ -173,6 +184,8 @@ export interface PressConfig {
     theme: PressTheme;
     /** Set when identity and theme are read per request from the tenant's site settings. */
     sites?: SitesConfig;
+    /** Set by the tenant's settings on a request-time site while it is holding. Never set by hand. */
+    holding?: Holding;
 }
 
 export type PressConfigInput = {
@@ -189,7 +202,7 @@ export type PressConfigInput = {
      */
     theme?: PressThemeInput;
     sites?: Partial<SitesConfig>;
-} & Partial<Omit<PressConfig, "types" | "fields" | "pageFields" | "routes" | "site" | "pageSizes" | "theme" | "sites">>;
+} & Partial<Omit<PressConfig, "types" | "fields" | "pageFields" | "routes" | "site" | "pageSizes" | "theme" | "sites" | "holding">>;
 
 /**
  * The `blog` blueprint, which is what `POST /api/content-types/blueprints/blog` creates.
