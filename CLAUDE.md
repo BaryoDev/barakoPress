@@ -130,7 +130,9 @@ comment explaining behaviour it did not have. An instrumented CMS showed it caus
 
 It is the only writer to the cache and it is reachable by anyone who finds the URL, so the order
 of the checks is part of the design: cheap checks first, body read last and bounded, signature
-compared in constant time, timestamp refused outside the window, each signature honoured once.
+compared in constant time, timestamp refused outside the window, each signature honoured once per
+tenant. A request-time site verifies with the key derived for the tenant its host resolves to, never
+with `REVALIDATE_SECRET` itself (`src/revalidate-key.ts`).
 
 The signing recipe is barakoCMS `docs/webhooks.md`. The signature covers the **raw body bytes**:
 parse the JSON first and you have re-serialised it into something that will never verify.

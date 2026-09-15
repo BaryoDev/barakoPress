@@ -3,6 +3,7 @@ import { revalidateTag } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import type { PressConfig } from "../config.js";
 import { cacheTagFor } from "../delivery.js";
+import { revalidateKeyFor } from "../revalidate-key.js";
 import { tenantFromHeaders } from "../site.js";
 
 /*
@@ -35,7 +36,11 @@ const TOLERANCE_SECONDS = 300;
 const MAX_BODY_BYTES = 64 * 1024;
 
 export interface RevalidateOptions {
-    /** Defaults to REVALIDATE_SECRET. */
+    /**
+     * Defaults to REVALIDATE_SECRET. A build-time site verifies with it as it is. A request-time site
+     * verifies each delivery with the key `revalidateKeyFor(secret, tenant)` derives for the tenant
+     * its host resolves to, so no tenant ever holds a key that verifies for another.
+     */
     secret?: string;
     /** Seconds a signature stays valid. Shorter is safer; the sender's clock has to be close. */
     toleranceSeconds?: number;
@@ -60,11 +65,14 @@ function sameSignature(a: string, b: string): boolean {
  */
 function makeReplayGuard(windowSeconds: number) {
     const seen = new Map<string, number>();
-    return function alreadyHonoured(signature: string): boolean {
+    // Keyed by what was purged as well as the signature, so an honoured delivery can only ever
+    // stand in for the same purge. A handle has no spaces, so the key cannot be read two ways.
+    return function alreadyHonoured(tag: string, signature: string): boolean {
         const now = Date.now() / 1000;
-        for (const [sig, at] of seen) if (now - at > windowSeconds) seen.delete(sig);
-        if (seen.has(signature)) return true;
-        seen.set(signature, now);
+        for (const [key, at] of seen) if (now - at > windowSeconds) seen.delete(key);
+        const key = `${tag} ${signature}`;
+        if (seen.has(key)) return true;
+        seen.set(key, now);
         return false;
     };
 }
@@ -110,8 +118,24 @@ export function createRevalidateRoute(config: PressConfig, options: RevalidateOp
             return NextResponse.json({ error: "too large" }, { status: 413 });
         }
 
+        /*
+         * A request-time site purges only the tenant this delivery came to, and verifies with that
+         * tenant's key. The webhook URL is on the tenant's own domain, so the host resolves it exactly
+         * as it resolves a page, and a host with no tenant purges nothing. The lookup comes before the
+         * signature because the key depends on it; it is the same bounded, cached lookup any page
+         * request makes.
+         */
+        let tag = config.cacheTag;
+        let key = secret;
+        if (config.sites) {
+            const found = await tenantFromHeaders(config, request.headers);
+            if (!found) return NextResponse.json({ error: "no site for this host" }, { status: 404 });
+            tag = cacheTagFor({ ...config, tenant: found.tenant });
+            key = revalidateKeyFor(secret, found.tenant);
+        }
+
         const material = Buffer.concat([Buffer.from(`${timestamp}.`, "utf8"), raw]);
-        const expected = "sha256=" + createHmac("sha256", secret).update(material).digest("hex");
+        const expected = "sha256=" + createHmac("sha256", key).update(material).digest("hex");
         if (!sameSignature(expected, signature)) {
             return NextResponse.json({ error: "bad signature" }, { status: 401 });
         }
@@ -131,20 +155,8 @@ export function createRevalidateRoute(config: PressConfig, options: RevalidateOp
          * the response, and triple the work an attacker gets from one captured signature, for
          * nothing.
          */
-        /*
-         * A request-time site purges only the tenant this delivery came to. The webhook URL is on the
-         * tenant's own domain, so the host resolves it exactly as it resolves a page, and a host with no
-         * tenant purges nothing.
-         */
-        let tag = config.cacheTag;
-        if (config.sites) {
-            const found = await tenantFromHeaders(config, request.headers);
-            if (!found) return NextResponse.json({ error: "no site for this host" }, { status: 404 });
-            tag = cacheTagFor({ ...config, tenant: found.tenant });
-        }
-
         // After the tenant resolved, so a lookup that failed with the CMS down leaves the retry free to purge.
-        if (alreadyHonoured(signature)) {
+        if (alreadyHonoured(tag, signature)) {
             // Honest 200: the purge this delivery asked for has already happened, so the CMS has
             // no reason to retry. A 401 here would make a legitimate retry look like an attack.
             return NextResponse.json({ revalidated: true, repeated: true });
