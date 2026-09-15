@@ -181,16 +181,21 @@ curl -s -o /dev/null -D - -X POST -H "Host: baryo.dev" --data-urlencode "key=$KE
 grep -q "$KEY" "$TMP/two-hosts-app.log" && fail "the share key reached the log"
 echo "ok: expired, forged, other-tenant and raw-key cookies are held back, and baryo.dev is unaffected"
 
+# A tenant's webhook key, as the README derives it: HMAC-SHA256 of "revalidate.<tenant>" keyed with the secret.
+tenant_key() { printf 'revalidate.%s' "$1" | openssl dgst -sha256 -hmac "$SECRET" | sed 's/^.* //'; }
+# purge <host> <signing key>
 purge() {
   local body='{"event":"Published"}' ts sig
   ts=$(date +%s)
-  sig=$(printf '%s.%s' "$ts" "$body" | openssl dgst -sha256 -hmac "$SECRET" -hex | sed 's/^.* //')
+  sig=$(printf '%s.%s' "$ts" "$body" | openssl dgst -sha256 -hmac "$2" -hex | sed 's/^.* //')
   curl -s -X POST -H "Host: $1" -H 'content-type: application/json' \
     -H "x-barako-timestamp: $ts" -H "x-barako-signature: sha256=$sig" --data "$body" "$APP/api/revalidate"
 }
 
 before=$(curl -s "http://127.0.0.1:$CMS_PORT/__reads")
-purge baryo.dev | grep -q '"tag":"cms:baryo"' || fail "the purge did not name baryo's tag"
+[ "$(purge baryo.dev "$SECRET" | grep -c '"revalidated":true')" = "0" ] || fail "the shared secret still purges a tenant"
+[ "$(purge baryo.dev "$(tenant_key rckoronadal)" | grep -c '"revalidated":true')" = "0" ] || fail "rckoronadal's key purges baryo.dev"
+purge baryo.dev "$(tenant_key baryo)" | grep -q '"tag":"cms:baryo"' || fail "the purge with baryo's key did not name baryo's tag"
 page rckoronadal.org / > /dev/null
 page baryo.dev / > /dev/null
 after=$(curl -s "http://127.0.0.1:$CMS_PORT/__reads")
@@ -199,11 +204,11 @@ node -e '
   if (a.rckoronadal !== b.rckoronadal) { console.log("rckoronadal re-read after baryo purge", b, a); process.exit(1); }
   if (a.baryo <= b.baryo) { console.log("baryo was not re-read after its purge", b, a); process.exit(1); }
 ' "$before" "$after" || fail "a purge on one tenant reached the other"
-echo "ok: a purge on baryo left rckoronadal's cached reads in place"
+echo "ok: only baryo's own key purges baryo.dev, not the shared secret or rckoronadal's key, and the purge left rckoronadal's cached reads in place"
 
 kill $CMS_PID
 wait $CMS_PID 2>/dev/null || true
-purge baryo.dev > /dev/null
+purge baryo.dev "$(tenant_key baryo)" > /dev/null
 [ "$(status baryo.dev /)" = "200" ] || fail "baryo.dev is not 200 with the CMS stopped"
 page baryo.dev / > "$TMP/baryo-down.html"
 grep -q "BaryoDev" "$TMP/baryo-down.html" || fail "baryo.dev lost its name with the CMS stopped"

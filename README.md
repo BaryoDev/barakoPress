@@ -312,8 +312,9 @@ faces, the palette, the top bar, header links, footer columns, social links and 
 
 **Caching per tenant.** Every read carries the tenant in `X-Tenant` and in its cache tag,
 `<cacheTag>:<tenant>`. The webhook purges the tag of the tenant its host resolves to, so point each
-tenant's webhook at `https://<that tenant's domain>/api/revalidate`. A publish on one tenant leaves
-every other tenant's cached reads in place.
+tenant's webhook at `https://<that tenant's domain>/api/revalidate`, signed with that tenant's own key
+(see [One key per tenant](#one-key-per-tenant)). A publish on one tenant leaves every other tenant's
+cached reads in place.
 
 **When the CMS is down.** Each successful read is also kept in process, keyed by CMS, tenant and path.
 A read that fails with a network error or a 5xx answers from the last good copy and logs a warning;
@@ -474,7 +475,43 @@ to change it.
 1. Put a long random value in `REVALIDATE_SECRET` where your app runs.
 2. In barakoBrew, create a workflow on your post content type, event `Published`.
 3. Add a Webhook action with `Url` set to `https://your-site/api/revalidate` and `Secret` set to the
-   same value.
+   same value. On a site with `sites` configured, the `Secret` is the tenant's key instead, below.
+
+### One key per tenant
+
+With `sites` configured, one app serves many tenants, and each tenant's admin can read and edit its
+own workflows. So no tenant is given `REVALIDATE_SECRET`. Each delivery is verified with a key derived
+for the tenant its host resolves to:
+
+```
+key = lowercase hex HMAC-SHA256(REVALIDATE_SECRET, "revalidate." + tenant handle)
+```
+
+A delivery signed with one tenant's key gets a 401 on every other tenant's host, and so does one
+signed with `REVALIDATE_SECRET` itself. Print a tenant's key where `REVALIDATE_SECRET` is set:
+
+```bash
+npx barakopress revalidate-key baryo
+# or, with no Node:
+printf 'revalidate.%s' baryo | openssl dgst -sha256 -hmac "$REVALIDATE_SECRET" | sed 's/^.* //'
+```
+
+Both read the secret from the environment and print only the key. Paste it into the `Secret` of that
+tenant's Webhook action, with `Url` on that tenant's domain. A new tenant needs nothing on the
+renderer. Changing `REVALIDATE_SECRET` changes every tenant's key, so each workflow needs its new one.
+
+A site without `sites` (one build, one site) verifies with `REVALIDATE_SECRET` itself, as before.
+
+**Upgrading a multi-tenant site to 0.4.0 is a breaking change.** Every tenant's workflow holds
+`REVALIDATE_SECRET` today, and after the upgrade that value verifies for no tenant: deliveries get a
+401 and purges stop, with the backstop the only refresh. Before or right after deploying, print each
+tenant's key and put it in that tenant's Webhook `Secret`. Then change `REVALIDATE_SECRET` and print
+the keys again, because every tenant admin has seen the old value and could derive any tenant's key
+from it.
+
+The barakoCMS webhook body does not name its tenant yet, so the host is what picks the key. Once the
+body carries the tenant (barakoCMS #868), a delivery whose body names a different tenant than its host
+resolves to is to be refused.
 
 **If your site sets `trailingSlash: true`, the webhook URL needs the slash.** Next redirects
 `/api/revalidate` to `/api/revalidate/` with a 308, and barakoCMS does not follow redirects on a
@@ -489,7 +526,7 @@ way.
 
 Verification follows the recipe in the API's `docs/webhooks.md`: HMAC-SHA256 over
 `"<timestamp>.<raw body>"`, compared in constant time, with a 300 second tolerance so a captured
-delivery cannot be replayed later, and each signature honoured once. An unsigned, missigned or stale
+delivery cannot be replayed later, and each signature honoured once per tenant. An unsigned, missigned or stale
 delivery gets a 401. If `REVALIDATE_SECRET` is unset the endpoint answers 503 and purges nothing,
 because an open cache-purge endpoint is a free denial of service.
 

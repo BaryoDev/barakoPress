@@ -169,6 +169,7 @@ export { createBlockSchemaRoute, createBlockSchemaPreflight, parseOrigins } from
 export type { BlockSchemaRouteOptions } from "./routes/block-schema.js";
 
 export { createRevalidateRoute } from "./routes/revalidate.js";
+export { revalidateKeyFor } from "./revalidate-key.js";
 export { createSharePage, createShareRedeemRoute, SHARE_INVALID_FRAGMENT } from "./routes/share.js";
 export type { SharePageOptions } from "./routes/share.js";
 export type { RevalidateOptions } from "./routes/revalidate.js";
