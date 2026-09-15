@@ -91,7 +91,7 @@ decision, not the engine's.
 | `app/sitemap.ts` | `default` | `createSitemap(config)` |
 | `app/robots.ts` | `default` | `createRobots(config)` |
 | `app/api/revalidate/route.ts` | `POST`, `GET` | `createRevalidateRoute(config)` |
-| `app/[slug]/page.tsx` | `default`, `generateMetadata` | `createPage(config, blocks)`, `createPageMetadata(config)` |
+| `app/[...path]/page.tsx` | `default`, `generateMetadata` | `createPage(config, blocks)`, `createPageMetadata(config)` |
 | `app/api/blocks/route.ts` | `GET`, `OPTIONS` | `createBlockSchemaRoute(blocks)`, `createBlockSchemaPreflight()` |
 | `app/layout.tsx` | `default`, `generateMetadata` | `createSiteLayout(config, { blocks })`, `createSiteMetadata(config)` |
 | `app/%5Fshare/route.ts` | `GET` | `createSharePage()` |
@@ -106,6 +106,55 @@ It reads `searchParams`, which forces the route dynamic, so a site using `output
 for that static case.
 
 `Card` and `PostView` are exported too, for a site that wants its own page but the engine's markup.
+
+### Pages and navigation from the Pages module
+
+With `BarakoCMS.Pages` installed, the CMS owns the page tree: which pages are in the menu, their
+order, their nesting and each page's path. Mount it with `pages`:
+
+```ts
+export const config = defineConfig({ sites: {}, pages: "" });
+```
+
+`""` is the site root. `"/docs"` serves the CMS page at `/about` on `/docs/about`. Leaving `pages` out
+means the site has no page tree, and nothing below asks for one. Then one catch-all route,
+`app/[[...path]]/page.tsx`, or `app/[...path]/page.tsx` when `app/page.tsx` keeps `/`:
+
+```tsx
+import { createPage, createPageMetadata } from "barakopress";
+import { blocks, config } from "@/press.config";
+
+export default createPage(config, blocks);
+export const generateMetadata = createPageMetadata(config);
+export const revalidate = 300;
+```
+
+- `createPage` reads `GET /api/public/pages/resolve?path=` and renders the page's blocks, or its
+  body, with breadcrumbs above the title when the page has a parent. Mounted on a `[slug]` route
+  instead, it reads the page type by slug as before.
+- `createSiteLayout` draws `GET /api/public/pages/navigation` in the header. `Navigation` draws the
+  items in the order it received them and links to the paths it was given, under the mount. It does
+  not sort, nest, filter or derive a path. A menu that cannot be read is no menu, not a broken page,
+  and while holding the holding page is left out of it.
+- A miss asks `GET /api/public/redirects/resolve?path=` before it is a 404, because a catch-all is
+  where a rebuilt site's old URLs land. A 301 answers as a permanent redirect and anything else as a
+  temporary one. A destination that is not a site path or an http or https URL is ignored.
+- **Reserved slugs.** Next answers a static route before a catch-all, so a root page slugged `blog`
+  or `feed.xml` would silently never render. At the root mount, a path whose first segment is
+  reserved is a 404 and is never asked for, and it is left out of the sitemap and static params with
+  a warning. The list is the first segment of each configured route plus `api`, `feed.xml`,
+  `sitemap.xml`, `robots.txt`, `_next`, `_share` and `favicon.ico`; `reservedSlugs` adds to it. Give
+  barakoCMS the same list as `Modules:Pages:ReservedSlugs` and an editor is refused the slug on save.
+- **Contract.** Both bodies carry `contract`, and this renderer reads the range in `PAGES_CONTRACT`
+  (1 to 1). A body outside it logs a warning and reads as absent: no menu, no page. A public site does
+  not stop rendering because a menu shape moved.
+- The sitemap lists the pages in the menu, and `createPageStaticParams` returns their path segments on
+  a build-time site, because the module publishes no other public list of paths. A page outside the
+  menu renders on request.
+
+`Navigation`, `Breadcrumbs`, `getNavigation(config)`, `getPageByPath(config, path)`,
+`getRedirect(config, path)` and `pageHref(config, path)` are exported for a site that draws its own
+layout. Every read goes through the same tagged, cached, per tenant read as the rest of the site.
 
 ### Pages built from blocks
 
@@ -217,6 +266,8 @@ for a post type with no such field.
 | `cmsUrl` | `CMS_URL`, or `http://localhost:5005` | Where the CMS is, from this server |
 | `tenant` | `CMS_TENANT` | Tenant slug, for a multi-tenant deployment. On a request-time site, pins every host to it |
 | `sites` | off | Request-time identity and theme from the tenant's site settings. See below |
+| `pages` | off | Where the Pages module's pages are mounted. `""` is the site root |
+| `reservedSlugs` | the routes and the engine's files | First path segments a root-mounted page may not take. Adds to the defaults |
 | `theme` | the barakoCMS palette | Colours, faces, radii and column widths. See below |
 
 **A site is build time or request time.** Without `sites`, identity is build time: the index, the

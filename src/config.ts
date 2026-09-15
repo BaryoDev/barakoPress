@@ -186,6 +186,19 @@ export interface PressConfig {
     sites?: SitesConfig;
     /** Set by the tenant's settings on a request-time site while it is holding. Never set by hand. */
     holding?: Holding;
+    /**
+     * Where the Pages module's pages are mounted: "" is the site root, "/docs" puts /about at
+     * /docs/about. Undefined means the site renders no page tree: no menu, no catch-all, no page in the
+     * sitemap.
+     */
+    pages?: string;
+    /**
+     * First path segments a page mounted at the root may not take, lowercased. A page there would sit
+     * on a route the app answers itself, and Next resolves a static segment before a catch-all, so it
+     * would never render. The defaults are the configured routes and the files the engine mounts;
+     * `reservedSlugs` in the input adds to them.
+     */
+    reservedSlugs: string[];
 }
 
 export type PressConfigInput = {
@@ -240,6 +253,25 @@ function trimSlash(path: string): string {
     return path.slice(0, end);
 }
 
+/** Paths the engine's own route files answer, which a page at the site root must not take. */
+const RESERVED_AT_ROOT = ["api", "feed.xml", "sitemap.xml", "robots.txt", "_next", "_share", "%5fshare", "favicon.ico"];
+
+function firstSegment(route: string | undefined): string | undefined {
+    return route?.split("/").find(Boolean)?.toLowerCase();
+}
+
+/** "" for the root, otherwise a path with one leading slash and none trailing. */
+function mountPath(value: string): string {
+    const trimmed = trimSlash(value.trim());
+    if (!trimmed) return "";
+    return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+}
+
+function reservedSlugs(routes: (string | undefined)[], extra: string[] | undefined): string[] {
+    const named = [...RESERVED_AT_ROOT, ...routes.map(firstSegment), ...(extra ?? []).map((s) => s.trim().toLowerCase())];
+    return [...new Set(named.filter((s): s is string => Boolean(s)))];
+}
+
 /**
  * Builds a complete config from a partial one.
  *
@@ -271,6 +303,8 @@ export function defineConfig(
         cmsUrl: trimSlash(input.cmsUrl ?? process.env.CMS_URL ?? "http://localhost:5005"),
         tenant: input.tenant ?? process.env.CMS_TENANT ?? undefined,
         theme: resolveTheme(input.theme),
+        reservedSlugs: reservedSlugs([routes.post, routes.author, routes.category], input.reservedSlugs),
+        ...(input.pages !== undefined ? { pages: mountPath(input.pages) } : {}),
         ...(input.sites
             ? {
                   sites: {

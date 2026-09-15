@@ -12,12 +12,16 @@ import { createBlockRegistry, defineConfig } from "barakopress";
  * A site that wants identity written here instead leaves `sites` out and passes `site`, as
  * barakocms.com does. That is a build-time site, and it behaves exactly as it did before this.
  *
+ * `pages: ""` mounts the Pages module's page tree at the site root: app/[...path] renders the page at
+ * each path, and the layout draws each tenant's menu in its header. The blog index keeps `/`.
+ *
  * A site using the `blog` blueprint unchanged needs nothing else. Everything else defaults to what
  * `POST /api/content-types/blueprints/blog` creates: the types post, author and category, the
  * PascalCase field names, and routes at /blog, /authors and /categories.
  */
 export const config = defineConfig({
   sites: {},
+  pages: "",
 });
 
 /*

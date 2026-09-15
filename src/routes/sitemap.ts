@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import type { PressConfig } from "../config.js";
-import { listPosts } from "../cms.js";
+import { flattenNavigation, getNavigation, isReservedPath, listPosts, pageHref } from "../cms.js";
 import { notFound } from "next/navigation";
 import { siteConfigOrNull } from "../site.js";
 
@@ -11,6 +11,9 @@ import { siteConfigOrNull } from "../site.js";
  * A post whose SEO block says noIndex is left out: the CMS resolves that flag per entry and its
  * own sitemap honours it, so a site that ignored it here would contradict the CMS on the one
  * signal an editor set deliberately.
+ *
+ * Pages are the ones in the menu, since the Pages module publishes no other public list of paths,
+ * less any under a reserved slug, which never render.
  */
 export function createSitemap(base: PressConfig) {
     return async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -27,14 +30,30 @@ export function createSitemap(base: PressConfig) {
             indexable = [];
         }
 
+        let pagePaths: string[] = [];
+        if (config.pages !== undefined) {
+            try {
+                pagePaths = flattenNavigation(await getNavigation(config)).filter((p) => !isReservedPath(config, p));
+            } catch {
+                pagePaths = [];
+            }
+        }
+
+        const home = config.site.url;
+        const pages = [...new Set(pagePaths.map((p) => pageHref(config, p)))]
+            .map((href) => `${home}${href === "/" ? "" : href}`)
+            .filter((url) => url !== home)
+            .map((url) => ({ url, changeFrequency: "monthly" as const, priority: 0.5 }));
+
         return [
-            { url: config.site.url, changeFrequency: "daily", priority: 1 },
+            { url: home, changeFrequency: "daily", priority: 1 },
             ...indexable.map((p) => ({
                 url: `${config.site.url}${config.routes.post}/${p.slug}`,
                 lastModified: p.publishedAt ? new Date(p.publishedAt) : undefined,
                 changeFrequency: "monthly" as const,
                 priority: 0.7,
             })),
+            ...pages,
         ];
     };
 }
