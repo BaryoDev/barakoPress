@@ -209,6 +209,8 @@ export async function tenantForHost(config: PressConfig, host: string): Promise<
     } catch (e) {
         if (known?.tenant && worthServingStale(e)) {
             console.warn(`cms: tenant lookup for ${host} failed, keeping "${known.tenant}"`);
+            // Kept for another minute, so an outage costs one lookup a minute per host, not one a request.
+            hosts.set(host, { tenant: known.tenant, at: Date.now() });
             return known.tenant;
         }
         throw e;
@@ -302,6 +304,9 @@ export async function pageAtPath(config: PressConfig, path: string): Promise<Res
     }
 }
 
+/** A redemption waits this long for the CMS. A visitor is waiting on the answer, and a slow one is a failed one. */
+const SHARE_REDEEM_TIMEOUT_MS = 5_000;
+
 export type ShareRedeemAnswer =
     | { kind: "valid"; expiresAt: number }
     | { kind: "invalid" }
@@ -315,7 +320,8 @@ export type ShareRedeemAnswer =
  * One uncached request, never retried, since a retry would spend the caller's throttle allowance.
  * The key goes in the body, not the URL, so no access log records it. Nothing here logs it either.
  * A 200 whose expiry is missing, unreadable or already past counts as a failure: there is nothing
- * safe to sign.
+ * safe to sign. A redirect is refused rather than followed, because a 307 or 308 would send the key
+ * on to wherever it points.
  */
 export async function redeemShareLink(config: PressConfig, key: string, now: number = Date.now()): Promise<ShareRedeemAnswer> {
     try {
@@ -324,6 +330,8 @@ export async function redeemShareLink(config: PressConfig, key: string, now: num
             headers: { ...headers(config), "content-type": "application/json" },
             body: JSON.stringify({ key }),
             cache: "no-store",
+            redirect: "error",
+            signal: AbortSignal.timeout(SHARE_REDEEM_TIMEOUT_MS),
         });
         if (res.status === 404) return { kind: "invalid" };
         if (res.status === 429) return { kind: "throttled" };

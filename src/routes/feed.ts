@@ -1,6 +1,6 @@
 import type { PressConfig } from "../config.js";
 import { listPosts } from "../cms.js";
-import { siteConfigOrNull } from "../site.js";
+import { siteConfigOrNull, tenantVary } from "../site.js";
 
 /*
  * RSS, built here rather than proxied from the CMS.
@@ -75,11 +75,13 @@ ${items}
 </rss>
 `;
 
-        return new Response(body, {
-            headers: {
-                "content-type": "application/rss+xml; charset=utf-8",
-                "cache-control": "public, max-age=300",
-            },
+        const headers = new Headers({
+            "content-type": "application/rss+xml; charset=utf-8",
+            "cache-control": "public, max-age=300",
         });
+        // The URL names the host, but not a tenant picked by a header, so a shared cache has to key on it.
+        const vary = tenantVary(config);
+        if (vary) headers.set("vary", vary);
+        return new Response(body, { headers });
     };
 }

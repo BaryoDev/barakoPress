@@ -1,6 +1,8 @@
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defineConfig } from "./config.js";
-import { semantic } from "./delivery.js";
+import { redeemShareLink, semantic } from "./delivery.js";
 
 const config = defineConfig({
     site: { name: "Test", url: "https://test.example" },
@@ -84,5 +86,67 @@ describe("semantic", () => {
         // The API clamps to 20 itself. Asking for 50 anyway is a request that says one thing and
         // means another, and it is the sort of thing a later reader trusts.
         expect(String(fetchMock.mock.calls[0][0])).toContain("limit=20");
+    });
+});
+
+describe("redeemShareLink", () => {
+    const servers: Server[] = [];
+    afterEach(async () => {
+        vi.restoreAllMocks();
+        await Promise.all(servers.splice(0).map((server) => new Promise((done) => server.close(done))));
+    });
+
+    async function listen(handler: Parameters<typeof createServer>[1]): Promise<string> {
+        const server = createServer(handler);
+        servers.push(server);
+        await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+        return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    }
+
+    it("does not follow a redirect, so the key is never sent on to another server", async () => {
+        const received: string[] = [];
+        const elsewhere = await listen((req, res) => {
+            let body = "";
+            req.on("data", (chunk) => (body += chunk));
+            req.on("end", () => {
+                received.push(body);
+                res.writeHead(200, { "content-type": "application/json" });
+                res.end(JSON.stringify({ expiresAt: new Date(Date.now() + 3_600_000).toISOString() }));
+            });
+        });
+        const cms = await listen((req, res) => {
+            req.resume();
+            res.writeHead(307, { location: `${elsewhere}/redeem` });
+            res.end();
+        });
+
+        const config = { ...defineConfig({ site: { name: "T", url: "https://t.example" }, cmsUrl: cms }), tenant: "t" };
+        const answer = await redeemShareLink(config, "share-key-for-tests-0123456789");
+
+        expect(answer).toEqual({ kind: "failed" });
+        expect(received).toEqual([]);
+    });
+
+    it("gives up on a CMS that stalls, and counts that as a failed redemption", async () => {
+        const stall = new AbortController();
+        const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(stall.signal);
+        const fetchMock = vi.fn(
+            (_input: string | URL | Request, init?: RequestInit) =>
+                new Promise<Response>((_resolve, reject) => {
+                    init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+                }),
+        );
+        vi.stubGlobal("fetch", fetchMock);
+
+        const config = { ...defineConfig({ site: { name: "T", url: "https://t.example" }, cmsUrl: "http://cms.test" }), tenant: "t" };
+        const pending = redeemShareLink(config, "share-key-for-tests-0123456789");
+        stall.abort(new DOMException("timed out", "TimeoutError"));
+
+        expect(await pending).toEqual({ kind: "failed" });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(fetchMock.mock.calls[0][1]?.signal).toBe(stall.signal);
+        expect(timeout).toHaveBeenCalledTimes(1);
+        expect(timeout.mock.calls[0][0]).toBeGreaterThan(0);
+        expect(timeout.mock.calls[0][0]).toBeLessThanOrEqual(10_000);
     });
 });

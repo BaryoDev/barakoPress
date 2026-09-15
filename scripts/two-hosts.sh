@@ -16,31 +16,34 @@ APP="http://127.0.0.1:$APP_PORT"
 # A data cache left by an earlier run would answer with that run's settings before this CMS is asked.
 rm -rf .next/cache/fetch-cache
 
+# One private directory per run, so two runs on one machine cannot read or truncate each other's files.
+TMP=$(mktemp -d)
+
 node scripts/fake-cms.mjs "$CMS_PORT" &
 CMS_PID=$!
-CMS_URL="http://127.0.0.1:$CMS_PORT" REVALIDATE_SECRET=$SECRET PRESS_PREVIEW_SECRET=$PREVIEW_SECRET PRESS_CONSOLE_ORIGINS=https://brew.example npx next start --port "$APP_PORT" > /tmp/two-hosts-app.log 2>&1 &
+CMS_URL="http://127.0.0.1:$CMS_PORT" REVALIDATE_SECRET=$SECRET PRESS_PREVIEW_SECRET=$PREVIEW_SECRET PRESS_CONSOLE_ORIGINS=https://brew.example npx next start --port "$APP_PORT" > "$TMP/two-hosts-app.log" 2>&1 &
 APP_PID=$!
-trap 'kill $CMS_PID $APP_PID 2>/dev/null || true' EXIT
+trap 'kill "$CMS_PID" "$APP_PID" 2>/dev/null || true; rm -rf "$TMP"' EXIT
 
 for _ in $(seq 1 60); do
   curl -s -o /dev/null "$APP/api/revalidate" && break
   sleep 1
 done
 
-fail() { echo "FAIL: $1"; cat /tmp/two-hosts-app.log | tail -40; exit 1; }
+fail() { echo "FAIL: $1"; cat "$TMP/two-hosts-app.log" | tail -40; exit 1; }
 page() { curl -s -H "Host: $1" "$APP$2"; }
 status() { curl -s -o /dev/null -w '%{http_code}' -H "Host: $1" "$APP$2"; }
 
-page rckoronadal.org / > /tmp/rotary.html
-page baryo.dev / > /tmp/baryo.html
-grep -q "Rotary Club of Koronadal" /tmp/rotary.html || fail "rckoronadal.org does not carry its name"
-grep -q "#17458F" /tmp/rotary.html || fail "rckoronadal.org does not carry its palette"
-grep -q "Zilla+Slab" /tmp/rotary.html || fail "rckoronadal.org does not load its heading face"
-grep -q 'lang="en-PH"' /tmp/rotary.html || fail "rckoronadal.org does not carry its locale"
-grep -q "BaryoDev" /tmp/baryo.html || fail "baryo.dev does not carry its name"
-grep -q "#1A6B41" /tmp/baryo.html || fail "baryo.dev does not carry its palette"
-if grep -q -e "BaryoDev" -e "shipping-notes" /tmp/rotary.html; then fail "rckoronadal.org shows baryo.dev content"; fi
-if grep -q -e "Koronadal" -e "club-news" /tmp/baryo.html; then fail "baryo.dev shows rckoronadal.org content"; fi
+page rckoronadal.org / > "$TMP/rotary.html"
+page baryo.dev / > "$TMP/baryo.html"
+grep -q "Rotary Club of Koronadal" "$TMP/rotary.html" || fail "rckoronadal.org does not carry its name"
+grep -q "#17458F" "$TMP/rotary.html" || fail "rckoronadal.org does not carry its palette"
+grep -q "Zilla+Slab" "$TMP/rotary.html" || fail "rckoronadal.org does not load its heading face"
+grep -q 'lang="en-PH"' "$TMP/rotary.html" || fail "rckoronadal.org does not carry its locale"
+grep -q "BaryoDev" "$TMP/baryo.html" || fail "baryo.dev does not carry its name"
+grep -q "#1A6B41" "$TMP/baryo.html" || fail "baryo.dev does not carry its palette"
+if grep -q -e "BaryoDev" -e "shipping-notes" "$TMP/rotary.html"; then fail "rckoronadal.org shows baryo.dev content"; fi
+if grep -q -e "Koronadal" -e "club-news" "$TMP/baryo.html"; then fail "baryo.dev shows rckoronadal.org content"; fi
 echo "ok: two hosts, two names, palettes, faces"
 
 page baryo.dev /feed.xml | grep -q "https://baryo.dev/blog/shipping-notes" || fail "feed is not baryo.dev's"
@@ -66,51 +69,51 @@ KEY=soon-share-key-0123456789
 SHORT=soon-short-key-0123456789
 held() { grep -q 'data-press="holding"' "$1" && grep -q "Opening in October" "$1" && grep -q 'name="robots" content="noindex' "$1"; }
 real() { grep -q "launch-plans" "$1" && ! grep -q 'data-press="holding"' "$1"; }
-curl -s -D /tmp/soon-head.txt -H "Host: soon.example" "$APP/" > /tmp/soon.html
-held /tmp/soon.html || fail "soon.example does not answer its holding page, from the page at /coming-soon, with noindex"
-grep -q "Opening soon" /tmp/soon.html || fail "the holding page is not rendered as the page at /coming-soon"
-grep -q 'id="share-invalid"' /tmp/soon.html || fail "the holding page has no notice for a link that did not redeem"
+curl -s -D "$TMP/soon-head.txt" -H "Host: soon.example" "$APP/" > "$TMP/soon.html"
+held "$TMP/soon.html" || fail "soon.example does not answer its holding page, from the page at /coming-soon, with noindex"
+grep -q "Opening soon" "$TMP/soon.html" || fail "the holding page is not rendered as the page at /coming-soon"
+grep -q 'id="share-invalid"' "$TMP/soon.html" || fail "the holding page has no notice for a link that did not redeem"
 # Next streams the page, so the status is sent before the page stops. What must hold is that a path
 # that exists and one that does not answer alike.
 [ "$(status soon.example /blog/launch-plans)" = "$(status soon.example /no-such-page)" ] || fail "the holding page tells an existing path from a missing one"
-grep -q "launch-plans" /tmp/soon.html && fail "the holding page carries soon.example content"
-tr -d '\r' < /tmp/soon-head.txt | grep -qi '^cache-control:.*no-store' || fail "the holding page may be stored by a cache"
-page soon.example /blog/launch-plans > /tmp/soon-post.html
-held /tmp/soon-post.html || fail "a post on soon.example does not answer the holding page"
-grep -q "Soon Club post" /tmp/soon-post.html && fail "the holding page carries the post's title"
+grep -q "launch-plans" "$TMP/soon.html" && fail "the holding page carries soon.example content"
+tr -d '\r' < "$TMP/soon-head.txt" | grep -qi '^cache-control:.*no-store' || fail "the holding page may be stored by a cache"
+page soon.example /blog/launch-plans > "$TMP/soon-post.html"
+held "$TMP/soon-post.html" || fail "a post on soon.example does not answer the holding page"
+grep -q "Soon Club post" "$TMP/soon-post.html" && fail "the holding page carries the post's title"
 [ "$(status soon.example /feed.xml)" = "404" ] || fail "soon.example serves its feed while holding"
 [ "$(status soon.example /sitemap.xml)" = "404" ] || fail "soon.example serves its sitemap while holding"
 page soon.example /robots.txt | grep -q "Disallow: /" || fail "soon.example robots does not disallow while holding"
-asset=$(grep -o '/_next/static/[^"]*\.js' /tmp/soon.html | head -1)
+asset=$(grep -o '/_next/static/[^"]*\.js' "$TMP/soon.html" | head -1)
 [ -n "$asset" ] && [ "$(status soon.example "$asset")" = "200" ] || fail "static assets are not reachable while holding"
 [ "$(status soon.example /api/revalidate)" != "404" ] || fail "the revalidate endpoint is not reachable while holding"
 echo "ok: soon.example answers the page at /coming-soon as its holding page, no feed or sitemap, robots and assets reachable"
 
-curl -s -D /tmp/share-head.txt -H "Host: soon.example" "$APP/_share?key=$KEY" > /tmp/share.html
-tr -d '\r' < /tmp/share-head.txt | grep -q '^HTTP/1.1 200' || fail "/_share is not served while holding"
-tr -d '\r' < /tmp/share-head.txt | grep -qi '^cache-control: no-store' || fail "/_share may be stored by a cache"
-grep -q "location.hash" /tmp/share.html || fail "/_share does not read the fragment"
-grep -q '/api/share/redeem' /tmp/share.html || fail "/_share does not post to the redeem route"
-grep -q "<noscript>.*needs JavaScript" /tmp/share.html || fail "/_share does not explain itself without JavaScript"
-grep -q "$KEY" /tmp/share.html && fail "/_share echoed a key from the query string"
+curl -s -D "$TMP/share-head.txt" -H "Host: soon.example" "$APP/_share?key=$KEY" > "$TMP/share.html"
+tr -d '\r' < "$TMP/share-head.txt" | grep -q '^HTTP/1.1 200' || fail "/_share is not served while holding"
+tr -d '\r' < "$TMP/share-head.txt" | grep -qi '^cache-control: no-store' || fail "/_share may be stored by a cache"
+grep -q "location.hash" "$TMP/share.html" || fail "/_share does not read the fragment"
+grep -q '/api/share/redeem' "$TMP/share.html" || fail "/_share does not post to the redeem route"
+grep -q "<noscript>.*needs JavaScript" "$TMP/share.html" || fail "/_share does not explain itself without JavaScript"
+grep -q "$KEY" "$TMP/share.html" && fail "/_share echoed a key from the query string"
 echo "ok: /_share is served while holding, reads only the fragment, and explains itself without JavaScript"
 
 redeem() { curl -s -o /dev/null -D - -X POST -H "Host: soon.example" "$@" | tr -d '\r'; }
 for refused in wrong-key-but-long-enough-000 soon-throttled-key-0123456789; do
-  redeem --data-urlencode "key=$refused" "$APP/api/share/redeem" > /tmp/soon-wrong.txt
-  grep -q '^HTTP/1.1 303' /tmp/soon-wrong.txt || fail "a link the CMS refused ($refused) is not redirected"
-  grep -qi '^location: \(https\?://[^/]*\)\?/#share-invalid$' /tmp/soon-wrong.txt || fail "a link the CMS refused ($refused) does not land on the notice"
-  grep -qi '^set-cookie:' /tmp/soon-wrong.txt && fail "a link the CMS refused ($refused) was given a cookie"
+  redeem --data-urlencode "key=$refused" "$APP/api/share/redeem" > "$TMP/soon-wrong.txt"
+  grep -q '^HTTP/1.1 303' "$TMP/soon-wrong.txt" || fail "a link the CMS refused ($refused) is not redirected"
+  grep -qi '^location: \(https\?://[^/]*\)\?/#share-invalid$' "$TMP/soon-wrong.txt" || fail "a link the CMS refused ($refused) does not land on the notice"
+  grep -qi '^set-cookie:' "$TMP/soon-wrong.txt" && fail "a link the CMS refused ($refused) was given a cookie"
 done
-redeem -H 'content-type: application/x-www-form-urlencoded' --data '' "$APP/api/share/redeem?key=$KEY" > /tmp/soon-query.txt
-grep -qi '^set-cookie:' /tmp/soon-query.txt && fail "the key was read from the query string"
-redeem -H "Origin: https://evil.example" --data-urlencode "key=$KEY" "$APP/api/share/redeem" > /tmp/soon-cross.txt
-grep -qi '^set-cookie:' /tmp/soon-cross.txt && fail "a post from another origin was given a cookie"
-redeem -H "Origin: https://soon.example" -H "Sec-Fetch-Site: same-origin" --data-urlencode "key=$KEY" "$APP/api/share/redeem" > /tmp/soon-key.txt
-grep -q '^HTTP/1.1 303' /tmp/soon-key.txt || fail "a valid link is not redirected"
-grep -qiE '^location: (https?://[^/]+)?/$' /tmp/soon-key.txt || fail "a valid link does not redirect to /"
-grep -qi '^cache-control: no-store' /tmp/soon-key.txt || fail "the redeem answer may be stored by a cache"
-cookie=$(grep -i '^set-cookie: __Host-press-share=' /tmp/soon-key.txt) || fail "a valid link did not set its cookie"
+redeem -H 'content-type: application/x-www-form-urlencoded' --data '' "$APP/api/share/redeem?key=$KEY" > "$TMP/soon-query.txt"
+grep -qi '^set-cookie:' "$TMP/soon-query.txt" && fail "the key was read from the query string"
+redeem -H "Origin: https://evil.example" --data-urlencode "key=$KEY" "$APP/api/share/redeem" > "$TMP/soon-cross.txt"
+grep -qi '^set-cookie:' "$TMP/soon-cross.txt" && fail "a post from another origin was given a cookie"
+redeem -H "Origin: https://soon.example" -H "Sec-Fetch-Site: same-origin" --data-urlencode "key=$KEY" "$APP/api/share/redeem" > "$TMP/soon-key.txt"
+grep -q '^HTTP/1.1 303' "$TMP/soon-key.txt" || fail "a valid link is not redirected"
+grep -qiE '^location: (https?://[^/]+)?/$' "$TMP/soon-key.txt" || fail "a valid link does not redirect to /"
+grep -qi '^cache-control: no-store' "$TMP/soon-key.txt" || fail "the redeem answer may be stored by a cache"
+cookie=$(grep -i '^set-cookie: __Host-press-share=' "$TMP/soon-key.txt") || fail "a valid link did not set its cookie"
 for part in HttpOnly Secure SameSite=Lax "Path=/"; do
   echo "$cookie" | grep -qi "; $part" || fail "the share cookie is missing $part"
 done
@@ -132,24 +135,24 @@ OTHER_TENANT="__Host-press-share=$future.$(sign baryo "$future" "$PREVIEW_SECRET
 HAND_SIGNED="__Host-press-share=$future.$(sign soon "$future" "$PREVIEW_SECRET")"
 
 visit() { curl -s -D "$2.head" ${3:+-H "Cookie: $3"} -H "Host: soon.example" "$APP$1" > "$2"; }
-visit / /tmp/soon-1.html "$COOKIE"; real /tmp/soon-1.html || fail "the share cookie does not show the real site"
-tr -d '\r' < /tmp/soon-1.html.head | grep -qi '^cache-control:.*no-store' || fail "the real site behind holding may be stored by a cache"
-grep -q 'href="/coming-soon"' /tmp/soon-1.html && fail "the holding page is in the navigation while holding"
-grep -q 'href="/about"' /tmp/soon-1.html || fail "the other header links went with the holding page's"
-visit / /tmp/soon-2.html; held /tmp/soon-2.html || fail "a visitor without a session got the real site after one with it"
-visit / /tmp/soon-3.html "$COOKIE"; real /tmp/soon-3.html || fail "a visitor with a session got the holding page after one without it"
-visit / /tmp/soon-4.html "__Host-press-share=$KEY"; held /tmp/soon-4.html || fail "the raw key as a cookie shows the real site"
-visit / /tmp/soon-5.html "$EXPIRED"; held /tmp/soon-5.html || fail "an expired cookie shows the real site"
-visit / /tmp/soon-6.html "$FORGED"; held /tmp/soon-6.html || fail "a cookie signed with another secret shows the real site"
-visit / /tmp/soon-7.html "$OTHER_TENANT"; held /tmp/soon-7.html || fail "a cookie signed for another tenant shows the real site"
-visit / /tmp/soon-8.html "$HAND_SIGNED"; real /tmp/soon-8.html || fail "a cookie signed with the secret for this tenant does not show the real site"
+visit / "$TMP/soon-1.html" "$COOKIE"; real "$TMP/soon-1.html" || fail "the share cookie does not show the real site"
+tr -d '\r' < "$TMP/soon-1.html.head" | grep -qi '^cache-control:.*no-store' || fail "the real site behind holding may be stored by a cache"
+grep -q 'href="/coming-soon"' "$TMP/soon-1.html" && fail "the holding page is in the navigation while holding"
+grep -q 'href="/about"' "$TMP/soon-1.html" || fail "the other header links went with the holding page's"
+visit / "$TMP/soon-2.html"; held "$TMP/soon-2.html" || fail "a visitor without a session got the real site after one with it"
+visit / "$TMP/soon-3.html" "$COOKIE"; real "$TMP/soon-3.html" || fail "a visitor with a session got the holding page after one without it"
+visit / "$TMP/soon-4.html" "__Host-press-share=$KEY"; held "$TMP/soon-4.html" || fail "the raw key as a cookie shows the real site"
+visit / "$TMP/soon-5.html" "$EXPIRED"; held "$TMP/soon-5.html" || fail "an expired cookie shows the real site"
+visit / "$TMP/soon-6.html" "$FORGED"; held "$TMP/soon-6.html" || fail "a cookie signed with another secret shows the real site"
+visit / "$TMP/soon-7.html" "$OTHER_TENANT"; held "$TMP/soon-7.html" || fail "a cookie signed for another tenant shows the real site"
+visit / "$TMP/soon-8.html" "$HAND_SIGNED"; real "$TMP/soon-8.html" || fail "a cookie signed with the secret for this tenant does not show the real site"
 [ "$(curl -s -o /dev/null -w '%{http_code}' -H "Cookie: $COOKIE" -H "Host: soon.example" "$APP/sitemap.xml")" = "404" ] || fail "the sitemap is served to a visitor with a session"
-page baryo.dev / > /tmp/baryo-beside-soon.html
-grep -q "shipping-notes" /tmp/baryo-beside-soon.html || fail "baryo.dev is not its real site beside a holding tenant"
-grep -q 'data-press="holding"' /tmp/baryo-beside-soon.html && fail "baryo.dev got a holding page"
+page baryo.dev / > "$TMP/baryo-beside-soon.html"
+grep -q "shipping-notes" "$TMP/baryo-beside-soon.html" || fail "baryo.dev is not its real site beside a holding tenant"
+grep -q 'data-press="holding"' "$TMP/baryo-beside-soon.html" && fail "baryo.dev got a holding page"
 [ "$(status baryo.dev /feed.xml)" = "200" ] || fail "baryo.dev lost its feed beside a holding tenant"
 curl -s -o /dev/null -D - -X POST -H "Host: baryo.dev" --data-urlencode "key=$KEY" "$APP/api/share/redeem" | grep -qi '^set-cookie:' && fail "baryo.dev handed out a share cookie"
-grep -q "$KEY" /tmp/two-hosts-app.log && fail "the share key reached the log"
+grep -q "$KEY" "$TMP/two-hosts-app.log" && fail "the share key reached the log"
 echo "ok: expired, forged, other-tenant and raw-key cookies are held back, and baryo.dev is unaffected"
 
 purge() {
@@ -176,9 +179,9 @@ kill $CMS_PID
 wait $CMS_PID 2>/dev/null || true
 purge baryo.dev > /dev/null
 [ "$(status baryo.dev /)" = "200" ] || fail "baryo.dev is not 200 with the CMS stopped"
-page baryo.dev / > /tmp/baryo-down.html
-grep -q "BaryoDev" /tmp/baryo-down.html || fail "baryo.dev lost its name with the CMS stopped"
-grep -q "#1A6B41" /tmp/baryo-down.html || fail "baryo.dev lost its palette with the CMS stopped"
-grep -q "shipping-notes" /tmp/baryo-down.html || fail "baryo.dev lost its posts with the CMS stopped"
+page baryo.dev / > "$TMP/baryo-down.html"
+grep -q "BaryoDev" "$TMP/baryo-down.html" || fail "baryo.dev lost its name with the CMS stopped"
+grep -q "#1A6B41" "$TMP/baryo-down.html" || fail "baryo.dev lost its palette with the CMS stopped"
+grep -q "shipping-notes" "$TMP/baryo-down.html" || fail "baryo.dev lost its posts with the CMS stopped"
 [ "$(status rckoronadal.org /)" = "200" ] || fail "rckoronadal.org is not 200 with the CMS stopped"
 echo "ok: with the CMS stopped and the cache purged, baryo.dev answers 200 as itself"

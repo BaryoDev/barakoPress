@@ -77,6 +77,18 @@ export async function tenantFromHeaders(
     return isTenantHandle(fallback) ? { tenant: fallback, host: null } : null;
 }
 
+/**
+ * The request headers that pick the tenant beyond what the URL names, as a `Vary` value. Null when the
+ * URL is enough: a build-time site, or one that reads the tenant from `host` alone.
+ */
+export function tenantVary(config: PressConfig): string | null {
+    const sites = config.sites;
+    if (!sites) return null;
+    const named = [sites.tenantHeader, sites.hostHeader === "host" ? undefined : sites.hostHeader];
+    const vary = named.filter((h): h is string => Boolean(h));
+    return vary.length > 0 ? vary.join(", ") : null;
+}
+
 /** The config a request renders with, or null when the request belongs to no tenant. */
 export async function resolveSite(
     config: PressConfig,
@@ -222,9 +234,10 @@ function record(v: unknown): Record<string, unknown> | undefined {
         : undefined;
 }
 
-function array(v: unknown): unknown[] {
+/** Undefined when the field is not a list, so the caller keeps the configured one. */
+function array(v: unknown): unknown[] | undefined {
     const parsed = json(v);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? parsed : undefined;
 }
 
 /** A path on the site, or an absolute http or https URL. Anything else is dropped. */
@@ -252,25 +265,25 @@ function origin(v: unknown): string | undefined {
     return href && !href.startsWith("/") ? withoutTrailingSlashes(href) : undefined;
 }
 
-function links(v: unknown, max = 24): SiteLink[] {
+function links(v: unknown, max = 24): SiteLink[] | undefined {
     return array(v)
-        .map((item) => record(item))
+        ?.map((item) => record(item))
         .map((item) => ({ label: str(item?.label), href: siteHref(item?.href) }))
         .filter((l): l is SiteLink => Boolean(l.label && l.href))
         .slice(0, max);
 }
 
-function footerColumns(v: unknown): FooterColumn[] {
+function footerColumns(v: unknown): FooterColumn[] | undefined {
     return array(v)
-        .map((item) => record(item))
-        .map((item) => ({ heading: str(item?.heading) ?? "", links: links(item?.links) }))
+        ?.map((item) => record(item))
+        .map((item) => ({ heading: str(item?.heading) ?? "", links: links(item?.links) ?? [] }))
         .filter((c) => c.heading || c.links.length > 0)
         .slice(0, 8);
 }
 
-function socialLinks(v: unknown): SocialLink[] {
+function socialLinks(v: unknown): SocialLink[] | undefined {
     return array(v)
-        .map((item) => record(item))
+        ?.map((item) => record(item))
         .map((item) => ({ network: str(item?.network), href: siteHref(item?.href) }))
         .filter((l): l is SocialLink => Boolean(l.network && l.href))
         .slice(0, 12);
@@ -280,7 +293,7 @@ function topBar(v: unknown): TopBar | undefined {
     const bar = record(v);
     if (!bar) return undefined;
     const text = str(bar.text);
-    const barLinks = links(bar.links, 8);
+    const barLinks = links(bar.links, 8) ?? [];
     return text || barLinks.length > 0 ? { text, links: barLinks } : undefined;
 }
 
@@ -393,9 +406,10 @@ export function applySiteSettings(
         shareImage: siteHref(d.ShareImage) ?? base.shareImage,
         copyright: str(d.Copyright) ?? base.copyright,
         topBar: topBar(d.TopBar) ?? base.topBar,
-        headerLinks: d.HeaderLinks !== undefined ? links(d.HeaderLinks) : base.headerLinks,
-        footerColumns: d.FooterColumns !== undefined ? footerColumns(d.FooterColumns) : base.footerColumns,
-        socialLinks: d.SocialLinks !== undefined ? socialLinks(d.SocialLinks) : base.socialLinks,
+        // A list saved empty clears the configured one. A field that is not a list keeps it.
+        headerLinks: links(d.HeaderLinks) ?? base.headerLinks,
+        footerColumns: footerColumns(d.FooterColumns) ?? base.footerColumns,
+        socialLinks: socialLinks(d.SocialLinks) ?? base.socialLinks,
     };
 
     const theme: PressTheme = {

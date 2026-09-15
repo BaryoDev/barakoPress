@@ -116,12 +116,6 @@ export function createRevalidateRoute(config: PressConfig, options: RevalidateOp
             return NextResponse.json({ error: "bad signature" }, { status: 401 });
         }
 
-        if (alreadyHonoured(signature)) {
-            // Honest 200: the purge this delivery asked for has already happened, so the CMS has
-            // no reason to retry. A 401 here would make a legitimate retry look like an attack.
-            return NextResponse.json({ revalidated: true, repeated: true });
-        }
-
         /*
          * No cache warming here, deliberately.
          *
@@ -147,6 +141,13 @@ export function createRevalidateRoute(config: PressConfig, options: RevalidateOp
             const found = await tenantFromHeaders(config, request.headers);
             if (!found) return NextResponse.json({ error: "no site for this host" }, { status: 404 });
             tag = cacheTagFor({ ...config, tenant: found.tenant });
+        }
+
+        // After the tenant resolved, so a lookup that failed with the CMS down leaves the retry free to purge.
+        if (alreadyHonoured(signature)) {
+            // Honest 200: the purge this delivery asked for has already happened, so the CMS has
+            // no reason to retry. A 401 here would make a legitimate retry look like an attack.
+            return NextResponse.json({ revalidated: true, repeated: true });
         }
 
         revalidateTag(tag, { expire: 0 });

@@ -19,7 +19,7 @@ vi.mock("next/navigation", () => ({
 
 const { defineConfig } = await import("./config.js");
 const { listPosts } = await import("./cms.js");
-const { forgetCachedReads } = await import("./delivery.js");
+const { forgetCachedReads, tenantForHost } = await import("./delivery.js");
 const { applySiteSettings, normaliseHost, resolveSite, siteConfig, tenantFromHeaders } = await import("./site.js");
 const { createFeed } = await import("./routes/feed.js");
 const { createSitemap } = await import("./routes/sitemap.js");
@@ -334,6 +334,30 @@ describe("one build serving two sites", () => {
     });
 });
 
+describe("the feed behind a shared cache", () => {
+    it("varies on a tenant header and on a host header other than host, since the URL names neither", async () => {
+        vi.stubGlobal("fetch", cms().fetchMock);
+
+        onHost("anything.example", { "x-press-tenant": "baryo" });
+        const byTenant = await createFeed(defineConfig({ sites: { tenantHeader: "X-Press-Tenant" }, cmsUrl: CMS }))();
+        expect(await byTenant.text()).toContain("https://baryo.dev/blog/shipping-notes");
+        expect(byTenant.headers.get("vary")).toBe("x-press-tenant");
+
+        onHost("internal", { "x-forwarded-host": "baryo.dev" });
+        const byHost = await createFeed(defineConfig({ sites: { hostHeader: "X-Forwarded-Host" }, cmsUrl: CMS }))();
+        expect(await byHost.text()).toContain("https://baryo.dev/blog/shipping-notes");
+        expect(byHost.headers.get("vary")).toBe("x-forwarded-host");
+    });
+
+    it("adds no Vary when the host header alone picks the tenant", async () => {
+        vi.stubGlobal("fetch", cms().fetchMock);
+        onHost("baryo.dev");
+        const res = await createFeed(requestTime())();
+        expect(await res.text()).toContain("https://baryo.dev/blog/shipping-notes");
+        expect(res.headers.get("vary")).toBeNull();
+    });
+});
+
 describe("while the CMS is down", () => {
     it("serves each tenant its own last good pages, identity and theme", async () => {
         vi.stubGlobal("fetch", cms().fetchMock);
@@ -370,6 +394,29 @@ describe("while the CMS is down", () => {
         await expect(listPosts(baryo!)).resolves.toMatchObject({ posts: [{ slug: "shipping-notes" }] });
     });
 
+    it("keeps a host's tenant for another minute after a failed lookup, instead of asking again on every request", async () => {
+        const config = requestTime();
+        let now = 1_000_000;
+        vi.spyOn(Date, "now").mockImplementation(() => now);
+        vi.stubGlobal("fetch", cms().fetchMock);
+        expect(await tenantForHost(config, "baryo.dev")).toBe("baryo");
+
+        const down = cms({ down: true });
+        vi.stubGlobal("fetch", down.fetchMock);
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        now += 61_000;
+        expect(await tenantForHost(config, "baryo.dev")).toBe("baryo");
+        now += 1_000;
+        expect(await tenantForHost(config, "baryo.dev")).toBe("baryo");
+        now += 1_000;
+        expect(await tenantForHost(config, "baryo.dev")).toBe("baryo");
+
+        expect(down.calls).toHaveLength(1);
+        now += 61_000;
+        expect(await tenantForHost(config, "baryo.dev")).toBe("baryo");
+        expect(down.calls).toHaveLength(2);
+    });
+
     it("replaces the kept answer on the next successful read", async () => {
         const config = requestTime();
         let title = "first";
@@ -394,6 +441,33 @@ describe("while the CMS is down", () => {
 
 describe("applySiteSettings", () => {
     const base = { ...defineConfig({ sites: {}, site: { name: "Fallback" }, theme: { colors: { accent: "#000001" } } }), tenant: "t" };
+
+    it("keeps the configured links, footer columns and social links when a field is not a list, and clears them when it is an empty one", () => {
+        const configured = {
+            ...base,
+            site: {
+                ...base.site,
+                headerLinks: [{ label: "Home", href: "/" }],
+                footerColumns: [{ heading: "Club", links: [{ label: "About", href: "/about" }] }],
+                socialLinks: [{ network: "facebook", href: "https://facebook.com/x" }],
+            },
+        };
+
+        for (const wrong of ["[not json", { label: "Home" }, 5, "\"text\"", null]) {
+            const out = applySiteSettings(configured, { HeaderLinks: wrong, FooterColumns: wrong, SocialLinks: wrong }, null);
+            expect(out.site.headerLinks).toHaveLength(1);
+            expect(out.site.headerLinks).toEqual(configured.site.headerLinks);
+            expect(out.site.footerColumns).toHaveLength(1);
+            expect(out.site.footerColumns).toEqual(configured.site.footerColumns);
+            expect(out.site.socialLinks).toHaveLength(1);
+            expect(out.site.socialLinks).toEqual(configured.site.socialLinks);
+        }
+
+        const cleared = applySiteSettings(configured, { HeaderLinks: [], FooterColumns: "[]", SocialLinks: [] }, null);
+        expect(cleared.site.headerLinks).toEqual([]);
+        expect(cleared.site.footerColumns).toEqual([]);
+        expect(cleared.site.socialLinks).toEqual([]);
+    });
 
     it("falls back to the configured identity and theme when there are no settings", () => {
         const out = applySiteSettings(base, undefined, "t.example");
