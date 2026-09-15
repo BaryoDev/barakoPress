@@ -106,10 +106,27 @@ function remember(key: string, text: string) {
     }
 }
 
-/** For tests: forget every kept answer and every host lookup. */
+/*
+ * When a read last failed, per kept answer. Until this has passed, the read answers from the kept copy
+ * without asking the CMS, so during an outage a purged page costs one request every few seconds and
+ * not one per visitor, each waiting out the timeout. Only a key with a kept answer gets a marker, and
+ * the map is capped like the host map.
+ */
+const FAILED_READ_TTL_MS = 10_000;
+const FAILED_MAX = 1000;
+const failedAt = new Map<string, number>();
+
+function markFailed(key: string) {
+    failedAt.delete(key);
+    failedAt.set(key, Date.now());
+    while (failedAt.size > FAILED_MAX) failedAt.delete(failedAt.keys().next().value as string);
+}
+
+/** For tests: forget every kept answer, failed read and host lookup. */
 export function forgetCachedReads() {
     stale.clear();
     staleChars = 0;
+    failedAt.clear();
     hosts.clear();
 }
 
@@ -129,9 +146,15 @@ interface ReadOptions {
 }
 
 async function read<T>(config: PressConfig, path: string, opts: ReadOptions): Promise<T> {
+    if (opts.staleKey) {
+        const at = failedAt.get(opts.staleKey);
+        const kept = stale.get(opts.staleKey);
+        if (at !== undefined && Date.now() - at < FAILED_READ_TTL_MS && kept !== undefined) return JSON.parse(kept) as T;
+    }
     try {
         const res = await fetch(`${config.cmsUrl}${path}`, {
             headers: opts.headers,
+            signal: AbortSignal.timeout(config.cmsTimeoutMs),
             next: {
                 tags: [opts.tag],
                 // Zero means no backstop, which Next spells as false.
@@ -141,11 +164,15 @@ async function read<T>(config: PressConfig, path: string, opts: ReadOptions): Pr
         if (!res.ok) throw new CmsError(path, res.status);
         const text = await res.text();
         const value = JSON.parse(text) as T;
-        if (opts.staleKey) remember(opts.staleKey, text);
+        if (opts.staleKey) {
+            remember(opts.staleKey, text);
+            failedAt.delete(opts.staleKey);
+        }
         return value;
     } catch (e) {
         const kept = opts.staleKey ? stale.get(opts.staleKey) : undefined;
         if (kept === undefined || !worthServingStale(e)) throw e;
+        markFailed(opts.staleKey!);
         const why = e instanceof Error ? e.message : String(e);
         console.warn(`cms: ${path} for tenant "${config.tenant ?? ""}" failed (${why}), serving the last good answer`);
         return JSON.parse(kept) as T;
@@ -166,6 +193,7 @@ async function getFresh<T>(config: PressConfig, path: string): Promise<T | null>
     const res = await fetch(`${config.cmsUrl}${path}`, {
         headers: headers(config),
         cache: "no-store",
+        signal: AbortSignal.timeout(config.cmsTimeoutMs),
     });
     if (res.status === 404) return null;
     if (!res.ok) throw new CmsError(path, res.status);
@@ -199,7 +227,7 @@ export async function tenantForHost(config: PressConfig, host: string): Promise<
     const path = `/api/tenants/by-host/${encodeURIComponent(host)}`;
     let tenant: string | null;
     try {
-        const res = await fetch(`${config.cmsUrl}${path}`, { cache: "no-store" });
+        const res = await fetch(`${config.cmsUrl}${path}`, { cache: "no-store", signal: AbortSignal.timeout(config.cmsTimeoutMs) });
         if (res.status === 404) tenant = null;
         else if (!res.ok) throw new CmsError(path, res.status);
         else {
@@ -325,7 +353,11 @@ export async function pageAtPath(config: PressConfig, path: string): Promise<Res
             warnContract(config, `the page at ${path}`, res.contract);
             return null;
         }
-        return res.entry && typeof res.entry === "object" ? res : null;
+        // An entry without its data would throw in toPage, and that is a 500 for a body that is only malformed.
+        const entry = res.entry as Partial<PublicContent> | null | undefined;
+        return entry && typeof entry === "object" && entry.data && typeof entry.data === "object" && !Array.isArray(entry.data)
+            ? res
+            : null;
     } catch (e) {
         if (e instanceof CmsError && e.status === 404) return null;
         throw e;

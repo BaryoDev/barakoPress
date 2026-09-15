@@ -174,6 +174,8 @@ export interface PressConfig {
     cacheTag: string;
     /** How long a cached read may live with no webhook. Zero disables the backstop. */
     backstopSeconds: number;
+    /** How long a read from the CMS may take before it counts as failed and the last good answer stands in. */
+    cmsTimeoutMs: number;
     /** Passed to toLocaleDateString. */
     locale: string;
     /** Where the CMS is, from this server. */
@@ -299,6 +301,7 @@ export function defineConfig(
         pageSizes: { index: 20, feed: 50, sitemap: 1000, archive: 50, ...input.pageSizes },
         cacheTag: input.cacheTag ?? "cms",
         backstopSeconds: input.backstopSeconds ?? 300,
+        cmsTimeoutMs: input.cmsTimeoutMs && input.cmsTimeoutMs > 0 ? input.cmsTimeoutMs : 5_000,
         locale: input.locale ?? "en-GB",
         cmsUrl: trimSlash(input.cmsUrl ?? process.env.CMS_URL ?? "http://localhost:5005"),
         tenant: input.tenant ?? process.env.CMS_TENANT ?? undefined,

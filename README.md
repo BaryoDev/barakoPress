@@ -262,6 +262,7 @@ for a post type with no such field.
 | `pageSizes` | 20, 50, 1000, 50 | Index, feed, sitemap, archive |
 | `cacheTag` | `cms` | The tag this site purges. Two sites on one server need two tags |
 | `backstopSeconds` | 300 | How long a cached read may live with no webhook. 0 disables it |
+| `cmsTimeoutMs` | 5000 | How long a read from the CMS may take. Past it the read has failed, and a request-time site answers from its last good copy |
 | `locale` | `en-GB` | Passed to `toLocaleDateString` |
 | `cmsUrl` | `CMS_URL`, or `http://localhost:5005` | Where the CMS is, from this server |
 | `tenant` | `CMS_TENANT` | Tenant slug, for a multi-tenant deployment. On a request-time site, pins every host to it |
@@ -317,8 +318,10 @@ tenant's webhook at `https://<that tenant's domain>/api/revalidate`, signed with
 cached reads in place.
 
 **When the CMS is down.** Each successful read is also kept in process, keyed by CMS, tenant and path.
-A read that fails with a network error or a 5xx answers from the last good copy and logs a warning;
-the next successful read replaces it. Known hosts keep resolving the same way. A page that was cached
+A read that fails with a network error, a 5xx, or no answer within `cmsTimeoutMs` answers from the
+last good copy and logs a warning; the next successful read replaces it. For ten seconds after such a
+failure that read answers from the copy without asking the CMS, so an outage costs one request per
+read every ten seconds rather than one per visitor. Known hosts keep resolving the same way. A page that was cached
 for a tenant keeps answering 200 with that tenant's identity and theme. A tenant never gets another
 tenant's kept answer.
 
