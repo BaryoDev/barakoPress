@@ -407,12 +407,13 @@ tenant's kept answer.
 
 **Holding mode.** A tenant can show a holding page on every route in place of its site, for a launch,
 maintenance or a seasonal break, and share the real site with a few people through site share links.
-Two fields on the `site` entry control it:
+Three fields on the `site` entry control it:
 
 | Field | Type | What |
 | --- | --- | --- |
 | `Mode` | string | `Live` or `Holding`. Unset, or anything else, is `Live` |
-| `HoldingPath` | string | A site path such as `/coming-soon`. The page the Pages module serves there is the holding page. Empty, or nothing served there, renders the name, tagline and "Coming soon." in the theme |
+| `HoldingPath` | string | A site path such as `/coming-soon`. The page the Pages module serves there is the holding page. Empty, or nothing served there, renders the default holding page: the name, the tagline and `HoldingMessage`, in the theme |
+| `HoldingMessage` | string | The line the default holding page shows under the name and tagline, as text, for example `Closed until 6 January.` Unset or blank shows no line. Read only while holding. For more than a sentence, use `HoldingPath` |
 
 Holding is presentation, not access control: the API still delivers every published entry. Content
 that must stay hidden before launch stays unpublished with a scheduled publish.
