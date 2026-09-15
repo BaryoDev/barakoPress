@@ -104,7 +104,7 @@ export function createShareRedeemRoute(base: PressConfig) {
 
         const secret = shareSecret();
         if (!secret) {
-            console.warn("share links: PRESS_PREVIEW_SECRET is unset or shorter than 32 characters, so no session can be issued");
+            console.warn("share links: PRESS_SECRET (else PRESS_PREVIEW_SECRET) is unset or shorter than 32 characters, so no session can be issued");
             return refused();
         }
 

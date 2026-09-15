@@ -18,6 +18,7 @@ import {
     type TopBar,
 } from "./config.js";
 import { CmsError, isTenantHandle, list, tenantForHost } from "./delivery.js";
+import { readSecret } from "./secret.js";
 import type { PressTheme, ThemeColors, ThemeFonts, ThemeLayout, ThemeRadii } from "./theme.js";
 
 /*
@@ -133,7 +134,7 @@ export async function siteConfig(config: PressConfig): Promise<PressConfig> {
  *
  * barakoCMS checks a share link once, when it is redeemed. What that check buys is a cookie this
  * process can verify on every later request without asking the CMS again: an expiry and an
- * HMAC-SHA256 over the tenant and that expiry, keyed with PRESS_PREVIEW_SECRET. The tenant is in the
+ * HMAC-SHA256 over the tenant and that expiry, keyed with PRESS_SECRET. The tenant is in the
  * signature, so a cookie made for one tenant opens no other. The cost is that revoking a link in the
  * CMS does not end a session already made from it; the 24 hour cap bounds that. Rotating the secret
  * ends every session, for every tenant at once.
@@ -145,14 +146,15 @@ export const SHARE_COOKIE = "__Host-press-share";
 /** The longest a session made from a share link lasts, whatever the link's own expiry. */
 export const SHARE_SESSION_MAX_SECONDS = 24 * 60 * 60;
 
-/** Below this the secret is a guess away, so it counts as unset. */
-const MIN_SECRET_LENGTH = 32;
 const SHARE_VALUE = /^(\d{1,12})\.([A-Za-z0-9_-]{43})$/;
 
-/** PRESS_PREVIEW_SECRET, read per request. Null when unset or too short, which turns sessions off. */
+/**
+ * PRESS_SECRET, else PRESS_PREVIEW_SECRET, read per request. Null when unset or shorter than
+ * MIN_SECRET_LENGTH, which turns sessions off.
+ */
 export function shareSecret(): string | null {
-    const secret = process.env.PRESS_PREVIEW_SECRET;
-    return secret && secret.length >= MIN_SECRET_LENGTH ? secret : null;
+    const secret = readSecret("press-share");
+    return secret && !secret.short ? secret.value : null;
 }
 
 function shareSignature(tenant: string, expires: number, secret: string): Buffer {
