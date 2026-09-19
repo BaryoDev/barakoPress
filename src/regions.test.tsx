@@ -254,6 +254,18 @@ describe("reading the region settings", () => {
         }
     });
 
+    it("merges the path and the tone one at a time over the configured region", () => {
+        const configured = { ...base, regions: { footer: { path: "/built/in", tone: "inverse" as const } } };
+        // Only a tone set: the configured path stays and the tenant's tone wins.
+        expect(applySiteSettings(configured, { FooterTone: "surface" }, null).regions).toEqual({
+            footer: { path: "/built/in", tone: "surface" },
+        });
+        // Only a path set: the configured tone stays.
+        expect(applySiteSettings(configured, { FooterPath: "/tenant/footer" }, null).regions).toEqual({
+            footer: { path: "/tenant/footer", tone: "inverse" },
+        });
+    });
+
     it("keeps the configured region when the setting is unset or wrong", () => {
         const configured = { ...base, regions: { footer: { path: "/built/in" as string } } };
         expect(applySiteSettings(configured, {}, null).regions).toEqual({ footer: { path: "/built/in" } });

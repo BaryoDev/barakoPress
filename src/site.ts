@@ -383,22 +383,25 @@ function holding(d: Record<string, unknown>): Holding | undefined {
 /*
  * A block region from its two settings: the page path and the tone behind it (#48).
  *
- * A path that is not a plain site path leaves the region unset, so the built-in header or footer
- * renders rather than nothing. A tone that is not one of the theme's tones is dropped and the
- * region falls back to `page`, the same way every other setting that fails its shape is dropped.
+ * The two merge over the configured region one at a time, the way `Tagline` and `Logo` do, so a
+ * tenant that sets only a tone keeps the configured path and gets its own tone. A path that is not
+ * a plain site path leaves the configured one, and no path at all leaves the region unset, so the
+ * built-in header or footer renders rather than nothing. A tone that is not one of the theme's
+ * tones is dropped and the region falls back to `page`.
  */
-function region(path: unknown, tone: unknown): Region | undefined {
-    const at = sitePath(path);
+function region(base: Region | undefined, path: unknown, tone: unknown): Region | undefined {
+    const at = sitePath(path) ?? base?.path;
     if (!at) return undefined;
     const name = str(tone)?.toLowerCase();
     const known = name !== undefined && (TONES as readonly string[]).includes(name);
-    return { path: at, ...(known ? { tone: name as ToneName } : {}) };
+    const chosen = known ? (name as ToneName) : base?.tone;
+    return { path: at, ...(chosen ? { tone: chosen } : {}) };
 }
 
-/** The tenant's regions, each falling back to the configured one when the setting is unset or wrong. */
+/** The tenant's regions, each merged over the configured one. */
 function regions(base: SiteRegions | undefined, d: Record<string, unknown>): SiteRegions | undefined {
-    const header = region(d.HeaderPath, d.HeaderTone) ?? base?.header;
-    const footer = region(d.FooterPath, d.FooterTone) ?? base?.footer;
+    const header = region(base?.header, d.HeaderPath, d.HeaderTone);
+    const footer = region(base?.footer, d.FooterPath, d.FooterTone);
     if (!header && !footer) return undefined;
     return { ...(header ? { header } : {}), ...(footer ? { footer } : {}) };
 }
