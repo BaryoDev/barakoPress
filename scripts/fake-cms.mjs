@@ -42,10 +42,27 @@ const tenants = {
             Fonts: { heading: "Zilla Slab" },
             Collections: { projects: PROJECTS_COLLECTION },
             OptionColors: { "project.AreaOfFocus": { "Providing clean water": "sky", "Supporting education": "gold" } },
+            // A footer region (#48): the page below is drawn as the footer, in place of the built-in one.
+            FooterPath: "/site/footer",
+            FooterTone: "surface",
         },
         post: "club-news",
-        navigation: [nav("p", "Projects", "/projects", 1)],
+        // The footer page is in the menu the CMS returns, and must be drawn as the footer and nowhere else.
+        navigation: [nav("p", "Projects", "/projects", 1), nav("f", "Footer", "/site/footer", 2)],
         content: { project: PROJECTS },
+        pages: {
+            "/site/footer": {
+                id: "sf",
+                slug: "footer",
+                data: {
+                    Title: "Footer",
+                    Blocks: [
+                        { type: "text", props: { value: "Meets Tuesdays at 6pm", variant: "heading" } },
+                        { type: "text", props: { value: "Written by {{site.Name}}", variant: "small" } },
+                    ],
+                },
+            },
+        },
     },
     baryo: {
         host: "baryo.dev",

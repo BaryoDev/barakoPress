@@ -89,6 +89,18 @@ page rckoronadal.org /sitemap.xml > "$TMP/rotary-sitemap.xml"
 grep -q "<loc>https://rckoronadal.org/projects/clean-water</loc>" "$TMP/rotary-sitemap.xml" || fail "the sitemap does not list rckoronadal.org's projects"
 echo "ok: rckoronadal.org renders its projects collection from its settings, coloured by option, and baryo.dev does not"
 
+# The footer as a block region (#48). rckoronadal.org names a page at /site/footer; baryo.dev names
+# nothing and keeps the built-in footer, which is the compatibility case a deployed site is in.
+grep -q 'data-press="footer"' "$TMP/rotary.html" || fail "rckoronadal.org does not draw its footer region"
+grep -q "Meets Tuesdays at 6pm" "$TMP/rotary.html" || fail "the footer region's blocks did not render"
+grep -q "Written by Rotary Club of Koronadal" "$TMP/rotary.html" || fail "a binding in the footer region did not resolve"
+# An if, not `&& fail`: under errexit a grep that finds nothing would end the script itself.
+if grep -q 'href="/site/footer"' "$TMP/rotary.html"; then fail "the footer region page is in the menu"; fi
+if grep -q "<loc>https://rckoronadal.org/site/footer</loc>" "$TMP/rotary-sitemap.xml"; then fail "the footer region page is in the sitemap"; fi
+if grep -q 'data-press="footer"' "$TMP/baryo.html"; then fail "baryo.dev drew a region it never asked for"; fi
+grep -q "<footer style=\"background:#101223" "$TMP/baryo.html" || fail "baryo.dev lost the built-in footer"
+echo "ok: rckoronadal.org draws its footer from a page of blocks, out of the menu and the sitemap, and baryo.dev keeps the built-in footer"
+
 [ "$(status unknown.example /)" = "404" ] || fail "a host with no tenant is not a 404"
 [ "$(status unknown.example /feed.xml)" = "404" ] || fail "the feed for a host with no tenant is not a 404"
 echo "ok: a host with no tenant is a 404"

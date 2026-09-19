@@ -525,7 +525,8 @@ The settings are the singleton `site` type from barakoCMS `docs/site-settings.md
 (`POST /api/content-types/blueprints/site`, then publish its one entry). The engine reads `Name`,
 `Tagline`, `Url`, `Locale`, `Logo`, `LogoAlt`, `FooterLogo`, `Favicon`, `ShareImage`, `Copyright`,
 `Colors` (the theme slots), `Fonts` (Google Fonts family names), `Radii`, `Layout`, `TopBar`,
-`HeaderLinks`, `FooterColumns` and `SocialLinks`. `Collections` and `OptionColors` are read as the collections section
+`HeaderLinks`, `FooterColumns`, `SocialLinks`, `HeaderPath`, `HeaderTone`, `FooterPath` and
+`FooterTone`. `Collections` and `OptionColors` are read as the collections section
 describes. `Variants` are not rendered yet. Every value is checked for shape; one that fails, and any the
 entry leaves out, keeps the configured value, so a half-filled theme renders. A link is a path on the
 site or an absolute http or https URL. Set `Url`: without it the feed and sitemap fall back to the
@@ -533,6 +534,43 @@ host the tenant was found by.
 
 `createSiteLayout` and `createSiteMetadata` render the root layout from all of this: `lang`, the
 faces, the palette, the top bar, header links, footer columns, social links and the copyright line.
+
+**Header and footer as block regions.** The built-in header and footer take links and text and
+nothing else, so a clinic that wants a light footer with opening hours and a map cannot have one, and
+a school that wants an enrolment banner with a button cannot either. Point a region at a page and its
+blocks are drawn there instead, resolved and bound exactly as the page route resolves and binds them.
+
+| Field | Type | What |
+| --- | --- | --- |
+| `HeaderPath` | string | A site path such as `/site/header`. The page served there is drawn in place of the top bar and the header band |
+| `HeaderTone` | string | `page`, `surface`, `accent` or `inverse`: the tone behind the header region. `page` when unset or not one of the four |
+| `FooterPath` | string | A site path such as `/site/footer`. The page served there is drawn in place of the footer |
+| `FooterTone` | string | The same four names, behind the footer region |
+
+Set neither and nothing changes: `TopBar`, `HeaderLinks`, `FooterColumns`, `SocialLinks` and
+`Copyright` draw the built-in chrome with the markup they always had, which is what keeps a site
+whose own CSS keys off that markup rendering. A path with nothing served at it does the same, so
+naming a page before writing it is safe, and so is a typo.
+
+A region page is chrome rather than somewhere to go, so it is left out of the menu and the sitemap.
+It still answers on its own route, which is how an editor opens it to work on it.
+
+A header region replaces the whole band, the site name, the menu and the RSS link along with the top
+bar. There is no navigation or logo block yet, so a header region lists its own links until the block
+library has one.
+
+A build-time site sets the same thing in its config, and a tenant's settings win over it:
+
+```ts
+export const config = defineConfig({
+    site: { name: "Mabini Clinic", url: "https://clinic.example" },
+    pages: "",
+    regions: { footer: { path: "/site/footer", tone: "surface" } },
+});
+```
+
+The registry the regions render with is the one passed to `createSiteLayout(config, { blocks })`, and
+the built-in blocks when none was passed.
 
 **Caching per tenant.** Every read carries the tenant in `X-Tenant` and in its cache tag,
 `<cacheTag>:<tenant>`. The webhook purges the tag of the tenant its host resolves to, so point each
