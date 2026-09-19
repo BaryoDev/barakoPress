@@ -69,7 +69,20 @@ export function forgetPresetWarnings(): void {
     said.clear();
 }
 
-const forTenant = (tenant: string | undefined) => (tenant ? ` for tenant "${tenant}"` : "");
+/**
+ * Who a warning is about.
+ *
+ * A function is resolved when a warning is emitted, not when the caller was built. `createBlockRegistry`
+ * runs at module scope in a site's `press.config.ts`, and a tenant that comes from `CMS_TENANT` must not
+ * be read there (barakoPress #51). Deferring it keeps the name in the line that needs it, and a site with
+ * no preset to complain about never resolves it at all.
+ */
+export type TenantLabel = string | (() => string | undefined) | undefined;
+
+const forTenant = (tenant: TenantLabel) => {
+    const name = typeof tenant === "function" ? tenant() : tenant;
+    return name ? ` for tenant "${name}"` : "";
+};
 
 /**
  * The most drops one reading of a tenant's settings spells out, before it says how many are left.
@@ -263,7 +276,7 @@ export const MAX_PRESET_BLOCKS = MAX_BLOCKS * 4;
 export function withPresets(
     registry: BlockRegistry,
     presets: readonly BlockPreset[],
-    tenant?: string,
+    tenant?: TenantLabel,
 ): BlockRegistry {
     if (presets.length === 0) return registry;
     const out = new Map(registry);

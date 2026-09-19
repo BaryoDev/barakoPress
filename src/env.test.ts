@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createBlockRegistry } from "./blocks/registry.js";
+import { forgetPresetWarnings } from "./blocks/presets.js";
 import { cmsUrlFor, defineConfig, pinnedTenant } from "./config.js";
 import { list } from "./delivery.js";
 import { ENV_NAMES, readEnv, type PressEnv } from "./env.js";
@@ -27,6 +29,7 @@ const stub = (values: Record<string, string | undefined>) => restores.push(set(v
 afterEach(() => {
     restores.splice(0).forEach((undo) => undo());
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
 });
 
 describe("readEnv", () => {
@@ -174,5 +177,44 @@ describe("a build-time site with CMS_URL and CMS_TENANT in the environment", () 
 
         const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
         expect(init.headers).toEqual({});
+    });
+});
+
+/*
+ * The preset warnings of #33 exist so a person can tell whose preset was dropped and why. Taking the
+ * CMS_TENANT read out of createBlockRegistry, which runs at module scope in a site's press.config.ts,
+ * must not cost them that name. It is resolved in the warning instead, so a site with nothing to warn
+ * about never reads the variable at all.
+ */
+describe("a preset dropped while the registry is built", () => {
+    const clashing = [{ type: "section", label: "Mine", fields: [], blocks: [] }];
+
+    function build(): string[] {
+        forgetPresetWarnings();
+        const warnings: string[] = [];
+        vi.spyOn(console, "warn").mockImplementation((m: unknown) => void warnings.push(String(m)));
+        const config = defineConfig({ site: { name: "T", url: "https://t.example" } });
+        createBlockRegistry(config, [], { presets: clashing });
+        return warnings;
+    }
+
+    it("names the tenant CMS_TENANT pins the build to", () => {
+        stub({ CMS_TENANT: "academy" });
+
+        const warnings = build();
+
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toContain('the preset "section"');
+        expect(warnings[0]).toContain('for tenant "academy"');
+    });
+
+    it("names no tenant when CMS_TENANT is unset", () => {
+        stub({ CMS_TENANT: undefined });
+
+        const warnings = build();
+
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toContain('the preset "section"');
+        expect(warnings[0]).not.toContain("for tenant");
     });
 });

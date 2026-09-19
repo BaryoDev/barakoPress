@@ -515,9 +515,6 @@ per request, so when a value was read depended on which value it was.
 Values are used exactly as the environment has them, untrimmed. A secret with a trailing space is a
 different HMAC key, so trimming one here would stop a webhook that verifies today.
 
-`cmsUrlFor(config)` and `pinnedTenant(config)` are exported, so a middleware or a hand-written route
-can ask where the CMS is and which tenant the process is pinned to without reading a variable itself.
-
 **A site is build time or request time.** Without `sites`, identity is build time: the index, the
 feed, the sitemap and robots are prerendered, so anything *your own* `press.config.ts` reads from the
 environment is baked when you build, not when the server starts. Write per-site values as literals in

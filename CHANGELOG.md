@@ -7,9 +7,7 @@
   `press.config.ts` is first imported, while `CMS_DEFAULT_TENANT`, `CMS_RENDERER_KEY`,
   `PRESS_CONSOLE_ORIGINS` and the secrets were read per request. When a variable was read depended on
   which variable it was. Nothing outside `src/env.ts` names `process.env` now, and a test fails if
-  that changes. Variable names, defaults and precedence are unchanged, and `cmsUrlFor(config)` and
-  `pinnedTenant(config)` are exported so a middleware or a hand-written route can ask where the CMS
-  is and which tenant the process is pinned to without reading a variable itself. (#51)
+  that changes. Variable names, defaults and precedence are unchanged. (#51)
 - Redeeming a share link is bounded by `cmsTimeoutMs`, like every other call to the CMS, instead of a
   fixed five seconds. An operator who lowers the timeout for a site on a slow network meant that call
   too. The default is still 5000ms, so a site that leaves `cmsTimeoutMs` alone behaves as it did.

@@ -1,4 +1,4 @@
-import type { PressConfig } from "../config.js";
+import { pinnedTenant, type PressConfig } from "../config.js";
 import { builtInBlocks } from "./built-in.js";
 import { libraryPresets } from "./library.js";
 import { withPresets, type BlockPreset } from "./presets.js";
@@ -38,7 +38,9 @@ export function createBlockRegistry(
         own.add(block.type);
         registry.set(block.type, block);
     }
-    return withPresets(registry, options.presets ?? config.presets, config.tenant);
+    // Lazily, because this runs at module scope in a site's press.config.ts: the name is resolved in
+    // the warning that needs it, not here (barakoPress #51).
+    return withPresets(registry, options.presets ?? config.presets, () => pinnedTenant(config));
 }
 
 /**
@@ -49,5 +51,5 @@ export function createBlockRegistry(
  * tenant has presets and the same map when it does not.
  */
 export function registryFor(config: PressConfig, registry: BlockRegistry): BlockRegistry {
-    return withPresets(registry, config.presets, config.tenant);
+    return withPresets(registry, config.presets, () => pinnedTenant(config));
 }
