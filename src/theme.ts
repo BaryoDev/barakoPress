@@ -16,6 +16,8 @@
  * the house look passes nothing.
  */
 
+import { fontSourcesFrom } from "./fonts.js";
+
 export interface ThemeColors {
     /** The page behind the bands. */
     pageBg: string;
@@ -55,6 +57,14 @@ export interface ThemeFonts {
     /** Code, meta and labels. The distinction is load bearing: every machine-produced value is mono. */
     mono: string;
 }
+
+export type FontRole = keyof ThemeFonts;
+
+/**
+ * The stylesheet that loads a role's face, for a site that does not load it from Google Fonts. Held
+ * to the deployment's allow list when the head is built. The reasoning is in fonts.ts.
+ */
+export type ThemeFontSources = Partial<Record<FontRole, string>>;
 
 export interface ThemeRadii {
     panel: string;
@@ -116,6 +126,11 @@ export interface SuppliedAsset {
 export interface PressTheme {
     colors: ThemeColors;
     fonts: ThemeFonts;
+    /**
+     * Where a role's face is loaded from, when it is not Google Fonts. Absent, and for any role it
+     * leaves out, the family name is linked from Google Fonts as it always was.
+     */
+    fontSources?: ThemeFontSources;
     radii: ThemeRadii;
     layout: ThemeLayout;
     space: ThemeSpace;
@@ -131,6 +146,7 @@ export interface PressTheme {
 export type PressThemeInput = {
     colors?: Partial<ThemeColors>;
     fonts?: Partial<ThemeFonts>;
+    fontSources?: ThemeFontSources;
     radii?: Partial<ThemeRadii>;
     layout?: Partial<ThemeLayout>;
     space?: Partial<ThemeSpace>;
@@ -208,9 +224,13 @@ function suppliedAssets(input: readonly SuppliedAsset[] | undefined): readonly S
 }
 
 export function resolveTheme(input: PressThemeInput | undefined): PressTheme {
+    // A stylesheet a site configures is checked for shape the same as one a tenant saves, so a typo
+    // here is a missing face rather than a link to nowhere in every page.
+    const sources = fontSourcesFrom(input?.fontSources);
     return {
         colors: { ...DEFAULT_THEME.colors, ...input?.colors },
         fonts: { ...DEFAULT_THEME.fonts, ...input?.fonts },
+        ...(sources ? { fontSources: sources } : {}),
         radii: { ...DEFAULT_THEME.radii, ...input?.radii },
         layout: { ...DEFAULT_THEME.layout, ...input?.layout },
         space: { ...DEFAULT_THEME.space, ...input?.space },

@@ -524,6 +524,9 @@ them only behind a proxy that sets the header and strips a caller's value.
 The settings are the singleton `site` type from barakoCMS `docs/site-settings.md`
 (`POST /api/content-types/blueprints/site`, then publish its one entry). The engine reads `Name`,
 `Tagline`, `Url`, `Locale`, `Logo`, `LogoAlt`, `FooterLogo`, `Favicon`, `ShareImage`, `Copyright`,
+`Colors` (the theme slots), `Fonts` (a family name per role, and the stylesheet that loads it),
+`Radii`, `Layout`, `TopBar`, `HeaderLinks`, `FooterColumns`, `SocialLinks`, `HeaderPath`,
+`HeaderTone`, `FooterPath` and `FooterTone`. `Collections` and `OptionColors` are read as the collections section
 `Colors` (the theme slots), `Fonts` (Google Fonts family names), `Radii`, `Layout`, `TopBar`,
 `HeaderLinks`, `FooterColumns`, `SocialLinks`, `HeaderPath`, `HeaderTone`, `FooterPath`,
 `FooterTone`, `AssetsAsSupplied`, `LogoAsSupplied` and `LogoClearSpace`. `Collections` and `OptionColors` are read as the collections section
@@ -534,6 +537,42 @@ host the tenant was found by.
 
 `createSiteLayout` and `createSiteMetadata` render the root layout from all of this: `lang`, the
 faces, the palette, the top bar, header links, footer columns, social links and the copyright line.
+
+**Fonts, from an allow list.** A family name on its own is loaded from Google Fonts, which is what it
+has always meant:
+
+```json
+{ "Fonts": { "heading": "Zilla Slab" } }
+```
+
+A site that cannot use Google Fonts, a school with a licensed face on its own host or a tenant that
+must not send visitor addresses to a third party, names the stylesheet instead:
+
+```json
+{ "Fonts": { "heading": { "family": "Zilla Slab", "url": "https://type.school.example/zilla.css" } } }
+```
+
+That URL is a tenant's setting on its way into a `<link>` in every visitor's page, so which origins a
+page may reach is the deployment's decision and not the tenant's. `PRESS_FONT_ORIGINS` is the list:
+origins separated by commas or spaces, each `https://host`, a bare host read as https.
+
+| `PRESS_FONT_ORIGINS` | What a page may link |
+| --- | --- |
+| unset or blank | Google Fonts, and nothing else. This is what every site rendered before the list existed |
+| `https://type.school.example` | That origin only. Nothing goes to Google Fonts, the built-in link and its preconnects included |
+| `fonts.googleapis.com, type.school.example` | Both |
+
+A URL on any other origin is refused: no link to it is rendered, the role falls back to its family
+name, and the server log says so once rather than once a page view. The list replaces the default
+rather than adding to it, which is what gives a tenant that must not reach Google Fonts a deployment
+where nothing can. `createSiteLayout(config, { loadFonts: false })` still turns off every font link
+for the whole image.
+
+Only an absolute https URL is kept, for the whole chain: http is blocked as mixed content on every
+site this serves, so allowing it would mean rendering a link that never loads. A role the tenant names
+is the tenant's, family and stylesheet together, so a family set with no url clears a configured
+stylesheet rather than leaving the page loading a face it no longer uses. A build-time site sets the
+same thing in `theme.fontSources`, and it is held to the same list.
 
 **Header and footer as block regions.** The built-in header and footer take links and text and
 nothing else, so a clinic that wants a light footer with opening hours and a map cannot have one, and
@@ -688,7 +727,9 @@ values or build a palette from them.
 
 Loading the faces is the site's job, not the engine's. The default theme names Sora, Manrope and
 JetBrains Mono with real fallback stacks, and a `<link>` in your root layout is what makes them
-arrive.
+arrive. `createSiteLayout` writes that link for you: a family name from Google Fonts, or the
+stylesheet named in `theme.fontSources` when the face is not loaded from there, held to
+`PRESS_FONT_ORIGINS` either way.
 
 **Three slots**, for what belongs to the site rather than the engine:
 
