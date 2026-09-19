@@ -23,8 +23,17 @@ import {
 import { CmsError, isTenantHandle, list, tenantForHost } from "./delivery.js";
 import { readSecret } from "./secret.js";
 import { presetsFrom } from "./blocks/presets.js";
-import { TONES, type ToneName } from "./blocks/tokens.js";
-import type { PressTheme, ThemeColors, ThemeFonts, ThemeLayout, ThemeRadii, ThemeSpace, ThemeText } from "./theme.js";
+import { SPACES, TONES, type ToneName } from "./blocks/tokens.js";
+import type {
+    PressTheme,
+    SuppliedAsset,
+    ThemeColors,
+    ThemeFonts,
+    ThemeLayout,
+    ThemeRadii,
+    ThemeSpace,
+    ThemeText,
+} from "./theme.js";
 
 /*
  * Request-time sites: one build, many domains (barakoCMS D22, barakoPress #20).
@@ -398,6 +407,44 @@ function region(base: Region | undefined, path: unknown, tone: unknown): Region 
     return { path: at, ...(chosen ? { tone: chosen } : {}) };
 }
 
+/*
+ * The assets this tenant uses exactly as supplied (#29).
+ *
+ * `AssetsAsSupplied` is a list of URLs, or of `{ url, clearSpace }` for one that needs more room
+ * than the default. `LogoAsSupplied` is the common case said once: the logo and the footer logo,
+ * with `LogoClearSpace` around them, so a tenant that replaces its logo file does not have to
+ * remember a second setting naming the old one.
+ *
+ * A list saved empty clears the configured one, the way every other list here does. An entry whose
+ * URL is not a site path or an http URL is dropped rather than half applied.
+ */
+function clearSpaceName(v: unknown): string | undefined {
+    const name = str(v)?.toLowerCase();
+    return name && (SPACES as readonly string[]).includes(name) ? name : undefined;
+}
+
+function asset(url: string | undefined, clearSpace: string | undefined): SuppliedAsset[] {
+    if (!url) return [];
+    return [{ url, ...(clearSpace ? { clearSpace } : {}) }];
+}
+
+function assetsAsSupplied(
+    base: readonly SuppliedAsset[],
+    d: Record<string, unknown>,
+    site: SiteIdentity,
+): readonly SuppliedAsset[] {
+    const listed = array(d.AssetsAsSupplied)?.flatMap((entry) => {
+        const written = record(entry);
+        return written
+            ? asset(siteHref(written.url), clearSpaceName(written.clearSpace))
+            : asset(siteHref(entry), undefined);
+    });
+    const logoSpace = clearSpaceName(d.LogoClearSpace);
+    const logos =
+        d.LogoAsSupplied === true ? [...asset(site.logo, logoSpace), ...asset(site.footerLogo, logoSpace)] : [];
+    return [...(listed ?? base), ...logos].slice(0, 24);
+}
+
 /** The tenant's regions, each merged over the configured one. */
 function regions(base: SiteRegions | undefined, d: Record<string, unknown>): SiteRegions | undefined {
     const header = region(base?.header, d.HeaderPath, d.HeaderTone);
@@ -604,6 +651,7 @@ export function applySiteSettings(
         layout: tokens<ThemeLayout>(config.theme.layout, d.Layout, LENGTH),
         space: tokens<ThemeSpace>(config.theme.space, d.Space, LENGTH),
         text: tokens<ThemeText>(config.theme.text, d.Text, LENGTH),
+        asSupplied: assetsAsSupplied(config.theme.asSupplied, d, site),
     };
 
     const { holding: _ignored, ...rest } = config;

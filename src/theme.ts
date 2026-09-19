@@ -102,6 +102,17 @@ export interface ThemeText {
     display: string;
 }
 
+/**
+ * An asset used exactly as it was supplied: no tint, no border, no corner, no shadow, no filter, no
+ * crop, and a minimum clear space held around it. A mark with an identity manual behind it (#29).
+ */
+export interface SuppliedAsset {
+    /** The image URL. Matched without its query, so a mark the CMS resized with `?w=480` is it. */
+    url: string;
+    /** The minimum clear space, a name from the spacing scale. `md` when unset. */
+    clearSpace?: string;
+}
+
 export interface PressTheme {
     colors: ThemeColors;
     fonts: ThemeFonts;
@@ -109,6 +120,12 @@ export interface PressTheme {
     layout: ThemeLayout;
     space: ThemeSpace;
     text: ThemeText;
+    /**
+     * The assets the theme may not touch. Here rather than beside the logo in `SiteIdentity`
+     * because the theme is the one thing every drawing path carries, a block component included,
+     * and a rule a block cannot see is a rule blocks do not keep.
+     */
+    asSupplied: readonly SuppliedAsset[];
 }
 
 export type PressThemeInput = {
@@ -118,6 +135,7 @@ export type PressThemeInput = {
     layout?: Partial<ThemeLayout>;
     space?: Partial<ThemeSpace>;
     text?: Partial<ThemeText>;
+    asSupplied?: readonly SuppliedAsset[];
 };
 
 export const DEFAULT_THEME: PressTheme = {
@@ -177,7 +195,17 @@ export const DEFAULT_THEME: PressTheme = {
         title: "26px",
         display: "38px",
     },
+    asSupplied: [],
 };
+
+/** Entries with a URL, and no more than a site could plausibly protect. */
+function suppliedAssets(input: readonly SuppliedAsset[] | undefined): readonly SuppliedAsset[] {
+    if (!input) return DEFAULT_THEME.asSupplied;
+    return input
+        .filter((asset) => typeof asset?.url === "string" && asset.url.trim() !== "")
+        .map((asset) => ({ url: asset.url.trim(), ...(asset.clearSpace ? { clearSpace: asset.clearSpace } : {}) }))
+        .slice(0, 24);
+}
 
 export function resolveTheme(input: PressThemeInput | undefined): PressTheme {
     return {
@@ -187,6 +215,7 @@ export function resolveTheme(input: PressThemeInput | undefined): PressTheme {
         layout: { ...DEFAULT_THEME.layout, ...input?.layout },
         space: { ...DEFAULT_THEME.space, ...input?.space },
         text: { ...DEFAULT_THEME.text, ...input?.text },
+        asSupplied: suppliedAssets(input?.asSupplied),
     };
 }
 

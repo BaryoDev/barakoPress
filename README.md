@@ -525,8 +525,8 @@ The settings are the singleton `site` type from barakoCMS `docs/site-settings.md
 (`POST /api/content-types/blueprints/site`, then publish its one entry). The engine reads `Name`,
 `Tagline`, `Url`, `Locale`, `Logo`, `LogoAlt`, `FooterLogo`, `Favicon`, `ShareImage`, `Copyright`,
 `Colors` (the theme slots), `Fonts` (Google Fonts family names), `Radii`, `Layout`, `TopBar`,
-`HeaderLinks`, `FooterColumns`, `SocialLinks`, `HeaderPath`, `HeaderTone`, `FooterPath` and
-`FooterTone`. `Collections` and `OptionColors` are read as the collections section
+`HeaderLinks`, `FooterColumns`, `SocialLinks`, `HeaderPath`, `HeaderTone`, `FooterPath`,
+`FooterTone`, `AssetsAsSupplied`, `LogoAsSupplied` and `LogoClearSpace`. `Collections` and `OptionColors` are read as the collections section
 describes. `Variants` are not rendered yet. Every value is checked for shape; one that fails, and any the
 entry leaves out, keeps the configured value, so a half-filled theme renders. A link is a path on the
 site or an absolute http or https URL. Set `Url`: without it the feed and sitemap fall back to the
@@ -707,6 +707,45 @@ paragraphs belongs to the block model, which is issue #6, because only the body 
 
 Read time is derived from the body at 200 words a minute, with fenced code blocks excluded, so there
 is no field to fill in and nothing to keep in sync.
+
+### Assets used exactly as supplied
+
+Some marks come with an identity manual: never recoloured, never outlined, never put in a box, never
+crowded. A renderer that rounds a corner or drops a logo into a tinted panel breaks that rule, and on
+screen it looks like a nice touch. Mark the asset and it is drawn from the file, with a minimum clear
+space held around it, everywhere the engine draws an image.
+
+```ts
+export const config = defineConfig({
+  site:  { name: "The club", url: "https://club.example", logo: "/mark.svg" },
+  theme: { asSupplied: [{ url: "/mark.svg", clearSpace: "lg" }] },
+});
+```
+
+A tenant says the same thing in its site settings:
+
+| Field | Type | What |
+| --- | --- | --- |
+| `AssetsAsSupplied` | list | URLs, or `{ "url": "...", "clearSpace": "lg" }` for one that needs more room. A list saved empty clears the configured one |
+| `LogoAsSupplied` | boolean | Marks `Logo` and `FooterLogo`, so replacing the logo file does not mean editing a second setting that names the old one |
+| `LogoClearSpace` | string | The clear space around those two |
+
+The clear space is a name from the theme's spacing scale (`none`, `xs`, `sm`, `md`, `lg`, `xl`,
+`xxl`), `md` when unset, and it is a minimum: a block asking for more gets more, a block asking for
+less gets the site's. A URL is matched without its query, so a mark the CMS resized with `?w=480` is
+still that mark.
+
+What a marked asset gets is the file: no tint, no border, no corner, no shadow, no filter, no crop,
+and the clear space around it at every width. A block that asked for a frame draws the mark alone
+instead, which is what the `image` block's own `asSupplied` and `clearSpace` props are for when the
+site has not listed the file. It holds in the header, the footer, the holding page, a header or
+footer region, a page block, a preset, a post's cover image, a collection item's image and an image
+inside markdown, and `src/assets.test.tsx` walks all of those and fails if a new way to draw an image
+skips the rule.
+
+One thing it cannot do: it does not know what is behind the mark. A tenant that puts a marked asset
+on an `inverse` band gets the supplied file on that band, drawn plainly. Choosing the band is the
+tenant's, and a white box behind the mark would itself be the boxing the rule forbids.
 
 ### Related posts, if the CMS has the AI module
 
