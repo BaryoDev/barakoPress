@@ -6,6 +6,7 @@ import {
     CATEGORY_COLLECTION,
     POST_COLLECTION,
     SETTINGS_TYPE,
+    embedHosts,
     type CollectionConfig,
     type CollectionReference,
     type FieldNames,
@@ -19,7 +20,8 @@ import {
 } from "./config.js";
 import { CmsError, isTenantHandle, list, tenantForHost } from "./delivery.js";
 import { readSecret } from "./secret.js";
-import type { PressTheme, ThemeColors, ThemeFonts, ThemeLayout, ThemeRadii } from "./theme.js";
+import { presetsFrom } from "./blocks/presets.js";
+import type { PressTheme, ThemeColors, ThemeFonts, ThemeLayout, ThemeRadii, ThemeSpace, ThemeText } from "./theme.js";
 
 /*
  * Request-time sites: one build, many domains (barakoCMS D22, barakoPress #20).
@@ -571,6 +573,8 @@ export function applySiteSettings(
         fonts: fonts(config.theme.fonts, d.Fonts),
         radii: tokens<ThemeRadii>(config.theme.radii, d.Radii, LENGTH),
         layout: tokens<ThemeLayout>(config.theme.layout, d.Layout, LENGTH),
+        space: tokens<ThemeSpace>(config.theme.space, d.Space, LENGTH),
+        text: tokens<ThemeText>(config.theme.text, d.Text, LENGTH),
     };
 
     const { holding: _ignored, ...rest } = config;
@@ -581,6 +585,13 @@ export function applySiteSettings(
         site: held?.path ? withoutHoldingPage(site, held.path) : site,
         theme,
         locale: locale(config.locale, d.Locale),
+        ...(str(d.Currency) && /^[A-Za-z]{3}$/.test(str(d.Currency) as string)
+            ? { currency: (str(d.Currency) as string).toUpperCase() }
+            : {}),
+        embedHosts: embedHosts(array(d.EmbedHosts) as string[] | undefined) ?? config.embedHosts,
+        // A tenant's named blocks. Saved in barakoBrew, so anything that is not a preset is left
+        // out rather than half applied, the same as every other setting.
+        presets: array(d.Presets) ? presetsFrom(array(d.Presets)) : config.presets,
         collections: collectionsFrom(config.collections, d.Collections),
         optionColors: optionColorsFrom(config.optionColors, theme, d.Colors, d.OptionColors),
         ...(held ? { holding: held } : {}),

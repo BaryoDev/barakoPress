@@ -177,8 +177,29 @@ describe("BlockList", () => {
 });
 
 describe("createBlockRegistry", () => {
-    it("ships the five built-ins", () => {
-        expect([...registry.keys()]).toEqual(["richText", "image", "columns", "callToAction", "collection"]);
+    it("ships the primitives, the data blocks and the named blocks stored pages already use", () => {
+        const layers: Record<string, string[]> = {};
+        for (const block of registry.values()) (layers[block.layer ?? "block"] ??= []).push(block.type);
+
+        expect(layers.primitive).toEqual([
+            "section",
+            "stack",
+            "row",
+            "grid",
+            "spacer",
+            "divider",
+            "text",
+            "richText",
+            "image",
+            "video",
+            "embed",
+            "icon",
+            "button",
+            "link",
+            "list",
+        ]);
+        expect(layers.data).toEqual(["source", "repeat", "showIf", "slot", "pager"]);
+        expect(layers.block).toEqual(["columns", "callToAction", "collection"]);
     });
 
     it("refuses one type registered twice by the site", () => {
@@ -201,7 +222,7 @@ describe("blockSchema", () => {
     it("is plain data an editor can fetch", () => {
         const schema = blockSchema(registry);
 
-        expect(schema.blocks).toHaveLength(5);
+        expect(schema.blocks).toHaveLength(registry.size);
         expect(JSON.parse(JSON.stringify(schema))).toEqual(schema);
         const cta = schema.blocks.find((b) => b.type === "callToAction");
         expect(cta?.fields.map((f) => f.name)).toEqual(["heading", "text", "label", "href"]);

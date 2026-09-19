@@ -15,6 +15,7 @@
  */
 
 import { resolveTheme, type PressTheme, type PressThemeInput } from "./theme.js";
+import type { BlockPreset } from "./blocks/presets.js";
 
 /*
  * The attributes the markdown renderer puts on a link. The browser entry, barakopress/markdown,
@@ -31,6 +32,33 @@ export const SETTINGS_TYPE = "site";
 export const POST_COLLECTION = "post";
 export const AUTHOR_COLLECTION = "author";
 export const CATEGORY_COLLECTION = "category";
+
+/**
+ * The hosts an `embed` block frames unless a site names its own. Players, not a content shape: an
+ * embed block exists to hold a video or a map, and every one of these serves a sandboxed player
+ * over https. A site that needs another adds it in `embedHosts` rather than editing this.
+ */
+export const EMBED_HOSTS: readonly string[] = [
+    "www.youtube-nocookie.com",
+    "www.youtube.com",
+    "youtube.com",
+    "player.vimeo.com",
+    "www.google.com",
+    "open.spotify.com",
+    "w.soundcloud.com",
+];
+
+/** Hosts as a site writes them: lowercased, a bare hostname each, anything else dropped. */
+export function embedHosts(values: readonly string[] | undefined): string[] | undefined {
+    if (!Array.isArray(values)) return undefined;
+    const out = new Set<string>();
+    for (const raw of values) {
+        if (typeof raw !== "string") continue;
+        const host = raw.trim().toLowerCase();
+        if (/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(host)) out.add(host);
+    }
+    return [...out];
+}
 
 /** Where a reference into a type that is no configured collection keeps its name and slug. */
 export const REFERENCE_FIELDS: { title: FieldNames; slug: FieldNames } = { title: ["Name", "Title"], slug: ["Slug"] };
@@ -265,6 +293,21 @@ export interface PressConfig {
     cmsTimeoutMs: number;
     /** Passed to toLocaleDateString. */
     locale: string;
+    /**
+     * The ISO code a `money` binding format uses, for example "PHP". Unset, an amount renders as a
+     * plain number: a default currency is one client's currency, and there is no neutral one.
+     */
+    currency?: string;
+    /**
+     * The hosts an `embed` block may frame, lowercased and without a port. `EMBED_HOSTS` unless the
+     * site says otherwise, and a request-time site reads its tenant's `EmbedHosts` setting.
+     */
+    embedHosts: string[];
+    /**
+     * Named blocks saved as arrangements of primitives. A request-time site reads its tenant's
+     * `Presets` setting, which is how a designer adds one without a barakoPress release.
+     */
+    presets: BlockPreset[];
     /** Where the CMS is, from this server. */
     cmsUrl: string;
     /** Tenant slug, for a multi-tenant deployment. */
@@ -477,6 +520,9 @@ export function defineConfig(
         backstopSeconds: input.backstopSeconds ?? 300,
         cmsTimeoutMs: timeoutMs(input.cmsTimeoutMs),
         locale: input.locale ?? "en-GB",
+        ...(input.currency ? { currency: input.currency } : {}),
+        embedHosts: embedHosts(input.embedHosts) ?? [...EMBED_HOSTS],
+        presets: input.presets ?? [],
         cmsUrl: trimSlash(input.cmsUrl ?? process.env.CMS_URL ?? "http://localhost:5005"),
         tenant: input.tenant ?? process.env.CMS_TENANT ?? undefined,
         theme: resolveTheme(input.theme),

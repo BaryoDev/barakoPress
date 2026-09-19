@@ -257,8 +257,28 @@ Field names come from `pageFields` in the config, and the type from `types.page`
 ]
 ```
 
-Built in: `richText` (markdown), `image`, `columns` (up to four lists of blocks), `callToAction` and
-`collection` (the newest posts, or authors or categories when the site has those routes).
+Blocks come in four layers.
+
+**Layout primitives** hold blocks and no content: `section` (a tone, a width and a padding step),
+`stack`, `row` (side by side, wrapping on a phone), `grid`, `spacer` and `divider`.
+
+**Content primitives** hold content and no layout: `text` (a variant from the theme's type scale),
+`richText` (markdown), `image`, `video`, `embed` (an iframe, only for a host in `embedHosts`),
+`icon`, `button`, `link` and `list`.
+
+Every primitive takes theme tokens and never a colour or a pixel value. Tones are `page`, `surface`,
+`accent` and `inverse`; spacing is `none` to `xxl` from `theme.space`; type is a role from
+`theme.text`; corners are `none`, `control`, `panel` or `pill`. A tenant that changes the scale
+changes every page built from primitives, and nobody can put one client's blue into a block.
+
+**Presets** are named arrangements of primitives, stored per tenant as data. See below.
+
+**Data blocks** load and choose rather than draw: `source`, `repeat`, `showIf`, `pager` and `slot`.
+See bindings below.
+
+Also built in, from before the layers: `columns` (up to four lists of blocks), `callToAction` and
+`collection` (the newest posts, or authors or categories when the site has those routes). Pages
+already hold these and they render unchanged.
 
 A site adds its own blocks, or replaces a built-in, by registering a definition. The fields are the
 only description of the props: the renderer reads props through them, and `app/api/blocks` publishes
@@ -306,6 +326,79 @@ A block that shows something depending on who is looking sets `perViewer: true`.
 such blocks out, because its output is cached and shared. `createViewerPage` renders them and calls
 `connection()` first, so that route is always dynamic. Signing a viewer in, and gating a block by
 role, is issue #7.
+
+### Bindings
+
+Any string prop can hold a placeholder, which is barakoCMS's workflow template syntax with an
+optional format and fallback:
+
+```json
+{ "type": "text", "props": { "value": "Welcome to {{site.Name}}", "variant": "display" } }
+{ "type": "text", "props": { "value": "{{item.Fee | money ?? Free}}" } }
+{ "type": "text", "props": { "value": "{{page.PublishedAt | date}}" } }
+```
+
+Scopes are `site` (the tenant's settings and resolved identity), `page` (the entry the page
+renders), `item` (the row inside a `source` or a `repeat`) and `query` (URL parameters). `viewer`
+arrives with #7. Formats are `text`, `date`, `datetime`, `time`, `money`, `number`, `upper` and
+`lower`; `money` uses the tenant's `Currency` setting, or a plain amount when it has none.
+
+Paths, formats and fallbacks only. There are no expressions and no JavaScript. Everything resolves
+on the server as the request's tenant, before a component is called, so a binding never makes the
+browser call the API. A placeholder that finds no value renders its fallback and is reported in the
+server log, never a crash. What a binding resolves to is checked against the field again, so a link
+whose stored field holds `javascript:` drops the block; and a resolved value is never rescanned, so
+one field cannot reach another through its own contents.
+
+`source` loads one entry or a page of them and puts it in scope. `repeat` renders its content once
+per row. `pager` draws prev and next links for the `source` it sits in, paged by the API. `showIf`
+keeps its content only when a bound value has something, or equals what it names.
+
+```json
+{ "type": "source", "props": {
+    "collection": "enrolments", "mode": "list", "pageSize": 20, "pageParam": "p",
+    "filterField": "Class", "filterValue": "{{query.class}}",
+    "content": [[
+      { "type": "repeat", "props": { "empty": "No one yet.", "content": [[
+        { "type": "text", "props": { "value": "{{item.Title}}" } }
+      ]] } },
+      { "type": "pager", "props": {} }
+    ]]
+} }
+```
+
+A filter narrows what the API already lets the reader see. It is never access control: who may read
+which rows is decided in barakoCMS. A page reads at most eight sources, and a `source` at most fifty
+rows a page.
+
+### Presets
+
+A preset is a named block saved as data, not code: a few props and an arrangement of primitives that
+reads them through the `props` scope. A designer saves one in barakoBrew and every site on the
+published image can use it, with no barakoPress release.
+
+```json
+{
+  "type": "band",
+  "label": "Band",
+  "fields": [
+    { "name": "heading", "kind": "text", "required": true },
+    { "name": "tone", "kind": "select", "options": ["page", "accent"] },
+    { "name": "content", "kind": "slots" }
+  ],
+  "blocks": [
+    { "type": "section", "props": { "tone": "{{props.tone}}", "content": [[
+      { "type": "text", "props": { "value": "{{props.heading}}", "variant": "title" } },
+      { "type": "slot", "props": { "name": "content" } }
+    ]] } }
+  ]
+}
+```
+
+A request-time site reads its tenant's presets from the `Presets` site setting. A build-time site
+passes them as `presets` in the config. A preset never replaces a block that is code, and a preset
+body may not use another preset. `slot` marks where the content an editor dropped into the preset
+goes, and that content binds in the page's scope rather than the preset's.
 
 ## Configuring it
 

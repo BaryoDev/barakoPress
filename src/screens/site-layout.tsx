@@ -9,6 +9,7 @@ import type { BlockRegistry } from "../blocks/schema.js";
 import { getNavigation, getPageAtPath, pageHref, type NavItem, type Page } from "../cms.js";
 import { Navigation } from "./navigation.js";
 import { PageView } from "./page.js";
+import { registryFor } from "../blocks/registry.js";
 
 /*
  * The root layout and its metadata, from the site's identity and theme.
@@ -119,7 +120,7 @@ async function HoldingDocument({ cfg, registry, loadFonts }: { cfg: PressConfig;
                 </p>
                 {page && registry ? (
                     <div data-press="holding">
-                        <PageView config={cfg} page={page} registry={registry} />
+                        {await PageView({ config: cfg, page, registry: registryFor(cfg, registry) })}
                     </div>
                 ) : (
                     <main

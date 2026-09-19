@@ -1,0 +1,595 @@
+import type { CSSProperties, ReactNode } from "react";
+import Link from "next/link";
+import type { PressConfig } from "../config.js";
+import { renderMarkdown } from "../markdown.js";
+import type { PressTheme } from "../theme.js";
+import { defineBlock, type BlockDefinition } from "./schema.js";
+import {
+    ALIGNMENTS,
+    RADII,
+    SPACES,
+    TEXT_VARIANTS,
+    TEXT_VARIANT_NAMES,
+    TONES,
+    WIDTHS,
+    alignOf,
+    radiusOf,
+    spaceOf,
+    textAlignOf,
+    toneOf,
+    widthOf,
+} from "./tokens.js";
+
+/*
+ * Layer 1 and layer 2 of barakoPress #33: the parts a page is assembled from.
+ *
+ * Layout primitives hold blocks and no content. Content primitives hold content and no layout. Each
+ * one takes theme tokens (a tone, a space name, a text role, a radius name) and never a colour or a
+ * pixel value, so a page a designer assembles in barakoBrew cannot drift from the site's design and
+ * a tenant restyles every page by changing the theme.
+ *
+ * Styled inline for the reason the screens are: `barakopress/styles.css` is opt-in, and a look that
+ * depends on an import the consumer may not make is a look somebody does not get.
+ */
+
+/** The class the page's generated body stylesheet is scoped to, shared with the markdown block. */
+export const PROSE_CLASS = "bp-prose";
+
+const toneSelect = { kind: "select" as const, options: [...TONES] };
+const spaceSelect = { kind: "select" as const, options: [...SPACES] };
+const alignSelect = { kind: "select" as const, options: [...ALIGNMENTS] };
+
+function gap(theme: PressTheme, name: string | undefined, fallback: Parameters<typeof spaceOf>[2] = "md"): string {
+    return spaceOf(theme, name, fallback);
+}
+
+/* ---------------------------------------------------------------- layout */
+
+type SectionProps = { tone?: string; width?: string; padding?: string; align?: string };
+
+const section = defineBlock<SectionProps, "content">({
+    type: "section",
+    label: "Section",
+    layer: "primitive",
+    fields: [
+        { name: "tone", label: "Tone", ...toneSelect },
+        { name: "width", label: "Width", kind: "select", options: [...WIDTHS] },
+        { name: "padding", label: "Padding", ...spaceSelect },
+        { name: "align", label: "Align", ...alignSelect },
+        { name: "content", kind: "slots", label: "Content", min: 1, max: 1 },
+    ],
+    component: ({ props, slots, theme }) => {
+        const tone = toneOf(theme, props.tone);
+        const inner = widthOf(theme, props.width);
+        return (
+            <section
+                style={{
+                    background: tone.bg,
+                    color: tone.ink,
+                    paddingTop: spaceOf(theme, props.padding, "xl"),
+                    paddingBottom: spaceOf(theme, props.padding, "xl"),
+                    paddingLeft: theme.layout.gutter,
+                    paddingRight: theme.layout.gutter,
+                    textAlign: textAlignOf(props.align),
+                }}
+            >
+                <div style={{ maxWidth: inner, margin: inner ? "0 auto" : undefined }}>{slots.content?.[0]}</div>
+            </section>
+        );
+    },
+});
+
+type StackProps = { gap?: string; align?: string };
+
+const stack = defineBlock<StackProps, "content">({
+    type: "stack",
+    label: "Stack",
+    layer: "primitive",
+    fields: [
+        { name: "gap", label: "Gap", ...spaceSelect },
+        { name: "align", label: "Align", ...alignSelect },
+        { name: "content", kind: "slots", label: "Content", min: 1, max: 1 },
+    ],
+    component: ({ props, slots, theme }) => (
+        <div
+            style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: gap(theme, props.gap),
+                alignItems: props.align ? alignOf(props.align) : "stretch",
+            }}
+        >
+            {slots.content?.[0]}
+        </div>
+    ),
+});
+
+type RowProps = { gap?: string; align?: string; justify?: string };
+
+/*
+ * Side by side, wrapping onto its own line below `layout.columnMin`. `flex-wrap` and a basis rather
+ * than a media query, because a block does not know how wide the column it was dropped into is.
+ */
+const row = defineBlock<RowProps, "items">({
+    type: "row",
+    label: "Row",
+    layer: "primitive",
+    fields: [
+        { name: "gap", label: "Gap", ...spaceSelect },
+        { name: "align", label: "Align", ...alignSelect },
+        {
+            name: "justify",
+            label: "Distribute",
+            kind: "select",
+            options: ["start", "center", "end", "between"],
+        },
+        { name: "items", kind: "slots", label: "Items", required: true, min: 1, max: 8 },
+    ],
+    component: ({ props, slots, theme }) => (
+        <div
+            style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: gap(theme, props.gap),
+                alignItems: props.align ? alignOf(props.align) : "stretch",
+                justifyContent: props.justify === "between" ? "space-between" : alignOf(props.justify),
+            }}
+        >
+            {(slots.items ?? []).map((item, i) => (
+                <div key={i} style={{ flex: `1 1 min(100%, ${theme.layout.columnMin})`, minWidth: 0 }}>
+                    {item}
+                </div>
+            ))}
+        </div>
+    ),
+});
+
+type GridProps = { columns?: number; gap?: string };
+
+const grid = defineBlock<GridProps, "items">({
+    type: "grid",
+    label: "Grid",
+    layer: "primitive",
+    fields: [
+        { name: "columns", kind: "number", label: "Columns", min: 1, max: 6 },
+        { name: "gap", label: "Gap", ...spaceSelect },
+        { name: "items", kind: "slots", label: "Items", required: true, min: 1, max: 24 },
+    ],
+    component: ({ props, slots, theme }) => (
+        <div
+            style={{
+                display: "grid",
+                gridTemplateColumns: `repeat(${props.columns ?? 2}, minmax(min(100%, ${theme.layout.columnMin}), 1fr))`,
+                gap: gap(theme, props.gap),
+            }}
+        >
+            {(slots.items ?? []).map((item, i) => (
+                <div key={i} style={{ minWidth: 0 }}>
+                    {item}
+                </div>
+            ))}
+        </div>
+    ),
+});
+
+const spacer = defineBlock<{ size?: string }>({
+    type: "spacer",
+    label: "Spacer",
+    layer: "primitive",
+    fields: [{ name: "size", label: "Size", ...spaceSelect }],
+    component: ({ props, theme }) => <div style={{ height: spaceOf(theme, props.size, "lg") }} />,
+});
+
+const divider = defineBlock<{ tone?: string; space?: string }>({
+    type: "divider",
+    label: "Divider",
+    layer: "primitive",
+    fields: [
+        { name: "tone", label: "Tone", ...toneSelect },
+        { name: "space", label: "Space around", ...spaceSelect },
+    ],
+    component: ({ props, theme }) => (
+        <hr
+            style={{
+                border: 0,
+                borderTop: `1px solid ${toneOf(theme, props.tone).hairline}`,
+                margin: `${spaceOf(theme, props.space, "lg")} 0`,
+            }}
+        />
+    ),
+});
+
+/* --------------------------------------------------------------- content */
+
+type TextProps = { value: string; variant?: string; tone?: string; align?: string; weight?: string };
+
+const INK: Record<string, keyof ReturnType<typeof toneOf>> = {
+    ink: "ink",
+    secondary: "secondaryInk",
+    muted: "muted",
+    accent: "accent",
+};
+
+const text = defineBlock<TextProps>({
+    type: "text",
+    label: "Text",
+    layer: "primitive",
+    fields: [
+        { name: "value", kind: "text", label: "Text", required: true },
+        { name: "variant", kind: "select", label: "Variant", options: TEXT_VARIANT_NAMES },
+        { name: "tone", kind: "select", label: "Ink", options: Object.keys(INK) },
+        { name: "align", label: "Align", ...alignSelect },
+        { name: "weight", kind: "select", label: "Weight", options: ["regular", "medium", "bold"] },
+    ],
+    component: ({ props, theme }) => {
+        const variant = TEXT_VARIANTS[props.variant ?? "body"] ?? TEXT_VARIANTS.body;
+        const Tag = variant.tag;
+        const tone = toneOf(theme, undefined);
+        const heading = Tag !== "p";
+        const style: CSSProperties = {
+            margin: 0,
+            fontFamily: variant.role === "meta" ? theme.fonts.mono : heading ? theme.fonts.heading : theme.fonts.body,
+            fontSize: theme.text[variant.role],
+            lineHeight: heading ? 1.15 : 1.7,
+            letterSpacing: heading ? "-.03em" : undefined,
+            fontWeight: props.weight === "bold" ? 700 : props.weight === "regular" ? 400 : heading ? 600 : 400,
+            color: tone[INK[props.tone ?? ""] ?? (heading ? "ink" : "secondaryInk")],
+            textAlign: textAlignOf(props.align),
+            textWrap: heading ? "balance" : "pretty",
+        };
+        return <Tag style={style}>{props.value}</Tag>;
+    },
+});
+
+/*
+ * The markdown primitive is `richText`, the name stored pages already use, and its field is still
+ * `markdown`. A primitive under a new name would have meant migrating every page that has one for
+ * nothing: this is the same block, with a width token added.
+ *
+ * Rendered markdown is a string of HTML, the one thing an inline style cannot reach, so a page that
+ * holds one emits `proseCss` for this class.
+ */
+const richText = defineBlock<{ markdown: string; width?: string }>({
+    type: "richText",
+    label: "Rich text",
+    layer: "primitive",
+    fields: [
+        { name: "markdown", kind: "markdown", label: "Text", required: true },
+        { name: "width", kind: "select", label: "Width", options: [...WIDTHS] },
+    ],
+    component: ({ props, theme }) => (
+        <div
+            className={PROSE_CLASS}
+            style={{ maxWidth: widthOf(theme, props.width ?? "prose") }}
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(props.markdown) }}
+        />
+    ),
+});
+
+type ImageProps = { src: string; alt?: string; caption?: string; radius?: string; width?: string; frame?: boolean };
+
+/*
+ * Also the `image` that shipped in 0.3.0, which is why the frame is on unless a block turns it off:
+ * a page stored before the primitives existed carries src, alt and caption and nothing else, and it
+ * still renders a framed, rounded, captioned figure. `radius`, `width` and `frame` are the new
+ * tokens, all optional, and the caption gap now comes off the spacing scale.
+ */
+const image = defineBlock<ImageProps>({
+    type: "image",
+    label: "Image",
+    layer: "primitive",
+    fields: [
+        { name: "src", kind: "url", label: "Image URL", required: true },
+        { name: "alt", kind: "text", label: "Alternative text" },
+        { name: "caption", kind: "text", label: "Caption" },
+        { name: "radius", kind: "select", label: "Corners", options: [...RADII] },
+        { name: "width", kind: "select", label: "Width", options: [...WIDTHS] },
+        { name: "frame", kind: "boolean", label: "Hairline frame" },
+    ],
+    component: ({ props, theme }) => (
+        <figure style={{ margin: 0, maxWidth: widthOf(theme, props.width ?? "full") }}>
+            <img
+                src={props.src}
+                alt={props.alt ?? ""}
+                loading="lazy"
+                style={{
+                    display: "block",
+                    maxWidth: "100%",
+                    height: "auto",
+                    borderRadius: radiusOf(theme, props.radius ?? "panel"),
+                    border: props.frame === false ? undefined : `1px solid ${theme.colors.hairline}`,
+                }}
+            />
+            {props.caption && (
+                <figcaption
+                    style={{
+                        marginTop: theme.space.xs,
+                        fontFamily: theme.fonts.mono,
+                        fontSize: theme.text.meta,
+                        color: theme.colors.muted,
+                    }}
+                >
+                    {props.caption}
+                </figcaption>
+            )}
+        </figure>
+    ),
+});
+
+type VideoProps = { src: string; poster?: string; caption?: string; radius?: string; autoplay?: boolean };
+
+const video = defineBlock<VideoProps>({
+    type: "video",
+    label: "Video",
+    layer: "primitive",
+    fields: [
+        { name: "src", kind: "url", label: "Video URL", required: true },
+        { name: "poster", kind: "url", label: "Poster image" },
+        { name: "caption", kind: "text", label: "Caption" },
+        { name: "radius", kind: "select", label: "Corners", options: [...RADII] },
+        { name: "autoplay", kind: "boolean", label: "Play muted on view" },
+    ],
+    component: ({ props, theme }) => (
+        <figure style={{ margin: 0 }}>
+            <video
+                src={props.src}
+                poster={props.poster}
+                controls
+                playsInline
+                preload="metadata"
+                // Autoplay is muted and looping or it is not autoplay: a video that makes noise on
+                // its own is the thing everyone leaves the page over.
+                autoPlay={props.autoplay === true}
+                muted={props.autoplay === true}
+                loop={props.autoplay === true}
+                style={{
+                    display: "block",
+                    width: "100%",
+                    height: "auto",
+                    borderRadius: radiusOf(theme, props.radius ?? "panel"),
+                    background: theme.colors.darkPanel,
+                }}
+            />
+            {props.caption && (
+                <figcaption
+                    style={{ marginTop: theme.space.xs, fontSize: theme.text.meta, color: theme.colors.muted }}
+                >
+                    {props.caption}
+                </figcaption>
+            )}
+        </figure>
+    ),
+});
+
+const ASPECTS: Record<string, string> = { "16:9": "16 / 9", "4:3": "4 / 3", "1:1": "1 / 1" };
+
+/*
+ * An iframe is the one block that hands a third party a frame inside the page, so the host is held
+ * to the site's allow list (`config.embedHosts`) and the frame is sandboxed. The allow list is
+ * configuration rather than a literal here: which players a site trusts is the site's decision.
+ */
+function embed(config: PressConfig): BlockDefinition {
+    const allowed = new Set(config.embedHosts.map((h) => h.toLowerCase()));
+    return defineBlock<{ src: string; title: string; aspect?: string; radius?: string }>({
+        type: "embed",
+        label: "Embed",
+        layer: "primitive",
+        fields: [
+            { name: "src", kind: "url", label: "Embed URL", required: true },
+            { name: "title", kind: "text", label: "What it is", required: true },
+            { name: "aspect", kind: "select", label: "Shape", options: Object.keys(ASPECTS) },
+            { name: "radius", kind: "select", label: "Corners", options: [...RADII] },
+        ],
+        component: ({ props, theme }) => {
+            let url: URL;
+            try {
+                url = new URL(props.src);
+            } catch {
+                return null;
+            }
+            if (url.protocol !== "https:" || !allowed.has(url.hostname.toLowerCase())) return null;
+            return (
+                <iframe
+                    src={url.toString()}
+                    title={props.title}
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                    sandbox="allow-scripts allow-same-origin allow-presentation"
+                    allowFullScreen
+                    style={{
+                        display: "block",
+                        width: "100%",
+                        aspectRatio: ASPECTS[props.aspect ?? "16:9"] ?? ASPECTS["16:9"],
+                        border: 0,
+                        borderRadius: radiusOf(theme, props.radius ?? "panel"),
+                    }}
+                />
+            );
+        },
+    });
+}
+
+/*
+ * A small set of shapes, drawn from paths here rather than loaded from anywhere, so an icon costs
+ * no request and no third party. Generic marks only: a client's own mark is an image.
+ */
+export const ICONS: Record<string, string> = {
+    arrow: "M4 12h15m0 0-6-6m6 6-6 6",
+    check: "M4 12.5l5 5L20 6.5",
+    close: "M6 6l12 12M18 6L6 18",
+    plus: "M12 5v14M5 12h14",
+    info: "M12 11v6m0-10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+    warning: "M12 9v4m0 4h.01M10.3 3.9L2.4 17.5A2 2 0 004.1 20.5h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z",
+    star: "M12 3.5l2.7 5.6 6.1.9-4.4 4.3 1 6.2-5.4-2.9-5.4 2.9 1-6.2L3.2 10l6.1-.9z",
+    mail: "M3 7l9 6 9-6M4 5h16a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1z",
+    phone: "M6 3h3l2 5-2.5 1.5a12 12 0 006 6L16 13l5 2v3a2 2 0 01-2 2A16 16 0 014 5a2 2 0 012-2z",
+    location: "M12 21s7-5.7 7-11a7 7 0 10-14 0c0 5.3 7 11 7 11zm0-8.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z",
+    calendar: "M7 3v3m10-3v3M4 9h16M5 6h14a1 1 0 011 1v12a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1z",
+    clock: "M12 7v5l3 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z",
+    link: "M10 13a5 5 0 007.5.5l2-2a5 5 0 00-7-7l-1 1m-1 8a5 5 0 01-7.5.5l-2-2a5 5 0 017-7l1 1",
+};
+
+const ICON_SIZES: Record<string, keyof PressTheme["text"]> = {
+    sm: "small",
+    md: "lead",
+    lg: "display",
+};
+
+const icon = defineBlock<{ name: string; size?: string; tone?: string; label?: string }>({
+    type: "icon",
+    label: "Icon",
+    layer: "primitive",
+    fields: [
+        { name: "name", kind: "select", label: "Icon", required: true, options: Object.keys(ICONS) },
+        { name: "size", kind: "select", label: "Size", options: Object.keys(ICON_SIZES) },
+        { name: "tone", kind: "select", label: "Ink", options: Object.keys(INK) },
+        { name: "label", kind: "text", label: "Read out as" },
+    ],
+    component: ({ props, theme }) => {
+        const path = ICONS[props.name];
+        if (!path) return null;
+        const tone = toneOf(theme, undefined);
+        const size = theme.text[ICON_SIZES[props.size ?? "md"] ?? "lead"];
+        return (
+            <svg
+                viewBox="0 0 24 24"
+                width={size}
+                height={size}
+                fill="none"
+                stroke={tone[INK[props.tone ?? ""] ?? "accent"]}
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                role={props.label ? "img" : undefined}
+                aria-hidden={props.label ? undefined : true}
+                aria-label={props.label}
+                style={{ display: "inline-block", verticalAlign: "middle" }}
+            >
+                <path d={path} />
+            </svg>
+        );
+    },
+});
+
+type LinkProps = { label: string; href: string; variant?: string; size?: string; newTab?: boolean };
+
+const BUTTON_VARIANTS = ["primary", "secondary", "quiet"];
+
+function linkStyle(theme: PressTheme, variant: string, size: string): CSSProperties {
+    const tone = toneOf(theme, undefined);
+    const pad = size === "lg" ? `${theme.space.sm} ${theme.space.md}` : `${theme.space.xs} ${theme.space.sm}`;
+    const base: CSSProperties = {
+        display: "inline-block",
+        padding: pad,
+        borderRadius: theme.radii.control,
+        fontWeight: 600,
+        fontSize: size === "lg" ? theme.text.body : theme.text.small,
+        textDecoration: "none",
+    };
+    if (variant === "secondary") {
+        return { ...base, background: "transparent", color: tone.accent, border: `1px solid ${tone.hairline}` };
+    }
+    if (variant === "quiet") {
+        return { ...base, padding: 0, background: "transparent", color: tone.accent, textDecoration: "underline" };
+    }
+    return { ...base, background: tone.accent, color: tone.onAccent, border: "1px solid transparent" };
+}
+
+/*
+ * One component behind `button` and `link`. They are two block types because an editor picking a
+ * part thinks in those words, and the same because a button that navigates is a link: rendering one
+ * as a <button> would give a control that does nothing without JavaScript.
+ */
+function anchorBlock(type: string, label: string, defaultVariant: string): BlockDefinition {
+    return defineBlock<LinkProps>({
+        type,
+        label,
+        layer: "primitive",
+        fields: [
+            { name: "label", kind: "text", label: "Label", required: true },
+            { name: "href", kind: "url", label: "Link", required: true },
+            { name: "variant", kind: "select", label: "Style", options: BUTTON_VARIANTS },
+            { name: "size", kind: "select", label: "Size", options: ["sm", "lg"] },
+            { name: "newTab", kind: "boolean", label: "Open in a new tab" },
+        ],
+        component: ({ props, theme }) => {
+            const href = props.href.trim();
+            const external = /^[a-z][a-z0-9+.-]*:/i.test(href);
+            const style = linkStyle(theme, props.variant ?? defaultVariant, props.size ?? "lg");
+            const rel = external || props.newTab ? "noopener noreferrer" : undefined;
+            const target = props.newTab ? "_blank" : undefined;
+            if (external) {
+                return (
+                    <a href={href} rel={rel} target={target} style={style}>
+                        {props.label}
+                    </a>
+                );
+            }
+            return (
+                <Link href={href} rel={rel} target={target} style={style}>
+                    {props.label}
+                </Link>
+            );
+        },
+    });
+}
+
+/*
+ * A list's entries are slots rather than strings, so an entry can hold a bound text block, an icon
+ * beside a line, or anything else assembled from primitives.
+ */
+const list = defineBlock<{ style?: string; gap?: string }, "items">({
+    type: "list",
+    label: "List",
+    layer: "primitive",
+    fields: [
+        { name: "style", kind: "select", label: "Marker", options: ["bullet", "number", "none"] },
+        { name: "gap", label: "Gap", ...spaceSelect },
+        { name: "items", kind: "slots", label: "Entries", required: true, min: 1, max: 30 },
+    ],
+    component: ({ props, slots, theme }) => {
+        const ordered = props.style === "number";
+        const Tag = ordered ? "ol" : "ul";
+        return (
+            <Tag
+                style={{
+                    margin: 0,
+                    padding: props.style === "none" ? 0 : undefined,
+                    paddingInlineStart: props.style === "none" ? 0 : "1.3em",
+                    listStyle: ordered ? "decimal" : props.style === "none" ? "none" : "disc",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: gap(theme, props.gap, "xs"),
+                    color: toneOf(theme, undefined).secondaryInk,
+                }}
+            >
+                {(slots.items ?? []).map((item, i) => (
+                    <li key={i}>{item}</li>
+                ))}
+            </Tag>
+        );
+    },
+});
+
+/** Every primitive, layout then content. `config` is only read for the embed allow list. */
+export function primitiveBlocks(config: PressConfig): BlockDefinition[] {
+    return [
+        section,
+        stack,
+        row,
+        grid,
+        spacer,
+        divider,
+        text,
+        richText,
+        image,
+        video,
+        embed(config),
+        icon,
+        anchorBlock("button", "Button", "primary"),
+        anchorBlock("link", "Link", "quiet"),
+        list,
+    ];
+}
+
+export type PrimitiveNode = ReactNode;

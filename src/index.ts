@@ -32,6 +32,7 @@ export {
     AUTHOR_COLLECTION,
     CATEGORY_COLLECTION,
     SETTINGS_TYPE,
+    EMBED_HOSTS,
 } from "./config.js";
 export {
     siteConfig,
@@ -60,6 +61,8 @@ export type {
     ThemeFonts,
     ThemeRadii,
     ThemeLayout,
+    ThemeSpace,
+    ThemeText,
 } from "./theme.js";
 export { readingMinutes, initials } from "./reading-time.js";
 export type {
@@ -169,6 +172,8 @@ export {
     resolveBlocks,
     readProps,
     blockSchema,
+    accepts,
+    isBindable,
     MAX_BLOCKS,
     MAX_DEPTH,
 } from "./blocks/schema.js";
@@ -183,15 +188,63 @@ export type {
     ResolvedBlock,
     ResolveOptions,
 } from "./blocks/schema.js";
-export { createBlockRegistry } from "./blocks/registry.js";
+export { createBlockRegistry, registryFor } from "./blocks/registry.js";
 export { builtInBlocks, collectionItems, BLOCK_PROSE_CLASS } from "./blocks/built-in.js";
 export type { CollectionItem } from "./blocks/built-in.js";
+export { primitiveBlocks, PROSE_CLASS, ICONS } from "./blocks/primitives.js";
+export {
+    dataBlocks,
+    SOURCE_BLOCK,
+    REPEAT_BLOCK,
+    SHOW_IF_BLOCK,
+    SLOT_BLOCK,
+    PAGER_BLOCK,
+    MAX_SOURCES,
+    MAX_SOURCE_ROWS,
+} from "./blocks/data.js";
+export {
+    TONES,
+    SPACES,
+    TEXT_ROLES,
+    TEXT_VARIANTS,
+    TEXT_VARIANT_NAMES,
+    RADII,
+    WIDTHS,
+    toneOf,
+    spaceOf,
+    radiusOf,
+    widthOf,
+} from "./blocks/tokens.js";
+export type { Tone, ToneName } from "./blocks/tokens.js";
+export {
+    BINDING_SCOPES,
+    BINDING_FORMATS,
+    BindingSource,
+    bindText,
+    readBindings,
+    hasBinding,
+    formatValue,
+    MAX_TEMPLATE,
+} from "./blocks/bindings.js";
+export type {
+    Binding,
+    BindingFormat,
+    BindingOptions,
+    BindingProblem,
+    BindingScope,
+    BindingScopes,
+} from "./blocks/bindings.js";
+export { bindBlocks, itemScope, pageScope, siteScope, queryScope } from "./blocks/bind.js";
+export type { BindPageOptions } from "./blocks/bind.js";
+export { presetsFrom, compilePreset, withPresets, MAX_PRESETS } from "./blocks/presets.js";
+export type { BlockPreset } from "./blocks/presets.js";
 export { BlockList } from "./blocks/render.js";
 export {
     createPage,
     createViewerPage,
     createPageMetadata,
     createPageStaticParams,
+    pageBlocks,
     PageView,
 } from "./screens/page.js";
 export type { PageViewProps } from "./screens/page.js";
