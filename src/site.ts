@@ -19,7 +19,9 @@ import {
     type SiteLink,
     type SocialLink,
     type TopBar,
+    pinnedTenant,
 } from "./config.js";
+import { readEnv } from "./env.js";
 import { CmsError, isTenantHandle, list, tenantForHost } from "./delivery.js";
 import { readSecret } from "./secret.js";
 import { presetsFrom } from "./blocks/presets.js";
@@ -42,7 +44,8 @@ import type { PressTheme, ThemeColors, ThemeFonts, ThemeLayout, ThemeRadii, Them
  *
  * Every read after that carries the tenant in its header, its cache tag and its fallback key. No
  * tenant means a 404, never another tenant's site. Nothing here is read at module scope, because a
- * value read there is baked into whatever is prerendered at build.
+ * value read there is baked into whatever is prerendered at build. Every environment value comes
+ * through `readEnv` (barakoPress #51).
  */
 
 /** The host a request named, lowercased, without a port or a trailing dot. Null if it is not a DNS name. */
@@ -71,9 +74,11 @@ export async function tenantFromHeaders(
     requestHeaders: Headers,
 ): Promise<ResolvedTenant | null> {
     const sites = config.sites;
-    if (!sites) return config.tenant ? { tenant: config.tenant, host: null } : null;
+    const env = readEnv();
+    const pinned = pinnedTenant(config, env);
+    if (!sites) return pinned ? { tenant: pinned, host: null } : null;
 
-    if (config.tenant) return { tenant: config.tenant, host: null };
+    if (pinned) return { tenant: pinned, host: null };
 
     if (sites.tenantHeader) {
         const named = requestHeaders.get(sites.tenantHeader)?.trim();
@@ -86,7 +91,7 @@ export async function tenantFromHeaders(
         if (tenant) return { tenant, host };
     }
 
-    const fallback = sites.defaultTenant ?? process.env.CMS_DEFAULT_TENANT;
+    const fallback = sites.defaultTenant ?? env.defaultTenant;
     return isTenantHandle(fallback) ? { tenant: fallback, host: null } : null;
 }
 
@@ -194,7 +199,7 @@ export function shareCookieValid(
 export async function showsHoldingPage(config: PressConfig): Promise<boolean> {
     if (!config.holding) return false;
     const jar = await cookies();
-    return !shareCookieValid(jar.get(SHARE_COOKIE)?.value, config.tenant, shareSecret());
+    return !shareCookieValid(jar.get(SHARE_COOKIE)?.value, pinnedTenant(config), shareSecret());
 }
 
 /** As `siteConfig`, but null rather than a 404, for a layout or a handler that answers for itself. */
@@ -209,7 +214,7 @@ export async function siteConfigOrNull(config: PressConfig): Promise<PressConfig
  */
 export async function getGlobals(config: PressConfig): Promise<Record<string, unknown>> {
     // The read below swallows its own failures, so a config nobody resolved has to be refused here.
-    if (config.sites && !config.tenant) throw new Error("a request-time site has to be resolved before it reads");
+    if (config.sites && !pinnedTenant(config)) throw new Error("a request-time site has to be resolved before it reads");
     return (await readSettings(config, config.sites?.settingsType ?? SETTINGS_TYPE)) ?? {};
 }
 
@@ -228,7 +233,7 @@ async function readSettings(
         // than failing the page (#14: fall back to the configured theme, not to the defaults).
         if (!(e instanceof CmsError && e.status === 404)) {
             const why = e instanceof Error ? e.message : String(e);
-            console.warn(`site: settings for tenant "${config.tenant}" could not be read (${why})`);
+            console.warn(`site: settings for tenant "${pinnedTenant(config) ?? ""}" could not be read (${why})`);
         }
         return undefined;
     }
@@ -580,7 +585,7 @@ export function applySiteSettings(
     const base = config.site;
 
     const site: SiteIdentity = {
-        name: str(d.Name) ?? (base.name || config.tenant || ""),
+        name: str(d.Name) ?? (base.name || pinnedTenant(config) || ""),
         tagline: str(d.Tagline) ?? base.tagline,
         // A host is only a fallback origin when the CMS said it belongs to this tenant.
         url: origin(d.Url) ?? (base.url || (host ? `https://${host}` : "")),
@@ -621,7 +626,7 @@ export function applySiteSettings(
         embedHosts: embedHosts(array(d.EmbedHosts) as string[] | undefined) ?? config.embedHosts,
         // A tenant's named blocks. Saved in barakoBrew, so anything that is not a preset is left
         // out rather than half applied, the same as every other setting.
-        presets: array(d.Presets) ? presetsFrom(array(d.Presets), config.tenant) : config.presets,
+        presets: array(d.Presets) ? presetsFrom(array(d.Presets), pinnedTenant(config)) : config.presets,
         collections: collectionsFrom(config.collections, d.Collections),
         optionColors: optionColorsFrom(config.optionColors, theme, d.Colors, d.OptionColors),
         ...(bands ? { regions: bands } : {}),

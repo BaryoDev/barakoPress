@@ -483,10 +483,10 @@ for a post type with no such field.
 | `pageSizes` | 20, 50, 1000, 50 | Index, feed, sitemap, archive |
 | `cacheTag` | `cms` | The tag this site purges. Two sites on one server need two tags |
 | `backstopSeconds` | 300 | How long a cached read may live with no webhook. 0 disables it |
-| `cmsTimeoutMs` | 5000 | How long a read from the CMS may take. Past it the read has failed, and a request-time site answers from its last good copy |
+| `cmsTimeoutMs` | 5000 | How long any one call to the CMS may take, a share link redemption included. Past it the call has failed, and a request-time site answers from its last good copy |
 | `locale` | `en-GB` | Passed to `toLocaleDateString` |
-| `cmsUrl` | `CMS_URL`, or `http://localhost:5005` | Where the CMS is, from this server |
-| `tenant` | `CMS_TENANT` | Tenant slug, for a multi-tenant deployment. On a request-time site, pins every host to it |
+| `cmsUrl` | `CMS_URL`, or `http://localhost:5005` | Where the CMS is, from this server. The variable is read when the CMS is called, not when this file runs |
+| `tenant` | `CMS_TENANT` | Tenant slug, for a multi-tenant deployment. On a request-time site, pins every host to it. The variable is read when the CMS is called, not when this file runs |
 | `sites` | off | Request-time identity and theme from the tenant's site settings. See below |
 | `pages` | off | Where the Pages module's pages are mounted. `""` is the site root |
 | `reservedSlugs` | the routes and the engine's files | First path segments a root-mounted page may not take. Adds to the defaults |
@@ -494,11 +494,35 @@ for a post type with no such field.
 | `optionColors` | none | CSS colours by `type.field` and option, for `colorBy` |
 | `theme` | the barakoCMS palette | Colours, faces, radii and column widths. See below |
 
+### The environment
+
+Every environment value this package reads goes through one reader, `readEnv` in `src/env.ts`, and
+every one of them is read on the call that uses it. None is read when `press.config.ts` runs. That
+used to differ per variable: `CMS_URL` and `CMS_TENANT` were read inside `defineConfig`, the rest
+per request, so when a value was read depended on which value it was.
+
+| Variable | What it sets |
+| --- | --- |
+| `CMS_URL` | Where the delivery API is. `cmsUrl` in the config wins |
+| `CMS_TENANT` | Pins the process to one tenant. `tenant` in the config wins |
+| `CMS_DEFAULT_TENANT` | The tenant for a host the CMS does not know. `sites.defaultTenant` wins |
+| `CMS_RENDERER_KEY` | Sent to the CMS when a share link is redeemed. See [Share links](#one-build-many-sites) |
+| `PRESS_CONSOLE_ORIGINS` | Browser origins allowed to read the block schema, comma separated |
+| `PRESS_SECRET` | The HMAC key for everything this renderer signs. See [One secret](#one-secret) |
+| `REVALIDATE_SECRET` | The webhook key before `PRESS_SECRET`, read only while that is unset |
+| `PRESS_PREVIEW_SECRET` | The share key before `PRESS_SECRET`, read only while that is unset |
+
+Values are used exactly as the environment has them, untrimmed. A secret with a trailing space is a
+different HMAC key, so trimming one here would stop a webhook that verifies today.
+
+`cmsUrlFor(config)` and `pinnedTenant(config)` are exported, so a middleware or a hand-written route
+can ask where the CMS is and which tenant the process is pinned to without reading a variable itself.
+
 **A site is build time or request time.** Without `sites`, identity is build time: the index, the
-feed, the sitemap and robots are prerendered, so anything `press.config.ts` reads from `process.env`
-is baked when you build, not when the server starts. Write per-site values as literals in that file.
-Getting this wrong is how a client site ships with the vendor's name in its masthead. With `sites`,
-identity is data in the CMS and read per request, which is the next section.
+feed, the sitemap and robots are prerendered, so anything *your own* `press.config.ts` reads from the
+environment is baked when you build, not when the server starts. Write per-site values as literals in
+that file. Getting this wrong is how a client site ships with the vendor's name in its masthead. With
+`sites`, identity is data in the CMS and read per request, which is the next section.
 
 ### One build, many sites
 
@@ -514,7 +538,7 @@ On each request the engine resolves the tenant, reads that tenant's settings, an
 1. `CMS_TENANT` (or `tenant`) set: every host is that tenant, with no lookup.
 2. `sites.tenantHeader` set and the request carries a valid handle in it: that tenant. Off by default.
 3. The host, from `sites.hostHeader` (default `host`), looked up with `GET /api/tenants/by-host/{host}`.
-4. `sites.defaultTenant`, or `CMS_DEFAULT_TENANT` read at request time.
+4. `sites.defaultTenant`, or `CMS_DEFAULT_TENANT`, read at request time.
 5. None of those: a 404. Never another tenant's site.
 
 A handle is only ever read from the request through a header the operator named. `X-Tenant` and

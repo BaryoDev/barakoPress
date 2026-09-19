@@ -127,6 +127,34 @@ describe("redeemShareLink", () => {
         expect(received).toEqual([]);
     });
 
+    /*
+     * #51: redemption used a fixed five seconds while every other CMS call used cmsTimeoutMs, so an
+     * operator who lowered the timeout for a slow network still waited five seconds on a share link.
+     */
+    it("bounds the redemption by the config's cmsTimeoutMs, like every other CMS call", async () => {
+        const timeout = vi.spyOn(AbortSignal, "timeout");
+        vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 404 })));
+
+        const config = { ...defineConfig({ site: { name: "T", url: "https://t.example" }, cmsUrl: "http://cms.test", cmsTimeoutMs: 50 }), tenant: "t" };
+        expect(await redeemShareLink(config, "share-key-for-tests-0123456789")).toEqual({ kind: "invalid" });
+
+        expect(timeout).toHaveBeenCalledTimes(1);
+        expect(timeout).toHaveBeenCalledWith(50);
+    });
+
+    it("gives up on a CMS that never answers after cmsTimeoutMs, not after five seconds", async () => {
+        const cms = await listen((req) => {
+            // Never answers. The abort is what ends this, and how long it takes is the test.
+            req.resume();
+        });
+
+        const config = { ...defineConfig({ site: { name: "T", url: "https://t.example" }, cmsUrl: cms, cmsTimeoutMs: 50 }), tenant: "t" };
+        const started = Date.now();
+        expect(await redeemShareLink(config, "share-key-for-tests-0123456789")).toEqual({ kind: "failed" });
+
+        expect(Date.now() - started).toBeLessThan(2_000);
+    }, 4_000);
+
     it("gives up on a CMS that stalls, and counts that as a failed redemption", async () => {
         const stall = new AbortController();
         const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(stall.signal);

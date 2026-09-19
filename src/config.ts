@@ -14,14 +14,16 @@
  * `createBlogIndex(config)` and exports the result. One import, one call, full control.
  */
 
+import { readEnv, type PressEnv } from "./env.js";
 import { resolveTheme, type PressTheme, type PressThemeInput } from "./theme.js";
 import type { BlockPreset } from "./blocks/presets.js";
 import type { ToneName } from "./blocks/tokens.js";
 
 /*
  * The attributes the markdown renderer puts on a link. The browser entry, barakopress/markdown,
- * imports these, so this file must keep importing nothing from next/* or node:* and must not read
- * process.env at module scope.
+ * imports these, so this file must keep importing nothing from next/* or node:*. Its one import is
+ * `env.js`, which imports nothing and touches the environment only inside a function, so nothing
+ * here reads the environment at module scope.
  */
 export const LINK_REL = "noopener noreferrer";
 export const NEW_TAB_TARGET = "_blank";
@@ -334,9 +336,16 @@ export interface PressConfig {
      * `Presets` setting, which is how a designer adds one without a barakoPress release.
      */
     presets: BlockPreset[];
-    /** Where the CMS is, from this server. */
+    /**
+     * Where the CMS is, as the config file named it. Empty means it did not, and `CMS_URL` answers
+     * when the call is made. Read it through `cmsUrlFor`, never straight off the config.
+     */
     cmsUrl: string;
-    /** Tenant slug, for a multi-tenant deployment. */
+    /**
+     * Tenant slug, as the config file named it. Unset means it did not, and `CMS_TENANT` answers when
+     * the call is made. On a resolved request-time config it is the tenant the request belongs to.
+     * Read it through `pinnedTenant`, never straight off the config.
+     */
     tenant?: string;
     /** What the screens look like. See theme.ts for why appearance is config and not a stylesheet. */
     theme: PressTheme;
@@ -555,8 +564,8 @@ export function defineConfig(
         ...(input.currency ? { currency: input.currency } : {}),
         embedHosts: embedHosts(input.embedHosts) ?? [...EMBED_HOSTS],
         presets: input.presets ?? [],
-        cmsUrl: trimSlash(input.cmsUrl ?? process.env.CMS_URL ?? "http://localhost:5005"),
-        tenant: input.tenant ?? process.env.CMS_TENANT ?? undefined,
+        cmsUrl: trimSlash(input.cmsUrl ?? ""),
+        tenant: input.tenant,
         theme: resolveTheme(input.theme),
         collections,
         optionColors: input.optionColors ?? {},
@@ -578,6 +587,31 @@ export function defineConfig(
               }
             : {}),
     };
+}
+
+/*
+ * The environment as a layer under the config (barakoPress #51).
+ *
+ * `defineConfig` runs at module scope in a consumer's `press.config.ts`, so it records what the
+ * config file said and nothing else. These two read the environment on the call that needs the
+ * value, which is the build for a static export and the request for a server. The order is the
+ * order it always was: what the config named wins, then the variable, then the default.
+ */
+
+/** Where the CMS is when neither the config nor CMS_URL names one. */
+export const DEFAULT_CMS_URL = "http://localhost:5005";
+
+/** Where this call talks to: `cmsUrl` in the config, else `CMS_URL`, else localhost. */
+export function cmsUrlFor(config: Pick<PressConfig, "cmsUrl">, env: PressEnv = readEnv()): string {
+    return config.cmsUrl || trimSlash(env.cmsUrl ?? DEFAULT_CMS_URL);
+}
+
+/**
+ * The tenant this config is pinned to: `tenant` in the config, else `CMS_TENANT`. Undefined for a
+ * request-time config that has not resolved its tenant yet, which is not the same as none.
+ */
+export function pinnedTenant(config: Pick<PressConfig, "tenant">, env: PressEnv = readEnv()): string | undefined {
+    return config.tenant ?? env.tenant ?? undefined;
 }
 
 /**

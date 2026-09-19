@@ -1,3 +1,4 @@
+import { readEnv } from "../env.js";
 import { blockSchema, type BlockRegistry } from "../blocks/schema.js";
 
 /*
@@ -39,7 +40,7 @@ export function parseOrigins(values: readonly string[] | string | undefined): st
 function allowedOrigin(request: Request | undefined, options: BlockSchemaRouteOptions): string | null {
     const origin = request?.headers.get("origin");
     if (!origin) return null;
-    const allowed = parseOrigins(options.consoleOrigins ?? process.env.PRESS_CONSOLE_ORIGINS);
+    const allowed = parseOrigins(options.consoleOrigins ?? readEnv().consoleOrigins);
     return allowed.includes(origin) ? origin : null;
 }
 
