@@ -260,18 +260,30 @@ Field names come from `pageFields` in the config, and the type from `types.page`
 Blocks come in four layers.
 
 **Layout primitives** hold blocks and no content: `section` (a tone, a width and a padding step),
-`stack`, `row` (side by side, wrapping on a phone), `grid`, `spacer` and `divider`.
+`stack`, `row` (side by side, wrapping on a phone), `grid`, `flow`, `panel` (a card with a tone and
+a frame), `spacer` and `divider`.
+
+`row` and `grid` take one list per cell, which suits a designer placing each one. `flow` takes a
+single list and lays out whatever is in it, which is what a `repeat` and a preset's `slot` produce:
+a card per row that came back, however many that is. Its column count is a choice and not a number,
+because only a string field takes a binding, and a preset has to pass its own `columns` through.
 
 **Content primitives** hold content and no layout: `text` (a variant from the theme's type scale),
 `richText` (markdown), `image`, `video`, `embed` (an iframe, only for a host in `embedHosts`),
-`icon`, `button`, `link` and `list`.
+`icon`, `button`, `link`, `list` and `disclosure` (a labelled section that opens; give several the
+same `group` and only one is open at a time).
 
 Every primitive takes theme tokens and never a colour or a pixel value. Tones are `page`, `surface`,
 `accent` and `inverse`; spacing is `none` to `xxl` from `theme.space`; type is a role from
 `theme.text`; corners are `none`, `control`, `panel` or `pill`. A tenant that changes the scale
 changes every page built from primitives, and nobody can put one client's blue into a block.
 
-**Presets** are named arrangements of primitives, stored per tenant as data. See below.
+A tone belongs to the band and everything in it: a `section` or a `panel` publishes its ink, its
+accent and its hairline, and the blocks inside read those rather than the page's. That is what makes
+an inverse band readable, and it is why a block dropped anywhere still looks like it belongs.
+
+**Presets** are named arrangements of primitives, stored as data: the shipped library below, plus
+whatever a tenant saves of its own.
 
 **Data blocks** load and choose rather than draw: `source`, `repeat`, `showIf`, `pager` and `slot`.
 See bindings below.
@@ -396,8 +408,10 @@ published image can use it, with no barakoPress release.
 ```
 
 A request-time site reads its tenant's presets from the `Presets` site setting. A build-time site
-passes them as `presets` in the config. A preset never replaces a block that is code, and a preset
-body may not use another preset. `slot` marks where the content an editor dropped into the preset
+passes them as `presets` in the config. A preset never replaces a block that is code. It does
+replace a preset, which is how a tenant adjusts one of the shipped blocks below without waiting for
+a release. A preset body may not use another preset saved in the same pass, so a cycle cannot form;
+it may use one compiled earlier, which is how a tenant's own block builds on a shipped one. `slot` marks where the content an editor dropped into the preset
 goes, and that content binds in the page's scope rather than the preset's.
 
 A preset that is not used says why, once, in the server log, with one line per reason rather than one
@@ -406,6 +420,36 @@ uses, a field list that is not a list, fields inside it that are not fields, a n
 block already has, and the presets past the point where a tenant's bodies hold more than 400 blocks
 between them. A setting that quietly does nothing reads as done, which is worse than one that is
 missing. A bad paste is spelled out five times and then counted.
+
+### The block library
+
+Every site gets these, compiled in from the primitives. None of them is code, so a site that wants
+one to look different saves its own under the same name and that one wins.
+
+| Block | What it is | Props |
+| --- | --- | --- |
+| `hero` | The band at the head of a page | heading, body, image, imageAlt, primaryLabel, primaryHref, secondaryLabel, secondaryHref, tone, columns, align, padding |
+| `band` | Copy with one call to action | tone, heading, body, label, href, align, padding, width |
+| `statBand` | A row of figures | heading, tone, columns, padding, items |
+| `cardGrid` | Cards from a collection | heading, collection, filterField, filterValue, empty, tone, columns, padding |
+| `peopleGrid` | People from a collection, typed in place, or both | heading, collection, filterField, filterValue, role, tone, columns, padding, items |
+| `timeline` | Dated entries | heading, tone, padding, width, items |
+| `steps` | Numbered entries | heading, tone, padding, width, items |
+| `tiers` | Giving or pricing tiers | heading, tone, columns, padding, items |
+| `keyValueTable` | A panel of facts | heading, tone, padding, radius, rows |
+| `tabs` | Sections that open | heading, tone, padding, width, items |
+| `map` | An embedded map, held to `embedHosts` | src, title, heading, aspect, tone, padding |
+| `stat` | One figure and its label | value, label, align |
+| `timelineEntry` | One dated entry | date, title, body |
+| `step` | One numbered step | number, title, body |
+| `tier` | One tier | name, amount, body, label, href, tone |
+| `person` | One person | name, role, photo, href, linkLabel, align |
+| `keyValueRow` | One fact | label, value |
+
+The blocks in the second half go in the first half's slots: stats in a `statBand`, entries in a
+`timeline`, `disclosure` blocks in `tabs`. A card grid reads its entries through `{{item.Title}}`,
+`{{item.Summary}}`, `{{item.Date | date}}` and `{{item.Href}}`, so it works against whatever the
+tenant calls those fields, and it takes the collection as a prop rather than knowing any name.
 
 ## Configuring it
 

@@ -1,5 +1,6 @@
 import type { PressConfig } from "../config.js";
 import { builtInBlocks } from "./built-in.js";
+import { libraryPresets } from "./library.js";
 import { withPresets, type BlockPreset } from "./presets.js";
 import { checkDefinition, type BlockDefinition, type BlockRegistry } from "./schema.js";
 
@@ -13,15 +14,21 @@ import { checkDefinition, type BlockDefinition, type BlockRegistry } from "./sch
  * Presets are added last and never replace a code block, because a preset is data a designer saves
  * and a code block is behaviour the site depends on. A request-time site's presets come from its
  * tenant's settings, so they are applied per request in `registryFor` rather than here.
+ *
+ * The library of barakoPress #21 goes in first, in its own pass, so a tenant's own `hero` replaces
+ * the shipped one rather than being refused as a name already taken, and so the two do not share
+ * one block budget. It comes with the built-ins because its bodies are built from them: without
+ * them every preset in it would compile to an empty arrangement.
  */
 export function createBlockRegistry(
     config: PressConfig,
     blocks: BlockDefinition[] = [],
     options: { builtIns?: boolean; presets?: readonly BlockPreset[] } = {},
 ): BlockRegistry {
-    const registry = new Map<string, BlockDefinition>();
+    let registry = new Map<string, BlockDefinition>();
     if (options.builtIns !== false) {
         for (const block of builtInBlocks(config)) registry.set(block.type, block);
+        registry = new Map(withPresets(registry, libraryPresets()));
     }
 
     const own = new Set<string>();
