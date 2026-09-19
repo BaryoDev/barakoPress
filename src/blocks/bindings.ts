@@ -52,21 +52,32 @@ export interface BindingProblem {
 }
 
 /*
- * One placeholder. The path charset is barakoCMS's, the fallback is bounded and may not contain a
- * brace so it cannot swallow the rest of the template. Both quantified groups match disjoint
- * characters, so there is no backtracking to blow up on.
+ * Finding a placeholder and reading one are two jobs, and they are split on purpose.
+ *
+ * The scan is this and only this: two braces, a bounded run of characters that are not braces, two
+ * braces. One quantifier, nothing optional beside it, and nothing it matches can also start what
+ * follows it, so there is exactly one way to match at any position and no backtracking to pay for.
+ * The grammar used to live in the pattern instead, with three `\s*` runs that could each split a
+ * run of spaces several ways, and CodeQL was right that "{{{{0" followed by a few thousand spaces
+ * made that quadratic. `MAX_TEMPLATE` bounded it rather than removing it, and one renderer serves
+ * every tenant on the process, so a string typed in one tenant's console must not be able to spend
+ * another tenant's CPU.
+ *
+ * What is inside the braces is then read with `indexOf`, `slice` and `trim`, and the two pieces
+ * that have to hold a shape are checked against anchored patterns with fixed bounds. Same grammar,
+ * same published contract, no backtracking anywhere.
  */
-const PLACEHOLDER =
-    /\{\{\s*([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*)\s*(?:\|\s*([A-Za-z][A-Za-z0-9]{0,15})\s*)?(?:\?\?([^{}]{0,200}?))?\s*\}\}/g;
+const PLACEHOLDER = /\{\{[^{}]{0,250}\}\}/g;
+
+/** `scope.Path`, up to nine segments. Dots are not in the segment charset, so this cannot branch. */
+const PATH = /^[A-Za-z0-9_]{1,60}(?:\.[A-Za-z0-9_]{1,60}){0,8}$/;
+const FORMAT = /^[A-Za-z][A-Za-z0-9]{0,15}$/;
+
+/** The longest fallback a placeholder may carry. Longer, and it is not read as one. */
+const MAX_FALLBACK = 200;
 
 /** The longest template this reads. A stored prop is editor input, and scanning is work. */
 export const MAX_TEMPLATE = 4000;
-
-export function hasBinding(value: string): boolean {
-    if (value.length > MAX_TEMPLATE) return false;
-    PLACEHOLDER.lastIndex = 0;
-    return PLACEHOLDER.test(value);
-}
 
 function isScope(value: string): value is BindingScope {
     return (BINDING_SCOPES as readonly string[]).includes(value);
@@ -76,21 +87,61 @@ function isFormat(value: string): value is BindingFormat {
     return (BINDING_FORMATS as readonly string[]).includes(value);
 }
 
+/**
+ * One `{{...}}` span as a binding, or null when what is between the braces is not one.
+ *
+ * Null leaves the span in the page exactly as it was typed, which is what barakoCMS does with a
+ * variable it does not know and what an editor needs to see the typo.
+ *
+ * The fallback is split off first, so a `|` inside it stays part of it.
+ */
+function parse(raw: string): Binding | null {
+    let rest = raw.slice(2, -2);
+
+    let fallback = "";
+    const question = rest.indexOf("??");
+    if (question !== -1) {
+        fallback = rest.slice(question + 2).trim();
+        if (fallback.length > MAX_FALLBACK) return null;
+        rest = rest.slice(0, question);
+    }
+
+    let format = "text";
+    const bar = rest.indexOf("|");
+    if (bar !== -1) {
+        format = rest.slice(bar + 1).trim();
+        if (!FORMAT.test(format)) return null;
+        rest = rest.slice(0, bar);
+    }
+
+    const path = rest.trim();
+    if (!PATH.test(path)) return null;
+
+    const [scope, ...segments] = path.split(".");
+    return {
+        raw,
+        scope,
+        path: segments.join("."),
+        format: isFormat(format) ? format : "text",
+        fallback,
+    };
+}
+
+export function hasBinding(value: string): boolean {
+    if (value.length > MAX_TEMPLATE) return false;
+    for (const match of value.matchAll(PLACEHOLDER)) {
+        if (parse(match[0]) !== null) return true;
+    }
+    return false;
+}
+
 /** Every placeholder in a template, in order. What an editor wrote, not what it resolves to. */
 export function readBindings(value: string): Binding[] {
     if (value.length > MAX_TEMPLATE) return [];
     const found: Binding[] = [];
-    PLACEHOLDER.lastIndex = 0;
     for (const match of value.matchAll(PLACEHOLDER)) {
-        const [scope, ...rest] = match[1].split(".");
-        const format = match[2] ?? "text";
-        found.push({
-            raw: match[0],
-            scope,
-            path: rest.join("."),
-            format: isFormat(format) ? format : "text",
-            fallback: (match[3] ?? "").trim(),
-        });
+        const binding = parse(match[0]);
+        if (binding) found.push(binding);
     }
     return found;
 }
@@ -280,8 +331,8 @@ export async function bindText(
         resolved.set(binding.raw, text ?? binding.fallback);
     }
 
-    // One pass over the original, and what a placeholder resolved to is never scanned again.
-    PLACEHOLDER.lastIndex = 0;
+    // One pass over the original, and what a placeholder resolved to is never scanned again. A
+    // span that is not a binding has nothing in the map and stays exactly as it was typed.
     const text = template.replace(PLACEHOLDER, (raw) => resolved.get(raw) ?? raw);
     return { text, bound: true, missing };
 }

@@ -29,16 +29,75 @@ describe("reading a template", () => {
         expect(readBindings("{{page.Author.Name}}")[0].path).toBe("Author.Name");
     });
 
-    it("is not fooled by a single brace or an unclosed one", () => {
-        for (const text of ["{site.Name}", "{{site.Name}", "{{ site Name }}", "{{}}"]) {
+    it("is not fooled by a single brace, an unclosed one, or braces with no path in them", () => {
+        for (const text of ["{site.Name}", "{{site.Name}", "{{ site Name }}", "{{}}", "{{ }}"]) {
             expect(hasBinding(text)).toBe(false);
         }
+    });
+
+    it("leaves a span that is not a binding exactly as it was typed", async () => {
+        const { bound } = source(site({ Name: "Clinic" }));
+
+        // A format it does not have, an empty one, and a path with a space in it. Each is a typo
+        // somebody has to see, so none of them quietly becomes the empty string.
+        for (const text of ["{{site.Name | 9bad}}", "{{site.Name | }}", "{{site Name}}"]) {
+            expect((await bindText(text, bound)).text).toBe(text);
+        }
+    });
+
+    it("keeps a pipe that belongs to the fallback out of the format", () => {
+        expect(readBindings("{{site.Tagline ?? open | closed}}")).toEqual([
+            {
+                raw: "{{site.Tagline ?? open | closed}}",
+                scope: "site",
+                path: "Tagline",
+                format: "text",
+                fallback: "open | closed",
+            },
+        ]);
     });
 
     it("stops looking past the template cap, so a pasted page cannot make scanning the work", () => {
         const huge = "x".repeat(MAX_TEMPLATE + 1) + "{{site.Name}}";
         expect(hasBinding(huge)).toBe(false);
         expect(readBindings(huge)).toEqual([]);
+    });
+
+    /*
+     * The shape CodeQL found (js/polynomial-redos). The grammar used to live in the pattern, and
+     * its runs of optional whitespace could each split one run of spaces several ways, so "{{{{0"
+     * followed by spaces cost time in the square of the length. `MAX_TEMPLATE` bounded that at
+     * roughly 25ms a string rather than removing it, and one renderer serves every tenant on the
+     * process, so a string typed in one tenant's console could spend another tenant's CPU.
+     *
+     * Scanned in a loop because one pass of the old grammar was too cheap to tell from the new one
+     * by a clock. Fifty are not: the old pattern spends about 750ms here and this spends about one,
+     * so the bound fails on a return to quadratic and has three orders of magnitude of room on a
+     * busy machine. Both counts are asserted too, so the loop cannot be optimised into nothing.
+     */
+    it("reads a pathological string in bounded time, and finds no binding in it", () => {
+        const evil = "{{{{0" + " ".repeat(3000);
+        let found = 0;
+
+        const started = performance.now();
+        for (let i = 0; i < 50; i++) found += readBindings(evil).length;
+        const spent = performance.now() - started;
+
+        expect(found).toBe(0);
+        expect(hasBinding(evil)).toBe(false);
+        expect(spent).toBeLessThan(250);
+    });
+
+    it("reads a page full of real placeholders in bounded time", () => {
+        const many = "{{site.Name | upper ?? none}} ".repeat(120).slice(0, MAX_TEMPLATE);
+        let found = 0;
+
+        const started = performance.now();
+        for (let i = 0; i < 50; i++) found += readBindings(many).length;
+        const spent = performance.now() - started;
+
+        expect(found).toBeGreaterThan(5000);
+        expect(spent).toBeLessThan(250);
     });
 });
 
