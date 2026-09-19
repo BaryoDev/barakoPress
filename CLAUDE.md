@@ -40,6 +40,7 @@ src/screens/*.tsx    factories that take config and return a page component
 src/routes/*.ts      factories for the feed, sitemap, robots and the revalidate endpoint
 src/styles.css       Signal tokens. A consumer may take the markup and none of this
 app/                 the reference deployment: thin re-exports
+look/                the look check: pair list, capture, comparison, fixtures. Not published
 dist/                the published package: what tsc makes of src. Never edited, never committed
 tsconfig.build.json  the package build. The repo's tsconfig is typecheck only
 ```

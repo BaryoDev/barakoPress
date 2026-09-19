@@ -1,0 +1,79 @@
+<!doctype html>
+<!--
+  The reference side of the fixture pair: one file holding two page states, the way a design comp
+  arrives. #home is the state with no hash, #about is reached by the hash. The rebuilt side is two
+  separate pages served over HTTP with different class names, because that is what a rebuild looks
+  like and the mask list has to survive it.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fixture prototype</title>
+    <link rel="stylesheet" href="./site.css" />
+  </head>
+  <body class="prototype">
+    <nav class="bar">
+      <a href="#home">Home</a>
+      <a href="#about">About</a>
+    </nav>
+
+    <section id="home" class="state">
+      <header class="hero">
+        <h1>A club that shows up</h1>
+        <p>Weekly meetings, a scholarship fund, and a water project that is nearly finished.</p>
+      </header>
+      <div class="wrap">
+        <div class="facts">
+          <div class="fact"><b>Members</b><span id="count" class="count">0</span></div>
+          <div class="fact"><b>Founded</b>1964</div>
+          <div class="fact"><b>Meets</b>Thursdays</div>
+        </div>
+        <span class="pulse marquee">Donations open</span>
+        <img src="./banner.svg" width="640" height="160" alt="" />
+        <h2>What we are working on</h2>
+        <div class="panel">
+          <p>The pump house is roofed and the pipe run is trenched as far as the school gate.</p>
+          <p>Two more classrooms have desks. The reading room needs shelves.</p>
+          <p>The medical mission is booked for the second week of the month.</p>
+        </div>
+        <p>Drawn at <span id="now">unknown</span>.</p>
+        <label for="signup">Join the mailing list</label>
+        <input id="signup" class="signup" autofocus placeholder="you@example.com" />
+        <img src="./banner.svg" width="640" height="160" alt="" loading="lazy" />
+        <p>
+          Everything below here exists so the page scrolls, because a check that never scrolls never
+          finds out what the page does when it is asked to.
+        </p>
+      </div>
+    </section>
+
+    <section id="about" class="state">
+      <div class="wrap">
+        <h2>About the club</h2>
+        <p>Chartered in 1964, meeting every Thursday, and open to anyone who turns up twice.</p>
+        <div class="panel">
+          <p>Officers are elected in June and serve a year.</p>
+          <p>Dues are collected quarterly and the books are read out at the first meeting after.</p>
+        </div>
+        <p>Drawn at <span id="now-about">unknown</span>.</p>
+      </div>
+    </section>
+
+    <footer>Fixture pages. Not a real club.</footer>
+
+    <script>
+      // Two deliberate sources of non-determinism. The count changes on every load and is masked.
+      // The time is whatever the clock says, and the clock is pinned by the check, so both captures
+      // print the same string without a mask.
+      for (const id of ["count"]) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = String(1000 + Math.floor(Math.random() * 9000));
+      }
+      for (const id of ["now", "now-about"]) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = new Date().toISOString();
+      }
+    </script>
+  </body>
+</html>

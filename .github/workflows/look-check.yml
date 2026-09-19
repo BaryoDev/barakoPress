@@ -1,0 +1,129 @@
+# The look check, as a job any site repository can call.
+#
+# It proves the rebuilt pages look like the design that was approved, and it runs before a site's
+# domain is switched to the stack. The pages are not listed here: the caller passes the path to a
+# pair list that lives with its own data, so adding a page, or a whole site, never means editing
+# this file.
+#
+# In a site repository:
+#
+#     jobs:
+#       look:
+#         uses: BaryoDev/barakoPress/.github/workflows/look-check.yml@master
+#         with:
+#           pairs: look/pairs.json
+#           variables: '{"REBUILT_BASE":"https://staging.rckoronadal.org"}'
+name: look check
+
+on:
+  workflow_call:
+    inputs:
+      pairs:
+        description: Path to the pair list, inside the calling repository.
+        required: true
+        type: string
+      variables:
+        description: >-
+          A JSON object of names the pair list expands with ${NAME}, such as
+          {"REBUILT_BASE":"https://staging.example"}. The rebuilt host is staging today and the real
+          one next week, and neither belongs in a file that is reviewed once and kept.
+        required: false
+        default: "{}"
+        type: string
+      engine-ref:
+        description: The barakoPress ref holding the check.
+        required: false
+        default: master
+        type: string
+      workers:
+        description: Parallel captures. Two full page renders per test, so more is not faster.
+        required: false
+        default: 2
+        type: number
+      artifact-name:
+        required: false
+        default: look-check
+        type: string
+      retention-days:
+        required: false
+        default: 14
+        type: number
+
+permissions:
+  contents: read
+
+jobs:
+  look:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: The site, which owns the pair list
+        uses: actions/checkout@v7
+        with:
+          path: site
+
+      - name: The engine, which owns the check
+        uses: actions/checkout@v7
+        with:
+          repository: BaryoDev/barakoPress
+          ref: ${{ inputs.engine-ref }}
+          path: engine
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: engine/package-lock.json
+
+      - name: What the pair list expands
+        # Refused rather than trusted: a name that is not a shell-safe identifier, or a value
+        # carrying a newline, would be writing whatever it liked into the job's environment.
+        env:
+          LOOK_VARIABLES: ${{ inputs.variables }}
+          LOOK_PAIRS_INPUT: ${{ inputs.pairs }}
+        run: |
+          node --input-type=module -e '
+            import { appendFileSync } from "node:fs";
+            const given = JSON.parse(process.env.LOOK_VARIABLES || "{}");
+            if (typeof given !== "object" || given === null || Array.isArray(given)) {
+              throw new Error("variables must be a JSON object of names to values");
+            }
+            for (const [name, value] of Object.entries(given)) {
+              if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new Error(`${name} is not a usable name`);
+              if (typeof value !== "string" || /[\r\n]/.test(value)) {
+                throw new Error(`the value of ${name} must be a string on one line`);
+              }
+              appendFileSync(process.env.GITHUB_ENV, `${name}=${value}\n`);
+            }
+            const pairs = process.env.LOOK_PAIRS_INPUT;
+            if (pairs.startsWith("/") || pairs.split("/").includes("..")) {
+              throw new Error("pairs must be a path inside the calling repository");
+            }
+          '
+
+      - name: Install the engine
+        working-directory: engine
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: engine
+        run: npx playwright install --with-deps chromium
+
+      - name: Compare every pair at every width
+        working-directory: engine
+        env:
+          LOOK_PAIRS: ${{ github.workspace }}/site/${{ inputs.pairs }}
+          LOOK_OUTPUT: ${{ github.workspace }}/look-results
+          LOOK_WORKERS: ${{ inputs.workers }}
+        run: npm run look
+
+      - name: The reference, the rebuilt page and the diff
+        # On failure, because a number alone does not tell anyone what moved. The table of every
+        # page's difference is in the job summary either way.
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ github.workspace }}/look-results
+          retention-days: ${{ inputs.retention-days }}
+          if-no-files-found: warn
