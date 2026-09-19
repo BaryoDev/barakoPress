@@ -286,3 +286,22 @@ jobs:
       - name: Stack logs on failure
         if: failure()
         run: docker compose -f /tmp/compose.yml logs --tail 80
+
+  look:
+    # The look check proving it is a gate. One pair list, run twice: green against pages that match
+    # the prototype on disk, red against the same pages with the hero heading in another colour, and
+    # the reference, rebuilt and diff images written for the page that moved.
+    #
+    # A check nobody has watched fail is not yet a gate, and this is where it fails on purpose.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run look:selftest

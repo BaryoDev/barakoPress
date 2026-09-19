@@ -720,6 +720,31 @@ start without that file, and refuses again if `PRESS_SECRET` and `REVALIDATE_SEC
 comes up with no secret can never be told that content changed. Only ports 80 and 443 are published:
 the API, the console and the site are reachable only through Caddy on the compose network.
 
+## The look check
+
+Before a site's domain moves to this stack, the look check proves the rebuilt pages look like the
+design that was approved. It takes pairs, a reference and a rebuilt page, screenshots both at 390px
+and 1280px in the same run, and fails the page whose pixels moved more than that page allows,
+handing back the reference, the rebuilt screenshot and a diff image.
+
+The reference is either a prototype file on disk with a page state, or the live URL of the site
+being replaced. The pages themselves are data the site owns, so adding a page, or a whole site,
+never means editing the job:
+
+```yaml
+jobs:
+  look:
+    uses: BaryoDev/barakoPress/.github/workflows/look-check.yml@master
+    with:
+      pairs: look/pairs.json
+      variables: '{"REBUILT_BASE":"https://staging.rckoronadal.org"}'
+```
+
+The pair list format, the per page threshold and the list of things that would otherwise make a run
+flake are in [docs/look-check.md](docs/look-check.md). `npm run look:selftest` runs the check twice
+over fixture pages, once green and once against a deliberate colour change, which is how anyone can
+see for themselves that it fails when it should.
+
 ## Working on the engine
 
 ```bash
