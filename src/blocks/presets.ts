@@ -248,7 +248,12 @@ export const MAX_PRESET_BLOCKS = MAX_BLOCKS * 4;
  * The registry with these presets added. Same map when there are none, so the common path allocates
  * nothing. A preset never replaces a code block: a tenant naming one `collection` would swap out
  * behaviour the site depends on, and a name collision is a mistake worth seeing rather than a
- * feature. Presets resolve against a registry without them, which is what stops one nesting another.
+ * feature. It does replace a preset, which is how a tenant adjusts one of the shipped blocks
+ * without waiting for a release; the one it replaces was data too.
+ *
+ * Presets resolve against the registry as it was handed over, never against the ones being added,
+ * which is what stops one nesting another and makes a cycle impossible. A preset compiled in an
+ * earlier pass is part of that registry, so a tenant's own block may hold a shipped one.
  *
  * A preset that is not used says so. A setting that quietly does nothing is worse than one that is
  * missing, because it reads as done: somebody naming a preset `collection` in barakoBrew would
@@ -267,7 +272,7 @@ export function withPresets(
 
     for (const preset of presets) {
         const taken = out.get(preset.type);
-        if (taken) {
+        if (taken && taken.layer !== "preset") {
             sayOnce(
                 `blocks: the preset "${preset.type}"${forTenant(tenant)} is not used, because the ` +
                     `${taken.layer ?? "block"} "${taken.label}" is already registered under that name`,

@@ -1,11 +1,23 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { PressTheme } from "../theme.js";
 import type { ResolvedBlock } from "./schema.js";
+
+/*
+ * A list of blocks is a column with a gap between the entries, unless the layout primitive holding
+ * it says otherwise. `flow` sets `--bp-list` to `contents`, which takes this wrapper out of the box
+ * tree so each block in the list becomes a cell of the flow rather than a row of this column.
+ *
+ * A custom property inherits, so each block resets it for whatever it holds: without the reset, a
+ * list nested two levels under a flow would be transparent too, and its blocks would land in a grid
+ * they have nothing to do with.
+ */
+const LIST_DISPLAY = "var(--bp-list, flex)";
+const RESET_LIST: CSSProperties = { "--bp-list": "flex" } as CSSProperties;
 
 /** Renders resolved blocks in order. Resolve first with `resolveBlocks`; this trusts its input. */
 export function BlockList({ blocks, theme }: { blocks: ResolvedBlock[]; theme: PressTheme }) {
     return (
-        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.lg }}>
+        <div style={{ display: LIST_DISPLAY, flexDirection: "column", gap: theme.space.lg }}>
             {blocks.map((block, index) => {
                 const Component = block.definition.component;
                 const slots: Record<string, ReactNode[]> = {};
@@ -15,7 +27,7 @@ export function BlockList({ blocks, theme }: { blocks: ResolvedBlock[]; theme: P
                     ));
                 }
                 return (
-                    <div key={index} data-block={block.definition.type}>
+                    <div key={index} data-block={block.definition.type} style={RESET_LIST}>
                         <Component props={block.props} slots={slots} theme={theme} />
                     </div>
                 );

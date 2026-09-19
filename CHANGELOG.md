@@ -2,6 +2,19 @@
 
 ## 0.4.0 (unreleased)
 
+- A block library every site gets: `hero`, `band`, `statBand`, `cardGrid`, `peopleGrid`, `timeline`,
+  `steps`, `tiers`, `keyValueTable`, `tabs`, `map`, and the parts that go in their slots (`stat`,
+  `timelineEntry`, `step`, `tier`, `person`, `keyValueRow`). Every one is a preset compiled from the
+  primitives rather than code, so a tenant that wants one to look different saves its own under that
+  name and that one wins. Three new primitives carry them: `flow` lays a single list out as cells
+  instead of stacking it, which is what a `repeat` and a preset's slot produce, `panel` is a card
+  with a tone and a frame, and `disclosure` is a labelled section that opens. (#21)
+- A band's tone reaches the blocks inside it. A `section` or a `panel` publishes its ink, accent and
+  hairline, and `text`, `icon`, `list`, `button` and `link` read those instead of the page's, so a
+  heading on an inverse band is no longer dark ink on a dark panel. (#21, toward #49)
+- A page may nest blocks eight lists deep instead of four. The hundred-block budget is what bounds
+  the work, and four was not enough for a card grid: a band, a source, a flow, a repeat, a card and
+  the stack inside it is six before any content. (#21)
 - Blocks in four layers: layout and content primitives that take theme tokens only, presets a tenant
   saves as data, and bindings. Any string prop can hold `{{site.Name}}`, `{{item.Fee | money}}` or
   `{{query.class ?? all}}`, resolved on the server as the request's tenant; `source`, `repeat`,

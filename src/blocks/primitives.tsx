@@ -5,6 +5,7 @@ import { renderMarkdown } from "../markdown.js";
 import type { PressTheme } from "../theme.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
 import {
+    type Tone,
     ALIGNMENTS,
     RADII,
     SPACES,
@@ -43,6 +44,36 @@ function gap(theme: PressTheme, name: string | undefined, fallback: Parameters<t
     return spaceOf(theme, name, fallback);
 }
 
+/*
+ * A tone is the band's, and everything inside the band takes it.
+ *
+ * A `section` sets its own background and ink, but the content primitives inside it resolved their
+ * colours against the page tone, so a heading in an inverse band was dark ink on a dark panel. They
+ * are drawn from a custom property instead, set by the nearest band or panel and falling back to the
+ * page tone, which is what a block standing on its own still gets. It is inheritance because that is
+ * the shape of the problem: a block does not know what it was dropped into, and CSS does.
+ */
+const TONE_VARS = {
+    ink: "--bp-ink",
+    secondaryInk: "--bp-ink-soft",
+    muted: "--bp-muted",
+    hairline: "--bp-hairline",
+    accent: "--bp-accent",
+    onAccent: "--bp-on-accent",
+} as const satisfies Partial<Record<keyof Tone, string>>;
+
+type ToneVar = keyof typeof TONE_VARS;
+
+function inherited(theme: PressTheme, key: ToneVar): string {
+    return `var(${TONE_VARS[key]}, ${toneOf(theme, undefined)[key]})`;
+}
+
+function toneVars(tone: Tone): CSSProperties {
+    const style: Record<string, string> = {};
+    for (const [key, name] of Object.entries(TONE_VARS)) style[name] = tone[key as ToneVar];
+    return style as CSSProperties;
+}
+
 /* ---------------------------------------------------------------- layout */
 
 type SectionProps = { tone?: string; width?: string; padding?: string; align?: string };
@@ -64,6 +95,7 @@ const section = defineBlock<SectionProps, "content">({
         return (
             <section
                 style={{
+                    ...toneVars(tone),
                     background: tone.bg,
                     color: tone.ink,
                     paddingTop: spaceOf(theme, props.padding, "xl"),
@@ -172,6 +204,114 @@ const grid = defineBlock<GridProps, "items">({
     ),
 });
 
+type FlowProps = { columns?: string; gap?: string; align?: string; justify?: string };
+
+/** How many columns a flow may ask for. A choice and not a number, for the reason below. */
+export const FLOW_COLUMNS = ["auto", "1", "2", "3", "4", "5", "6"];
+
+/*
+ * Blocks side by side, from one list rather than one list per cell.
+ *
+ * `row` and `grid` take a list per cell, which is right when a designer places each cell. It cannot
+ * express the other two cases: a `repeat` that turns one subtree into however many rows came back,
+ * and a preset's `slot`, which hands over a list whose length nobody knows when the preset is
+ * written. Both of those produce siblings in one list, and until now siblings in one list could
+ * only stack. So a `flow` lays its list out instead of stacking it.
+ *
+ * The column count is a choice and not a number because a number field cannot carry a binding: a
+ * preset that exposes "how many columns" has to pass its own prop through to this one, and only a
+ * string field takes `{{props.columns}}`.
+ */
+const flow = defineBlock<FlowProps, "content">({
+    type: "flow",
+    label: "Flow",
+    layer: "primitive",
+    fields: [
+        { name: "columns", kind: "select", label: "Columns", options: FLOW_COLUMNS },
+        { name: "gap", label: "Gap", ...spaceSelect },
+        { name: "align", label: "Align", ...alignSelect },
+        {
+            name: "justify",
+            label: "Distribute",
+            kind: "select",
+            options: ["start", "center", "end", "between"],
+        },
+        { name: "content", kind: "slots", label: "Content", required: true, min: 1, max: 1 },
+    ],
+    component: ({ props, slots, theme }) => {
+        const columns = Number(props.columns);
+        const asGrid = Number.isInteger(columns) && columns >= 1;
+        const style = {
+            // Takes the wrapper the list renders out of the box tree, so the blocks in it are the
+            // cells here. See render.tsx.
+            "--bp-list": "contents",
+            display: asGrid ? "grid" : "flex",
+            flexWrap: asGrid ? undefined : "wrap",
+            gridTemplateColumns: asGrid
+                ? `repeat(${columns}, minmax(min(100%, ${theme.layout.columnMin}), 1fr))`
+                : undefined,
+            gap: gap(theme, props.gap),
+            alignItems: props.align ? alignOf(props.align) : "stretch",
+            justifyContent: props.justify === "between" ? "space-between" : alignOf(props.justify),
+        } as CSSProperties;
+        return <div style={style}>{slots.content?.[0]}</div>;
+    },
+});
+
+type PanelProps = {
+    tone?: string;
+    padding?: string;
+    radius?: string;
+    border?: boolean;
+    align?: string;
+    width?: string;
+};
+
+/*
+ * A box with a background of its own: the card in a card grid, the panel a table of facts sits in.
+ *
+ * `section` is the band across the page, gutters and all, and stacking two of them is not a card.
+ * The frame is on unless a block turns it off, the same bargain the image primitive made, and the
+ * height is full so cards in one row of a flow end level with each other.
+ */
+const panel = defineBlock<PanelProps, "content">({
+    type: "panel",
+    label: "Panel",
+    layer: "primitive",
+    fields: [
+        { name: "tone", label: "Tone", ...toneSelect },
+        { name: "padding", label: "Padding", ...spaceSelect },
+        { name: "radius", kind: "select", label: "Corners", options: [...RADII] },
+        { name: "border", kind: "boolean", label: "Hairline frame" },
+        { name: "align", label: "Align", ...alignSelect },
+        { name: "width", kind: "select", label: "Width", options: [...WIDTHS] },
+        { name: "content", kind: "slots", label: "Content", required: true, min: 1, max: 1 },
+    ],
+    component: ({ props, slots, theme }) => {
+        const tone = toneOf(theme, props.tone ?? "surface");
+        const inner = widthOf(theme, props.width ?? "full");
+        return (
+            <div
+                style={{
+                    ...toneVars(tone),
+                    boxSizing: "border-box",
+                    height: "100%",
+                    maxWidth: inner,
+                    margin: inner ? "0 auto" : undefined,
+                    padding: spaceOf(theme, props.padding, "lg"),
+                    background: tone.bg,
+                    color: tone.ink,
+                    borderRadius: radiusOf(theme, props.radius ?? "panel"),
+                    border: props.border === false ? undefined : `1px solid ${tone.hairline}`,
+                    textAlign: textAlignOf(props.align),
+                }}
+            >
+                {slots.content?.[0]}
+            </div>
+        );
+    },
+});
+
 const spacer = defineBlock<{ size?: string }>({
     type: "spacer",
     label: "Spacer",
@@ -192,7 +332,9 @@ const divider = defineBlock<{ tone?: string; space?: string }>({
         <hr
             style={{
                 border: 0,
-                borderTop: `1px solid ${toneOf(theme, props.tone).hairline}`,
+                borderTop: `1px solid ${
+                    props.tone ? toneOf(theme, props.tone).hairline : inherited(theme, "hairline")
+                }`,
                 margin: `${spaceOf(theme, props.space, "lg")} 0`,
             }}
         />
@@ -203,7 +345,7 @@ const divider = defineBlock<{ tone?: string; space?: string }>({
 
 type TextProps = { value: string; variant?: string; tone?: string; align?: string; weight?: string };
 
-const INK: Record<string, keyof ReturnType<typeof toneOf>> = {
+const INK: Record<string, ToneVar> = {
     ink: "ink",
     secondary: "secondaryInk",
     muted: "muted",
@@ -224,7 +366,6 @@ const text = defineBlock<TextProps>({
     component: ({ props, theme }) => {
         const variant = TEXT_VARIANTS[props.variant ?? "body"] ?? TEXT_VARIANTS.body;
         const Tag = variant.tag;
-        const tone = toneOf(theme, undefined);
         const heading = Tag !== "p";
         const style: CSSProperties = {
             margin: 0,
@@ -233,7 +374,7 @@ const text = defineBlock<TextProps>({
             lineHeight: heading ? 1.15 : 1.7,
             letterSpacing: heading ? "-.03em" : undefined,
             fontWeight: props.weight === "bold" ? 700 : props.weight === "regular" ? 400 : heading ? 600 : 400,
-            color: tone[INK[props.tone ?? ""] ?? (heading ? "ink" : "secondaryInk")],
+            color: inherited(theme, INK[props.tone ?? ""] ?? (heading ? "ink" : "secondaryInk")),
             textAlign: textAlignOf(props.align),
             textWrap: heading ? "balance" : "pretty",
         };
@@ -448,7 +589,6 @@ const icon = defineBlock<{ name: string; size?: string; tone?: string; label?: s
     component: ({ props, theme }) => {
         const path = ICONS[props.name];
         if (!path) return null;
-        const tone = toneOf(theme, undefined);
         const size = theme.text[ICON_SIZES[props.size ?? "md"] ?? "lead"];
         return (
             <svg
@@ -456,7 +596,7 @@ const icon = defineBlock<{ name: string; size?: string; tone?: string; label?: s
                 width={size}
                 height={size}
                 fill="none"
-                stroke={tone[INK[props.tone ?? ""] ?? "accent"]}
+                stroke={inherited(theme, INK[props.tone ?? ""] ?? "accent")}
                 strokeWidth={1.8}
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -476,7 +616,6 @@ type LinkProps = { label: string; href: string; variant?: string; size?: string;
 const BUTTON_VARIANTS = ["primary", "secondary", "quiet"];
 
 function linkStyle(theme: PressTheme, variant: string, size: string): CSSProperties {
-    const tone = toneOf(theme, undefined);
     const pad = size === "lg" ? `${theme.space.sm} ${theme.space.md}` : `${theme.space.xs} ${theme.space.sm}`;
     const base: CSSProperties = {
         display: "inline-block",
@@ -486,13 +625,24 @@ function linkStyle(theme: PressTheme, variant: string, size: string): CSSPropert
         fontSize: size === "lg" ? theme.text.body : theme.text.small,
         textDecoration: "none",
     };
+    const accent = inherited(theme, "accent");
     if (variant === "secondary") {
-        return { ...base, background: "transparent", color: tone.accent, border: `1px solid ${tone.hairline}` };
+        return {
+            ...base,
+            background: "transparent",
+            color: accent,
+            border: `1px solid ${inherited(theme, "hairline")}`,
+        };
     }
     if (variant === "quiet") {
-        return { ...base, padding: 0, background: "transparent", color: tone.accent, textDecoration: "underline" };
+        return { ...base, padding: 0, background: "transparent", color: accent, textDecoration: "underline" };
     }
-    return { ...base, background: tone.accent, color: tone.onAccent, border: "1px solid transparent" };
+    return {
+        ...base,
+        background: accent,
+        color: inherited(theme, "onAccent"),
+        border: "1px solid transparent",
+    };
 }
 
 /*
@@ -560,13 +710,59 @@ const list = defineBlock<{ style?: string; gap?: string }, "items">({
                     display: "flex",
                     flexDirection: "column",
                     gap: gap(theme, props.gap, "xs"),
-                    color: toneOf(theme, undefined).secondaryInk,
+                    color: inherited(theme, "secondaryInk"),
                 }}
             >
                 {(slots.items ?? []).map((item, i) => (
                     <li key={i}>{item}</li>
                 ))}
             </Tag>
+        );
+    },
+});
+
+type DisclosureProps = { label: string; open?: boolean; group?: string; tone?: string };
+
+/*
+ * A labelled section that opens. `details` and not a scripted tab strip: a tab strip needs either
+ * JavaScript or a stylesheet with sibling selectors, and a primitive can emit neither. What it can
+ * emit is the one element the browser already knows how to open and close, which works with the
+ * keyboard, is found by the browser's own find-in-page, and needs nothing loaded.
+ *
+ * Two disclosures sharing a `group` behave as a tab strip does: opening one closes the other.
+ */
+const disclosure = defineBlock<DisclosureProps, "content">({
+    type: "disclosure",
+    label: "Disclosure",
+    layer: "primitive",
+    fields: [
+        { name: "label", kind: "text", label: "Label", required: true },
+        { name: "open", kind: "boolean", label: "Open to begin with" },
+        { name: "group", kind: "text", label: "Only one open in this group" },
+        { name: "tone", label: "Tone", ...toneSelect },
+        { name: "content", kind: "slots", label: "Content", required: true, min: 1, max: 1 },
+    ],
+    component: ({ props, slots, theme }) => {
+        const tone = toneOf(theme, props.tone);
+        return (
+            <details
+                name={props.group}
+                open={props.open === true}
+                style={{ borderTop: `1px solid ${tone.hairline}`, padding: `${theme.space.sm} 0` }}
+            >
+                <summary
+                    style={{
+                        cursor: "pointer",
+                        fontFamily: theme.fonts.heading,
+                        fontWeight: 600,
+                        fontSize: theme.text.subheading,
+                        color: tone.ink,
+                    }}
+                >
+                    {props.label}
+                </summary>
+                <div style={{ paddingTop: theme.space.sm }}>{slots.content?.[0]}</div>
+            </details>
         );
     },
 });
@@ -578,6 +774,8 @@ export function primitiveBlocks(config: PressConfig): BlockDefinition[] {
         stack,
         row,
         grid,
+        flow,
+        panel,
         spacer,
         divider,
         text,
@@ -589,6 +787,7 @@ export function primitiveBlocks(config: PressConfig): BlockDefinition[] {
         anchorBlock("button", "Button", "primary"),
         anchorBlock("link", "Link", "quiet"),
         list,
+        disclosure,
     ];
 }
 
