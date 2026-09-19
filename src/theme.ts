@@ -69,6 +69,37 @@ export interface ThemeLayout {
     wide: string;
     /** Side padding on every band. */
     gutter: string;
+    /** The narrowest a column gets before a row or a grid wraps it onto its own line. */
+    columnMin: string;
+}
+
+/**
+ * The spacing scale. Block primitives take one of these names, never a pixel value, so a tenant
+ * that wants roomier pages changes the scale once instead of every block on every page.
+ */
+export interface ThemeSpace {
+    none: string;
+    xs: string;
+    sm: string;
+    md: string;
+    lg: string;
+    xl: string;
+    xxl: string;
+}
+
+/**
+ * The type scale, by role rather than by size, for the same reason. `text` names the role a
+ * primitive asks for; what that measures is the theme's business.
+ */
+export interface ThemeText {
+    meta: string;
+    small: string;
+    body: string;
+    lead: string;
+    subheading: string;
+    heading: string;
+    title: string;
+    display: string;
 }
 
 export interface PressTheme {
@@ -76,6 +107,8 @@ export interface PressTheme {
     fonts: ThemeFonts;
     radii: ThemeRadii;
     layout: ThemeLayout;
+    space: ThemeSpace;
+    text: ThemeText;
 }
 
 export type PressThemeInput = {
@@ -83,6 +116,8 @@ export type PressThemeInput = {
     fonts?: Partial<ThemeFonts>;
     radii?: Partial<ThemeRadii>;
     layout?: Partial<ThemeLayout>;
+    space?: Partial<ThemeSpace>;
+    text?: Partial<ThemeText>;
 };
 
 export const DEFAULT_THEME: PressTheme = {
@@ -121,6 +156,26 @@ export const DEFAULT_THEME: PressTheme = {
         prose: "780px",
         wide: "1160px",
         gutter: "40px",
+        columnMin: "240px",
+    },
+    space: {
+        none: "0",
+        xs: "8px",
+        sm: "12px",
+        md: "20px",
+        lg: "32px",
+        xl: "48px",
+        xxl: "80px",
+    },
+    text: {
+        meta: "12.5px",
+        small: "14.5px",
+        body: "17px",
+        lead: "20px",
+        subheading: "17px",
+        heading: "21px",
+        title: "26px",
+        display: "38px",
     },
 };
 
@@ -130,6 +185,8 @@ export function resolveTheme(input: PressThemeInput | undefined): PressTheme {
         fonts: { ...DEFAULT_THEME.fonts, ...input?.fonts },
         radii: { ...DEFAULT_THEME.radii, ...input?.radii },
         layout: { ...DEFAULT_THEME.layout, ...input?.layout },
+        space: { ...DEFAULT_THEME.space, ...input?.space },
+        text: { ...DEFAULT_THEME.text, ...input?.text },
     };
 }
 

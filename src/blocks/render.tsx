@@ -5,7 +5,7 @@ import type { ResolvedBlock } from "./schema.js";
 /** Renders resolved blocks in order. Resolve first with `resolveBlocks`; this trusts its input. */
 export function BlockList({ blocks, theme }: { blocks: ResolvedBlock[]; theme: PressTheme }) {
     return (
-        <div style={{ display: "flex", flexDirection: "column", gap: "32px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.lg }}>
             {blocks.map((block, index) => {
                 const Component = block.definition.component;
                 const slots: Record<string, ReactNode[]> = {};

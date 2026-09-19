@@ -19,8 +19,10 @@ import { proseCss } from "../theme.js";
 import { siteConfig } from "../site.js";
 import { BLOCK_PROSE_CLASS } from "../blocks/built-in.js";
 import { BlockList } from "../blocks/render.js";
-import { createBlockRegistry } from "../blocks/registry.js";
-import { resolveBlocks, type BlockRegistry } from "../blocks/schema.js";
+import { createBlockRegistry, registryFor } from "../blocks/registry.js";
+import { resolveBlocks, type BlockRegistry, type ResolvedBlock } from "../blocks/schema.js";
+import { bindBlocks, pageScope, queryScope, siteScope } from "../blocks/bind.js";
+import { getGlobals } from "../site.js";
 import { collectionAt, collectionOf, getItem } from "../collections.js";
 import { CollectionIndexView, itemMetadata, renderCollectionDetail } from "./collection.js";
 import { Breadcrumbs } from "./navigation.js";
@@ -32,7 +34,13 @@ import { Breadcrumbs } from "./navigation.js";
  * /about/team.
  */
 type PageRouteParams = { slug?: string; path?: string[] };
-type PageParams = { params: Promise<PageRouteParams> };
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+/*
+ * `searchParams` is taken but never awaited unless a block binds `{{query.X}}`. Awaiting it is what
+ * makes a route dynamic, and `output: "export"` refuses a build outright over it, so a static site
+ * with no query binding is unaffected by this existing.
+ */
+type PageParams = { params: Promise<PageRouteParams>; searchParams?: SearchParams };
 
 export interface PageViewProps {
     config: PressConfig;
@@ -43,16 +51,55 @@ export interface PageViewProps {
     showTitle?: boolean;
     /** From the Pages module, root first. Drawn above the title when the page has a parent. */
     breadcrumbs?: Breadcrumb[];
+    /** The request's URL parameters, for `{{query.X}}`. Awaited only if a block asks for one. */
+    searchParams?: SearchParams;
+}
+
+/**
+ * A page's blocks: resolved against the registry, then bound and expanded.
+ *
+ * Every scope is a thunk, so a page that binds nothing reads nothing. That matters for `site`,
+ * which is a CMS read, and for `query`, which makes the route dynamic.
+ */
+export async function pageBlocks(
+    config: PressConfig,
+    page: Page,
+    registry: BlockRegistry,
+    options: { perViewer?: boolean; searchParams?: SearchParams } = {},
+): Promise<ResolvedBlock[]> {
+    if (!Array.isArray(page.blocks) || page.blocks.length === 0) return [];
+    const blocks = resolveBlocks(page.blocks, registry, { perViewer: options.perViewer === true });
+    return bindBlocks(blocks, {
+        config,
+        registry,
+        scopes: {
+            site: async () => siteScope(config, await getGlobals(config)),
+            page: () => pageScope(page),
+            ...(options.searchParams ? { query: async () => queryScope(await options.searchParams!) } : {}),
+        },
+        // Reported, never thrown, and never shown to a visitor: a renamed field is something the
+        // person editing the page has to see, and nothing a reader can act on.
+        onProblem: (problem) =>
+            console.warn(`blocks: ${problem.binding} on page "${page.slug || page.id}" is ${problem.reason}`),
+    });
 }
 
 /*
  * A page is its blocks when it has any, and its markdown body otherwise. The fallback is what keeps
  * a blueprint page, which has a Body and no Blocks field until one is added, rendering unchanged.
  */
-export function PageView({ config, page, registry, perViewer = false, showTitle = true, breadcrumbs = [] }: PageViewProps) {
+export async function PageView({
+    config,
+    page,
+    registry,
+    perViewer = false,
+    showTitle = true,
+    breadcrumbs = [],
+    searchParams,
+}: PageViewProps) {
     const t = config.theme;
     const hasBlocks = Array.isArray(page.blocks) && page.blocks.length > 0;
-    const blocks = hasBlocks ? resolveBlocks(page.blocks, registry, { perViewer }) : [];
+    const blocks = await pageBlocks(config, page, registry, { perViewer, searchParams });
 
     return (
         <div style={{ background: t.colors.pageBg, color: t.colors.ink, fontFamily: t.fonts.body }}>
@@ -181,7 +228,7 @@ async function missing(config: PressConfig, p: PageRouteParams): Promise<never> 
  */
 export function createPage(base: PressConfig, registry?: BlockRegistry) {
     let blocks = registry;
-    return async function BlockPage({ params }: PageParams) {
+    return async function BlockPage({ params, searchParams }: PageParams) {
         const config = await siteConfig(base);
         const p = await params;
         const hit = collectionHit(config, p);
@@ -193,13 +240,19 @@ export function createPage(base: PressConfig, registry?: BlockRegistry) {
         const found = await findPage(config, p);
         if (!found) return missing(config, p);
         blocks ??= createBlockRegistry(base);
-        return <PageView config={config} page={found.page} breadcrumbs={found.breadcrumbs} registry={blocks} />;
+        return PageView({
+            config,
+            page: found.page,
+            breadcrumbs: found.breadcrumbs,
+            registry: registryFor(config, blocks),
+            searchParams,
+        });
     };
 }
 
 export function createViewerPage(base: PressConfig, registry?: BlockRegistry) {
     let blocks = registry;
-    return async function ViewerPage({ params }: PageParams) {
+    return async function ViewerPage({ params, searchParams }: PageParams) {
         await connection();
         const config = await siteConfig(base);
         const p = await params;
@@ -212,9 +265,14 @@ export function createViewerPage(base: PressConfig, registry?: BlockRegistry) {
         const found = await findPage(config, p);
         if (!found) return missing(config, p);
         blocks ??= createBlockRegistry(base);
-        return (
-            <PageView config={config} page={found.page} breadcrumbs={found.breadcrumbs} registry={blocks} perViewer />
-        );
+        return PageView({
+            config,
+            page: found.page,
+            breadcrumbs: found.breadcrumbs,
+            registry: registryFor(config, blocks),
+            searchParams,
+            perViewer: true,
+        });
     };
 }
 
