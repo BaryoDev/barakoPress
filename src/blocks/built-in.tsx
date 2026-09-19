@@ -3,74 +3,30 @@ import type { PressConfig } from "../config.js";
 import { showsHoldingPage, siteConfigOrNull } from "../site.js";
 import { formatDate } from "../cms.js";
 import { collectionOf, listCollection } from "../collections.js";
-import { renderMarkdown } from "../markdown.js";
+import { PROSE_CLASS, primitiveBlocks } from "./primitives.js";
+import { dataBlocks } from "./data.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
 
 /*
- * The blocks every site gets: rich text, image, columns, call to action and a collection embed.
+ * The blocks every site gets: the primitives and the data blocks of barakoPress #33, plus the named
+ * blocks that shipped before them.
+ *
+ * `columns`, `callToAction` and `collection` are here rather than in primitives.tsx because each is
+ * an arrangement or a behaviour rather than a part. `columns` is what `row` and `grid` do with
+ * tokens, and it stays because pages store it. `callToAction` is the shape a preset will take in
+ * 0.6.0. `collection` reads the CMS, which #33 keeps in code.
  *
  * Styled inline from the theme for the reason the post screen is (see post-view.tsx): a stylesheet
- * the consumer may not import is a look somebody does not get. Rich text is the exception, because
- * rendered markdown is a string inline styles cannot reach, so the page emits `proseCss` for it.
+ * the consumer may not import is a look somebody does not get.
  */
 
 /** The class the page's generated body stylesheet is scoped to. */
-export const BLOCK_PROSE_CLASS = "bp-prose";
-
-const richText = defineBlock<{ markdown: string }>({
-    type: "richText",
-    label: "Rich text",
-    fields: [{ name: "markdown", kind: "markdown", label: "Text", required: true }],
-    component: ({ props, theme }) => (
-        <div
-            className={BLOCK_PROSE_CLASS}
-            style={{ maxWidth: theme.layout.prose }}
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(props.markdown) }}
-        />
-    ),
-});
-
-const image = defineBlock<{ src: string; alt?: string; caption?: string }>({
-    type: "image",
-    label: "Image",
-    fields: [
-        { name: "src", kind: "url", label: "Image URL", required: true },
-        { name: "alt", kind: "text", label: "Alternative text" },
-        { name: "caption", kind: "text", label: "Caption" },
-    ],
-    component: ({ props, theme }) => (
-        <figure style={{ margin: 0 }}>
-            <img
-                src={props.src}
-                alt={props.alt ?? ""}
-                loading="lazy"
-                style={{
-                    display: "block",
-                    maxWidth: "100%",
-                    height: "auto",
-                    borderRadius: theme.radii.panel,
-                    border: `1px solid ${theme.colors.hairline}`,
-                }}
-            />
-            {props.caption && (
-                <figcaption
-                    style={{
-                        marginTop: "10px",
-                        fontFamily: theme.fonts.mono,
-                        fontSize: "12.5px",
-                        color: theme.colors.muted,
-                    }}
-                >
-                    {props.caption}
-                </figcaption>
-            )}
-        </figure>
-    ),
-});
+export const BLOCK_PROSE_CLASS = PROSE_CLASS;
 
 const columns = defineBlock<{}, "columns">({
     type: "columns",
     label: "Columns",
+    layer: "block",
     fields: [{ name: "columns", kind: "slots", label: "Columns", required: true, min: 1, max: 4 }],
     component: ({ slots }) => (
         <div
@@ -91,6 +47,7 @@ const columns = defineBlock<{}, "columns">({
 const callToAction = defineBlock<{ heading: string; text?: string; label: string; href: string }>({
     type: "callToAction",
     label: "Call to action",
+    layer: "block",
     fields: [
         { name: "heading", kind: "text", label: "Heading", required: true },
         { name: "text", kind: "text", label: "Text" },
@@ -210,6 +167,7 @@ function collection(config: PressConfig): BlockDefinition {
     return defineBlock<CollectionBlockProps>({
         type: "collection",
         label: "Collection",
+        layer: "block",
         fields: [
             config.sites
                 ? { name: "collection", kind: "text", label: "Collection", required: true }
@@ -300,5 +258,5 @@ function collection(config: PressConfig): BlockDefinition {
 }
 
 export function builtInBlocks(config: PressConfig): BlockDefinition[] {
-    return [richText, image, columns, callToAction, collection(config)];
+    return [...primitiveBlocks(config), ...dataBlocks(config), columns, callToAction, collection(config)];
 }

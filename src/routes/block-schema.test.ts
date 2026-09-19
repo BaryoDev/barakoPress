@@ -21,7 +21,7 @@ describe("the block schema route across origins", () => {
         expect(res.headers.get("access-control-allow-credentials")).toBeNull();
         expect(res.headers.get("vary")).toBe("Origin");
         const body = (await res.json()) as { blocks: unknown[] };
-        expect(body.blocks).toHaveLength(5);
+        expect(body.blocks).toHaveLength(registry.size);
     });
 
     it("gives an unlisted origin the schema with no CORS header, so a browser keeps it from the page", () => {

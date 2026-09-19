@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { isSafeHref } from "../markdown.js";
 import type { PressTheme } from "../theme.js";
+import { BINDING_FORMATS, BINDING_SCOPES, hasBinding, readBindings } from "./bindings.js";
 
 /*
  * The block model.
@@ -30,6 +31,20 @@ export interface BlockField {
     /** A `number` value's range, or how many lists a `slots` field holds. Inclusive. */
     min?: number;
     max?: number;
+    /**
+     * Whether the stored value may hold `{{scope.Field}}` placeholders. Every string field takes
+     * them unless it says otherwise. A number or a boolean does not: a binding resolves to text,
+     * and a number that arrives as text is a bug rather than a binding.
+     *
+     * Published in the block schema, so an editor knows which inputs get a binding picker.
+     */
+    bindable?: boolean;
+}
+
+const BINDABLE_BY_DEFAULT: ReadonlySet<FieldKind> = new Set<FieldKind>(["text", "markdown", "url", "select"]);
+
+export function isBindable(field: BlockField): boolean {
+    return field.bindable ?? BINDABLE_BY_DEFAULT.has(field.kind);
 }
 
 export type BlockProps = Record<string, unknown>;
@@ -81,6 +96,17 @@ export interface BlockDefinition<P extends BlockProps = BlockProps, S extends st
     type: string;
     label: string;
     fields: BlockField[] | TypedBlockField<P, S>[];
+    /**
+     * The layer this belongs to, published so an editor can group what it offers. `primitive` is a
+     * part, `preset` a saved arrangement of parts, `data` a block that loads or chooses rather than
+     * draws, and `block` the code blocks with behaviour of their own.
+     */
+    layer?: "primitive" | "preset" | "data" | "block";
+    /**
+     * A preset's body: the block list it stands for, expanded at render with `props` bound to this
+     * block's own props. Set by `compilePreset`, never by hand.
+     */
+    preset?: ResolvedBlock[];
     /**
      * Shows something that depends on who is looking. Such a block is left out by `createPage`,
      * whose output is shared by every visitor, and rendered by `createViewerPage`, which is never
@@ -136,7 +162,35 @@ function inRange(field: BlockField, n: number): boolean {
     return (field.min === undefined || n >= field.min) && (field.max === undefined || n <= field.max);
 }
 
-function accepts(field: BlockField, value: unknown): boolean {
+/*
+ * A template stands in for what it will resolve to, with every placeholder replaced by the most
+ * harmless value of its kind, so the field's own rule still gets a say before anything is bound.
+ * "javascript:{{item.Url}}" fails `url` here, at save-shaped input, rather than depending on what
+ * the binding happens to return. What it does return is checked again after substitution.
+ */
+function standIn(field: BlockField): string {
+    if (field.kind === "url") return "/x";
+    // Any of the options will do: what the binding resolves to is checked against them for real
+    // once it has resolved.
+    if (field.kind === "select") return field.options?.[0] ?? "x";
+    return "x";
+}
+
+export function withoutBindings(field: BlockField, value: string): string {
+    const filler = standIn(field);
+    let out = value;
+    for (const binding of readBindings(value)) out = out.split(binding.raw).join(filler);
+    return out;
+}
+
+export function accepts(field: BlockField, value: unknown): boolean {
+    if (typeof value === "string" && isBindable(field) && hasBinding(value)) {
+        return acceptsValue(field, withoutBindings(field, value));
+    }
+    return acceptsValue(field, value);
+}
+
+function acceptsValue(field: BlockField, value: unknown): boolean {
     switch (field.kind) {
         case "text":
         case "markdown":
@@ -236,23 +290,35 @@ function resolveList(
 }
 
 export interface BlockSchema {
-    version: 1;
-    blocks: { type: string; label: string; perViewer: boolean; fields: BlockField[] }[];
+    version: 2;
+    /** The scopes and formats a binding may name, so an editor offers exactly what renders. */
+    bindings: { scopes: string[]; formats: string[] };
+    blocks: {
+        type: string;
+        label: string;
+        layer: "primitive" | "preset" | "data" | "block";
+        perViewer: boolean;
+        fields: (BlockField & { bindable: boolean })[];
+    }[];
 }
 
 /** What this site can render, as data an editor can build a form from. */
 export function blockSchema(registry: BlockRegistry): BlockSchema {
     return {
-        version: 1,
+        version: 2,
+        bindings: { scopes: [...BINDING_SCOPES], formats: [...BINDING_FORMATS] },
         blocks: [...registry.values()].map((d) => ({
             type: d.type,
             label: d.label,
+            layer: d.layer ?? "block",
             perViewer: d.perViewer === true,
             // Options copied too: the registry validates against its own array, and this result is
-            // handed to callers.
+            // handed to callers. `bindable` is resolved rather than passed through, so an editor
+            // reads one answer instead of reimplementing the default.
             fields: (d.fields as BlockField[]).map((f) => ({
                 ...f,
                 options: f.options ? [...f.options] : undefined,
+                bindable: isBindable(f),
             })),
         })),
     };

@@ -223,6 +223,8 @@ export interface Page {
      */
     blocks?: unknown;
     seo?: Seo;
+    /** The entry as the API returned it, so a binding can read a field by the name the tenant gave it. */
+    content?: PublicContent;
 }
 
 export function toPage(config: PressConfig, c: PublicContent): Page {
@@ -236,6 +238,7 @@ export function toPage(config: PressConfig, c: PublicContent): Page {
         body: str(field(d, f.body)),
         blocks: field(d, f.blocks),
         seo: c.seo ?? undefined,
+        content: c,
     };
 }
 
