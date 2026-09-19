@@ -45,6 +45,54 @@ export interface BlockPreset {
 /** The most presets one tenant may define. A registry is walked on every page. */
 export const MAX_PRESETS = 60;
 
+/*
+ * Saying a preset was dropped, once.
+ *
+ * A request-time site builds its registry on every request, so warning where the drop happens would
+ * put one line per request in the log for a preset somebody has to rename once. The same message is
+ * said once and then remembered, the way delivery.ts remembers a failed read, and the set is
+ * bounded because a preset name is typed by somebody. Full, it is emptied rather than trimmed, so
+ * the messages come back rather than stopping for the life of the process.
+ */
+const SAID_MAX = 200;
+const said = new Set<string>();
+
+function sayOnce(message: string): void {
+    if (said.has(message)) return;
+    if (said.size >= SAID_MAX) said.clear();
+    said.add(message);
+    console.warn(message);
+}
+
+/** For tests: say every message again. */
+export function forgetPresetWarnings(): void {
+    said.clear();
+}
+
+const forTenant = (tenant: string | undefined) => (tenant ? ` for tenant "${tenant}"` : "");
+
+/**
+ * The most drops one reading of a tenant's settings spells out, before it says how many are left.
+ *
+ * A settings blob typed wrong holds up to `MAX_PRESETS` broken entries, and one line each would
+ * fill the log and then the set above with a single bad paste.
+ */
+const MAX_SAID_DROPS = 5;
+
+/*
+ * A dropped entry as it appears in a message.
+ *
+ * The type it claims is what a person recognises, so it is shown, and the index is there because a
+ * broken entry may have no usable name at all. It came out of a settings field, so it is cut to a
+ * length and stripped of anything outside printable ASCII: a stored newline in a log line reads as
+ * a second log line.
+ */
+function entryName(raw: unknown, index: number): string {
+    const type = isRecord(raw) && typeof raw.type === "string" ? raw.type : "";
+    const safe = type.replace(/[^\x20-\x7E]/g, "").replace(/"/g, "").slice(0, 40);
+    return safe ? `"${safe}" (entry ${index + 1})` : `entry ${index + 1}`;
+}
+
 const NAME = /^[A-Za-z][A-Za-z0-9_-]{0,40}$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -61,41 +109,92 @@ const FIELD_KINDS = ["text", "markdown", "url", "number", "boolean", "select", "
  * than half applied. The blocks are not checked here; `compilePreset` does that against the
  * registry, which is the only thing that knows what this site can render.
  */
-export function presetsFrom(value: unknown): BlockPreset[] {
+export function presetsFrom(value: unknown, tenant?: string): BlockPreset[] {
     if (!Array.isArray(value)) return [];
     const out: BlockPreset[] = [];
     const seen = new Set<string>();
-    for (const raw of value.slice(0, MAX_PRESETS)) {
-        if (!isRecord(raw)) continue;
+    // Each reason is its own line, because a type name that is not a name, a name used twice and a
+    // field list that is not a list are three different things to go and correct. One catchall
+    // would tell a person only that something was wrong.
+    const dropped: string[] = [];
+
+    value.slice(0, MAX_PRESETS).forEach((raw, index) => {
+        const where = entryName(raw, index);
+        if (!isRecord(raw)) {
+            dropped.push(`${where} is not a preset`);
+            return;
+        }
         const type = typeof raw.type === "string" ? raw.type : "";
-        if (!NAME.test(type) || seen.has(type)) continue;
-        const fields = fieldsFrom(raw.fields);
-        if (fields === null) continue;
+        if (!NAME.test(type)) {
+            dropped.push(`${where} has no type, or one that is not a name`);
+            return;
+        }
+        if (seen.has(type)) {
+            dropped.push(`${where} uses a type an earlier preset already uses`);
+            return;
+        }
+        const read = fieldsFrom(raw.fields);
+        if (read === null) {
+            dropped.push(`${where} has fields that are not a list`);
+            return;
+        }
+        if (read.skipped > 0) {
+            // The preset is kept: it renders, and its other props work. What it is short of is the
+            // props somebody thinks it exposes, so a binding to one renders its fallback forever.
+            dropped.push(
+                `${where} keeps ${read.fields.length} of its fields, because ${read.skipped} ` +
+                    `${read.skipped === 1 ? "is not a field" : "are not fields"}`,
+            );
+        }
         seen.add(type);
         out.push({
             type,
             label: typeof raw.label === "string" && raw.label ? raw.label : type,
-            fields,
+            fields: read.fields,
             blocks: raw.blocks,
         });
+    });
+
+    for (const why of dropped.slice(0, MAX_SAID_DROPS)) sayOnce(`blocks: ${why}${forTenant(tenant)}`);
+    if (dropped.length > MAX_SAID_DROPS) {
+        sayOnce(
+            `blocks: ${dropped.length - MAX_SAID_DROPS} more preset settings${forTenant(tenant)} ` +
+                `are wrong in the same way, and are not spelled out`,
+        );
     }
     return out;
 }
 
+interface ReadFields {
+    fields: BlockField[];
+    /** Entries in the list that are not fields. The preset keeps the rest. */
+    skipped: number;
+}
+
 /** Null for a field list that is not one, so the preset is dropped rather than exposing no props. */
-function fieldsFrom(value: unknown): BlockField[] | null {
-    if (value === undefined) return [];
+function fieldsFrom(value: unknown): ReadFields | null {
+    if (value === undefined) return { fields: [], skipped: 0 };
     if (!Array.isArray(value)) return null;
     const fields: BlockField[] = [];
+    let skipped = 0;
     for (const raw of value.slice(0, 30)) {
-        if (!isRecord(raw)) continue;
+        if (!isRecord(raw)) {
+            skipped++;
+            continue;
+        }
         const name = typeof raw.name === "string" ? raw.name : "";
         const kind = typeof raw.kind === "string" ? raw.kind : "";
-        if (!NAME.test(name) || !FIELD_KINDS.includes(kind)) continue;
+        if (!NAME.test(name) || !FIELD_KINDS.includes(kind)) {
+            skipped++;
+            continue;
+        }
         const options = Array.isArray(raw.options)
             ? raw.options.filter((o): o is string => typeof o === "string").slice(0, 40)
             : undefined;
-        if (kind === "select" && (!options || options.length === 0)) continue;
+        if (kind === "select" && (!options || options.length === 0)) {
+            skipped++;
+            continue;
+        }
         fields.push({
             name,
             kind: kind as BlockField["kind"],
@@ -107,7 +206,7 @@ function fieldsFrom(value: unknown): BlockField[] | null {
             bindable: typeof raw.bindable === "boolean" ? raw.bindable : undefined,
         });
     }
-    return fields;
+    return { fields, skipped };
 }
 
 /**
@@ -144,32 +243,6 @@ export function compilePreset(preset: BlockPreset, registry: BlockRegistry): Blo
  * hundred blocks each is work nobody asked for on every page.
  */
 export const MAX_PRESET_BLOCKS = MAX_BLOCKS * 4;
-
-/*
- * Saying a preset was dropped, once.
- *
- * A request-time site builds its registry on every request, so warning where the drop happens would
- * put one line per request in the log for a preset somebody has to rename once. The same message is
- * said once and then remembered, the way delivery.ts remembers a failed read, and the set is
- * bounded because a preset name is typed by somebody. Full, it is emptied rather than trimmed, so
- * the messages come back rather than stopping for the life of the process.
- */
-const SAID_MAX = 200;
-const said = new Set<string>();
-
-function sayOnce(message: string): void {
-    if (said.has(message)) return;
-    if (said.size >= SAID_MAX) said.clear();
-    said.add(message);
-    console.warn(message);
-}
-
-/** For tests: say every message again. */
-export function forgetPresetWarnings(): void {
-    said.clear();
-}
-
-const forTenant = (tenant: string | undefined) => (tenant ? ` for tenant "${tenant}"` : "");
 
 /**
  * The registry with these presets added. Same map when there are none, so the common path allocates

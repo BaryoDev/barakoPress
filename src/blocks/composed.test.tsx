@@ -43,7 +43,7 @@ const { siteConfig } = await import("../site.js");
 const { createPage } = await import("../screens/page.js");
 const { blockSchema } = await import("./schema.js");
 const { createBlockRegistry, registryFor } = await import("./registry.js");
-const { forgetPresetWarnings, MAX_PRESET_BLOCKS } = await import("./presets.js");
+const { forgetPresetWarnings, presetsFrom, MAX_PRESET_BLOCKS } = await import("./presets.js");
 
 const CMS = "http://cms.test";
 
@@ -631,5 +631,84 @@ describe("what a binding may not do", () => {
         await page("academy.example", many);
 
         expect(calls.filter((c) => c.startsWith("/api/public/enrolment")).length).toBeLessThanOrEqual(8);
+    });
+});
+
+/*
+ * A preset a designer typed wrong in barakoBrew is read the way every other setting is: the entry is
+ * left out rather than half applied. Left out quietly, it reads as saved, and somebody goes looking
+ * for a block that will never appear. Each reason is its own line because each is a different thing
+ * to go and correct.
+ */
+describe("a preset setting that is not read", () => {
+    const read = (entries: unknown[]) => presetsFrom(entries, "academy");
+
+    it("says an entry that is not a preset at all", () => {
+        expect(read(["just a string"])).toEqual([]);
+
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toContain("entry 1 is not a preset");
+        expect(warnings[0]).toContain('for tenant "academy"');
+    });
+
+    it("says a type that is not a name, apart from a type used twice", () => {
+        read([
+            { type: "has spaces", label: "A", fields: [] },
+            { type: "band", label: "B", fields: [] },
+            { type: "band", label: "C", fields: [] },
+        ]);
+
+        expect(warnings).toHaveLength(2);
+        expect(warnings[0]).toContain("has no type, or one that is not a name");
+        expect(warnings[1]).toContain('"band" (entry 3)');
+        expect(warnings[1]).toContain("uses a type an earlier preset already uses");
+    });
+
+    it("says a field list that is not a list", () => {
+        expect(read([{ type: "band", label: "B", fields: "heading" }])).toEqual([]);
+
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toContain('"band" (entry 1)');
+        expect(warnings[0]).toContain("has fields that are not a list");
+    });
+
+    it("says how many of a kept preset's fields are not fields, since a binding to one never resolves", () => {
+        const presets = read([
+            {
+                type: "band",
+                label: "B",
+                fields: [
+                    { name: "heading", kind: "text" },
+                    { name: "tone", kind: "colour" },
+                    { name: "size", kind: "select" },
+                ],
+            },
+        ]);
+
+        expect(presets[0].fields.map((f) => f.name)).toEqual(["heading"]);
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toContain("keeps 1 of its fields, because 2 are not fields");
+    });
+
+    it("spells out a few and then says how many more, so one bad paste is not a page of log", () => {
+        read(Array.from({ length: 30 }, () => "not a preset"));
+
+        expect(warnings).toHaveLength(6);
+        expect(warnings[5]).toContain("25 more preset settings");
+        expect(warnings[5]).toContain("are wrong in the same way");
+    });
+
+    it("keeps a stored newline out of the log, so a settings field cannot write its own line", () => {
+        read([{ type: "bad\nblocks: everything is fine", label: "A", fields: [] }]);
+
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0].split("\n")).toHaveLength(1);
+        expect(warnings[0]).toContain("badblocks: everything is fine");
+    });
+
+    it("says it once, however many requests read the same settings", () => {
+        for (let i = 0; i < 5; i++) read(["just a string"]);
+
+        expect(warnings).toHaveLength(1);
     });
 });

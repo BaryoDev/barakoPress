@@ -591,7 +591,7 @@ export function applySiteSettings(
         embedHosts: embedHosts(array(d.EmbedHosts) as string[] | undefined) ?? config.embedHosts,
         // A tenant's named blocks. Saved in barakoBrew, so anything that is not a preset is left
         // out rather than half applied, the same as every other setting.
-        presets: array(d.Presets) ? presetsFrom(array(d.Presets)) : config.presets,
+        presets: array(d.Presets) ? presetsFrom(array(d.Presets), config.tenant) : config.presets,
         collections: collectionsFrom(config.collections, d.Collections),
         optionColors: optionColorsFrom(config.optionColors, theme, d.Colors, d.OptionColors),
         ...(held ? { holding: held } : {}),
