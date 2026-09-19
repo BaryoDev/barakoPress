@@ -1,0 +1,32 @@
+<!doctype html>
+<!-- The rebuilt about page, matching the prototype's #about state. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>About the club</title>
+    <link rel="stylesheet" href="/site.css" />
+  </head>
+  <body class="page">
+    <nav class="bar">
+      <a href="/">Home</a>
+      <a href="/about">About</a>
+    </nav>
+
+    <div class="wrap">
+      <h2>About the club</h2>
+      <p>Chartered in 1964, meeting every Thursday, and open to anyone who turns up twice.</p>
+      <div class="panel">
+        <p>Officers are elected in June and serve a year.</p>
+        <p>Dues are collected quarterly and the books are read out at the first meeting after.</p>
+      </div>
+      <p>Drawn at <span id="now">unknown</span>.</p>
+    </div>
+
+    <footer>Fixture pages. Not a real club.</footer>
+
+    <script>
+      document.getElementById("now").textContent = new Date().toISOString();
+    </script>
+  </body>
+</html>

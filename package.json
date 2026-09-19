@@ -42,6 +42,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "look": "playwright test --config look/playwright.look.config.ts",
+    "look:selftest": "scripts/look-check-selftest.sh",
     "prepare": "npm run build:package"
   },
   "dependencies": {
@@ -52,10 +54,14 @@
     "react": ">=19"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "^26.5.0",
+    "@types/pngjs": "^6.0.5",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "next": "^16.0.0",
+    "pixelmatch": "^7.2.0",
+    "pngjs": "^7.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "typescript": "^7.0.2",

@@ -186,6 +186,8 @@ describe("createBlockRegistry", () => {
             "stack",
             "row",
             "grid",
+            "flow",
+            "panel",
             "spacer",
             "divider",
             "text",
@@ -197,6 +199,7 @@ describe("createBlockRegistry", () => {
             "button",
             "link",
             "list",
+            "disclosure",
         ]);
         expect(layers.data).toEqual(["source", "repeat", "showIf", "slot", "pager"]);
         expect(layers.block).toEqual(["columns", "callToAction", "collection"]);

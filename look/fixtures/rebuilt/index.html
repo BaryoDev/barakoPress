@@ -1,0 +1,54 @@
+<!doctype html>
+<!--
+  The rebuilt home page. Same look as the prototype's #home state, different markup: separate pages
+  instead of hash states, and the counter carries the site's own class rather than the comp's id.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>A club that shows up</title>
+    <link rel="stylesheet" href="/site.css" />
+  </head>
+  <body class="page">
+    <nav class="bar">
+      <a href="/">Home</a>
+      <a href="/about">About</a>
+    </nav>
+
+    <header class="hero">
+      <h1>A club that shows up</h1>
+      <p>Weekly meetings, a scholarship fund, and a water project that is nearly finished.</p>
+    </header>
+    <div class="wrap">
+      <div class="facts">
+        <div class="fact"><b>Members</b><span class="live-total">0</span></div>
+        <div class="fact"><b>Founded</b>1964</div>
+        <div class="fact"><b>Meets</b>Thursdays</div>
+      </div>
+      <span class="pulse marquee">Donations open</span>
+      <img src="/banner.svg" width="640" height="160" alt="" />
+      <h2>What we are working on</h2>
+      <div class="panel">
+        <p>The pump house is roofed and the pipe run is trenched as far as the school gate.</p>
+        <p>Two more classrooms have desks. The reading room needs shelves.</p>
+        <p>The medical mission is booked for the second week of the month.</p>
+      </div>
+      <p>Drawn at <span id="now">unknown</span>.</p>
+      <label for="signup">Join the mailing list</label>
+      <input id="signup" class="signup" autofocus placeholder="you@example.com" />
+      <img src="/banner.svg" width="640" height="160" alt="" loading="lazy" />
+      <p>
+        Everything below here exists so the page scrolls, because a check that never scrolls never
+        finds out what the page does when it is asked to.
+      </p>
+    </div>
+
+    <footer>Fixture pages. Not a real club.</footer>
+
+    <script>
+      document.querySelector(".live-total").textContent = String(1000 + Math.floor(Math.random() * 9000));
+      document.getElementById("now").textContent = new Date().toISOString();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,187 @@
+import { describe, expect, it } from "vitest";
+
+import { addressOf, masksFor, parsePairs, type Env, type Pair } from "./pairs.js";
+
+const baseDir = "/sites/rckoronadal/look";
+
+const minimal = {
+    defaults: { rebuiltBase: "https://staging.example" },
+    pairs: [{ id: "home", reference: "prototypes/comp.html", rebuilt: "/" }],
+};
+
+const parse = (raw: unknown, env: Env = {}): Pair[] => parsePairs(raw, { baseDir, env });
+
+const problems = (raw: unknown, env: Env = {}): string => {
+    try {
+        parse(raw, env);
+    } catch (error) {
+        return (error as Error).message;
+    }
+    throw new Error("the pair list was accepted, and it should not have been");
+};
+
+describe("parsePairs", () => {
+    it("fills in the widths, the threshold and the clock so a short list is a whole one", () => {
+        const pairs = parse(minimal);
+
+        expect(pairs).toHaveLength(1);
+        expect(pairs[0].widths).toEqual([390, 1280]);
+        expect(pairs[0].maxDiffRatio).toBe(0.001);
+        expect(pairs[0].fullPage).toBe(true);
+        expect(Number.isNaN(Date.parse(pairs[0].fixedTime))).toBe(false);
+    });
+
+    it("reads a bare relative string as a prototype on disk, next to the pair list", () => {
+        const pairs = parse(minimal);
+
+        expect(pairs[0].reference).toMatchObject({
+            kind: "file",
+            location: "/sites/rckoronadal/look/prototypes/comp.html",
+        });
+    });
+
+    it("joins a path onto the base, and leaves a full URL alone", () => {
+        const pairs = parse({
+            defaults: { rebuiltBase: "https://staging.example" },
+            pairs: [
+                { id: "home", reference: "comp.html", rebuilt: "/" },
+                { id: "news", reference: "comp.html", rebuilt: "/news/" },
+                { id: "old", reference: "https://rckoronadal.org/", rebuilt: "https://elsewhere.example/x" },
+            ],
+        });
+
+        expect(pairs).toHaveLength(3);
+        expect(pairs[0].rebuilt.location).toBe("https://staging.example/");
+        expect(pairs[1].rebuilt.location).toBe("https://staging.example/news/");
+        expect(pairs[2].reference).toMatchObject({ kind: "url", location: "https://rckoronadal.org/" });
+        expect(pairs[2].rebuilt.location).toBe("https://elsewhere.example/x");
+    });
+
+    it("expands a name from the environment, because the rebuilt host changes and the list does not", () => {
+        const pairs = parse(
+            { defaults: { rebuiltBase: "${REBUILT_BASE}" }, pairs: [{ id: "home", reference: "c.html", rebuilt: "/" }] },
+            { REBUILT_BASE: "https://new.example" },
+        );
+
+        expect(pairs[0].rebuilt.location).toBe("https://new.example/");
+    });
+
+    it("refuses a name that is not set, rather than joining onto nothing", () => {
+        const message = problems({
+            defaults: { rebuiltBase: "${REBUILT_BASE}" },
+            pairs: [{ id: "home", reference: "c.html", rebuilt: "/" }],
+        });
+
+        expect(message).toContain("${REBUILT_BASE}");
+        expect(message).toContain("not set in the environment");
+    });
+
+    /*
+     * The one that matters most. A gate whose threshold key was misspelled would pass everything
+     * and look healthy doing it, so an unknown key is refused wherever it appears.
+     */
+    it("refuses an unknown key instead of ignoring it", () => {
+        const message = problems({
+            defaults: { rebuiltBase: "https://s.example", maxdiffratio: 0.5 },
+            pairs: [{ id: "home", reference: "c.html", rebuilt: "/", treshold: 0.4 }],
+        });
+
+        expect(message).toContain("defaults.maxdiffratio: unknown key");
+        expect(message).toContain("pairs[0].treshold: unknown key");
+    });
+
+    it("names every problem at once, so the file is fixed in one go", () => {
+        const message = problems({
+            defaults: { rebuiltBase: "https://s.example", widths: [10] },
+            pairs: [
+                { id: "home", reference: "c.html", rebuilt: "/", maxDiffRatio: 4 },
+                { id: "home", reference: "c.html", rebuilt: "/" },
+                { reference: "c.html", rebuilt: "/" },
+            ],
+        });
+        const lines = message.split("\n");
+
+        expect(lines.length).toBeGreaterThanOrEqual(4);
+        expect(message).toContain("defaults.widths[0]");
+        expect(message).toContain("pairs[0].maxDiffRatio");
+        expect(message).toContain("which an earlier pair already used");
+        expect(message).toContain("pairs[2].id");
+    });
+
+    it("refuses a reference that is both a file and a URL", () => {
+        const message = problems({
+            pairs: [{ id: "home", reference: { file: "c.html", url: "https://x.example" }, rebuilt: "https://y.example" }],
+        });
+
+        expect(message).toContain("A reference is one or the other");
+    });
+
+    it("refuses a path with no base, and says which key to set", () => {
+        const message = problems({ pairs: [{ id: "home", reference: "c.html", rebuilt: "/about" }] });
+
+        expect(message).toContain("defaults.rebuiltBase");
+    });
+
+    it("keeps a global mask and adds the page's own, per side", () => {
+        const pairs = parse({
+            defaults: { rebuiltBase: "https://s.example", mask: [".site-clock"] },
+            pairs: [
+                {
+                    id: "home",
+                    reference: "c.html",
+                    rebuilt: "/",
+                    mask: { both: [".weather"], reference: ["#comp-feed"], rebuilt: [".news-feed"] },
+                },
+            ],
+        });
+
+        expect(pairs).toHaveLength(1);
+        expect(masksFor(pairs[0], "reference")).toEqual([".site-clock", ".weather", "#comp-feed"]);
+        expect(masksFor(pairs[0], "rebuilt")).toEqual([".site-clock", ".weather", ".news-feed"]);
+    });
+
+    it("lets a page carry its own threshold, because the variable page is not every page", () => {
+        const pairs = parse({
+            defaults: { rebuiltBase: "https://s.example", maxDiffRatio: 0.0005 },
+            pairs: [
+                { id: "home", reference: "c.html", rebuilt: "/" },
+                { id: "news", reference: "c.html", rebuilt: "/news", maxDiffRatio: 0.01 },
+            ],
+        });
+
+        expect(pairs).toHaveLength(2);
+        expect(pairs[0].maxDiffRatio).toBe(0.0005);
+        expect(pairs[1].maxDiffRatio).toBe(0.01);
+    });
+
+    it("refuses an id that would not make a directory name", () => {
+        const message = problems({ pairs: [{ id: "../etc", reference: "c.html", rebuilt: "https://y.example" }] });
+
+        expect(message).toContain("because it is a directory name");
+    });
+
+    it("refuses an empty pair list", () => {
+        expect(problems({ pairs: [] })).toContain("non-empty");
+    });
+});
+
+describe("addressOf", () => {
+    it("turns a prototype on disk into a file URL", () => {
+        expect(addressOf({ kind: "file", location: "/sites/comp.html", click: [] })).toBe("file:///sites/comp.html");
+    });
+
+    it("carries a page state on the hash, with or without the hash character", () => {
+        expect(addressOf({ kind: "file", location: "/sites/comp.html", hash: "about", click: [] })).toBe(
+            "file:///sites/comp.html#about",
+        );
+        expect(addressOf({ kind: "url", location: "https://x.example/p", hash: "#two", click: [] })).toBe(
+            "https://x.example/p#two",
+        );
+    });
+
+    it("replaces a hash the URL already carried rather than appending a second one", () => {
+        expect(addressOf({ kind: "url", location: "https://x.example/p#one", hash: "#two", click: [] })).toBe(
+            "https://x.example/p#two",
+        );
+    });
+});

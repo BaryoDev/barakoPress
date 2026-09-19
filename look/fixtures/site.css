@@ -1,0 +1,183 @@
+/*
+ * One stylesheet for both sides of the fixture pair, so the prototype on disk and the pages the
+ * fixture server answers with render the same. Only the drift run changes it, by appending a rule.
+ *
+ * Every deliberate source of non-determinism the check has to survive is in here: an infinite
+ * animation, a second one behind prefers-reduced-motion, a text caret, a scrollable panel with a
+ * scrollbar, and a counter whose box is fixed so that masking it covers the same pixels every run.
+ */
+
+:root {
+    --ink: #17264f;
+    --paper: #ffffff;
+    --muted: #5b6784;
+    --rule: #d7dced;
+    --accent: #17458f;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: sans-serif;
+    color: var(--ink);
+    background: var(--paper);
+    font-size: 16px;
+    line-height: 1.55;
+}
+
+.prototype .state {
+    display: none;
+}
+
+.prototype #home {
+    display: block;
+}
+
+.prototype:has(.state:target) #home {
+    display: none;
+}
+
+.prototype .state:target {
+    display: block;
+}
+
+.bar {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--rule);
+}
+
+.bar a {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.hero {
+    padding: 40px 20px 28px;
+    border-bottom: 1px solid var(--rule);
+}
+
+.hero h1 {
+    margin: 0 0 10px;
+    font-size: 40px;
+    line-height: 1.1;
+    font-weight: 800;
+    color: var(--ink);
+}
+
+.hero p {
+    margin: 0;
+    color: var(--muted);
+    max-width: 44ch;
+}
+
+.wrap {
+    padding: 24px 20px 60px;
+}
+
+h2 {
+    font-size: 24px;
+    margin: 28px 0 8px;
+}
+
+.facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 16px 0;
+}
+
+.fact {
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 12px 14px;
+    min-width: 150px;
+}
+
+.fact b {
+    display: block;
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 600;
+}
+
+.count,
+.live-total {
+    display: inline-block;
+    width: 5ch;
+    font-variant-numeric: tabular-nums;
+}
+
+.pulse {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 13px;
+    animation: pulse 1.9s infinite alternate;
+}
+
+@keyframes pulse {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0.15;
+    }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .marquee {
+        animation: drift 2.3s infinite alternate;
+    }
+}
+
+@keyframes drift {
+    from {
+        transform: translateX(0);
+    }
+    to {
+        transform: translateX(90px);
+    }
+}
+
+.panel {
+    height: 120px;
+    overflow: auto;
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin: 14px 0;
+}
+
+.signup {
+    display: block;
+    width: 100%;
+    max-width: 320px;
+    padding: 9px 11px;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    font: inherit;
+    margin: 10px 0 0;
+}
+
+img {
+    display: block;
+    max-width: 100%;
+    margin: 18px 0;
+}
+
+footer {
+    border-top: 1px solid var(--rule);
+    padding: 18px 20px 40px;
+    color: var(--muted);
+    font-size: 14px;
+}

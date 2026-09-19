@@ -132,11 +132,16 @@ export function defineBlock<P extends BlockProps = BlockProps, S extends string 
 
 /*
  * Bounds on untrusted input, so a pasted list cannot make one render arbitrarily expensive.
- * MAX_BLOCKS is for the whole tree, not each list: per list, four levels of four columns would
- * still allow billions of entries.
+ * MAX_BLOCKS is for the whole tree, not each list: per list, a few levels of four columns would
+ * still allow billions of entries. It is the bound that does the work, and it is why the depth can
+ * be generous: however deep a page nests, only a hundred entries are ever read.
+ *
+ * The depth is what a preset body needs rather than what a page needs. A card grid is a band, a
+ * heading beside a source, a flow, a repeat, a card and the stack inside it before a single word of
+ * content, which is seven lists deep and used to render as nothing below the fourth.
  */
 export const MAX_BLOCKS = 100;
-export const MAX_DEPTH = 4;
+export const MAX_DEPTH = 8;
 
 /** Refuses a definition that could never render, at startup rather than on some page later. */
 export function checkDefinition(definition: BlockDefinition): void {

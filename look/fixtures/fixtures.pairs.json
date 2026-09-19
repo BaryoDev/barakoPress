@@ -1,0 +1,23 @@
+{
+  "defaults": {
+    "widths": [390, 1280],
+    "maxDiffRatio": 0.001,
+    "rebuiltBase": "${REBUILT_BASE}"
+  },
+  "pairs": [
+    {
+      "id": "home",
+      "reference": "prototype.html",
+      "rebuilt": "/",
+      "mask": {
+        "reference": ["#count"],
+        "rebuilt": [".live-total"]
+      }
+    },
+    {
+      "id": "about",
+      "reference": { "file": "prototype.html", "hash": "#about" },
+      "rebuilt": "/about"
+    }
+  ]
+}

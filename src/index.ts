@@ -194,7 +194,7 @@ export type {
 export { createBlockRegistry, registryFor } from "./blocks/registry.js";
 export { builtInBlocks, collectionItems, BLOCK_PROSE_CLASS } from "./blocks/built-in.js";
 export type { CollectionItem } from "./blocks/built-in.js";
-export { primitiveBlocks, PROSE_CLASS, ICONS } from "./blocks/primitives.js";
+export { primitiveBlocks, PROSE_CLASS, ICONS, FLOW_COLUMNS } from "./blocks/primitives.js";
 export {
     dataBlocks,
     SOURCE_BLOCK,
@@ -240,6 +240,7 @@ export type {
 export { bindBlocks, itemScope, pageScope, siteScope, queryScope } from "./blocks/bind.js";
 export type { BindPageOptions } from "./blocks/bind.js";
 export { presetsFrom, compilePreset, withPresets, MAX_PRESETS, MAX_PRESET_BLOCKS } from "./blocks/presets.js";
+export { libraryPresets } from "./blocks/library.js";
 export type { BlockPreset } from "./blocks/presets.js";
 export { BlockList } from "./blocks/render.js";
 export {

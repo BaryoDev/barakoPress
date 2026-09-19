@@ -67,8 +67,8 @@ const ENROLMENT_COLLECTION = {
  * reading its own props through `{{props.X}}`. No barakoPress release created this.
  */
 const BAND_PRESET = {
-    type: "band",
-    label: "Band",
+    type: "welcome",
+    label: "Welcome",
     fields: [
         { name: "heading", kind: "text", label: "Heading", required: true },
         { name: "tone", kind: "select", label: "Tone", options: ["page", "accent"] },
@@ -397,7 +397,7 @@ describe("presets", () => {
     it("renders a preset the tenant saved, with its own props bound into it", async () => {
         const html = await page("academy.example", [
             {
-                type: "band",
+                type: "welcome",
                 props: {
                     heading: "Enrol at {{site.Name}}",
                     tone: "accent",
@@ -413,7 +413,7 @@ describe("presets", () => {
 
     it("is one tenant's, not the container's: another tenant does not have it", async () => {
         const html = await page("clinic.example", [
-            { type: "band", props: { heading: "Not here", content: [[]] } },
+            { type: "welcome", props: { heading: "Not here", content: [[]] } },
             text("clinic page"),
         ]);
 
@@ -425,11 +425,11 @@ describe("presets", () => {
         requestHeaders = new Headers({ host: "academy.example" });
         const resolved = await siteConfig(config);
         const schema = blockSchema(registryFor(resolved, registry));
-        const band = schema.blocks.find((b) => b.type === "band");
+        const welcome = schema.blocks.find((b) => b.type === "welcome");
 
-        expect(band?.layer).toBe("preset");
-        expect(band?.fields.map((f) => f.name)).toEqual(["heading", "tone", "content"]);
-        expect(band?.fields.find((f) => f.name === "heading")?.bindable).toBe(true);
+        expect(welcome?.layer).toBe("preset");
+        expect(welcome?.fields.map((f) => f.name)).toEqual(["heading", "tone", "content"]);
+        expect(welcome?.fields.find((f) => f.name === "heading")?.bindable).toBe(true);
     });
 
     it("never lets a preset take the name of a block the site depends on, and says so", async () => {
