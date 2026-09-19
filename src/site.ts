@@ -13,7 +13,9 @@ import {
     type FooterColumn,
     type Holding,
     type PressConfig,
+    type Region,
     type SiteIdentity,
+    type SiteRegions,
     type SiteLink,
     type SocialLink,
     type TopBar,
@@ -21,6 +23,7 @@ import {
 import { CmsError, isTenantHandle, list, tenantForHost } from "./delivery.js";
 import { readSecret } from "./secret.js";
 import { presetsFrom } from "./blocks/presets.js";
+import { TONES, type ToneName } from "./blocks/tokens.js";
 import type { PressTheme, ThemeColors, ThemeFonts, ThemeLayout, ThemeRadii, ThemeSpace, ThemeText } from "./theme.js";
 
 /*
@@ -377,6 +380,29 @@ function holding(d: Record<string, unknown>): Holding | undefined {
     return { ...(path ? { path } : {}), ...(message ? { message } : {}) };
 }
 
+/*
+ * A block region from its two settings: the page path and the tone behind it (#48).
+ *
+ * A path that is not a plain site path leaves the region unset, so the built-in header or footer
+ * renders rather than nothing. A tone that is not one of the theme's tones is dropped and the
+ * region falls back to `page`, the same way every other setting that fails its shape is dropped.
+ */
+function region(path: unknown, tone: unknown): Region | undefined {
+    const at = sitePath(path);
+    if (!at) return undefined;
+    const name = str(tone)?.toLowerCase();
+    const known = name !== undefined && (TONES as readonly string[]).includes(name);
+    return { path: at, ...(known ? { tone: name as ToneName } : {}) };
+}
+
+/** The tenant's regions, each falling back to the configured one when the setting is unset or wrong. */
+function regions(base: SiteRegions | undefined, d: Record<string, unknown>): SiteRegions | undefined {
+    const header = region(d.HeaderPath, d.HeaderTone) ?? base?.header;
+    const footer = region(d.FooterPath, d.FooterTone) ?? base?.footer;
+    if (!header && !footer) return undefined;
+    return { ...(header ? { header } : {}), ...(footer ? { footer } : {}) };
+}
+
 export function samePath(a: string, b: string): boolean {
     const trim = (p: string) => withoutTrailingSlashes(p).toLowerCase() || "/";
     return trim(a) === trim(b);
@@ -580,6 +606,7 @@ export function applySiteSettings(
     const { holding: _ignored, ...rest } = config;
     void _ignored;
     const held = holding(d);
+    const bands = regions(config.regions, d);
     return {
         ...rest,
         site: held?.path ? withoutHoldingPage(site, held.path) : site,
@@ -594,6 +621,7 @@ export function applySiteSettings(
         presets: array(d.Presets) ? presetsFrom(array(d.Presets), config.tenant) : config.presets,
         collections: collectionsFrom(config.collections, d.Collections),
         optionColors: optionColorsFrom(config.optionColors, theme, d.Colors, d.OptionColors),
+        ...(bands ? { regions: bands } : {}),
         ...(held ? { holding: held } : {}),
     };
 }

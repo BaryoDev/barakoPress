@@ -16,6 +16,7 @@
 
 import { resolveTheme, type PressTheme, type PressThemeInput } from "./theme.js";
 import type { BlockPreset } from "./blocks/presets.js";
+import type { ToneName } from "./blocks/tokens.js";
 
 /*
  * The attributes the markdown renderer puts on a link. The browser entry, barakopress/markdown,
@@ -212,6 +213,31 @@ export interface Holding {
 }
 
 /**
+ * A block region: a page whose blocks are drawn as the site's header or footer.
+ *
+ * The same idea as `HoldingPath`. The header and the footer used to be drawn in code, with only
+ * their links and their text configurable, so a clinic wanting a light footer with opening hours
+ * and a map could not have one. A region is a list of blocks resolved and bound the way a page's
+ * blocks are, which makes the arrangement the tenant's data and keeps the image the same
+ * everywhere (barakoCMS D22).
+ *
+ * Nothing served at the path draws the built-in header or footer instead, so naming a page that is
+ * not written yet leaves the site rendering.
+ */
+export interface Region {
+    /** The site path of the page, for example "/site/footer". */
+    path: string;
+    /** The tone behind the region's blocks. `page` when unset. */
+    tone?: ToneName;
+}
+
+/** Where the header and the footer come from. A region that is absent is the built-in one. */
+export interface SiteRegions {
+    header?: Region;
+    footer?: Region;
+}
+
+/**
  * A field name, or several tried in order until one holds a value. A name starting with "@" reads the
  * entry itself rather than its data: "@createdAt" or "@updatedAt".
  */
@@ -318,6 +344,12 @@ export interface PressConfig {
     sites?: SitesConfig;
     /** Set by the tenant's settings on a request-time site while it is holding. Never set by hand. */
     holding?: Holding;
+    /**
+     * The header and the footer as block regions. A request-time site reads its tenant's
+     * `HeaderPath`, `HeaderTone`, `FooterPath` and `FooterTone` settings, which win over anything
+     * set here. Unset on both sides, the built-in header and footer render as they always did.
+     */
+    regions?: SiteRegions;
     /**
      * Where the Pages module's pages are mounted: "" is the site root, "/docs" puts /about at
      * /docs/about. Undefined means the site renders no page tree: no menu, no catch-all, no page in the
@@ -533,6 +565,7 @@ export function defineConfig(
             input.reservedSlugs,
         ),
         ...(input.pages !== undefined ? { pages: mountPath(input.pages) } : {}),
+        ...(input.regions ? { regions: input.regions } : {}),
         ...(input.sites
             ? {
                   sites: {

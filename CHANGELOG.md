@@ -2,6 +2,13 @@
 
 ## 0.4.0 (unreleased)
 
+- The header and the footer are block regions. `HeaderPath` and `FooterPath` name a page whose blocks
+  are drawn there, `HeaderTone` and `FooterTone` the tone behind it, so a clinic gets a light footer
+  with opening hours and a map and a school an enrolment banner with a button, with no barakoPress
+  release. A site that sets neither renders the built-in header, top bar and footer from `TopBar`,
+  `HeaderLinks`, `FooterColumns` and `SocialLinks`, with the markup it always had, and so does one
+  whose region path has nothing served at it. A region page is chrome, so it is left out of the menu
+  and the sitemap. (#48)
 - Blocks in four layers: layout and content primitives that take theme tokens only, presets a tenant
   saves as data, and bindings. Any string prop can hold `{{site.Name}}`, `{{item.Fee | money}}` or
   `{{query.class ?? all}}`, resolved on the server as the request's tenant; `source`, `repeat`,

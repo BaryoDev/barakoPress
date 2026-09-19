@@ -10,7 +10,7 @@ import {
     type PublicContent,
     type Seo,
 } from "./delivery.js";
-import { siteHref } from "./site.js";
+import { samePath, siteHref } from "./site.js";
 
 export type { Seo };
 
@@ -376,6 +376,21 @@ export function isReservedPath(config: PressConfig, path: string): boolean {
     if (first === undefined) return false;
     if (config.reservedSlugs.includes(first)) return true;
     return Object.values(config.collections).some((c) => c.route?.split("/").find(Boolean)?.toLowerCase() === first);
+}
+
+/**
+ * True when the site draws the page at this path as chrome rather than serving it as a place to go:
+ * a header or footer region (#48), or the holding page. The path is relative to the pages mount, the
+ * same as `isReservedPath` takes it.
+ *
+ * Such a page is on every page of the site already, so it has no business in the menu or the
+ * sitemap. It still answers on its own route, which is what lets an editor open it to work on it.
+ */
+export function isChromePath(config: PressConfig, path: string): boolean {
+    const drawn = [config.holding?.path, config.regions?.header?.path, config.regions?.footer?.path];
+    if (drawn.every((p) => p === undefined)) return false;
+    const href = pageHref(config, path);
+    return drawn.some((p) => p !== undefined && samePath(href, p));
 }
 
 export interface Redirect {

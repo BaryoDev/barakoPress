@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import type { PressConfig } from "../config.js";
-import { flattenNavigation, getNavigation, isReservedPath, pageHref } from "../cms.js";
+import { flattenNavigation, getNavigation, isChromePath, isReservedPath, pageHref } from "../cms.js";
 import { listCollection } from "../collections.js";
 import { notFound } from "next/navigation";
 import { siteConfigOrNull } from "../site.js";
@@ -46,7 +46,9 @@ export function createSitemap(base: PressConfig) {
         let pagePaths: string[] = [];
         if (config.pages !== undefined) {
             try {
-                pagePaths = flattenNavigation(await getNavigation(config)).filter((p) => !isReservedPath(config, p));
+                pagePaths = flattenNavigation(await getNavigation(config)).filter(
+                    (p) => !isReservedPath(config, p) && !isChromePath(config, p),
+                );
             } catch {
                 pagePaths = [];
             }

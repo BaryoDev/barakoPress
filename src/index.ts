@@ -76,6 +76,8 @@ export type {
     SiteIdentity,
     SitesConfig,
     Holding,
+    Region,
+    SiteRegions,
     SiteLink,
     FooterColumn,
     SocialLink,
@@ -131,6 +133,7 @@ export {
     flattenNavigation,
     pageHref,
     isReservedPath,
+    isChromePath,
 } from "./cms.js";
 export type { Post, Ref, Term, Page, NavItem, Breadcrumb, PageAtPath, Redirect } from "./cms.js";
 export { Navigation, Breadcrumbs } from "./screens/navigation.js";
