@@ -139,23 +139,83 @@ export function compilePreset(preset: BlockPreset, registry: BlockRegistry): Blo
 }
 
 /**
+ * The most blocks a tenant's presets may hold between them. A request-time site compiles them per
+ * request, so the bodies are bounded together and not only one at a time: sixty presets of a
+ * hundred blocks each is work nobody asked for on every page.
+ */
+export const MAX_PRESET_BLOCKS = MAX_BLOCKS * 4;
+
+/*
+ * Saying a preset was dropped, once.
+ *
+ * A request-time site builds its registry on every request, so warning where the drop happens would
+ * put one line per request in the log for a preset somebody has to rename once. The same message is
+ * said once and then remembered, the way delivery.ts remembers a failed read, and the set is
+ * bounded because a preset name is typed by somebody. Full, it is emptied rather than trimmed, so
+ * the messages come back rather than stopping for the life of the process.
+ */
+const SAID_MAX = 200;
+const said = new Set<string>();
+
+function sayOnce(message: string): void {
+    if (said.has(message)) return;
+    if (said.size >= SAID_MAX) said.clear();
+    said.add(message);
+    console.warn(message);
+}
+
+/** For tests: say every message again. */
+export function forgetPresetWarnings(): void {
+    said.clear();
+}
+
+const forTenant = (tenant: string | undefined) => (tenant ? ` for tenant "${tenant}"` : "");
+
+/**
  * The registry with these presets added. Same map when there are none, so the common path allocates
  * nothing. A preset never replaces a code block: a tenant naming one `collection` would swap out
  * behaviour the site depends on, and a name collision is a mistake worth seeing rather than a
  * feature. Presets resolve against a registry without them, which is what stops one nesting another.
+ *
+ * A preset that is not used says so. A setting that quietly does nothing is worse than one that is
+ * missing, because it reads as done: somebody naming a preset `collection` in barakoBrew would
+ * otherwise get a block that never appears anywhere, with nothing to look at. The two reasons are
+ * separate messages, because renaming the preset fixes one and only shortening them fixes the other.
  */
-export function withPresets(registry: BlockRegistry, presets: readonly BlockPreset[]): BlockRegistry {
+export function withPresets(
+    registry: BlockRegistry,
+    presets: readonly BlockPreset[],
+    tenant?: string,
+): BlockRegistry {
     if (presets.length === 0) return registry;
     const out = new Map(registry);
-    // A request-time site compiles its tenant's presets per request, so the bodies are bounded
-    // together and not only one at a time. Sixty presets of a hundred blocks each is work nobody
-    // asked for on every page.
-    let budget = MAX_BLOCKS * 4;
+    let budget = MAX_PRESET_BLOCKS;
+    let dropped = 0;
+
     for (const preset of presets) {
-        if (out.has(preset.type) || budget <= 0) continue;
+        const taken = out.get(preset.type);
+        if (taken) {
+            sayOnce(
+                `blocks: the preset "${preset.type}"${forTenant(tenant)} is not used, because the ` +
+                    `${taken.layer ?? "block"} "${taken.label}" is already registered under that name`,
+            );
+            continue;
+        }
+        if (budget <= 0) {
+            dropped++;
+            continue;
+        }
         const compiled = compilePreset(preset, registry);
         budget -= countBlocks(compiled.preset ?? []);
         out.set(preset.type, compiled);
+    }
+
+    if (dropped > 0) {
+        sayOnce(
+            `blocks: ${dropped} preset${dropped === 1 ? "" : "s"}${forTenant(tenant)} ` +
+                `${dropped === 1 ? "is" : "are"} not used, because the ones before ` +
+                `${dropped === 1 ? "it" : "them"} already hold ${MAX_PRESET_BLOCKS} blocks between them`,
+        );
     }
     return out;
 }

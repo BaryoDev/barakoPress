@@ -43,6 +43,7 @@ const { siteConfig } = await import("../site.js");
 const { createPage } = await import("../screens/page.js");
 const { blockSchema } = await import("./schema.js");
 const { createBlockRegistry, registryFor } = await import("./registry.js");
+const { forgetPresetWarnings, MAX_PRESET_BLOCKS } = await import("./presets.js");
 
 const CMS = "http://cms.test";
 
@@ -167,13 +168,20 @@ function cms() {
 const config = defineConfig({ sites: {}, cmsUrl: CMS, pages: "" });
 const registry = createBlockRegistry(config);
 
+let warnings: string[] = [];
+
 beforeEach(() => {
     calls = [];
     pages = {};
+    warnings = [];
     requestHeaders = null;
     forgetCachedReads();
+    // Said once and then remembered, so a test that wants to hear it starts from silence.
+    forgetPresetWarnings();
     vi.stubGlobal("fetch", cms());
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
+        warnings.push(args.map(String).join(" "));
+    });
 });
 afterEach(() => {
     vi.unstubAllGlobals();
@@ -424,14 +432,91 @@ describe("presets", () => {
         expect(band?.fields.find((f) => f.name === "heading")?.bindable).toBe(true);
     });
 
-    it("never lets a preset take the name of a block the site depends on", async () => {
+    it("never lets a preset take the name of a block the site depends on, and says so", async () => {
         const hostile = { ...BAND_PRESET, type: "collection" };
         requestHeaders = new Headers({ host: "academy.example" });
         TENANTS.academy.settings.Presets = [hostile];
         try {
             const resolved = await siteConfig(config);
             const reg = registryFor(resolved, registry);
+
             expect(reg.get("collection")?.layer).toBe("block");
+            // Named, so somebody reading the log knows which preset to rename and what it hit.
+            expect(warnings).toHaveLength(1);
+            expect(warnings[0]).toContain('the preset "collection"');
+            expect(warnings[0]).toContain('for tenant "academy"');
+            expect(warnings[0]).toContain('the block "Collection" is already registered');
+        } finally {
+            TENANTS.academy.settings.Presets = [BAND_PRESET];
+        }
+    });
+
+    it("says it once however many pages a tenant serves, because the registry is built per request", async () => {
+        const hostile = { ...BAND_PRESET, type: "collection" };
+        requestHeaders = new Headers({ host: "academy.example" });
+        TENANTS.academy.settings.Presets = [hostile];
+        try {
+            const resolved = await siteConfig(config);
+            for (let i = 0; i < 5; i++) registryFor(resolved, registry);
+
+            expect(warnings).toHaveLength(1);
+        } finally {
+            TENANTS.academy.settings.Presets = [BAND_PRESET];
+        }
+    });
+
+    it("says how many presets it dropped when they hold more blocks than it will compile", async () => {
+        // Each of these holds one section around forty text blocks, so the budget runs out well
+        // before the last of them and the count in the message is what is left.
+        const heavy = (n: number) => ({
+            type: `heavy${n}`,
+            label: `Heavy ${n}`,
+            fields: [],
+            blocks: [
+                {
+                    type: "section",
+                    props: { content: [Array.from({ length: 40 }, (_, i) => text(`row ${i}`))] },
+                },
+            ],
+        });
+        requestHeaders = new Headers({ host: "academy.example" });
+        TENANTS.academy.settings.Presets = Array.from({ length: 20 }, (_, i) => heavy(i));
+        try {
+            const resolved = await siteConfig(config);
+            const reg = registryFor(resolved, registry);
+
+            const compiled = [...reg.values()].filter((b) => b.type.startsWith("heavy"));
+            expect(compiled.length).toBeGreaterThan(0);
+            expect(compiled.length).toBeLessThan(20);
+
+            const dropped = 20 - compiled.length;
+            expect(warnings).toHaveLength(1);
+            expect(warnings[0]).toContain(`${dropped} preset`);
+            expect(warnings[0]).toContain('for tenant "academy"');
+            expect(warnings[0]).toContain(`${MAX_PRESET_BLOCKS} blocks`);
+        } finally {
+            TENANTS.academy.settings.Presets = [BAND_PRESET];
+        }
+    });
+
+    it("tells the two reasons apart, so renaming one and shortening the others are separate jobs", async () => {
+        requestHeaders = new Headers({ host: "academy.example" });
+        TENANTS.academy.settings.Presets = [
+            { ...BAND_PRESET, type: "collection" },
+            ...Array.from({ length: 20 }, (_, i) => ({
+                type: `bulk${i}`,
+                label: `Bulk ${i}`,
+                fields: [],
+                blocks: [{ type: "section", props: { content: [Array.from({ length: 40 }, (_, n) => text(`r${n}`))] } }],
+            })),
+        ];
+        try {
+            const resolved = await siteConfig(config);
+            registryFor(resolved, registry);
+
+            expect(warnings).toHaveLength(2);
+            expect(warnings.filter((w) => w.includes('the preset "collection"'))).toHaveLength(1);
+            expect(warnings.filter((w) => w.includes("blocks between them"))).toHaveLength(1);
         } finally {
             TENANTS.academy.settings.Presets = [BAND_PRESET];
         }

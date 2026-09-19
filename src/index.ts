@@ -236,7 +236,7 @@ export type {
 } from "./blocks/bindings.js";
 export { bindBlocks, itemScope, pageScope, siteScope, queryScope } from "./blocks/bind.js";
 export type { BindPageOptions } from "./blocks/bind.js";
-export { presetsFrom, compilePreset, withPresets, MAX_PRESETS } from "./blocks/presets.js";
+export { presetsFrom, compilePreset, withPresets, MAX_PRESETS, MAX_PRESET_BLOCKS } from "./blocks/presets.js";
 export type { BlockPreset } from "./blocks/presets.js";
 export { BlockList } from "./blocks/render.js";
 export {

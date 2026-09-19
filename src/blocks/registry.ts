@@ -31,7 +31,7 @@ export function createBlockRegistry(
         own.add(block.type);
         registry.set(block.type, block);
     }
-    return withPresets(registry, options.presets ?? config.presets);
+    return withPresets(registry, options.presets ?? config.presets, config.tenant);
 }
 
 /**
@@ -42,5 +42,5 @@ export function createBlockRegistry(
  * tenant has presets and the same map when it does not.
  */
 export function registryFor(config: PressConfig, registry: BlockRegistry): BlockRegistry {
-    return withPresets(registry, config.presets);
+    return withPresets(registry, config.presets, config.tenant);
 }

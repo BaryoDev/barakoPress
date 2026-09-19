@@ -400,6 +400,11 @@ passes them as `presets` in the config. A preset never replaces a block that is 
 body may not use another preset. `slot` marks where the content an editor dropped into the preset
 goes, and that content binds in the page's scope rather than the preset's.
 
+A preset that is not used says why, once, in the server log: one line for a name a registered block
+already has, naming both, and one for the presets past the point where a tenant's bodies hold more
+than 400 blocks between them, saying how many. A setting that quietly does nothing reads as done,
+which is worse than one that is missing.
+
 ## Configuring it
 
 `press.config.ts` is the one file a site owns, and the seam the whole package turns on.
