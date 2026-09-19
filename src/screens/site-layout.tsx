@@ -2,7 +2,13 @@ import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { PressConfig, Region } from "../config.js";
-import { showsHoldingPage, siteConfigOrNull, themeFamilies } from "../site.js";
+import { showsHoldingPage, siteConfigOrNull } from "../site.js";
+import {
+    allowedFontOrigins,
+    fontLinks,
+    GOOGLE_FONTS_FILES_ORIGIN,
+    GOOGLE_FONTS_ORIGIN,
+} from "../fonts.js";
 import { SHARE_INVALID_FRAGMENT } from "../routes/share.js";
 import { themeVariablesCss, type PressTheme } from "../theme.js";
 import type { BlockRegistry } from "../blocks/schema.js";
@@ -26,20 +32,33 @@ import { spaceOf, toneOf, widthOf } from "../blocks/tokens.js";
 
 type LayoutProps = { children: ReactNode };
 
-function fontHref(family: string): string {
-    return `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, "+")}:wght@400;600;700&display=swap`;
-}
-
+/*
+ * The faces, from the theme and the deployment's allow list (#54).
+ *
+ * A role whose family is all the theme carries is linked from Google Fonts, as it always was. A
+ * role with a stylesheet of its own is linked from there instead, if the operator allows that
+ * origin. `PRESS_FONT_ORIGINS` is read here rather than in the config, because a value read at
+ * module scope is baked into whatever is prerendered at build.
+ *
+ * The preconnects go out only when something is actually loaded from Google Fonts. Nothing is
+ * preconnected for another origin: the stylesheet opens that connection itself, and where it fetches
+ * its font files from is not something this can know.
+ */
 function ThemeHead({ theme, loadFonts }: { theme: PressTheme; loadFonts: boolean }) {
+    const faces = loadFonts ? fontLinks(theme, allowedFontOrigins()) : null;
     return (
         <head>
             <style dangerouslySetInnerHTML={{ __html: themeVariablesCss(theme) }} />
-            {loadFonts && (
+            {faces && (
                 <>
-                    <link rel="preconnect" href="https://fonts.googleapis.com" />
-                    <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-                    {themeFamilies(theme).map((family) => (
-                        <link key={family} rel="stylesheet" href={fontHref(family)} />
+                    {faces.google && (
+                        <>
+                            <link rel="preconnect" href={GOOGLE_FONTS_ORIGIN} />
+                            <link rel="preconnect" href={GOOGLE_FONTS_FILES_ORIGIN} crossOrigin="" />
+                        </>
+                    )}
+                    {faces.stylesheets.map((href) => (
+                        <link key={href} rel="stylesheet" href={href} />
                     ))}
                 </>
             )}

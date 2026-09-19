@@ -48,9 +48,18 @@ export {
     applySiteSettings,
     normaliseHost,
     siteHref,
-    themeFamilies,
     getGlobals,
 } from "./site.js";
+export {
+    allowedFontOrigins,
+    fontLinks,
+    fontStylesheetHref,
+    themeFamilies,
+    FONT_ROLES,
+    GOOGLE_FONTS_ORIGIN,
+    GOOGLE_FONTS_FILES_ORIGIN,
+} from "./fonts.js";
+export type { FontHead } from "./fonts.js";
 export type { ResolvedTenant } from "./site.js";
 export { createSiteLayout, createSiteMetadata } from "./screens/site-layout.js";
 export { DEFAULT_THEME, resolveTheme, proseCss, relatedCss, themeVariablesCss } from "./theme.js";
@@ -58,6 +67,8 @@ export type {
     PressTheme,
     PressThemeInput,
     ThemeColors,
+    FontRole,
+    ThemeFontSources,
     ThemeFonts,
     ThemeRadii,
     ThemeLayout,

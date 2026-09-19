@@ -24,7 +24,17 @@ import { CmsError, isTenantHandle, list, tenantForHost } from "./delivery.js";
 import { readSecret } from "./secret.js";
 import { presetsFrom } from "./blocks/presets.js";
 import { TONES, type ToneName } from "./blocks/tokens.js";
-import type { PressTheme, ThemeColors, ThemeFonts, ThemeLayout, ThemeRadii, ThemeSpace, ThemeText } from "./theme.js";
+import type {
+    PressTheme,
+    ThemeColors,
+    ThemeFontSources,
+    ThemeFonts,
+    ThemeLayout,
+    ThemeRadii,
+    ThemeSpace,
+    ThemeText,
+} from "./theme.js";
+import { FONT_FAMILY, FONT_ROLES, fontStylesheetHref } from "./fonts.js";
 
 /*
  * Request-time sites: one build, many domains (barakoCMS D22, barakoPress #20).
@@ -325,7 +335,6 @@ function topBar(v: unknown): TopBar | undefined {
 
 const COLOR = /^(#[0-9a-f]{3,8}|(rgb|rgba|hsl|hsla|oklch|oklab)\([0-9.,%\s/+-]{1,60}\)|[a-z]{3,30})$/i;
 const LENGTH = /^(0|\d{1,4}(\.\d{1,3})?(px|rem|em|ch|%|vw|vh))$/;
-const FAMILY = /^[A-Za-z0-9][A-Za-z0-9 ]{0,60}$/;
 
 function tokens<T extends object>(base: T, v: unknown, valid: RegExp): T {
     const input = record(v);
@@ -344,15 +353,45 @@ function fallbackStack(stack: string): string {
     return comma === -1 ? "sans-serif" : stack.slice(comma + 1).trim();
 }
 
-function fonts(base: ThemeFonts, v: unknown): ThemeFonts {
+/*
+ * `Fonts`: a family name per role, and the stylesheet that loads it when the site does not want
+ * Google Fonts (#54).
+ *
+ *   "Fonts": { "heading": "Zilla Slab", "body": { "family": "Inter", "url": "https://type.school.example/inter.css" } }
+ *
+ * A role the tenant names is the tenant's, family and stylesheet together: a family set with no url
+ * clears a configured one rather than leaving the page loading a stylesheet for a face it no longer
+ * uses. A role the tenant leaves out keeps both.
+ *
+ * A url is kept only if it is an absolute https URL. Whether it is ever linked is a separate
+ * question, answered against the deployment's allow list when the head is built, because the
+ * environment is not readable at module scope and this runs wherever settings are applied.
+ */
+function fontsFrom(
+    base: ThemeFonts,
+    baseSources: ThemeFontSources | undefined,
+    v: unknown,
+): { fonts: ThemeFonts; sources: ThemeFontSources | undefined } {
     const input = record(v);
-    if (!input) return base;
+    if (!input) return { fonts: base, sources: baseSources };
+
     const out = { ...base };
-    for (const role of ["heading", "body", "mono"] as const) {
-        const family = str(input[role]);
-        if (family && FAMILY.test(family)) out[role] = `'${family}', ${fallbackStack(base[role])}`;
+    const sources: ThemeFontSources = { ...baseSources };
+    for (const role of FONT_ROLES) {
+        const entry = input[role];
+        if (entry === undefined || entry === null) continue;
+        const spec = record(entry);
+        const family = str(spec ? spec.family : entry);
+        const href = spec ? fontStylesheetHref(spec.url ?? spec.href) : undefined;
+        if (family && FONT_FAMILY.test(family)) {
+            out[role] = `'${family}', ${fallbackStack(base[role])}`;
+            if (href) sources[role] = href;
+            else delete sources[role];
+        } else if (href) {
+            sources[role] = href;
+        }
     }
-    return out;
+    return { fonts: out, sources: Object.keys(sources).length > 0 ? sources : undefined };
 }
 
 function locale(base: string, v: unknown): string {
@@ -597,9 +636,11 @@ export function applySiteSettings(
         socialLinks: socialLinks(d.SocialLinks) ?? base.socialLinks,
     };
 
+    const face = fontsFrom(config.theme.fonts, config.theme.fontSources, d.Fonts);
     const theme: PressTheme = {
         colors: tokens<ThemeColors>(config.theme.colors, d.Colors, COLOR),
-        fonts: fonts(config.theme.fonts, d.Fonts),
+        fonts: face.fonts,
+        ...(face.sources ? { fontSources: face.sources } : {}),
         radii: tokens<ThemeRadii>(config.theme.radii, d.Radii, LENGTH),
         layout: tokens<ThemeLayout>(config.theme.layout, d.Layout, LENGTH),
         space: tokens<ThemeSpace>(config.theme.space, d.Space, LENGTH),
@@ -627,12 +668,4 @@ export function applySiteSettings(
         ...(bands ? { regions: bands } : {}),
         ...(held ? { holding: held } : {}),
     };
-}
-
-/** The first family of each role's stack, for a site that loads its faces from Google Fonts. */
-export function themeFamilies(theme: PressTheme): string[] {
-    const families = [theme.fonts.heading, theme.fonts.body, theme.fonts.mono]
-        .map((stack) => stack.split(",")[0].trim().replace(/^['"]|['"]$/g, ""))
-        .filter((family) => FAMILY.test(family));
-    return [...new Set(families)];
 }

@@ -79,6 +79,9 @@ services:
       # Compose refuses to start with neither.
       PRESS_SECRET: ${PRESS_SECRET:-}
       REVALIDATE_SECRET: ${REVALIDATE_SECRET:-${PRESS_SECRET:?set PRESS_SECRET in .env}}
+      # Which origins a tenant's font stylesheet may be linked from. Empty is Google Fonts alone,
+      # which is what a site rendered before there was a list.
+      PRESS_FONT_ORIGINS: ${PRESS_FONT_ORIGINS:-}
 
   caddy:
     image: caddy:2-alpine

@@ -2,6 +2,16 @@
 
 ## 0.4.0 (unreleased)
 
+- Fonts from somewhere other than Google Fonts. A `Fonts` entry may name the stylesheet that loads a
+  face, `{ "family": "Zilla Slab", "url": "https://type.school.example/zilla.css" }`, which is how a
+  school with a licensed face on its own host or a tenant that must not send visitor addresses to a
+  third party gets its type. The URL is a tenant's setting on its way into a `<link>` in every
+  visitor's page, so the deployment decides which origins may appear there: `PRESS_FONT_ORIGINS`,
+  read per request, `https://fonts.googleapis.com` alone when unset. Anything else is refused, the
+  role falls back to its family name, and the log says so once. An operator who leaves Google Fonts
+  out of the list stops every link to it, the built-in one and its preconnects included, and no
+  setting can put one back. A family name on its own renders the Google Fonts link it always did.
+  (#54)
 - A block library every site gets: `hero`, `band`, `statBand`, `cardGrid`, `peopleGrid`, `timeline`,
   `steps`, `tiers`, `keyValueTable`, `tabs`, `map`, and the parts that go in their slots (`stat`,
   `timelineEntry`, `step`, `tier`, `person`, `keyValueRow`). Every one is a preset compiled from the
