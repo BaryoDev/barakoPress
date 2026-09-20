@@ -11,8 +11,12 @@ import {
     listCollection,
     listReferencing,
     referencedBy,
+    searchCollection,
     type Item,
 } from "../collections.js";
+import { collectionTree, treeNeighbours, type CollectionTreeResult } from "../tree.js";
+import { ArticleView, type ArticleRelated } from "./article-view.js";
+import { EditLink, SearchBox, TreePager, TreeShell, TreeSidebar, TreeSwitcher } from "./tree.js";
 import { CmsError } from "../delivery.js";
 import { listRelatedItems } from "../related.js";
 import { readingMinutes } from "../reading-time.js";
@@ -35,7 +39,7 @@ export type CardProps = { config: PressConfig; featured?: boolean } & (
 );
 
 /** A post read by `listPosts`, as an item of the post collection, so one card renders both. */
-function itemFromPost(config: PressConfig, post: Post): Item {
+export function itemFromPost(config: PressConfig, post: Post): Item {
     const refs: Record<string, Ref | undefined> = {};
     for (const [field, ref] of Object.entries(collectionOf(config, POST_COLLECTION)?.references ?? {})) {
         if (ref.collection === AUTHOR_COLLECTION) refs[field] = post.author;
@@ -144,10 +148,73 @@ export interface ItemViewProps {
     /** True when the item is a draft read with a preview token. */
     preview?: boolean;
     backHref?: string;
+    /**
+     * The collection's tree, when it is one, already read. Passed in rather than fetched here so this
+     * stays a component a test can render and a consumer can call with what it already has.
+     */
+    tree?: CollectionTreeResult;
 }
 
-/** A detail page: the item, and the items listed under it, as an author's archive always was. */
-export function ItemView({ config, item, related, backHref = "/" }: ItemViewProps) {
+/*
+ * A detail page, in whichever layout the collection asked for, inside whatever chrome it needs.
+ *
+ * "article" is the reading column the blog has always drawn, which is now what any long-form
+ * collection gets (#75). "list", the default, is the shell markup every collection has had. A tree
+ * collection then gets a sidebar, a switcher and a search box beside it and previous, next and an
+ * edit link under it, whichever layout it chose (#23).
+ */
+export function ItemView(props: ItemViewProps) {
+    const { config, item, tree } = props;
+    const col = collectionOf(config, item.collection);
+    const body = col?.layout === "article" ? <ItemArticle {...props} /> : <ItemList {...props} />;
+    if (!col?.tree || !tree) return body;
+
+    const { previous, next } = treeNeighbours(tree.order, item.slug);
+    const route = col.route ?? "";
+    return (
+        <TreeShell
+            config={config}
+            aside={
+                <>
+                    <TreeSwitcher config={config} collection={item.collection} current={item.product} />
+                    {route && (
+                        <SearchBox config={config} action={route} param="q" id={`bp-search-${item.collection}`} />
+                    )}
+                    <TreeSidebar config={config} tree={tree} current={item.slug} />
+                </>
+            }
+        >
+            {body}
+            <TreePager config={config} collection={item.collection} previous={previous} next={next} />
+            <EditLink config={config} item={item} />
+        </TreeShell>
+    );
+}
+
+/** The item as a card in the band under an article: its own route unless another collection owns it. */
+function asBandCard(config: PressConfig, item: Item): ArticleRelated {
+    const route = collectionOf(config, item.collection)?.route;
+    return {
+        slug: item.slug,
+        title: item.title,
+        ...(route !== undefined ? { href: `${route}/${item.slug}` } : {}),
+        ...(item.date ? { date: item.date } : {}),
+        ...(item.summary ? { summary: item.summary } : {}),
+    };
+}
+
+function ItemArticle({ config, item, related, preview }: ItemViewProps) {
+    return (
+        <ArticleView
+            config={config}
+            item={item}
+            preview={preview}
+            related={(related?.items ?? []).map((i) => asBandCard(config, i))}
+        />
+    );
+}
+
+function ItemList({ config, item, related, backHref = "/" }: ItemViewProps) {
     const noun = related ? collectionOf(config, related.collection)?.noun : undefined;
     const count = related?.items.length ?? 0;
     // Worked out from the body rather than typed, so there is no field to keep in step with the prose.
@@ -214,7 +281,17 @@ export interface CollectionIndexOptions {
     filter?: Record<string, string>;
     /** The heading. The collection's `label`, or the site's name and tagline, when unset. */
     heading?: string;
+    /**
+     * Answer `?q=` by listing what the API's search matched instead of the index.
+     *
+     * Off unless asked for, because reading the query makes the route dynamic and `output: "export"`
+     * refuses a build outright over it. The same trade as preview, made in the consumer's own file.
+     */
+    search?: boolean;
 }
+
+/** The most rows a search on an index lists. The API caps its own side at fifty. */
+const SEARCH_LIMIT = 20;
 
 /** An index, rendered for an already resolved config. A catch-all serving a collection calls this. */
 export async function CollectionIndexView({
@@ -222,14 +299,18 @@ export async function CollectionIndexView({
     collection,
     filter,
     heading,
-}: { config: PressConfig; collection: string } & CollectionIndexOptions) {
+    query,
+}: { config: PressConfig; collection: string; query?: string } & CollectionIndexOptions) {
     const col = collectionOf(config, collection);
     if (!col) notFound();
+    const typed = (query ?? "").trim();
     let items: Item[] = [];
     let failure = false;
 
     try {
-        ({ items } = await listCollection(config, collection, { filter }));
+        ({ items } = typed
+            ? { items: await searchCollection(config, collection, typed, SEARCH_LIMIT) }
+            : await listCollection(config, collection, { filter }));
     } catch (e) {
         if (e && typeof e === "object" && "digest" in e) throw e;
         // The type is not there, or not publicly deliverable, so nothing lives at this route.
@@ -239,11 +320,13 @@ export async function CollectionIndexView({
         failure = true;
     }
 
-    const featured = items.filter((i) => i.featured);
-    const rest = items.filter((i) => !i.featured);
+    // A search answers with what matched, in the order the API ranked it. Lifting a featured row to
+    // the top there would put a worse match above a better one.
+    const featured = typed ? [] : items.filter((i) => i.featured);
+    const rest = typed ? items : items.filter((i) => !i.featured);
     const title = heading ?? col.label;
 
-    return (
+    const list = (
         <div className="shell">
             <header className="masthead">
                 <h1>{title ?? config.site.name}</h1>
@@ -262,9 +345,9 @@ export async function CollectionIndexView({
             {!failure && items.length === 0 && (
                 <div className="notice">
                     <p>
-                        <strong>{config.labels.empty}</strong>
+                        <strong>{typed ? config.labels.searchEmpty : config.labels.empty}</strong>
                     </p>
-                    <p>{config.labels.emptyNote}</p>
+                    {!typed && <p>{config.labels.emptyNote}</p>}
                 </div>
             )}
 
@@ -276,6 +359,25 @@ export async function CollectionIndexView({
             ))}
         </div>
     );
+
+    if (!col.tree) return list;
+    const tree = await collectionTree(config, collection);
+    return (
+        <TreeShell
+            config={config}
+            aside={
+                <>
+                    <TreeSwitcher config={config} collection={collection} />
+                    {col.route !== undefined && (
+                        <SearchBox config={config} action={col.route} param="q" query={query} id={`bp-search-${collection}`} />
+                    )}
+                    <TreeSidebar config={config} tree={tree} />
+                </>
+            }
+        >
+            {list}
+        </TreeShell>
+    );
 }
 
 /*
@@ -286,9 +388,18 @@ export async function CollectionIndexView({
  *     export const revalidate = 300;
  */
 export function createCollectionIndex(base: PressConfig, collection: string, options: CollectionIndexOptions = {}) {
-    return async function CollectionIndex({ params }: { params?: SiteParams } = {}) {
+    return async function CollectionIndex({
+        params,
+        searchParams,
+    }: { params?: SiteParams; searchParams?: Promise<{ q?: string }> } = {}) {
         const config = await siteConfig(base, params);
-        return CollectionIndexView({ config, collection, ...options });
+        /*
+         * Awaited only when the route file asked for search, because awaiting it is what makes the
+         * route dynamic and `output: "export"` refuses a build over it (#55). An index with no search
+         * never touches it and prerenders exactly as it did.
+         */
+        const query = options.search && searchParams ? (await searchParams).q : undefined;
+        return CollectionIndexView({ config, collection, ...options, query });
     };
 }
 
@@ -354,9 +465,15 @@ export async function renderCollectionDetail(
     if (!item) notFound();
 
     const related = await relatedFor(config, collection, col, item, options);
+    /*
+     * The tree is read here rather than in the view, and for the product this page belongs to, so a
+     * manual covering four products draws the sidebar of the one being read and spends its read
+     * budget there. A collection that is not a tree reads nothing.
+     */
+    const tree = col.tree ? await collectionTree(config, collection, { product: item.product }) : undefined;
 
     const view = options.view ?? ItemView;
-    return view({ config, item, related, preview: Boolean(previewToken), backHref: options.backHref });
+    return view({ config, item, related, tree, preview: Boolean(previewToken), backHref: options.backHref });
 }
 
 type DetailParams = { params: Promise<{ slug: string; site?: string }>; searchParams?: Promise<{ preview?: string }> };

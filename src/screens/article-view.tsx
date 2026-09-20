@@ -2,22 +2,32 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { Asset, renderProse } from "../assets.js";
 import type { PressConfig } from "../config.js";
-import { formatDate, type Post } from "../cms.js";
+import { formatDate } from "../cms.js";
+import { collectionOf, type Item } from "../collections.js";
 import { initials, readingMinutes } from "../reading-time.js";
-import type { RelatedPost } from "../related.js";
 import { proseCss, relatedCss } from "../theme.js";
 
 /*
- * The post page, shared by the static screen and the preview screen.
+ * The article layout: a collection item drawn as a reading column.
+ *
+ * This is the markup the blog post page has always had, and it is here rather than in a blog file
+ * because what it does is not blog-shaped (#75). A reading column, a byline, a read time and a band
+ * of neighbours are what any long-form collection wants: a law firm's briefings, a newsroom's
+ * features, a manual's pages. A collection asks for it with `layout: "article"`, and the blog's post
+ * collection is one that does.
+ *
+ * What stays blog-only is what a post is composed of rather than how it is drawn: the three slots
+ * below, which exist for the blog screens and for a consumer assembling its own post page.
  *
  * It is its own component because reading `searchParams` forces a route to render dynamically,
  * and a site built with `output: "export"` is refused outright for it. Preview needs the query
  * string; a published post does not. Splitting the fetch from the render is what lets one set of
  * markup serve a static site and a server-rendered one.
  *
- * Every link is built from `config.routes`, and every colour, face and radius from `config.theme`,
- * so a site that mounts posts at /writing gets /writing links here and in the feed, and a site
- * with its own palette gets its own palette without touching this file.
+ * Every link is built from the collection's own route and its references' routes, and every colour,
+ * face and radius from `config.theme`, so a site that mounts posts at /writing gets /writing links
+ * here and in the feed, and a site with its own palette gets its own palette without touching this
+ * file.
  *
  * The styles are inline rather than classes against `barakopress/styles.css`. That stylesheet is
  * opt-in, barakocms.com never imported it, and the result was this screen rendering as an
@@ -32,9 +42,23 @@ const PROSE_CLASS = "bp-prose";
 /** Same reason as PROSE_CLASS: a hover rule needs a selector, and a style attribute has none. */
 const RELATED_CLASS = "bp-related-card";
 
-export interface PostViewProps {
+/**
+ * One card in the band under an article.
+ *
+ * `score` is what the semantic band has and a list of neighbours read any other way does not, so it
+ * is optional and the chip is drawn only where there is a number to put in it.
+ */
+export interface ArticleRelated {
+    slug: string;
+    title: string;
+    score?: number;
+    date?: string;
+    summary?: string;
+}
+
+export interface ArticleViewProps {
     config: PressConfig;
-    post: Post;
+    item: Item;
     preview?: boolean;
     /*
      * Three slots, and the reason there are exactly three.
@@ -52,35 +76,54 @@ export interface PostViewProps {
     beforeBody?: ReactNode;
     afterBody?: ReactNode;
     /*
-     * Computed by `listRelated`, passed in rather than fetched here, because this component also
+     * Computed by the caller, passed in rather than fetched here, because this component also
      * serves the preview screen and a draft has no business warming a shared cache. An empty list
      * renders no band at all: no heading, no empty state. A site whose CMS has no AI module gets
      * an empty list every time and never sees that this feature exists, which is the point.
      */
-    related?: RelatedPost[];
+    related?: ArticleRelated[];
+    /** Drawn under the band: previous and next, an edit link, whatever the caller puts there. */
+    footer?: ReactNode;
 }
 
-export function PostView({
+export function ArticleView({
     config,
-    post,
+    item,
     preview = false,
     headerBackdrop,
     beforeBody,
     afterBody,
     related = [],
-}: PostViewProps) {
+    footer,
+}: ArticleViewProps) {
     const t = config.theme;
     const c = t.colors;
     const labels = config.labels;
     const gutter = t.layout.gutter;
 
-    const backHref = config.routes.post || "/";
+    const col = collectionOf(config, item.collection);
+    const route = col?.route ?? "";
+    const backHref = route || "/";
     // "/writing" reads as WRITING. The route is the only thing that knows what the index is called,
     // and asking for a label as well would be a second place to keep the same word.
     const backLabel = backHref.split("/").filter(Boolean).pop() ?? labels.home;
 
-    const minutes = readingMinutes(post.body);
-    const monogram = post.author ? initials(post.author.name) : "";
+    const minutes = readingMinutes(item.body);
+    /*
+     * The byline is the collection's first reference, and the rest are plain links after the date.
+     *
+     * A long-form item has one relationship that reads as authorship and any number that read as
+     * filing, and the collection already puts its references in the order a card shows them. The blog
+     * declares Author before Category, so a post is drawn exactly as it always was, and a newsroom
+     * whose first reference is `Photographer` gets a byline without configuring a second thing.
+     */
+    const shown = Object.entries(col?.references ?? {}).flatMap(([field, ref]) => {
+        const target = item.refs[field];
+        const to = collectionOf(config, ref.collection)?.route;
+        return target ? [{ field, name: target.name, href: to ? `${to}/${target.slug}` : undefined }] : [];
+    });
+    const [byline, ...filed] = shown;
+    const monogram = byline ? initials(byline.name) : "";
 
     const band = { padding: `0 ${gutter}` } as const;
     const meta = { fontFamily: t.fonts.mono, fontSize: "12.5px", color: c.muted } as const;
@@ -162,10 +205,10 @@ export function PostView({
                             textWrap: "balance",
                         }}
                     >
-                        {post.title}
+                        {item.title}
                     </h1>
 
-                    {post.excerpt && (
+                    {item.summary && (
                         <p
                             style={{
                                 margin: "24px 0 0",
@@ -176,7 +219,7 @@ export function PostView({
                                 textWrap: "pretty",
                             }}
                         >
-                            {post.excerpt}
+                            {item.summary}
                         </p>
                     )}
 
@@ -191,7 +234,7 @@ export function PostView({
                             color: c.muted,
                         }}
                     >
-                        {post.author && (
+                        {byline && (
                             <span style={{ display: "flex", alignItems: "center", gap: "9px" }}>
                                 <span
                                     aria-hidden
@@ -213,24 +256,19 @@ export function PostView({
                                     {monogram}
                                 </span>
                                 {labels.by}{" "}
-                                {config.routes.author ? (
-                                    <Link
-                                        href={`${config.routes.author}/${post.author.slug}`}
-                                        style={{ color: c.ink, fontWeight: 600 }}
-                                    >
-                                        {post.author.name}
+                                {byline.href ? (
+                                    <Link href={byline.href} style={{ color: c.ink, fontWeight: 600 }}>
+                                        {byline.name}
                                     </Link>
                                 ) : (
-                                    <span style={{ color: c.ink, fontWeight: 600 }}>
-                                        {post.author.name}
-                                    </span>
+                                    <span style={{ color: c.ink, fontWeight: 600 }}>{byline.name}</span>
                                 )}
                             </span>
                         )}
 
-                        {post.publishedAt && (
-                            <time dateTime={post.publishedAt} style={meta}>
-                                {formatDate(config, post.publishedAt)}
+                        {item.date && (
+                            <time dateTime={item.date} style={meta}>
+                                {formatDate(config, item.date)}
                             </time>
                         )}
 
@@ -238,13 +276,16 @@ export function PostView({
                             {minutes} {labels.minRead}
                         </span>
 
-                        {post.category && config.routes.category && (
-                            <Link href={`${config.routes.category}/${post.category.slug}`} style={meta}>
-                                {post.category.name}
-                            </Link>
+                        {filed.map(
+                            (f) =>
+                                f.href && (
+                                    <Link key={f.field} href={f.href} style={meta}>
+                                        {f.name}
+                                    </Link>
+                                ),
                         )}
 
-                        {post.tags.map((tag) => (
+                        {item.tags.map((tag) => (
                             <span
                                 key={tag}
                                 style={{
@@ -275,12 +316,12 @@ export function PostView({
 
             <article style={{ ...band, paddingTop: "48px", paddingBottom: "72px" }}>
                 <div style={{ maxWidth: t.layout.prose, margin: "0 auto" }}>
-                    {post.coverImage && (
+                    {item.image && (
                         // Not next/image: the CMS resizes on request with ?w=, so the optimiser
                         // would be a second resizer in front of the first.
                         <Asset
-                            src={post.coverImage}
-                            alt={post.coverImageAlt ?? ""}
+                            src={item.image}
+                            alt={item.imageAlt ?? ""}
                             theme={t}
                             style={{
                                 width: "100%",
@@ -293,8 +334,16 @@ export function PostView({
 
                     <div
                         className={PROSE_CLASS}
-                        dangerouslySetInnerHTML={{ __html: renderProse(post.body, t) }}
+                        dangerouslySetInnerHTML={{ __html: renderProse(item.body, t) }}
                     />
+
+                    {item.url && (
+                        <p style={{ margin: "28px 0 0", fontSize: "14px" }}>
+                            <a href={item.url} rel="noopener noreferrer" style={{ color: c.accent }}>
+                                {item.url}
+                            </a>
+                        </p>
+                    )}
 
                     {afterBody}
                 </div>
@@ -355,7 +404,7 @@ export function PostView({
                             {related.map((r) => (
                                 <Link
                                     key={r.slug}
-                                    href={`${config.routes.post}/${r.slug}`}
+                                    href={`${route}/${r.slug}`}
                                     className={RELATED_CLASS}
                                     style={{
                                         display: "flex",
@@ -378,18 +427,20 @@ export function PostView({
                                             color: c.muted,
                                         }}
                                     >
-                                        <span
-                                            style={{
-                                                padding: "3px 8px",
-                                                borderRadius: t.radii.pill,
-                                                background: c.accentTint,
-                                                color: c.accentInk,
-                                                fontVariantNumeric: "tabular-nums",
-                                            }}
-                                        >
-                                            {r.score.toFixed(4)}
-                                        </span>
-                                        {r.publishedAt && formatDate(config, r.publishedAt)}
+                                        {r.score !== undefined && (
+                                            <span
+                                                style={{
+                                                    padding: "3px 8px",
+                                                    borderRadius: t.radii.pill,
+                                                    background: c.accentTint,
+                                                    color: c.accentInk,
+                                                    fontVariantNumeric: "tabular-nums",
+                                                }}
+                                            >
+                                                {r.score.toFixed(4)}
+                                            </span>
+                                        )}
+                                        {r.date && formatDate(config, r.date)}
                                     </span>
                                     <span
                                         style={{
@@ -403,7 +454,7 @@ export function PostView({
                                     >
                                         {r.title}
                                     </span>
-                                    {r.excerpt && (
+                                    {r.summary && (
                                         <span
                                             style={{
                                                 fontSize: "14px",
@@ -411,7 +462,7 @@ export function PostView({
                                                 color: c.secondaryInk,
                                             }}
                                         >
-                                            {r.excerpt}
+                                            {r.summary}
                                         </span>
                                     )}
                                 </Link>
@@ -420,6 +471,8 @@ export function PostView({
                     </div>
                 </section>
             )}
+
+            {footer}
         </div>
     );
 }

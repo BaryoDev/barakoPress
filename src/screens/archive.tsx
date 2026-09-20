@@ -9,6 +9,10 @@ import { createCollectionDetail, createCollectionStaticParams } from "./collecti
  * `which` is the collection's key. A site with no author type has no author collection, so the route
  * is a 404 if mounted anyway, and a site with the type but no reference field to filter on is too.
  */
+/**
+ * @deprecated Since 0.7.0. Use `createCollectionDetail(config, "author", { related: { collection:
+ * "post", via } })`, which is what this calls. Removed no earlier than 1.0.0.
+ */
 export function createArchive(base: PressConfig, which: "author" | "category") {
     const via = base.fields[which];
     return createCollectionDetail(
