@@ -2,6 +2,15 @@
 
 ## 0.4.0 (unreleased)
 
+- Two build-time keys are a tenant's to set. `PageSizes` gives a site its own index, feed, sitemap
+  and archive counts, so a bakery listing 50 products and an agency listing 9 case studies run the
+  same image instead of one of them needing a build; a key the entry leaves out keeps the configured
+  count, and a collection's own `pageSize` still wins. `ReservedSlugs` adds to the reserved first
+  segments, which is how a tenant keeps a path its proxy answers out of the menu and the sitemap. It
+  only ever adds: the configured list is the app's own routes, and a page freed onto one of those
+  would sit behind a route file and render nowhere. The pages mount stays operator-only, because
+  Next resolves the catch-all by where its file sits and no setting can move a file. A tenant that
+  sets neither renders exactly as it did. (#53)
 - Fonts from somewhere other than Google Fonts. A `Fonts` entry may name the stylesheet that loads a
   face, `{ "family": "Zilla Slab", "url": "https://type.school.example/zilla.css" }`, which is how a
   school with a licensed face on its own host or a tenant that must not send visitor addresses to a
