@@ -171,6 +171,11 @@ function escapeAttribute(value: string): string {
     return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
 
+const SCRIPT_OPEN = /<script\b[^>]*>/i;
+
+/** `</script >` with spaces is a valid end tag, and a pattern that wants `</script>` walks past it. */
+const SCRIPT_CLOSE = /<\/script\s*>/i;
+
 /*
  * Every script, and every hint that one is coming.
  *
@@ -178,11 +183,28 @@ function escapeAttribute(value: string): string {
  * on and redraws the page into something nobody approved, and the look check would then be comparing
  * the rebuild against today's data rather than against the design. Whatever the scripts drew before
  * the capture is already in the serialised DOM.
+ *
+ * One element at a time, rescanning from the start, rather than one pass of a global pattern. A
+ * single pass leaves behind exactly what it was removing: cut the inner script out of
+ * `<scr<script>ipt>alert(1)</script>` and the halves close up into a script tag the pass has
+ * already gone past. Each turn removes at least one opening tag, so it ends.
+ *
+ * An opening tag with no end tag anywhere after it is the tag on its own, dropped, rather than a
+ * reason to throw the rest of the document away.
  */
 export function stripScripts(html: string): string {
-    return html
-        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
-        .replace(/<script\b[^>]*\/>/gi, "")
+    let out = html;
+    for (;;) {
+        const open = SCRIPT_OPEN.exec(out);
+        if (!open) break;
+        const after = open.index + open[0].length;
+        const close = SCRIPT_CLOSE.exec(out.slice(after));
+        out =
+            close === null
+                ? out.slice(0, open.index) + out.slice(after)
+                : out.slice(0, open.index) + out.slice(after + close.index + close[0].length);
+    }
+    return out
         .replace(/<link\b[^>]*\bas\s*=\s*["']?script["']?[^>]*>/gi, "")
         .replace(/<link\b[^>]*\brel\s*=\s*["']?modulepreload["']?[^>]*>/gi, "");
 }

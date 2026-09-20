@@ -189,3 +189,34 @@ describe("the fetch hints", () => {
         expect(out).toContain('rel="alternate"');
     });
 });
+
+/*
+ * The two CodeQL found on this change, and both are real: a fixture that still runs a script is a
+ * fixture that redraws itself against today's data, which is the one thing the capture exists to
+ * stop.
+ */
+describe("the scripts, awkwardly written", () => {
+    it("takes out a script whose end tag carries spaces", () => {
+        const out = stripScripts("<body><script>alert(1)</script ><p>kept</p></body>");
+
+        expect(out).not.toContain("<script");
+        expect(out).not.toContain("alert(1)");
+        expect(out).toContain("<p>kept</p>");
+    });
+
+    it("takes out a script the first pass would have assembled out of the halves either side of it", () => {
+        const out = stripScripts("<body><scr<script>x</script>ipt>alert(1)</script><p>kept</p></body>");
+
+        expect(out).not.toContain("<script");
+        expect(out).not.toContain("alert(1)");
+        expect(out).toContain("<p>kept</p>");
+    });
+
+    it("drops an opening tag with no end tag rather than the rest of the document", () => {
+        const out = stripScripts("<body><p>before</p><script src='/a.js'><p>after</p></body>");
+
+        expect(out).not.toContain("<script");
+        expect(out).toContain("<p>before</p>");
+        expect(out).toContain("<p>after</p>");
+    });
+});
