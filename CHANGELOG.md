@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.0 (unreleased)
+## 0.4.0 (2026-09-20)
 
 - Two build-time keys are a tenant's to set. `PageSizes` gives a site its own index, feed, sitemap
   and archive counts, so a bakery listing 50 products and an agency listing 9 case studies run the
