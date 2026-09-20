@@ -27,9 +27,10 @@
   which is what a roadmap needs to be read and not only seen, and it reads its figure through a new
   `progress` field role so the tenant says which of its own fields holds the number. `stickyBar` is
   the announcement band, and `announcement` is the preset over it. `codeTabs` draws the snippet a
-  quickstart is for and puts the other ways of running it in `codeTab` disclosures sharing a group.
-  `progressList` and `changelogList` read a collection, and a changelog is grouped by kind with
-  `filterField` and `filterValue`, one band per kind, because a block that grouped by itself would
+  quickstart is for and puts the other ways of running it in `codeTab`s sharing a group (a tab strip
+  as of #91; disclosures until then). `progressList` and `changelogList` read a collection, and a
+  changelog is grouped by kind with `filterField` and `filterValue`, one band per kind, because a
+  block that grouped by itself would
   have to know which field holds the kind and that is the tenant's field name. `faq` and `faqItem`
   are questions that all open at once, which is the whole difference from `tabs`. A card grid's new
   `option` prop marks each card with the glyph and the word the site declared for that entry's

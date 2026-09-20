@@ -160,6 +160,25 @@ describe("resolveBlocks", () => {
         });
 
         /*
+         * A `columns` block spends the budget down to exactly zero filling its first column, then
+         * asks for a second list that holds nothing. Resolving an empty list reads nothing and costs
+         * nothing, so it was never truncated, whatever the budget happened to be when it was asked
+         * for: warning about it would tell a page author a block was cut that never held one.
+         */
+        it("says nothing when what runs out of budget next was already empty", () => {
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+            const firstColumn = Array.from({ length: MAX_BLOCKS - 1 }, (_, i) => text(`c${i}`));
+            const raw = [{ type: "columns", props: { columns: [firstColumn, []] } }];
+
+            const resolved = resolveBlocks(raw, registry, { perViewer: false });
+
+            expect(resolved).toHaveLength(1);
+            expect(resolved[0].slots.columns[0]).toHaveLength(MAX_BLOCKS - 1);
+            expect(resolved[0].slots.columns[1]).toEqual([]);
+            expect(warn).not.toHaveBeenCalled();
+        });
+
+        /*
          * `sayOnce` dedups on the message text, and resolveBlocks is never given a page id, so a
          * warning that read the same for every page would only ever fire for the first one: the
          * silence #90 is about, moved to the second offending page rather than fixed. The top-level
