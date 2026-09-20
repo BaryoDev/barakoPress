@@ -9,11 +9,13 @@
   typed in place, with no `collection`, for a page author's own package list or feed. `section` and
   every block that takes a `tone` gained `wash`, a radial gradient from the theme's own page and
   accent tint colours, declared rather than hand-written. `codeTabs` draws a real strip of tabs
-  now, `tabGroup` and `tabPanel`, in CSS alone: no script, and `disclosure` stays what `tabs` and
-  `faq` use. Measured against the fixture: 48.863% different at 1280px and 59.434% at 390px before,
-  29.950% and 35.536% after. The mascot, the bio panel, the sticky translucent header and the
-  richer "Four products" cards are not blocks yet; the gap that is left is written down in the pull
-  request rather than closed by guessing at a shape nobody asked for.
+  now, `tabGroup` and `tabPanel`, a radio and its label standing in for the tab and a `:checked`
+  selector standing in for the script, since a first version built on `<details>` broke past two
+  tabs (see the pull request for what and why) and this one is measured at four. `disclosure` stays
+  what `tabs` and `faq` use. Measured against the fixture: 48.863% different at 1280px and 59.434%
+  at 390px before, 30.595% and 35.741% after. The mascot, the bio panel, the sticky translucent
+  header and the richer "Four products" cards are not blocks yet; the gap that is left is written
+  down in the pull request rather than closed by guessing at a shape nobody asked for.
 - A page over its block budget says so, once, instead of rendering short with nothing said (#90).
   Raising the limit from a hundred to four hundred (#83) bought room; it did not make going over it
   visible, which is how baryo.dev's eighth band went missing with a 200 and no error. `resolveBlocks`

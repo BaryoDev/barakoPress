@@ -21,6 +21,7 @@
       "language": "shell",
       "selectLabel": "Click to select",
       "primaryLabel": "barakoCMS",
+      "group": "install",
       "width": "wide",
       "items": [
         [

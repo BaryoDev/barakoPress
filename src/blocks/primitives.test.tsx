@@ -275,69 +275,76 @@ describe("content primitives", () => {
 });
 
 /*
- * A real tab strip, no script (barakoPress #91). `tabPanel` is `transparent`, so its `summary` and
- * its panel land as ordinary children of `tabGroup` rather than nested inside a wrapper of their
- * own, which is what lets `order` put every summary before every panel regardless of which tab is
- * open or where its markup sits in the list.
+ * A real tab strip, no script (barakoPress #91).
+ *
+ * The first version used `<details style="display:contents">`, on the strength of the same trick
+ * `stickyBar` uses to escape the wrapper `BlockList` puts around every block. Rendered through
+ * Chromium, it broke past two tabs: `<details>`'s own native show-and-hide does not survive being
+ * promoted more than once into the same flex context, so the third and fourth buttons landed beside
+ * or behind the open panel instead of in the row above it. A radio input's `:checked` state does
+ * the same exclusivity through an ordinary selector instead, which is what these tests are against
+ * now, and the four-tab test below is the one that would have failed on the first version: it holds
+ * every tab's own id and, since `:checked ~ [data-bp-tabpanel="id"]` only ever names one panel, a
+ * broken pairing shows up as a missing or a duplicated id rather than as a layout only a screenshot
+ * would catch.
  */
 describe("a tab group", () => {
-    const strip = (open: string) =>
+    const tab = (label: string, open: boolean, content: string) => ({
+        type: "tabPanel",
+        props: { label, open, group: "g", content: [[{ type: "text", props: { value: content } }]] },
+    });
+
+    const strip = (labels: string[], open: string) =>
         render([
             {
                 type: "tabGroup",
-                props: {
-                    content: [
-                        [
-                            {
-                                type: "tabPanel",
-                                props: {
-                                    label: "One",
-                                    open: open === "One",
-                                    group: "g",
-                                    content: [[{ type: "text", props: { value: "first" } }]],
-                                },
-                            },
-                            {
-                                type: "tabPanel",
-                                props: {
-                                    label: "Two",
-                                    open: open === "Two",
-                                    group: "g",
-                                    content: [[{ type: "text", props: { value: "second" } }]],
-                                },
-                            },
-                        ],
-                    ],
-                },
+                props: { content: [labels.map((label) => tab(label, label === open, `panel-${label}`))] },
             },
         ]);
 
     it("draws every tab's button, whichever one is open", () => {
-        const html = strip("One");
+        const html = strip(["One", "Two"], "One");
         expect(html).toContain("One");
         expect(html).toContain("Two");
     });
 
-    /*
-     * A browser hides a `details` that is not `open` by default, with nothing added here, so the
-     * static markup this asserts on still carries both panels: that is what lets a reader with no
-     * script open the other tab, and what lets the browser's own find-in-page reach into it.
-     */
-    it("marks exactly one tab open, and only one", () => {
-        const html = strip("One");
-        expect(html).toContain("first");
-        expect(html).toContain("second");
-        expect([...html.matchAll(/<details[^>]*\bopen(?:=""|(?=[\s>]))/g)]).toHaveLength(1);
-        expect(html.indexOf('open=""')).toBeLessThan(html.indexOf("Two"));
+    it("marks exactly one tab checked, and only one", () => {
+        const html = strip(["One", "Two"], "One");
+        expect(html).toContain("panel-One");
+        expect(html).toContain("panel-Two");
+        expect([...html.matchAll(/checked=""/g)]).toHaveLength(1);
+        expect(html.indexOf('checked=""')).toBeLessThan(html.indexOf("Two"));
     });
 
     it("shares one exclusivity group across the strip, the same as a disclosure would", () => {
-        const html = strip("One");
+        const html = strip(["One", "Two"], "One");
         expect([...html.matchAll(/name="g"/g)]).toHaveLength(2);
     });
 
-    it("hides the details marker, so the buttons read as tabs and not an accordion", () => {
-        expect(strip("One")).toContain("::-webkit-details-marker");
+    it("hides the radio itself, so only its label reads as a button", () => {
+        expect(strip(["One", "Two"], "One")).toContain("clip:rect(0, 0, 0, 0)");
+    });
+
+    /*
+     * Four tabs, one primary and three others, is exactly the shape `codeTabs` compiles the
+     * baryo.dev fixture's install band into, and exactly the shape that broke with `<details>`.
+     */
+    it("pairs every one of four tabs with its own panel and nothing else's", () => {
+        const html = strip(["barakoCMS", "barakoBrew", "barakoPress", "BaryoVM"], "barakoCMS");
+
+        // Not the CSS rule's own `[data-bp-tabpanel="id"]` selector text, only the real attribute.
+        const ids = [...html.matchAll(/(?<!\[)data-bp-tabpanel="([^"]+)"/g)].map((m) => m[1]);
+        expect(ids).toHaveLength(4);
+        expect(new Set(ids).size).toBe(4);
+
+        for (const id of ids) {
+            // Exactly one rule points this id's radio at this id's panel, and exactly one radio
+            // and one panel carry it: a stray fourth tab sharing an id would fail one of these.
+            expect([...html.matchAll(new RegExp(`id="${id}"`, "g"))]).toHaveLength(1);
+            expect([...html.matchAll(new RegExp(`(?<!\\[)data-bp-tabpanel="${id}"`, "g"))]).toHaveLength(1);
+            expect(html).toContain(`#${id}:checked~[data-bp-tabpanel="${id}"]{display:block}`);
+        }
+        expect([...html.matchAll(/checked=""/g)]).toHaveLength(1);
     });
 });
 
