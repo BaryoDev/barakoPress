@@ -2,6 +2,13 @@
 
 ## 0.6.0 (unreleased)
 
+- The words a visitor reads are the tenant's. `Labels` on the site settings holds them, key by key:
+  "min read", "by", "Related", "Featured", "Back", "Untitled", the RSS link, the preview banner, the
+  two notices an index shows and the line the holding page shows after a share link that did not
+  open. A school setting `Locale` to `fil-PH` got Filipino dates beside English copy, and a tenant
+  that wanted "Read more" instead of "Back" had to fork the screen. A key left out keeps the English,
+  so a tenant that sets nothing reads as it did, and a build-time site passes `labels` to
+  `defineConfig`. A test reads the screens and fails on English written back into one. (#47)
 - The theme's colour slots say what a colour is for. `inverse`, `inverseChrome`, `inverseInk`,
   `inverseAccent`, `code` and `accentBorderStrong` replace `darkPanel`, `darkPanelChrome`,
   `darkPanelInk`, `darkPanelAccent`, `codeGreen` and `accentTintBorderStrong`, which were

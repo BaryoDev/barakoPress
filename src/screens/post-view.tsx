@@ -71,12 +71,13 @@ export function PostView({
 }: PostViewProps) {
     const t = config.theme;
     const c = t.colors;
+    const labels = config.labels;
     const gutter = t.layout.gutter;
 
     const backHref = config.routes.post || "/";
     // "/writing" reads as WRITING. The route is the only thing that knows what the index is called,
     // and asking for a label as well would be a second place to keep the same word.
-    const backLabel = backHref.split("/").filter(Boolean).pop() ?? "Home";
+    const backLabel = backHref.split("/").filter(Boolean).pop() ?? labels.home;
 
     const minutes = readingMinutes(post.body);
     const monogram = post.author ? initials(post.author.name) : "";
@@ -107,8 +108,7 @@ export function PostView({
                             lineHeight: 1.6,
                         }}
                     >
-                        Preview. This is how the post will look. It is not published, and it is
-                        served uncached so nothing here reaches another reader.
+                        {labels.preview}
                     </div>
                 </div>
             )}
@@ -212,7 +212,7 @@ export function PostView({
                                 >
                                     {monogram}
                                 </span>
-                                by{" "}
+                                {labels.by}{" "}
                                 {config.routes.author ? (
                                     <Link
                                         href={`${config.routes.author}/${post.author.slug}`}
@@ -234,7 +234,9 @@ export function PostView({
                             </time>
                         )}
 
-                        <span style={meta}>{minutes} min read</span>
+                        <span style={meta}>
+                            {minutes} {labels.minRead}
+                        </span>
 
                         {post.category && config.routes.category && (
                             <Link href={`${config.routes.category}/${post.category.slug}`} style={meta}>
@@ -327,7 +329,7 @@ export function PostView({
                                     color: c.ink,
                                 }}
                             >
-                                Related
+                                {labels.related}
                             </h2>
                             {/* Says how the list was made, because a computed list that looks
                                 hand-picked invites the reader to assume somebody chose. */}
@@ -338,7 +340,7 @@ export function PostView({
                                     color: c.muted,
                                 }}
                             >
-                                cosine similarity, computed on load, not curated
+                                {labels.relatedNote}
                             </span>
                         </div>
 

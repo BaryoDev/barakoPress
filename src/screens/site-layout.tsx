@@ -214,7 +214,7 @@ async function HoldingDocument({ cfg, registry, loadFonts }: { cfg: PressConfig;
                     role="status"
                     style={{ margin: 0, padding: `12px ${t.layout.gutter}`, background: t.colors.inverse, color: t.colors.inverseInk }}
                 >
-                    This link is not valid or has expired.
+                    {cfg.labels.shareInvalid}
                 </p>
                 {page && registry ? (
                     <div data-press="holding">
@@ -305,7 +305,7 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
                         ))}
                         {!cfg.holding && (
                             <a href="/feed.xml" style={{ ...linkStyle, fontFamily: t.fonts.mono, fontSize: "13px", color: c.muted }}>
-                                RSS
+                                {cfg.labels.feed}
                             </a>
                         )}
                     </span>

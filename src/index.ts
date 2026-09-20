@@ -35,6 +35,7 @@
 export {
     defineConfig,
     includesFor,
+    DEFAULT_LABELS,
     POST_COLLECTION,
     AUTHOR_COLLECTION,
     CATEGORY_COLLECTION,
@@ -105,6 +106,7 @@ export type {
     CollectionFields,
     CollectionReference,
     FieldNames,
+    Labels,
 } from "./config.js";
 
 export {

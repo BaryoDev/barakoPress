@@ -497,6 +497,7 @@ for a post type with no such field.
 | `regions` | off | `HeaderPath`, `HeaderTone`, `FooterPath`, `FooterTone` | The header and the footer as block regions |
 | `collections` | the blog's `post`, `author` and `category` | `Collections` | Content types rendered as lists and detail pages. See Collections |
 | `optionColors` | none | `OptionColors` | CSS colours by `type.field` and option, for `colorBy` |
+| `labels` | English | `Labels` | The words the screens print for a visitor. See below |
 | `theme` | the barakoCMS palette | `Colors`, `Fonts`, `Radii`, `Layout`, `Space`, `Text` | Colours, faces, radii and column widths. See below |
 
 The third column is the whole of the split. A key marked operator only is one the image decides for
@@ -593,7 +594,7 @@ The settings are the singleton `site` type from barakoCMS `docs/site-settings.md
 `Colors` (the theme slots), `Fonts` (a family name per role, and the stylesheet that loads it),
 `Radii`, `Layout`, `TopBar`, `HeaderLinks`, `FooterColumns`, `SocialLinks`, `HeaderPath`,
 `HeaderTone`, `FooterPath`, `FooterTone`, `AssetsAsSupplied`, `LogoAsSupplied`, `LogoClearSpace`,
-`PageSizes` and `ReservedSlugs`. `Collections` and `OptionColors` are read as the collections section
+`PageSizes`, `ReservedSlugs` and `Labels`. `Collections` and `OptionColors` are read as the collections section
 describes. `Variants` are not rendered yet. Every value is checked for shape; one that fails, and any the
 entry leaves out, keeps the configured value, so a half-filled theme renders. A link is a path on the
 site or an absolute http or https URL. Set `Url`: without it the feed and sitemap fall back to the
@@ -601,6 +602,33 @@ host the tenant was found by.
 
 `createSiteLayout` and `createSiteMetadata` render the root layout from all of this: `lang`, the
 faces, the palette, the top bar, header links, footer columns, social links and the copyright line.
+
+**The words a visitor reads.** `Labels` is the visitor-facing copy, key by key. A school setting
+`Locale` to `fil-PH` used to get Filipino dates beside English "min read" and "Related":
+
+```json
+{ "Labels": { "minRead": "minutong pagbasa", "by": "ni", "related": "Kaugnay" } }
+```
+
+| Key | English |
+| --- | --- |
+| `minRead` | `min read` |
+| `by` | `by` |
+| `related` | `Related` |
+| `relatedNote` | `cosine similarity, computed on load, not curated` |
+| `featured` | `Featured` |
+| `back` | `Back` |
+| `home` | `Home` |
+| `preview` | The banner over a draft being previewed |
+| `untitled` | `Untitled` |
+| `feed` | `RSS` |
+| `empty`, `emptyNote` | The notice on an index with nothing published |
+| `failed`, `failedNote` | The notice on an index whose read failed |
+| `shareInvalid` | `This link is not valid or has expired.` |
+
+A key left out, or saved as anything but a word, keeps the English, so a half-filled map reads. A
+build-time site passes `labels` to `defineConfig`. Nothing about a site's own content is here: a
+collection's heading is its `label` and how its count reads is its `noun`.
 
 **The colour slots, by role.** `Colors` sets any slot of the palette, one at a time. The slots are
 `pageBg`, `surface`, `ink`, `proseInk`, `secondaryInk`, `muted`, `hairline`, `accent`, `accentHover`,

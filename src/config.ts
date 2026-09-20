@@ -306,6 +306,67 @@ export interface CollectionConfig {
     colorBy?: string;
 }
 
+/**
+ * The words a screen prints for a visitor, so a tenant writing in Filipino is not stuck with ours
+ * (#47).
+ *
+ * The defaults are the English every site rendered before this existed, so a site that sets nothing
+ * reads exactly as it did. A request-time site reads its tenant's `Labels` setting, key by key: set
+ * `minRead` and the rest stay English. Anything that names the site's own content is not here, since
+ * that is the entry's data or the collection's `label` and `noun`.
+ */
+export interface Labels {
+    /** After the reading time on a post: "7 min read". */
+    minRead: string;
+    /** Before the author's name on a post. */
+    by: string;
+    /** The heading over the related posts band. */
+    related: string;
+    /** The line under that heading saying how the list was made. */
+    relatedNote: string;
+    /** The chip on a featured card. */
+    featured: string;
+    /** The link back from an item page to its list. */
+    back: string;
+    /** The back link on a post whose route is the site root. */
+    home: string;
+    /** The banner over a post being previewed as a draft. */
+    preview: string;
+    /** The title of an entry whose title field is empty. */
+    untitled: string;
+    /** The feed link in the built-in header. */
+    feed: string;
+    /** The notice on an index with nothing published. */
+    empty: string;
+    emptyNote: string;
+    /** The notice on an index whose read failed. */
+    failed: string;
+    failedNote: string;
+    /** The notice on the holding page after a share link that did not open. */
+    shareInvalid: string;
+}
+
+export const DEFAULT_LABELS: Labels = {
+    minRead: "min read",
+    by: "by",
+    related: "Related",
+    relatedNote: "cosine similarity, computed on load, not curated",
+    featured: "Featured",
+    back: "Back",
+    home: "Home",
+    preview:
+        "Preview. This is how the post will look. It is not published, and it is served uncached so nothing here reaches another reader.",
+    untitled: "Untitled",
+    feed: "RSS",
+    empty: "Nothing published yet.",
+    emptyNote: "Only published entries of a type opted into public delivery appear here.",
+    failed: "This page could not be loaded.",
+    failedNote: "Please try again shortly.",
+    shareInvalid: "This link is not valid or has expired.",
+};
+
+export const LABEL_KEYS = Object.keys(DEFAULT_LABELS) as (keyof Labels)[];
+
 export interface PressConfig {
     types: TypeNames;
     fields: FieldMap;
@@ -383,6 +444,8 @@ export interface PressConfig {
      * the tenant's `OptionColors` setting.
      */
     optionColors: Record<string, Record<string, string>>;
+    /** The words the screens print. A request-time site reads the tenant's `Labels` setting. */
+    labels: Labels;
 }
 
 export type PressConfigInput = {
@@ -399,7 +462,11 @@ export type PressConfigInput = {
      */
     theme?: PressThemeInput;
     sites?: Partial<SitesConfig>;
-} & Partial<Omit<PressConfig, "types" | "fields" | "pageFields" | "routes" | "site" | "pageSizes" | "theme" | "sites" | "holding">>;
+    /** Partial, so a site renaming one word keeps the English for the rest. */
+    labels?: Partial<Labels>;
+} & Partial<
+    Omit<PressConfig, "types" | "fields" | "pageFields" | "routes" | "site" | "pageSizes" | "theme" | "sites" | "holding" | "labels">
+>;
 
 /**
  * The `blog` blueprint, which is what `POST /api/content-types/blueprints/blog` creates.
@@ -569,6 +636,7 @@ export function defineConfig(
         theme: resolveTheme(input.theme),
         collections,
         optionColors: input.optionColors ?? {},
+        labels: { ...DEFAULT_LABELS, ...input.labels },
         reservedSlugs: reservedSlugs(
             [routes.post, routes.author, routes.category, ...Object.values(collections).map((c) => c.route)],
             input.reservedSlugs,

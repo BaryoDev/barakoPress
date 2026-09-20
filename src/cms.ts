@@ -73,7 +73,7 @@ export function toPost(config: PressConfig, c: PublicContent): Post {
     return {
         id: c.id,
         slug: c.slug ?? str(field(d, f.slug)),
-        title: str(field(d, f.title)) || "Untitled",
+        title: str(field(d, f.title)) || config.labels.untitled,
         excerpt: str(field(d, f.excerpt)) || undefined,
         body: str(field(d, f.body)),
         publishedAt: str(field(d, f.publishedAt)) || c.createdAt || undefined,
@@ -192,7 +192,7 @@ function toTerm(config: PressConfig, c: PublicContent): Term {
     return {
         id: c.id,
         slug: c.slug ?? (str(field(d, config.fields.slug)) || str(d.Slug)),
-        name: str(d.Name) || str(d.Title) || str(field(d, config.fields.title)) || "Untitled",
+        name: str(d.Name) || str(d.Title) || str(field(d, config.fields.title)) || config.labels.untitled,
         description: str(d.Description) || str(d.Bio) || undefined,
         photo: str(d.Photo) || undefined,
         website: str(d.Website) || undefined,
@@ -233,7 +233,7 @@ export function toPage(config: PressConfig, c: PublicContent): Page {
     return {
         id: c.id,
         slug: c.slug ?? str(field(d, f.slug)),
-        title: str(field(d, f.title)) || "Untitled",
+        title: str(field(d, f.title)) || config.labels.untitled,
         summary: str(field(d, f.summary)) || undefined,
         body: str(field(d, f.body)),
         blocks: field(d, f.blocks),

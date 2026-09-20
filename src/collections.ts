@@ -121,7 +121,7 @@ export function toItem(config: PressConfig, key: string, c: PublicContent): Item
         id: c.id,
         collection: key,
         slug: c.slug ?? text(c, f.slug),
-        title: text(c, f.title) || "Untitled",
+        title: text(c, f.title) || config.labels.untitled,
         summary: text(c, f.summary) || undefined,
         body: text(c, f.body),
         date: text(c, f.date) || undefined,

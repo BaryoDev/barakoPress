@@ -96,7 +96,7 @@ export function Card(props: CardProps) {
             className={featured ? "card featured-card" : "card"}
             style={item.color ? { borderLeft: `4px solid ${item.color}` } : undefined}
         >
-            {featured && <span className="chip">Featured</span>}
+            {featured && <span className="chip">{config.labels.featured}</span>}
             <h2>{col?.route !== undefined ? <Link href={`${col.route}/${item.slug}`}>{item.title}</Link> : item.title}</h2>
             <p className="meta">
                 {item.date && <time dateTime={item.date}>{formatDate(config, item.date)}</time>}
@@ -139,7 +139,7 @@ export function ItemView({ config, item, related, backHref = "/" }: ItemViewProp
     return (
         <div className="shell">
             <p className="meta">
-                <Link href={backHref}>Back</Link>
+                <Link href={backHref}>{config.labels.back}</Link>
             </p>
             <h1>{item.title}</h1>
             {item.option && <OptionLine item={item} />}
@@ -223,18 +223,18 @@ export async function CollectionIndexView({
             {failure && (
                 <div className="notice error">
                     <p>
-                        <strong>This page could not be loaded.</strong>
+                        <strong>{config.labels.failed}</strong>
                     </p>
-                    <p>Please try again shortly.</p>
+                    <p>{config.labels.failedNote}</p>
                 </div>
             )}
 
             {!failure && items.length === 0 && (
                 <div className="notice">
                     <p>
-                        <strong>Nothing published yet.</strong>
+                        <strong>{config.labels.empty}</strong>
                     </p>
-                    <p>Only published entries of a type opted into public delivery appear here.</p>
+                    <p>{config.labels.emptyNote}</p>
                 </div>
             )}
 

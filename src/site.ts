@@ -12,6 +12,8 @@ import {
     type FieldNames,
     type FooterColumn,
     type Holding,
+    type Labels,
+    LABEL_KEYS,
     type PageSizes,
     type PressConfig,
     type Region,
@@ -778,6 +780,27 @@ function reservedSlugsFrom(base: string[], v: unknown): string[] {
     return [...new Set([...base, ...added])];
 }
 
+/*
+ * `Labels`: the words this tenant's screens print (#47).
+ *
+ * One key at a time, the way a theme token merges, so a tenant that renames "min read" keeps the
+ * English for everything else. A value that is not a non-empty string of reasonable length is
+ * dropped and the configured word stands: a label saved empty would leave a visitor looking at a
+ * blank where a word belongs.
+ */
+const MAX_LABEL = 400;
+
+function labelsFrom(base: Labels, v: unknown): Labels {
+    const input = record(v);
+    if (!input) return base;
+    const out = { ...base };
+    for (const key of LABEL_KEYS) {
+        const word = str(input[key]);
+        if (word && word.length <= MAX_LABEL) out[key] = word;
+    }
+    return out;
+}
+
 export function applySiteSettings(
     config: PressConfig,
     data: Record<string, unknown> | undefined,
@@ -835,6 +858,7 @@ export function applySiteSettings(
         collections: collectionsFrom(config.collections, d.Collections),
         optionColors: optionColorsFrom(config.optionColors, theme, d.Colors, d.OptionColors),
         pageSizes: pageSizesFrom(config.pageSizes, d.PageSizes),
+        labels: labelsFrom(config.labels, d.Labels),
         reservedSlugs: reservedSlugsFrom(config.reservedSlugs, d.ReservedSlugs),
         ...(bands ? { regions: bands } : {}),
         ...(held ? { holding: held } : {}),
