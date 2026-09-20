@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Asset } from "../assets.js";
 import type { PressConfig, Region } from "../config.js";
 import { showsHoldingPage, siteConfigOrNull } from "../site.js";
 import {
@@ -221,8 +222,7 @@ async function HoldingDocument({ cfg, registry, loadFonts }: { cfg: PressConfig;
                     >
                         <div style={{ maxWidth: t.layout.prose }}>
                             {s.logo && (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={s.logo} alt={s.logoAlt ?? s.name} style={{ height: "48px", width: "auto" }} />
+                                <Asset src={s.logo} alt={s.logoAlt ?? s.name} theme={t} style={{ height: "48px", width: "auto" }} />
                             )}
                             <h1 style={{ margin: "24px 0 0", fontFamily: t.fonts.heading, fontSize: "clamp(32px, 4.4vw, 52px)", lineHeight: 1.08 }}>
                                 {s.name}
@@ -286,8 +286,7 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
                         style={{ ...linkStyle, display: "flex", alignItems: "center", gap: "12px", fontFamily: t.fonts.heading, fontWeight: 700, fontSize: "20px" }}
                     >
                         {s.logo ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={s.logo} alt={s.logoAlt ?? s.name} style={{ height: "36px", width: "auto" }} />
+                            <Asset src={s.logo} alt={s.logoAlt ?? s.name} theme={t} style={{ height: "36px", width: "auto" }} />
                         ) : (
                             s.name
                         )}
@@ -322,8 +321,7 @@ function BuiltInFooter({ cfg }: { cfg: PressConfig }) {
         <footer style={{ background: c.darkPanel, color: c.darkPanelInk, marginTop: "48px" }}>
             <div style={{ ...band, paddingTop: "40px", paddingBottom: "40px" }}>
                 {s.footerLogo && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={s.footerLogo} alt={s.logoAlt ?? s.name} style={{ height: "40px", width: "auto" }} />
+                    <Asset src={s.footerLogo} alt={s.logoAlt ?? s.name} theme={t} style={{ height: "40px", width: "auto" }} />
                 )}
                 {(s.footerColumns ?? []).length > 0 && (
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(180px, 100%), 1fr))", gap: "24px", marginTop: "24px" }}>

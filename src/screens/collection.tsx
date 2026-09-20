@@ -14,7 +14,7 @@ import {
     type Item,
 } from "../collections.js";
 import { CmsError } from "../delivery.js";
-import { renderMarkdown } from "../markdown.js";
+import { Asset, renderProse } from "../assets.js";
 import { siteConfig } from "../site.js";
 
 /*
@@ -144,16 +144,18 @@ export function ItemView({ config, item, related, backHref = "/" }: ItemViewProp
             <h1>{item.title}</h1>
             {item.option && <OptionLine item={item} />}
             {item.image && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <Asset
                     src={item.image}
                     alt={item.imageAlt ?? ""}
+                    theme={config.theme}
                     style={{ width: "100%", borderRadius: config.theme.radii.panel }}
                 />
             )}
             {item.summary && <p className="excerpt">{item.summary}</p>}
 
-            {item.body && <div className="prose" dangerouslySetInnerHTML={{ __html: renderMarkdown(item.body) }} />}
+            {item.body && (
+                <div className="prose" dangerouslySetInnerHTML={{ __html: renderProse(item.body, config.theme) }} />
+            )}
 
             {item.url && (
                 <p className="meta">
