@@ -1,0 +1,38 @@
+{
+  "Name": "baryo.dev",
+  "Url": "https://baryo.dev",
+  "Locale": "en-US",
+  "HomePath": "/home",
+  "Colors": {
+    "pageBg": "#FFFFFF",
+    "surface": "#FFFFFF",
+    "ink": "#202124",
+    "proseInk": "#3C4043",
+    "secondaryInk": "#3C4043",
+    "muted": "#5F6368",
+    "hairline": "#EDEDEE",
+    "accent": "#A35528",
+    "accentHover": "#8C4722",
+    "accentInk": "#A35528",
+    "accentTint": "#FDF0E7",
+    "accentTintBorder": "#F6DCC9",
+    "accentBorderStrong": "#EFC6A6",
+    "inverse": "#202124",
+    "inverseChrome": "#3C4043",
+    "inverseInk": "#EDEDEE",
+    "inverseAccent": "#EF7D3B",
+    "code": "#22A35F",
+    "success": "#1A6B41"
+  },
+  "Fonts": { "heading": "Manrope", "body": "Manrope", "mono": "IBM Plex Mono" },
+  "Layout": { "prose": "780px", "wide": "1160px", "gutter": "24px", "columnMin": "190px" },
+  "Radii": { "panel": "22px", "control": "999px", "pill": "999px" },
+  "Space": { "xs": "8px", "sm": "12px", "md": "20px", "lg": "32px", "xl": "48px", "xxl": "72px" },
+  "HeaderLinks": [
+    { "label": "Products", "href": "/#products" },
+    { "label": "Libraries", "href": "/#libraries" },
+    { "label": "Writing", "href": "/#writing" },
+    { "label": "Sponsor", "href": "https://github.com/sponsors/BaryoDev" }
+  ],
+  "Copyright": "baryo.dev, built and maintained by Arnel Robles."
+}

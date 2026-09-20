@@ -1,0 +1,180 @@
+[
+  {
+    "type": "hero",
+    "props": {
+      "heading": "Software you can install in one line.",
+      "body": "A headless CMS, the console that edits it, the renderer that publishes it and the tool that deploys the lot. Open source, MIT or MPL-2.0, already in other people's production.",
+      "primaryLabel": "Try the live demo",
+      "primaryHref": "https://playground.baryo.dev/barakocms",
+      "secondaryLabel": "Read the docs",
+      "secondaryHref": "https://docs.baryo.dev",
+      "columns": "2",
+      "padding": "xxl"
+    }
+  },
+  {
+    "type": "codeTabs",
+    "props": {
+      "heading": "Install it",
+      "code": "dotnet add package BarakoCMS\ndocker compose up -d\nbarako open",
+      "language": "shell",
+      "selectLabel": "Click to select",
+      "width": "wide",
+      "items": [
+        [
+          {
+            "type": "codeTab",
+            "props": {
+              "label": "barakoBrew",
+              "code": "npm i -g barako-brew\nbrew serve",
+              "language": "shell",
+              "group": "install"
+            }
+          },
+          {
+            "type": "codeTab",
+            "props": {
+              "label": "barakoPress",
+              "code": "npm i barakopress\nnpx barakopress bindings-key baryo",
+              "language": "shell",
+              "group": "install"
+            }
+          },
+          {
+            "type": "codeTab",
+            "props": {
+              "label": "BaryoVM",
+              "code": "dotnet tool install -g BaryoVM\nbaryovm up",
+              "language": "shell",
+              "group": "install"
+            }
+          }
+        ]
+      ]
+    }
+  },
+  {
+    "type": "statBand",
+    "props": {
+      "heading": "Where it is",
+      "tone": "page",
+      "columns": "4",
+      "items": [
+        [
+          { "type": "stat", "props": { "value": "50", "label": "Packages on NuGet", "motion": "countUp" } },
+          { "type": "stat", "props": { "value": "132926", "label": "Total downloads", "motion": "countUp" } },
+          { "type": "stat", "props": { "value": "4", "label": "Products", "motion": "countUp" } },
+          { "type": "stat", "props": { "value": "0", "label": "External dependencies", "motion": "countUp" } }
+        ]
+      ]
+    }
+  },
+  {
+    "type": "tiers",
+    "props": {
+      "heading": "Four products, one stack",
+      "columns": "4",
+      "items": [
+        [
+          {
+            "type": "tier",
+            "props": {
+              "name": "barakoCMS",
+              "amount": "01 Model",
+              "body": "The headless CMS. Content types at runtime, event sourced, Postgres underneath.",
+              "label": "Repo",
+              "href": "https://github.com/BaryoDev/barakoCMS"
+            }
+          },
+          {
+            "type": "tier",
+            "props": {
+              "name": "barakoBrew",
+              "amount": "02 Edit",
+              "body": "The console. Content, blocks, settings and the people who change them.",
+              "label": "Repo",
+              "href": "https://github.com/BaryoDev/barakoBrew"
+            }
+          },
+          {
+            "type": "tier",
+            "props": {
+              "name": "barakoPress",
+              "amount": "03 Publish",
+              "body": "The renderer. Next.js server components, cached until the CMS says otherwise.",
+              "label": "Repo",
+              "href": "https://github.com/BaryoDev/barakoPress"
+            }
+          },
+          {
+            "type": "tier",
+            "props": {
+              "name": "BaryoVM",
+              "amount": "04 Ship",
+              "body": "The deploy tool. One VM, one command, the whole stack answering.",
+              "label": "Repo",
+              "href": "https://github.com/BaryoDev/BaryoVM"
+            }
+          }
+        ]
+      ]
+    }
+  },
+  {
+    "type": "comparisonTable",
+    "props": {
+      "caption": "Merged upstream",
+      "rows": "Project | Stars | What was fixed | Merged\nUmbraco CMS | 5.2k | A content picker that lost its value on save | 2\nTestcontainers | 4.4k | A container left running after a failed wait | 3\nMarten | 3.5k | An event projection that skipped a tenant | 4"
+    }
+  },
+  {
+    "type": "keyValueTable",
+    "props": {
+      "heading": "What I build with",
+      "rows": [
+        [
+          { "type": "keyValueRow", "props": { "label": "Languages and backend", "value": "C#, TypeScript, Go" } },
+          { "type": "keyValueRow", "props": { "label": "Data and cloud", "value": "Postgres, Marten, AWS" } },
+          { "type": "keyValueRow", "props": { "label": "Gates I trust", "value": "Testcontainers, Playwright, CodeQL" } }
+        ]
+      ]
+    }
+  },
+  {
+    "type": "faq",
+    "props": {
+      "heading": "Asked often",
+      "items": [
+        [
+          {
+            "type": "faqItem",
+            "props": {
+              "question": "Is any of it metered?",
+              "answer": "No. No seat cap, no paid tier, no metered anything."
+            }
+          },
+          {
+            "type": "faqItem",
+            "props": {
+              "question": "Can I run it myself?",
+              "answer": "That is the only way it runs. Your VM, your database, your domain."
+            }
+          }
+        ]
+      ]
+    }
+  },
+  {
+    "type": "band",
+    "props": {
+      "tone": "gradient",
+      "heading": "Keep the workshop lit.",
+      "body": "Everything here is open source and self-hostable. No paid tier, no seat cap, no metered anything. Sponsorship buys the CI minutes and the coffee.",
+      "label": "GitHub Sponsors",
+      "href": "https://github.com/sponsors/BaryoDev",
+      "align": "start",
+      "padding": "xxl",
+      "width": "wide"
+    }
+  }
+]

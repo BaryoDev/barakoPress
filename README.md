@@ -160,7 +160,7 @@ merged over the configured collections by key. A build-time site passes `collect
 | --- | --- |
 | `type` | The content type. Required |
 | `route` | The index is served at the route and an item at `route/slug`. Absent, items are listed and never linked |
-| `fields` | `title` (required), `slug`, `summary`, `body` (markdown), `date`, `image`, `imageAlt`, `featured`, `tags`, `url`, `photo`. Each is a field name or a list tried in order; `@createdAt` and `@updatedAt` read the entry itself. `photo` is a portrait drawn above the title, `image` the wide one |
+| `fields` | `title` (required), `slug`, `summary`, `body` (markdown), `date`, `image`, `imageAlt`, `featured`, `tags`, `url`, `photo`, `progress`. Each is a field name or a list tried in order; `@createdAt` and `@updatedAt` read the entry itself. `photo` is a portrait drawn above the title, `image` the wide one, and `progress` is a number from 0 to 100 that `progressList` draws |
 | `references` | Reference fields, each naming the collection it points into and the word a card puts before the link. Resolved in the same request |
 | `sort` | Sent to the API, for example `-PublishedAt` |
 | `feed` | Whether `createFeed(config, key)` serves it |
@@ -373,7 +373,8 @@ Blocks come in four layers.
 
 **Layout primitives** hold blocks and no content: `section` (a tone, a width and a padding step),
 `stack`, `row` (side by side, wrapping on a phone), `grid`, `flow`, `panel` (a card with a tone and
-a frame), `spacer` and `divider`.
+a frame), `stickyBar` (a band that stays put while the page moves under it, at the top or the
+bottom), `spacer` and `divider`.
 
 `row` and `grid` take one list per cell, which suits a designer placing each one. `flow` takes a
 single list and lays out whatever is in it, which is what a `repeat` and a preset's `slot` produce:
@@ -382,8 +383,14 @@ because only a string field takes a binding, and a preset has to pass its own `c
 
 **Content primitives** hold content and no layout: `text` (a variant from the theme's type scale),
 `richText` (markdown), `image`, `video`, `embed` (an iframe, only for a host in `embedHosts`),
-`icon`, `button`, `link`, `list` and `disclosure` (a labelled section that opens; give several the
-same `group` and only one is open at a time).
+`icon`, `button`, `link`, `list`, `disclosure` (a labelled section that opens; give several the
+same `group` and only one is open at a time), `comparisonTable` (rows typed as lines with `|`
+between the cells, drawn as a real table with a heading on every column and every row) and
+`progressBar` (how far along one thing is, as `role="progressbar"` so it is read and not only seen).
+
+A comparison's first line is the column headings and the first cell of every line after it is that
+row's heading. What goes in a cell is whatever the tenant types, ticks and dashes included: a mark
+chosen inside the engine would be one more piece of English in the markup.
 
 **Motion primitives** are drawn finished and animate only away from that: `reveal` (a wrapper whose
 content lifts and fades in as it scrolls into view), `rotatingText` (a comma separated list of words,
@@ -452,8 +459,10 @@ Field kinds are `text`, `markdown`, `url`, `number`, `boolean`, `select` (with `
 (lists of nested blocks, handed to the component already rendered). The list is editor input, so a
 block renders only when its type is registered and every prop passes its field. A present but wrong
 value fails the whole block, a `url` must pass the same check markdown links do, and a component
-never receives a prop its fields did not declare. A page reads at most 100 blocks in total, nested
-ones included, and four levels deep.
+never receives a prop its fields did not declare. A page reads at most 400 blocks in total, nested
+ones included, and ten levels deep. The count is spent on every block the binder walks through as
+well as every one that comes out, so a band from the library costs eight or ten of it, and a page
+that goes over loses its tail with nothing said.
 
 `defineBlock<Props, SlotNames>` checks the fields against the props at compile time: every field
 names a prop, its kind suits the prop's type, and a prop that is not optional must be `required`.
@@ -559,13 +568,18 @@ one to look different saves its own under the same name and that one wins.
 | `hero` | The band at the head of a page | heading, body, image, imageAlt, primaryLabel, primaryHref, secondaryLabel, secondaryHref, tone, columns, align, padding |
 | `band` | Copy with one call to action | tone, heading, body, label, href, align, padding, width |
 | `statBand` | A row of figures | heading, tone, columns, padding, items |
-| `cardGrid` | Cards from a collection | heading, collection, filterField, filterValue, empty, tone, columns, padding, hueRotate |
+| `cardGrid` | Cards from a collection | heading, collection, filterField, filterValue, empty, tone, columns, padding, hueRotate, option |
 | `peopleGrid` | People from a collection, typed in place, or both | heading, collection, filterField, filterValue, role, tone, columns, padding, items |
 | `timeline` | Dated entries | heading, tone, padding, width, items |
 | `steps` | Numbered entries | heading, tone, padding, width, items |
 | `tiers` | Giving or pricing tiers | heading, tone, columns, padding, items |
 | `keyValueTable` | A panel of facts | heading, tone, padding, radius, rows |
 | `tabs` | Sections that open | heading, tone, padding, width, items |
+| `announcement` | The one line above everything, and it stays there | message, label, href, tone, edge, align |
+| `codeTabs` | A snippet to run, with the other ways behind it | heading, body, code, language, selectLabel, tone, padding, width, items |
+| `progressList` | How far along each entry of a collection is | heading, collection, filterField, filterValue, empty, tone, padding, width |
+| `changelogList` | Release entries, with the word for the kind of release | heading, collection, filterField, filterValue, empty, tone, padding, width |
+| `faq` | Questions, all openable at once | heading, body, tone, padding, width, items |
 | `map` | An embedded map, held to `embedHosts` | src, title, heading, aspect, tone, padding |
 | `stat` | One figure and its label | value, label, align, motion |
 | `timelineEntry` | One dated entry | date, title, body |
@@ -573,11 +587,25 @@ one to look different saves its own under the same name and that one wins.
 | `tier` | One tier | name, amount, body, label, href, tone |
 | `person` | One person | name, role, photo, href, linkLabel, align |
 | `keyValueRow` | One fact | label, value |
+| `codeTab` | One more way to run it | label, code, language, selectLabel, group |
+| `faqItem` | One question and its answer | question, answer, tone |
 
 The blocks in the second half go in the first half's slots: stats in a `statBand`, entries in a
-`timeline`, `disclosure` blocks in `tabs`. A card grid reads its entries through `{{item.Title}}`,
-`{{item.Summary}}`, `{{item.Date | date}}` and `{{item.Href}}`, so it works against whatever the
-tenant calls those fields, and it takes the collection as a prop rather than knowing any name.
+`timeline`, `disclosure` blocks in `tabs`, `codeTab` blocks in `codeTabs`, `faqItem` blocks in
+`faq`. A card grid reads its entries through `{{item.Title}}`, `{{item.Summary}}`,
+`{{item.Date | date}}` and `{{item.Href}}`, so it works against whatever the tenant calls those
+fields, and it takes the collection as a prop rather than knowing any name.
+
+Set a card grid's `option` to `show` and each card carries the glyph and the word the site declared
+for that entry's option, read through `{{item.Icon}}` and `{{item.Word}}`. With `filterField` and
+`filterValue` picking the category, that is a module grid: one band per category, each card marked
+with its own. It is off by default, so a grid that did not ask for it draws what it always drew.
+
+`progressList` reads its figure through `{{item.Progress}}`, which is the collection's `progress`
+field role: the tenant says which of its own fields holds a number from 0 to 100. `changelogList`
+does not group by itself, because grouping means knowing which field holds the kind and that is the
+tenant's field name. One band per kind with `filterField` and `filterValue` is the grouping, and the
+chip on each entry is the option's own word.
 
 ## Configuring it
 

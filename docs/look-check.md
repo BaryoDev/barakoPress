@@ -12,6 +12,33 @@ back as artifacts.
 Comparing a stored baseline would answer a different question. A baseline tells you the rebuilt site
 changed since yesterday. This tells you it matches the approved design today.
 
+## Capturing the design first
+
+For a site being replaced, the approved design is the site. A pair can name its live URL and the
+check will fetch it on every run, which works and costs the gate three things: it depends on that
+site being up, it depends on the internet from the runner, and it compares against whatever that
+site deployed this morning rather than against what was agreed. The last one is the real problem. A
+gate whose target moves on its own is not a gate.
+
+So the design is captured once, before the conversion starts, and committed:
+
+```bash
+npm run build:package      # the capture uses the repo's Playwright, nothing else
+npx playwright install chromium
+npm run look:capture -- https://baryo.dev/ look/fixtures/baryo-dev/home.html
+```
+
+What comes out is one file that needs nothing else. The stylesheets become `<style>` blocks, the
+fonts and images they name become data URIs, the images in the markup become data URIs, and every
+script and fetch hint is taken out. The scripts go because a captured page is a picture of a moment:
+a script re-running against an API that has moved on redraws the page into something nobody
+approved. Whatever the scripts drew is already in the serialised DOM.
+
+Check the capture before trusting it, by pointing a pair at the file and at the live site. It should
+come back at 0.000% at both widths. baryo.dev's did, which is how that fixture is known to be the
+design rather than an approximation of it. A capture that does not needs looking at before anything
+is built against it.
+
 ## The pair list is the site's
 
 The pages are data, not code. The list lives in the site's own repository, next to the prototypes it
@@ -135,8 +162,49 @@ npx playwright install chromium
 LOOK_PAIRS=/path/to/site/look/pairs.json REBUILT_BASE=https://staging.example npm run look
 ```
 
+Against a fixture in this repository, with no staging host to point at:
+
+```bash
+npm run build
+APP_PORT=3210 CMS_PORT=5199 npm run look:site -- baryo-dev baryo.dev
+```
+
+That starts the reference app against a stand-in CMS holding the fixture's `site.json` and its
+`*.blocks.json`, so the rebuilt side is the real renderer with the real theme, and runs the pair
+list beside them. It is the conversion rehearsed end to end on one machine.
+
 `LOOK_OUTPUT` moves the output, which defaults to `look-results`: `summary.md`, `summary.json` and
 `pages/<id>/<width>/{reference,rebuilt,diff}.png`.
+
+## What the first site through it found
+
+baryo.dev is the first site to be captured and rebuilt this way, and the point of running it before
+a real conversion was to find out what the gate says when nobody has tuned anything. It said four
+things, in order of how much they mattered.
+
+The capture is exact. The fixture against the live site is 0.000% at both widths, so the reference
+side of every number below is the design and not an approximation of it.
+
+A four column band scrolled a phone sideways. The rebuilt page came back 1144px wide beside a 390px
+reference, because `flow` laid out a fixed track list that could not wrap and each track had the
+column floor under it. Four floors and three gaps do not fit on a phone. Fixed.
+
+A page of eight bands lost its last band, silently. The library's bands are presets, and the binder
+spends its block budget on everything it walks through as well as everything that comes out, so the
+sponsor band at the bottom simply was not in the page and nothing said so. The budget is four
+hundred now rather than a hundred. The silence is not fixed: a page over its budget still renders as
+though it ended where the budget did.
+
+With all three of those out of the way the pages still differ by 48.9% at 1280px and 59.4% at 390px,
+and that number is the honest state of the rebuild rather than a fault in the check. The rebuilt page
+is 3675px tall against the design's 6035px. What is missing is content the block library has no
+answer for yet: the mascot with its halo, the package family grid, the Medium feed, the bio panel,
+and the install terminal's tab strip with its typing. What is there does not match either, because
+the design is a bespoke Next app with glass cards, a radial page wash and per-card brand tints, and
+the blocks draw plain panels on one ground.
+
+That is the answer #83 asked for. A site converts when its pages assemble from blocks that draw what
+the design draws, and for baryo.dev they do not yet.
 
 ## Proving it still works
 

@@ -280,6 +280,8 @@ export interface CollectionFields {
     url?: FieldNames;
     /** A portrait of whoever or whatever the item is, drawn above its title. Not the wide `image`. */
     photo?: FieldNames;
+    /** How far along the entry is, 0 to 100, for a roadmap or a target. Read as text, not a number. */
+    progress?: FieldNames;
 }
 
 export interface CollectionReference {

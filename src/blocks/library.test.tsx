@@ -109,7 +109,11 @@ describe("the layout the library needed", () => {
         const html = await page([{ type: "flow", props: { columns: "3", content: [stats] } }]);
 
         expect(html).toContain("display:grid");
-        expect(html).toContain(`repeat(3, minmax(min(100%, ${config.theme.layout.columnMin}), 1fr))`);
+        // Three columns is three tracks of a third of the row, with the column floor under them, so
+        // a row that cannot hold three wraps instead of scrolling sideways. See gridColumns.
+        expect(html).toContain("repeat(auto-fit,");
+        expect(html).toContain(config.theme.layout.columnMin);
+        expect(html).toContain("/ 3)");
         // The list inside is taken out of the box tree, so those two blocks are the cells: the
         // flow says `contents` and the list it holds reads it.
         expect(html).toContain("--bp-list:contents");
@@ -298,7 +302,7 @@ describe("the bands", () => {
         expect(html).toContain('src="https://img.test/hero.png"');
         expect(html).toContain('alt="Members planting"');
         expect(html).toContain(`background:${config.theme.colors.accentTint}`);
-        expect(html).toContain("repeat(2,");
+        expect(html).toContain("/ 2)");
     });
 
     it("leaves out a hero's buttons, and the row they would have sat in, when there is no link", async () => {
@@ -345,7 +349,7 @@ describe("the bands", () => {
         ]);
 
         expect(html).toContain("The club");
-        expect(html).toContain("repeat(3,");
+        expect(html).toContain("/ 3)");
         for (const word of ["62", "Members", "18", "Projects", "1962", "Chartered"]) {
             expect(html).toContain(word);
         }
@@ -403,7 +407,7 @@ describe("the bands", () => {
         expect(html).toContain("Patron");
         expect(html).toContain('href="/give/friend"');
         expect(html).toContain('href="/give/patron"');
-        expect(html).toContain("repeat(2,");
+        expect(html).toContain("/ 2)");
     });
 
     it("frames a map only from a host the site allows", async () => {
@@ -469,7 +473,7 @@ describe("the bands that read a collection", () => {
         ]);
 
         expect(html).toContain("Our projects");
-        expect(html).toContain("repeat(2,");
+        expect(html).toContain("/ 2)");
         expect(html).toContain('href="/projects/clean-water"');
         expect(html).toContain("Clean water");
         expect(html).toContain("A well for two barangays");

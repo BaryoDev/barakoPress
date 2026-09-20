@@ -29,6 +29,8 @@ export interface Item {
     url?: string;
     /** A portrait, from the collection's `photo` field role. */
     photo?: string;
+    /** How far along, from the collection's `progress` field role. Text, because a binding is text. */
+    progress?: string;
     featured: boolean;
     tags: string[];
     /** Resolved references, by field name. Undefined for one that did not come back resolved. */
@@ -174,6 +176,7 @@ export function toItem(config: PressConfig, key: string, c: PublicContent): Item
         imageAlt: text(c, f.imageAlt) || undefined,
         url: siteHref(text(c, f.url)),
         photo: text(c, f.photo) || undefined,
+        progress: text(c, f.progress) || undefined,
         ...treePlace(config, key, c, col),
         featured: value(c, f.featured) === true,
         tags: Array.isArray(tags) ? tags.filter((t): t is string => typeof t === "string") : [],

@@ -113,6 +113,17 @@ export interface BlockDefinition<P extends BlockProps = BlockProps, S extends st
      * cached.
      */
     perViewer?: boolean;
+    /**
+     * Draws without the wrapper `BlockList` puts around every block, which is `display: contents`
+     * on that wrapper rather than no element at all.
+     *
+     * One block needs it and the reason is narrow. A wrapper hugs its child, and a `position: sticky`
+     * element can only move inside its own containing block, so a sticky band wrapped like every
+     * other block has nowhere to move and scrolls away. Taking the wrapper out of the box tree makes
+     * the page's own column the containing block, which is the whole page. Measured: wrapped, the
+     * band's top goes from 0 to -400 after scrolling 400px; transparent, it stays at 0.
+     */
+    transparent?: boolean;
     // Method syntax, so a definition typed for its own props still fits a registry of any props.
     component(args: BlockComponentProps<P, S>): ReactNode | Promise<ReactNode>;
 }
@@ -134,14 +145,28 @@ export function defineBlock<P extends BlockProps = BlockProps, S extends string 
  * Bounds on untrusted input, so a pasted list cannot make one render arbitrarily expensive.
  * MAX_BLOCKS is for the whole tree, not each list: per list, a few levels of four columns would
  * still allow billions of entries. It is the bound that does the work, and it is why the depth can
- * be generous: however deep a page nests, only a hundred entries are ever read.
+ * be generous: however deep a page nests, only this many entries are ever read.
+ *
+ * It was a hundred, chosen when a page was a handful of blocks. A band from the library is not a
+ * block, it is a preset that expands into eight or ten, and the binder spends the budget on every
+ * one it walks through as well as on every one that comes out. The baryo.dev look fixture is eight
+ * bands, and it ran out on the seventh: the sponsor band at the bottom of the page was simply not
+ * there, with nothing said (#83). Four hundred is about thirty bands, which is a long marketing
+ * page and still a bound. What it costs is bounded too: the reads a page may make are capped
+ * separately at MAX_SOURCES, and a binding is capped at MAX_TEMPLATE, so this only buys more
+ * substitution over short strings.
+ *
+ * The drop is still silent, which is the half this does not fix. A page that goes over its budget
+ * loses its tail and renders as though that were the page.
  *
  * The depth is what a preset body needs rather than what a page needs. A card grid is a band, a
  * heading beside a source, a flow, a repeat, a card and the stack inside it before a single word of
- * content, which is seven lists deep and used to render as nothing below the fourth.
+ * content, which is seven lists deep and used to render as nothing below the fourth. The option row
+ * on a card (#24) puts a `showIf` and a row inside that stack, which is nine, and the library test
+ * that counts a compiled body against its source is what said so.
  */
-export const MAX_BLOCKS = 100;
-export const MAX_DEPTH = 8;
+export const MAX_BLOCKS = 400;
+export const MAX_DEPTH = 10;
 
 /** Refuses a definition that could never render, at startup rather than on some page later. */
 export function checkDefinition(definition: BlockDefinition): void {

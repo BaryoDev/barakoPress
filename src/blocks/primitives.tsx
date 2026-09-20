@@ -222,6 +222,29 @@ type FlowProps = { columns?: string; gap?: string; align?: string; justify?: str
 export const FLOW_COLUMNS = ["auto", "1", "2", "3", "4", "5", "6"];
 
 /*
+ * The track list for a flow of `n` columns, which has to be `n` columns on a desktop and fewer on a
+ * phone.
+ *
+ * It used to be `repeat(n, minmax(min(100%, columnMin), 1fr))`, where `100%` is the grid container
+ * and not the track, so the smallest a track could get was `columnMin`. Four of those plus the gaps
+ * is a thousand pixels, and a fixed track list does not wrap, so a four column stat band at 390px
+ * was a page 1144px wide that the phone scrolled sideways. The look check against baryo.dev is what
+ * found it (#83): the rebuilt page came back 1144px wide beside a 390px reference.
+ *
+ * So the ideal track is one `n`th of the row, the floor is `columnMin`, and `auto-fit` lays out as
+ * many as fit. `n` is still exactly what fits when the row is wide, because a track can never be
+ * narrower than one `n`th of it, and on a phone the floor wins and the cells wrap one per row.
+ */
+function gridColumns(n: number, between: string, columnMin: string): string {
+    // A gap of `none` is "0", which is a number and not a length, and `100% - 2 * 0` is a type
+    // error that takes the whole declaration with it. The grid then has no track list at all and
+    // everything stacks in one column, silently, for a gap an editor can pick from a list.
+    const gapLength = /^0+(\.0+)?$/.test(between.trim()) ? "0px" : between;
+    const ideal = `calc((100% - ${n - 1} * ${gapLength}) / ${n})`;
+    return `repeat(auto-fit, minmax(min(100%, max(${columnMin}, ${ideal})), 1fr))`;
+}
+
+/*
  * Blocks side by side, from one list rather than one list per cell.
  *
  * `row` and `grid` take a list per cell, which is right when a designer places each cell. It cannot
@@ -254,16 +277,15 @@ const flow = defineBlock<FlowProps, "content">({
     component: ({ props, slots, theme }) => {
         const columns = Number(props.columns);
         const asGrid = Number.isInteger(columns) && columns >= 1;
+        const between = gap(theme, props.gap);
         const style = {
             // Takes the wrapper the list renders out of the box tree, so the blocks in it are the
             // cells here. See render.tsx.
             "--bp-list": "contents",
             display: asGrid ? "grid" : "flex",
             flexWrap: asGrid ? undefined : "wrap",
-            gridTemplateColumns: asGrid
-                ? `repeat(${columns}, minmax(min(100%, ${theme.layout.columnMin}), 1fr))`
-                : undefined,
-            gap: gap(theme, props.gap),
+            gridTemplateColumns: asGrid ? gridColumns(columns, between, theme.layout.columnMin) : undefined,
+            gap: between,
             alignItems: props.align ? alignOf(props.align) : "stretch",
             justifyContent: props.justify === "between" ? "space-between" : alignOf(props.justify),
         } as CSSProperties;
@@ -328,6 +350,61 @@ const panel = defineBlock<PanelProps, "content">({
                 }}
             >
                 {slots.content?.[0]}
+            </div>
+        );
+    },
+});
+
+type StickyBarProps = { tone?: string; padding?: string; edge?: string; align?: string };
+
+/*
+ * A band that stays where it is while the page moves under it: the announcement bar at the top of
+ * barakocms.com, a call to action that follows the reader down.
+ *
+ * `position: sticky` and nothing beside it. No scroll listener, no measured offset, and a browser
+ * that does not do sticky draws the band where it sits and loses nothing but the sticking. It is a
+ * child of the page rather than of a scrolling box, which is what makes the page's own scroll the
+ * one it follows.
+ */
+const stickyBar = defineBlock<StickyBarProps, "content">({
+    type: "stickyBar",
+    label: "Sticky bar",
+    layer: "primitive",
+    // Without this it is a band that scrolls away, which is the one thing it is named for not
+    // happening. See BlockDefinition.transparent.
+    transparent: true,
+    fields: [
+        { name: "tone", label: "Tone", ...toneSelect },
+        { name: "padding", label: "Padding", ...spaceSelect },
+        { name: "edge", kind: "select", label: "Sticks to", options: ["top", "bottom"] },
+        { name: "align", label: "Align", ...alignSelect },
+        { name: "content", kind: "slots", label: "Content", required: true, min: 1, max: 1 },
+    ],
+    component: ({ props, slots, theme }) => {
+        const tone = toneOf(theme, props.tone ?? "inverse");
+        const bottom = props.edge === "bottom";
+        const rule = `1px solid ${tone.hairline}`;
+        return (
+            <div
+                style={{
+                    ...toneVars(tone),
+                    position: "sticky",
+                    top: bottom ? undefined : 0,
+                    bottom: bottom ? 0 : undefined,
+                    zIndex: 20,
+                    boxSizing: "border-box",
+                    background: tone.bg,
+                    color: tone.ink,
+                    paddingTop: spaceOf(theme, props.padding, "sm"),
+                    paddingBottom: spaceOf(theme, props.padding, "sm"),
+                    paddingLeft: theme.layout.gutter,
+                    paddingRight: theme.layout.gutter,
+                    borderTop: bottom ? rule : undefined,
+                    borderBottom: bottom ? undefined : rule,
+                    textAlign: textAlignOf(props.align),
+                }}
+            >
+                <div style={{ maxWidth: theme.layout.wide, margin: "0 auto" }}>{slots.content?.[0]}</div>
             </div>
         );
     },
@@ -856,6 +933,211 @@ const disclosure = defineBlock<DisclosureProps, "content">({
     },
 });
 
+/** The most rows and columns a comparison holds. Past either it is a spreadsheet, not a comparison. */
+const MAX_TABLE_ROWS = 20;
+const MAX_TABLE_COLUMNS = 6;
+
+/** One line's cells, trimmed, cut to the table's width and padded out to it so the rows line up. */
+function cellsOf(line: string, width: number): string[] {
+    const cells = line.split("|").map((cell) => cell.trim()).slice(0, width);
+    while (cells.length < width) cells.push("");
+    return cells;
+}
+
+type ComparisonProps = { rows: string; caption?: string; tone?: string; radius?: string };
+
+/*
+ * A real table, because what it draws is a table: a row heading on the left, a column per option and
+ * a cell saying where each one ends.
+ *
+ * The rows are lines with `|` between the cells, the shape anyone who has written markdown already
+ * knows, rather than a slot per cell: a five by four comparison is twenty boxes to fill in a console
+ * and four lines to type. The first line is the column headings and the first cell of every line
+ * after it is that row's own heading, so `scope` is on both and a cell is announced with the option
+ * it belongs to instead of on its own.
+ *
+ * What goes in a cell is whatever the tenant types, ticks and dashes included. A mark chosen in here
+ * would be one more piece of English in the markup, and a tick with no word beside it is read out as
+ * nothing at all.
+ */
+const comparisonTable = defineBlock<ComparisonProps>({
+    type: "comparisonTable",
+    label: "Comparison table",
+    layer: "primitive",
+    fields: [
+        { name: "rows", kind: "text", label: "Rows, one per line, cells separated by |", required: true },
+        { name: "caption", kind: "text", label: "What it compares" },
+        { name: "tone", label: "Tone", ...toneSelect },
+        { name: "radius", kind: "select", label: "Corners", options: [...RADII] },
+    ],
+    component: ({ props, theme }) => {
+        // Filtered before it is cut, not after. `linesOf` cuts first, so twenty blank lines pasted
+        // between the rows would spend the whole budget and the table would render nothing.
+        const lines = props.rows
+            .split("\n")
+            .map((line) => line.trim())
+            .filter((line) => line !== "")
+            .slice(0, MAX_TABLE_ROWS);
+        // One line is a heading row with nothing under it, which is not a comparison of anything.
+        if (lines.length < 2) return null;
+        const width = Math.min(MAX_TABLE_COLUMNS, Math.max(...lines.map((line) => line.split("|").length)));
+        const head = cellsOf(lines[0], width);
+        const body = lines.slice(1).map((line) => cellsOf(line, width));
+        const tone = toneOf(theme, props.tone ?? "surface");
+        const cell: CSSProperties = {
+            padding: theme.space.sm,
+            borderBottom: `1px solid ${tone.hairline}`,
+            fontSize: theme.text.small,
+            textAlign: "left",
+            verticalAlign: "top",
+        };
+        return (
+            <div
+                style={{
+                    ...toneVars(tone),
+                    boxSizing: "border-box",
+                    // The table keeps its columns at phone width and the box scrolls, rather than
+                    // the cells wrapping into a shape nobody can read across.
+                    overflowX: "auto",
+                    padding: theme.space.md,
+                    background: tone.bg,
+                    color: tone.ink,
+                    border: `1px solid ${tone.hairline}`,
+                    borderRadius: radiusOf(theme, props.radius ?? "panel"),
+                }}
+            >
+                <table style={{ borderCollapse: "collapse", width: "100%", fontFamily: theme.fonts.body }}>
+                    {props.caption && (
+                        <caption
+                            style={{
+                                textAlign: "left",
+                                paddingBottom: theme.space.sm,
+                                fontFamily: theme.fonts.mono,
+                                fontSize: theme.text.meta,
+                                color: tone.muted,
+                            }}
+                        >
+                            {props.caption}
+                        </caption>
+                    )}
+                    <thead>
+                        <tr>
+                            {head.map((value, i) => (
+                                <th
+                                    key={i}
+                                    scope="col"
+                                    style={{ ...cell, fontFamily: theme.fonts.heading, fontWeight: 600, color: tone.ink }}
+                                >
+                                    {value}
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {body.map((row, r) => (
+                            <tr key={r}>
+                                {row.map((value, i) =>
+                                    i === 0 ? (
+                                        <th key={i} scope="row" style={{ ...cell, fontWeight: 600, color: tone.ink }}>
+                                            {value}
+                                        </th>
+                                    ) : (
+                                        <td key={i} style={{ ...cell, color: tone.secondaryInk }}>
+                                            {value}
+                                        </td>
+                                    ),
+                                )}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        );
+    },
+});
+
+/**
+ * A percentage from whatever arrived, or null when that is not one.
+ *
+ * Text and not a number field, because the figure a roadmap draws comes from a collection through
+ * `{{item.Progress}}`, and a binding resolves to text. A trailing per cent sign is allowed because
+ * that is how the number is stored in half the places it comes from.
+ */
+function percentOf(value: string): number | null {
+    const text = value.trim().replace(/%$/, "").trim();
+    // Six decimals because a percentage is usually done over total, and 200 of 300 is 66.666667.
+    // Two decimals dropped the bar entirely for a figure nobody would call unusual.
+    if (!/^[0-9]{1,3}(\.[0-9]{1,6})?$/.test(text)) return null;
+    return Math.min(100, Number(text));
+}
+
+type ProgressProps = { label: string; value: string; tone?: string };
+
+/*
+ * How far along one thing is: a roadmap milestone, a fundraising target.
+ *
+ * The bar is `role="progressbar"` with the three values that role needs, so what it shows is in the
+ * accessibility tree rather than only in the pixels, and the label is beside it in the markup as
+ * well as on the bar. A value that is not a percentage draws the label and no bar: a milestone with
+ * nothing filled in should read as a milestone, not disappear.
+ */
+const progressBar = defineBlock<ProgressProps>({
+    type: "progressBar",
+    label: "Progress bar",
+    layer: "primitive",
+    fields: [
+        { name: "label", kind: "text", label: "What is progressing", required: true },
+        { name: "value", kind: "text", label: "How far along, 0 to 100", required: true },
+        { name: "tone", label: "Tone", ...toneSelect },
+    ],
+    component: ({ props, theme }) => {
+        const percent = percentOf(props.value);
+        const tone = props.tone ? toneOf(theme, props.tone) : null;
+        const muted = tone ? tone.muted : inherited(theme, "muted");
+        return (
+            <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
+                <div
+                    style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        justifyContent: "space-between",
+                        gap: theme.space.sm,
+                        fontFamily: theme.fonts.mono,
+                        fontSize: theme.text.meta,
+                        color: muted,
+                    }}
+                >
+                    <span>{props.label}</span>
+                    {percent !== null && <span>{props.value.trim()}</span>}
+                </div>
+                {percent !== null && (
+                    <div
+                        role="progressbar"
+                        aria-label={props.label}
+                        aria-valuenow={percent}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        style={{
+                            height: theme.space.xs,
+                            borderRadius: theme.radii.pill,
+                            background: tone ? tone.hairline : inherited(theme, "hairline"),
+                            overflow: "hidden",
+                        }}
+                    >
+                        <div
+                            style={{
+                                width: `${percent}%`,
+                                height: "100%",
+                                background: tone ? tone.accent : inherited(theme, "accent"),
+                            }}
+                        />
+                    </div>
+                )}
+            </div>
+        );
+    },
+});
+
 /* ---------------------------------------------------------------- motion */
 
 /*
@@ -1081,6 +1363,7 @@ export function primitiveBlocks(config: PressConfig): BlockDefinition[] {
         grid,
         flow,
         panel,
+        stickyBar,
         spacer,
         divider,
         text,
@@ -1093,6 +1376,8 @@ export function primitiveBlocks(config: PressConfig): BlockDefinition[] {
         anchorBlock("link", "Link", "quiet"),
         list,
         disclosure,
+        comparisonTable,
+        progressBar,
         reveal,
         rotatingText,
         typingTerminal,

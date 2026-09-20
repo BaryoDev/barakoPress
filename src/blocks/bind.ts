@@ -344,6 +344,20 @@ export function itemScope(config: PressConfig, item: Item): Record<string, unkno
         Tags: item.tags,
         Option: item.option,
         Color: item.color,
+        /*
+         * The progress figure and the option's style, so a bar and a card can draw what the site
+         * declared (#52) without a block naming either.
+         *
+         * Spread in only when there is something in them, the way `Href` already is. `walk` reads a
+         * path with `Object.hasOwn`, so a key set to `undefined` is a hit rather than a miss, and
+         * laying one over a tenant's own field of that name would take the field away. `Icon` is a
+         * plausible name for a field on exactly the collections this is for.
+         */
+        ...(item.progress !== undefined ? { Progress: item.progress } : {}),
+        ...(item.style?.icon !== undefined ? { Icon: item.style.icon } : {}),
+        ...(item.style?.label ?? item.option) !== undefined
+            ? { Word: item.style?.label ?? item.option }
+            : {},
         ...(route !== undefined && item.slug ? { Href: `${route}/${item.slug}` } : {}),
         ...Object.fromEntries(Object.entries(item.refs).map(([field, ref]) => [field, ref ? { ...ref } : undefined])),
     };

@@ -1,5 +1,4 @@
 import {
-    MAX_BLOCKS,
     checkDefinition,
     resolveBlocks,
     type BlockDefinition,
@@ -254,8 +253,14 @@ export function compilePreset(preset: BlockPreset, registry: BlockRegistry): Blo
  * The most blocks a tenant's presets may hold between them. A request-time site compiles them per
  * request, so the bodies are bounded together and not only one at a time: sixty presets of a
  * hundred blocks each is work nobody asked for on every page.
+ *
+ * Its own number rather than a multiple of the page budget, which is what it was. The page budget
+ * went from a hundred to four hundred because a page of library bands did not fit in it, and that
+ * is a bound on one render. This is a bound on work done on every request for every tenant, and
+ * nothing about a longer page says a tenant needs four times as many named blocks. Four hundred is
+ * what this has always been.
  */
-export const MAX_PRESET_BLOCKS = MAX_BLOCKS * 4;
+export const MAX_PRESET_BLOCKS = 400;
 
 /**
  * The registry with these presets added. Same map when there are none, so the common path allocates

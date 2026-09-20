@@ -1,6 +1,10 @@
+import { existsSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
-import { addressOf, masksFor, parsePairs, type Env, type Pair } from "./pairs.js";
+import { addressOf, loadPairs, masksFor, parsePairs, type Env, type Pair } from "./pairs.js";
 
 const baseDir = "/sites/rckoronadal/look";
 
@@ -183,5 +187,53 @@ describe("addressOf", () => {
         expect(addressOf({ kind: "url", location: "https://x.example/p#one", hash: "#two", click: [] })).toBe(
             "https://x.example/p#two",
         );
+    });
+});
+
+/*
+ * The pair lists this repository commits, read the way a run reads them.
+ *
+ * Nothing in CI runs a fixture site's look check: it needs a built app and a browser, and the one
+ * that matters is deliberately red. So without this, a typo in a committed pair list is found the
+ * next time somebody tries to use it, which is during a migration. `maxDiffratio` was the example
+ * in this file's own header, and it applies to the lists here as much as to a site's.
+ */
+describe("the pair lists committed in look/fixtures", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+
+    function lists(dir: string): string[] {
+        return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+            const full = join(dir, entry.name);
+            if (entry.isDirectory()) return lists(full);
+            return entry.name.endsWith("pairs.json") ? [full] : [];
+        });
+    }
+
+    const files = lists(join(here, "fixtures"));
+
+    it("finds them", () => {
+        expect(files.length).toBeGreaterThan(0);
+    });
+
+    it.each(files)("%s parses, and names both gate widths", (file) => {
+        const pairs = loadPairs(file, { REBUILT_BASE: "http://127.0.0.1:3210" });
+
+        expect(pairs.length).toBeGreaterThan(0);
+        for (const pair of pairs) {
+            // 390 and 1280 are the widths BaryoDev/barakoCMS#959 reads the gate at.
+            expect(pair.widths, pair.id).toContain(390);
+            expect(pair.widths, pair.id).toContain(1280);
+            expect(pair.maxDiffRatio, pair.id).toBeGreaterThan(0);
+        }
+    });
+
+    it.each(files)("%s points at a reference that is on disk", (file) => {
+        const pairs = loadPairs(file, { REBUILT_BASE: "http://127.0.0.1:3210" });
+
+        expect(pairs.length).toBeGreaterThan(0);
+        for (const pair of pairs) {
+            if (pair.reference.kind !== "file") continue;
+            expect(existsSync(pair.reference.location), `${pair.id}: ${pair.reference.location}`).toBe(true);
+        }
     });
 });
