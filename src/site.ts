@@ -28,6 +28,7 @@ import { readSecret } from "./secret.js";
 import { parseSiteSegment, type SiteRoute } from "./site-route.js";
 import { presetsFrom } from "./blocks/presets.js";
 import { SPACES, TONES, type ToneName } from "./blocks/tokens.js";
+import { mergeColors } from "./theme.js";
 import type {
     PressTheme,
     SuppliedAsset,
@@ -391,6 +392,24 @@ function topBar(v: unknown): TopBar | undefined {
 
 const COLOR = /^(#[0-9a-f]{3,8}|(rgb|rgba|hsl|hsla|oklch|oklab)\([0-9.,%\s/+-]{1,60}\)|[a-z]{3,30})$/i;
 const LENGTH = /^(0|\d{1,4}(\.\d{1,3})?(px|rem|em|ch|%|vw|vh))$/;
+
+/*
+ * `Colors`: the theme's slots, as the tenant saved them (#49).
+ *
+ * Read apart from the other token groups because the palette has two names for six of its slots: the
+ * role names, and the barakocms.com names those shipped under in 0.3.0. A tenant's entry holds
+ * whichever it was saved with, so `mergeColors` puts the colour in both.
+ */
+function colorsFrom(base: ThemeColors, v: unknown): ThemeColors {
+    const input = record(v);
+    if (!input) return base;
+    const named: Record<string, string> = {};
+    for (const key of Object.keys(base)) {
+        const value = str(input[key]);
+        if (value && COLOR.test(value)) named[key] = value;
+    }
+    return mergeColors(base, named);
+}
 
 function tokens<T extends object>(base: T, v: unknown, valid: RegExp): T {
     const input = record(v);
@@ -787,7 +806,7 @@ export function applySiteSettings(
 
     const face = fontsFrom(config.theme.fonts, config.theme.fontSources, d.Fonts);
     const theme: PressTheme = {
-        colors: tokens<ThemeColors>(config.theme.colors, d.Colors, COLOR),
+        colors: colorsFrom(config.theme.colors, d.Colors),
         fonts: face.fonts,
         ...(face.sources ? { fontSources: face.sources } : {}),
         radii: tokens<ThemeRadii>(config.theme.radii, d.Radii, LENGTH),

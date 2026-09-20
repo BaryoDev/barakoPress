@@ -121,7 +121,7 @@ export async function PageView({
                             margin: "0 0 40px",
                             fontFamily: t.fonts.heading,
                             fontWeight: 600,
-                            fontSize: "clamp(32px, 4.4vw, 52px)",
+                            fontSize: t.text.pageTitle,
                             lineHeight: 1.08,
                             letterSpacing: "-.035em",
                         }}

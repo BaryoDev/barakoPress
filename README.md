@@ -602,6 +602,29 @@ host the tenant was found by.
 `createSiteLayout` and `createSiteMetadata` render the root layout from all of this: `lang`, the
 faces, the palette, the top bar, header links, footer columns, social links and the copyright line.
 
+**The colour slots, by role.** `Colors` sets any slot of the palette, one at a time. The slots are
+`pageBg`, `surface`, `ink`, `proseInk`, `secondaryInk`, `muted`, `hairline`, `accent`, `accentHover`,
+`accentInk`, `accentTint`, `accentTintBorder`, `accentBorderStrong`, `inverse`, `inverseChrome`,
+`inverseInk`, `inverseAccent`, `code` and `success`. A role says where a colour goes rather than what
+it looks like: `inverse` is the band that reverses the page, the footer and a code panel and an
+inverse block, so a bakery with a cream footer sets `inverse` to cream and reads right doing it.
+
+```json
+{ "Colors": { "accent": "#17458F", "inverse": "#F4E3C1", "inverseInk": "#3B2A17" } }
+```
+
+Six slots shipped in 0.3.0 under barakocms.com's own names, and those still work: `darkPanel`,
+`darkPanelChrome`, `darkPanelInk`, `darkPanelAccent`, `codeGreen` and `accentTintBorderStrong` are
+read into `inverse`, `inverseChrome`, `inverseInk`, `inverseAccent`, `code` and `accentBorderStrong`.
+Setting either name sets both, so a tenant saved before the rename keeps its site and a consumer's
+own component reading `theme.colors.darkPanel` keeps compiling. The old names are deprecated and go
+in 2.0.0. An `OptionStyles` or `OptionColors` entry naming an old slot resolves too.
+
+Sizes work the same way. `Text` is the type scale by role, `meta`, `small`, `body`, `lead`,
+`subheading`, `heading`, `title`, `display` and `pageTitle`, and `Space` is the spacing scale. The
+blocks and the screens read those names, so a tenant that wants bigger headings sets `title` once
+instead of asking for a release.
+
 **How many items, per tenant.** `PageSizes` sets the four counts for this site, each on its own:
 
 ```json

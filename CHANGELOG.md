@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.0 (unreleased)
+
+- The theme's colour slots say what a colour is for. `inverse`, `inverseChrome`, `inverseInk`,
+  `inverseAccent`, `code` and `accentBorderStrong` replace `darkPanel`, `darkPanelChrome`,
+  `darkPanelInk`, `darkPanelAccent`, `codeGreen` and `accentTintBorderStrong`, which were
+  barakocms.com's design read back as a palette: a bakery with a cream footer had to put cream in a
+  slot called `darkPanel`, and a school with no code sample still set `codeGreen`. Both names work
+  and stay equal, whichever one a tenant saved or a consumer's component reads, so nothing has to be
+  re-saved; the old six are deprecated and go in 2.0.0. The blocks take their sizes from the theme
+  too: a block heading is `Text.title` and a block's padding and gaps are names on the spacing scale,
+  where they were 26px and 32px written into the block, so a tenant with a larger type scale gets
+  larger block headings. A page title is `Text.pageTitle`. A tenant that sets nothing renders exactly
+  as it did. (#49)
+
 ## 0.4.0 (2026-09-20)
 
 - Two build-time keys are a tenant's to set. `PageSizes` gives a site its own index, feed, sitemap

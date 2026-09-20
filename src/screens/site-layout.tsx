@@ -212,7 +212,7 @@ async function HoldingDocument({ cfg, registry, loadFonts }: { cfg: PressConfig;
                 <p
                     id={SHARE_INVALID_FRAGMENT}
                     role="status"
-                    style={{ margin: 0, padding: `12px ${t.layout.gutter}`, background: t.colors.darkPanel, color: t.colors.darkPanelInk }}
+                    style={{ margin: 0, padding: `12px ${t.layout.gutter}`, background: t.colors.inverse, color: t.colors.inverseInk }}
                 >
                     This link is not valid or has expired.
                 </p>
@@ -229,7 +229,7 @@ async function HoldingDocument({ cfg, registry, loadFonts }: { cfg: PressConfig;
                             {s.logo && (
                                 <Asset src={s.logo} alt={s.logoAlt ?? s.name} theme={t} style={{ height: "48px", width: "auto" }} />
                             )}
-                            <h1 style={{ margin: "24px 0 0", fontFamily: t.fonts.heading, fontSize: "clamp(32px, 4.4vw, 52px)", lineHeight: 1.08 }}>
+                            <h1 style={{ margin: "24px 0 0", fontFamily: t.fonts.heading, fontSize: t.text.pageTitle, lineHeight: 1.08 }}>
                                 {s.name}
                             </h1>
                             {s.tagline && <p style={{ margin: "12px 0 0", color: t.colors.secondaryInk }}>{s.tagline}</p>}
@@ -261,7 +261,7 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
     return (
         <>
             {s.topBar && (
-                <div style={{ background: c.darkPanel, color: c.darkPanelInk, fontSize: "13px" }}>
+                <div style={{ background: c.inverse, color: c.inverseInk, fontSize: "13px" }}>
                     <div style={{ ...band, display: "flex", flexWrap: "wrap", gap: "8px 20px", padding: `8px ${t.layout.gutter}` }}>
                         {s.topBar.text && <span>{s.topBar.text}</span>}
                         {s.topBar.links.map((l) => (
@@ -323,7 +323,7 @@ function BuiltInFooter({ cfg }: { cfg: PressConfig }) {
     const linkStyle = { color: "inherit", textDecoration: "none" } as const;
 
     return (
-        <footer style={{ background: c.darkPanel, color: c.darkPanelInk, marginTop: "48px" }}>
+        <footer style={{ background: c.inverse, color: c.inverseInk, marginTop: "48px" }}>
             <div style={{ ...band, paddingTop: "40px", paddingBottom: "40px" }}>
                 {s.footerLogo && (
                     <Asset src={s.footerLogo} alt={s.logoAlt ?? s.name} theme={t} style={{ height: "40px", width: "auto" }} />
@@ -332,7 +332,7 @@ function BuiltInFooter({ cfg }: { cfg: PressConfig }) {
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(180px, 100%), 1fr))", gap: "24px", marginTop: "24px" }}>
                         {(s.footerColumns ?? []).map((col, i) => (
                             <div key={`${col.heading}-${i}`}>
-                                {col.heading && <p style={{ margin: 0, fontWeight: 600, color: c.darkPanelAccent }}>{col.heading}</p>}
+                                {col.heading && <p style={{ margin: 0, fontWeight: 600, color: c.inverseAccent }}>{col.heading}</p>}
                                 <ul style={{ listStyle: "none", margin: "10px 0 0", padding: 0 }}>
                                     {col.links.map((l) => (
                                         <li key={l.href} style={{ margin: "6px 0" }}>

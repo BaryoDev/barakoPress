@@ -49,13 +49,13 @@ export function toneOf(theme: PressTheme, name: string | undefined): Tone {
             };
         case "inverse":
             return {
-                bg: c.darkPanel,
+                bg: c.inverse,
                 ink: c.surface,
-                secondaryInk: c.darkPanelInk,
-                muted: c.darkPanelInk,
-                hairline: c.darkPanelChrome,
-                accent: c.darkPanelAccent,
-                onAccent: c.darkPanel,
+                secondaryInk: c.inverseInk,
+                muted: c.inverseInk,
+                hairline: c.inverseChrome,
+                accent: c.inverseAccent,
+                onAccent: c.inverse,
             };
         default:
             return {

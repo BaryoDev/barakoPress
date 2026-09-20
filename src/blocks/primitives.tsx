@@ -505,7 +505,7 @@ const video = defineBlock<VideoProps>({
                     width: "100%",
                     height: "auto",
                     borderRadius: radiusOf(theme, props.radius ?? "panel"),
-                    background: theme.colors.darkPanel,
+                    background: theme.colors.inverse,
                 }}
             />
             {props.caption && (
