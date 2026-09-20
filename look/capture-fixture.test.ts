@@ -265,3 +265,76 @@ describe("the captures committed in look/fixtures", () => {
         }
     });
 });
+
+/*
+ * What a review found by measuring rather than reading, all in one place because each of them is a
+ * fixture that comes out wrong while everything passes.
+ */
+describe("html this has been wrong about", () => {
+    it("does not read data-src as src, or data-rel as rel", () => {
+        expect(attrOf('<img data-src="/placeholder.png" src="/real.png">', "src")).toBe("/real.png");
+        expect(attrOf('<link data-rel="stylesheet" rel="preload" href="/x.css">', "rel")).toBe("preload");
+    });
+
+    it("inlines the real image of a lazy loader, not its placeholder", async () => {
+        const { grab, asked } = serving({
+            "https://site.example/real.png": { type: "image/png", body: "REAL" },
+            "https://site.example/placeholder.png": { type: "image/png", body: "TINY" },
+        });
+        const out = await inlineImages('<img data-src="/placeholder.png" src="/real.png">', BASE, grab);
+
+        expect(asked).toEqual(["https://site.example/real.png"]);
+        expect(out).toContain(Buffer.from("REAL").toString("base64"));
+        expect(out).not.toContain(Buffer.from("TINY").toString("base64"));
+    });
+
+    it("reads a whole tag when an attribute value holds a closing angle bracket", async () => {
+        const { grab } = serving({ "https://site.example/a.png": { type: "image/png", body: "PNG" } });
+        const out = await inlineImages('<img alt="revenue > 2x" src="/a.png">tail', BASE, grab);
+
+        expect(out).toContain(`src="data:image/png;base64,${Buffer.from("PNG").toString("base64")}"`);
+        expect(out).toContain('alt="revenue > 2x"');
+        expect(out).toContain("tail");
+    });
+
+    it("takes a fetch hint out when a link before it holds a bracket in a value", () => {
+        const out = stripFetchHints('<link rel="icon" title="a > b" href="/i.png"/><link rel="preload" href="/f.woff2"/>');
+
+        expect(out).toContain('rel="icon"');
+        expect(out).not.toContain("preload");
+    });
+
+    /*
+     * `url(` and two thousand spaces used to take 4.6 seconds to not match, and a stylesheet is
+     * bounded at three megabytes of somebody else's output. A hundred of them in under a second is
+     * a bar the old pattern could not clear in two minutes, and it is not a stopwatch fine enough
+     * to flake on a loaded box.
+     */
+    it("does not spend a browser's afternoon on a stylesheet full of spaces", () => {
+        const nasty = ("url(" + " ".repeat(2000)).repeat(100);
+        const started = Date.now();
+        const urls = cssUrls(nasty);
+        const elapsed = Date.now() - started;
+
+        expect(urls).toEqual([]);
+        expect(elapsed).toBeLessThan(1000);
+    });
+
+    it("keeps reading urls that carry spaces around them", () => {
+        expect(cssUrls("a{background:url( /bg.png )}")).toEqual(["/bg.png"]);
+        expect(cssUrls('a{background:url( "/bg.png" )}')).toEqual(["/bg.png"]);
+        expect(replaceCssUrls("a{background:url( /bg.png )}", () => "data:x")).toContain('url("data:x")');
+    });
+
+    it("puts a stylesheet in as it was written, even when it holds a replacement pattern", async () => {
+        const { grab } = serving({
+            "https://site.example/s.css": { type: "text/css", body: `a{content:"$&"}b{content:"$'"}` },
+        });
+        const out = await inlineStylesheets('<link rel="stylesheet" href="/s.css"/>TAIL', BASE, grab);
+
+        expect(out).toContain(`a{content:"$&"}`);
+        expect(out).toContain(`b{content:"$'"}`);
+        // The rest of the document was not spliced in where the stylesheet goes.
+        expect(out.match(/TAIL/g)).toHaveLength(1);
+    });
+});

@@ -64,8 +64,10 @@ createServer((request, response) => {
 
     if (url.pathname === "/api/public/site") return send(response, 200, list([{ id: "site", data: settings }]));
     if (url.pathname === "/api/public/pages/resolve") {
-        const found = pages[url.searchParams.get("path") ?? "/"];
-        if (!found) return send(response, 404);
+        const path = url.searchParams.get("path") ?? "/";
+        // hasOwn, so `?path=constructor` is a 404 rather than a 200 carrying a function.
+        if (!Object.hasOwn(pages, path)) return send(response, 404);
+        const found = pages[path];
         return send(response, 200, {
             contract: 1,
             path: url.searchParams.get("path"),

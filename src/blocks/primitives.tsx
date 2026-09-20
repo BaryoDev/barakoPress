@@ -236,7 +236,11 @@ export const FLOW_COLUMNS = ["auto", "1", "2", "3", "4", "5", "6"];
  * narrower than one `n`th of it, and on a phone the floor wins and the cells wrap one per row.
  */
 function gridColumns(n: number, between: string, columnMin: string): string {
-    const ideal = `calc((100% - ${n - 1} * ${between}) / ${n})`;
+    // A gap of `none` is "0", which is a number and not a length, and `100% - 2 * 0` is a type
+    // error that takes the whole declaration with it. The grid then has no track list at all and
+    // everything stacks in one column, silently, for a gap an editor can pick from a list.
+    const gapLength = /^0+(\.0+)?$/.test(between.trim()) ? "0px" : between;
+    const ideal = `calc((100% - ${n - 1} * ${gapLength}) / ${n})`;
     return `repeat(auto-fit, minmax(min(100%, max(${columnMin}, ${ideal})), 1fr))`;
 }
 
@@ -366,6 +370,9 @@ const stickyBar = defineBlock<StickyBarProps, "content">({
     type: "stickyBar",
     label: "Sticky bar",
     layer: "primitive",
+    // Without this it is a band that scrolls away, which is the one thing it is named for not
+    // happening. See BlockDefinition.transparent.
+    transparent: true,
     fields: [
         { name: "tone", label: "Tone", ...toneSelect },
         { name: "padding", label: "Padding", ...spaceSelect },
@@ -964,7 +971,13 @@ const comparisonTable = defineBlock<ComparisonProps>({
         { name: "radius", kind: "select", label: "Corners", options: [...RADII] },
     ],
     component: ({ props, theme }) => {
-        const lines = linesOf(props.rows, MAX_TABLE_ROWS).filter((line) => line.trim() !== "");
+        // Filtered before it is cut, not after. `linesOf` cuts first, so twenty blank lines pasted
+        // between the rows would spend the whole budget and the table would render nothing.
+        const lines = props.rows
+            .split("\n")
+            .map((line) => line.trim())
+            .filter((line) => line !== "")
+            .slice(0, MAX_TABLE_ROWS);
         // One line is a heading row with nothing under it, which is not a comparison of anything.
         if (lines.length < 2) return null;
         const width = Math.min(MAX_TABLE_COLUMNS, Math.max(...lines.map((line) => line.split("|").length)));
@@ -1052,7 +1065,9 @@ const comparisonTable = defineBlock<ComparisonProps>({
  */
 function percentOf(value: string): number | null {
     const text = value.trim().replace(/%$/, "").trim();
-    if (!/^[0-9]{1,3}(\.[0-9]{1,2})?$/.test(text)) return null;
+    // Six decimals because a percentage is usually done over total, and 200 of 300 is 66.666667.
+    // Two decimals dropped the bar entirely for a figure nobody would call unusual.
+    if (!/^[0-9]{1,3}(\.[0-9]{1,6})?$/.test(text)) return null;
     return Math.min(100, Number(text));
 }
 

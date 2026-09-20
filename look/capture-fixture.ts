@@ -52,36 +52,70 @@ export function dataUri(contentType: string, body: Buffer): string {
     return `data:${type};base64,${body.toString("base64")}`;
 }
 
-/** The value of one attribute of one tag, unquoted. Undefined when the tag does not carry it. */
+/*
+ * The value of one attribute of one tag, unquoted. Undefined when the tag does not carry it.
+ *
+ * Preceded by whitespace, not by a word boundary. A dash is a word boundary, so `\bsrc` matches
+ * inside `data-src`, and an image that lazy loads would have had the bytes of its placeholder
+ * fetched and baked into the fixture under the real `src`. Same for `data-rel` and `rel`.
+ */
 export function attrOf(tag: string, name: string): string | undefined {
-    const found = new RegExp(`\\b${name}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s"'>]+))`, "i").exec(tag);
+    const found = new RegExp(`\\s${name}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s"'>]+))`, "i").exec(tag);
     if (!found) return undefined;
     return found[2] ?? found[3] ?? found[4];
 }
 
 /*
+ * One whole tag, quotes respected.
+ *
+ * `<img[^>]*>` stops at the first `>`, and `alt="revenue > 2x"` is a `>` inside a quoted value, so
+ * the match ends mid tag, carries no `src`, and the image is left pointing at the live URL with
+ * nothing said. The three branches cannot match the same first character, so there is one way to
+ * match and nothing to backtrack over.
+ */
+function tagPattern(name: string): RegExp {
+    return new RegExp(`<${name}\\b(?:[^>"']|"[^"]*"|'[^']*')*>`, "gi");
+}
+
+/*
  * `url(...)` targets in a stylesheet, skipping what is already inline.
  *
- * One quantifier over characters that cannot close the call, so there is one way to match and
- * nothing to backtrack over. A stylesheet is untrusted input here in the same way an editor's
- * markdown is: it came off somebody else's server.
+ * One quantifier, over characters that cannot close the call, so there is one way to match at any
+ * position and nothing to backtrack over. It used to be three: a leading `\s*`, a branch that
+ * could itself match spaces, and a trailing `\s*`, which all overlapped. `url(` followed by two
+ * thousand spaces took 4.6 seconds to not match, and a stylesheet may be three megabytes of
+ * somebody else's server's output.
+ *
+ * The quotes are taken off afterwards rather than in the pattern, which is also why a `)` inside a
+ * quoted URL still ends the match. That was true before and is rare enough to leave: the url is
+ * then not recognised and the stylesheet keeps it as it was.
  */
-const CSS_URL = /url\(\s*("([^"\n]{0,2000})"|'([^'\n]{0,2000})'|([^)'"\n]{0,2000}))\s*\)/g;
+const CSS_URL = /url\(([^)\n]{0,2000})\)/g;
+
+/** The address inside a `url(...)`, quotes off, or empty for one that is already inline. */
+function urlIn(raw: string): string {
+    const text = raw.trim();
+    const unquoted =
+        (text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'"))
+            ? text.slice(1, -1).trim()
+            : text;
+    return unquoted.startsWith("data:") || unquoted.startsWith("#") ? "" : unquoted;
+}
 
 export function cssUrls(css: string): string[] {
     const out: string[] = [];
     for (const found of css.matchAll(CSS_URL)) {
-        const url = (found[2] ?? found[3] ?? found[4] ?? "").trim();
-        if (url && !url.startsWith("data:") && !url.startsWith("#")) out.push(url);
+        const url = urlIn(found[1]);
+        if (url) out.push(url);
     }
     return [...new Set(out)];
 }
 
 /** The stylesheet with every `url(...)` the replacer answers for swapped out. Null keeps the original. */
 export function replaceCssUrls(css: string, replace: (url: string) => string | null): string {
-    return css.replace(CSS_URL, (whole, _quoted, doubled, singled, bare) => {
-        const url = (doubled ?? singled ?? bare ?? "").trim();
-        if (!url || url.startsWith("data:") || url.startsWith("#")) return whole;
+    return css.replace(CSS_URL, (whole, inner: string) => {
+        const url = urlIn(inner);
+        if (!url) return whole;
         const swapped = replace(url);
         return swapped === null ? whole : `url("${swapped}")`;
     });
@@ -129,7 +163,7 @@ async function inlineCss(css: string, base: string, grab: Grab, seen: Set<string
 
 /** Every `<link rel="stylesheet">` replaced by the stylesheet itself, assets and all. */
 export async function inlineStylesheets(html: string, base: string, grab: Grab): Promise<string> {
-    const tags = [...html.matchAll(/<link\b[^>]*>/gi)].map((m) => m[0]);
+    const tags = [...html.matchAll(tagPattern("link"))].map((m) => m[0]);
     const seen = new Set<string>();
     let out = html;
     for (const tag of tags) {
@@ -141,14 +175,18 @@ export async function inlineStylesheets(html: string, base: string, grab: Grab):
         const got = await grab(url);
         if (!got || got.body.byteLength > MAX_ASSET_BYTES) continue;
         const css = await inlineCss(got.body.toString("utf8"), url, grab, seen);
-        out = out.replace(tag, `<style data-look-fixture="${escapeAttribute(url)}">\n${css}\n</style>`);
+        // A function, because the second argument of `replace` reads `$&` and `$\'` as instructions
+        // and a stylesheet may hold either inside a `content` value. `$\'` splices the rest of the
+        // document in where the stylesheet should be.
+        const style = `<style data-look-fixture="${escapeAttribute(url)}">\n${css}\n</style>`;
+        out = out.replace(tag, () => style);
     }
     return out;
 }
 
 /** Every `<img>` carrying its own bytes, with the responsive set dropped so one source is left. */
 export async function inlineImages(html: string, base: string, grab: Grab): Promise<string> {
-    const tags = [...html.matchAll(/<img\b[^>]*>/gi)].map((m) => m[0]);
+    const tags = [...html.matchAll(tagPattern("img"))].map((m) => m[0]);
     let out = html;
     for (const tag of tags) {
         const src = attrOf(tag, "src");
@@ -157,12 +195,13 @@ export async function inlineImages(html: string, base: string, grab: Grab): Prom
         if (!url) continue;
         const got = await grab(url);
         if (!got || got.body.byteLength > MAX_ASSET_BYTES) continue;
+        const uri = dataUri(got.contentType, got.body);
         const replaced = tag
             .replace(/\ssrcset\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
             .replace(/\ssizes\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
             .replace(/\sloading\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
-            .replace(/(\ssrc\s*=\s*)("[^"]*"|'[^']*'|[^\s>]+)/i, `$1"${dataUri(got.contentType, got.body)}"`);
-        out = out.replace(tag, replaced);
+            .replace(/(\ssrc\s*=\s*)("[^"]*"|'[^']*'|[^\s>]+)/i, (_whole, before: string) => `${before}"${uri}"`);
+        out = out.replace(tag, () => replaced);
     }
     return out;
 }
@@ -220,7 +259,7 @@ const HINTS = ["preload", "prefetch", "preconnect", "dns-prefetch"];
  * waits on four fonts that are already in its own stylesheet.
  */
 export function stripFetchHints(html: string): string {
-    return html.replace(/<link\b[^>]*>/gi, (tag) => {
+    return html.replace(tagPattern("link"), (tag) => {
         const rel = (attrOf(tag, "rel") ?? "").toLowerCase().split(/\s+/);
         return rel.some((value) => HINTS.includes(value)) ? "" : tag;
     });

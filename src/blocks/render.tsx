@@ -14,6 +14,16 @@ import type { ResolvedBlock } from "./schema.js";
 const LIST_DISPLAY = "var(--bp-list, flex)";
 const RESET_LIST: CSSProperties = { "--bp-list": "flex" } as CSSProperties;
 
+/*
+ * A wrapper taken out of the box tree, for a block that has to be the column's own child.
+ *
+ * `position: sticky` moves inside its containing block, and a wrapper is exactly as tall as
+ * what it holds, so a sticky band wrapped like everything else has no room and scrolls away
+ * with the page. `display: contents` leaves the custom property inheriting and the element
+ * itself out of the layout, so the page column is the containing block.
+ */
+const TRANSPARENT: CSSProperties = { "--bp-list": "flex", display: "contents" } as CSSProperties;
+
 /** Renders resolved blocks in order. Resolve first with `resolveBlocks`; this trusts its input. */
 export function BlockList({ blocks, theme }: { blocks: ResolvedBlock[]; theme: PressTheme }) {
     return (
@@ -27,7 +37,11 @@ export function BlockList({ blocks, theme }: { blocks: ResolvedBlock[]; theme: P
                     ));
                 }
                 return (
-                    <div key={index} data-block={block.definition.type} style={RESET_LIST}>
+                    <div
+                        key={index}
+                        data-block={block.definition.type}
+                        style={block.definition.transparent ? TRANSPARENT : RESET_LIST}
+                    >
                         <Component props={block.props} slots={slots} theme={theme} />
                     </div>
                 );

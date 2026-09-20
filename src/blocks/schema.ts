@@ -113,6 +113,17 @@ export interface BlockDefinition<P extends BlockProps = BlockProps, S extends st
      * cached.
      */
     perViewer?: boolean;
+    /**
+     * Draws without the wrapper `BlockList` puts around every block, which is `display: contents`
+     * on that wrapper rather than no element at all.
+     *
+     * One block needs it and the reason is narrow. A wrapper hugs its child, and a `position: sticky`
+     * element can only move inside its own containing block, so a sticky band wrapped like every
+     * other block has nowhere to move and scrolls away. Taking the wrapper out of the box tree makes
+     * the page's own column the containing block, which is the whole page. Measured: wrapped, the
+     * band's top goes from 0 to -400 after scrolling 400px; transparent, it stays at 0.
+     */
+    transparent?: boolean;
     // Method syntax, so a definition typed for its own props still fits a registry of any props.
     component(args: BlockComponentProps<P, S>): ReactNode | Promise<ReactNode>;
 }

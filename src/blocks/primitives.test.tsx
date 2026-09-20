@@ -78,6 +78,37 @@ describe("layout primitives", () => {
         expect(render([{ type: "flow", props: { columns: "1", content: [[]] } }])).toContain("/ 1)");
     });
 
+    /*
+     * `theme.space.none` is "0", a number and not a length, and `100% - 2 * 0` is a type error that
+     * takes the whole declaration with it: `display:grid` with no track list, everything in one
+     * column, for a gap an editor picks from a list. Chromium agrees: CSS.supports on the unfixed
+     * string is false.
+     */
+    it("keeps its track list when a flow is asked for no gap at all", () => {
+        const html = render([{ type: "flow", props: { columns: "3", gap: "none", content: [[]] } }]);
+
+        expect(html).toContain("repeat(auto-fit,");
+        expect(html).toContain("0px");
+        expect(html).not.toContain("* 0)");
+    });
+
+    /*
+     * A sticky band can only move inside its containing block, and BlockList's per-block wrapper is
+     * exactly as tall as what it holds. Measured in Chromium before this: the band's top went from
+     * 0 to -400 after scrolling 400px, which is a band that scrolls away. The wrapper is out of the
+     * box tree now, so the page column is the containing block.
+     */
+    it("draws a sticky bar without the wrapper that would stop it sticking", () => {
+        const html = render([
+            { type: "stickyBar", props: { content: [[{ type: "text", props: { value: "Open" } }]] } },
+        ]);
+
+        expect(html).toContain("position:sticky");
+        expect(html).toContain('data-block="stickyBar"');
+        expect(html).toContain("display:contents");
+        expect(html).toContain("Open");
+    });
+
     it("renders nested blocks inside the layout that holds them, in order", () => {
         const html = render([
             box([

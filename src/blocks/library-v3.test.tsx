@@ -36,7 +36,9 @@ const CMS = "http://cms.test";
 type Entry = { id: string; slug: string; data: Record<string, unknown> };
 
 const MODULES: Entry[] = [
-    { id: "m1", slug: "search", data: { Name: "Search", Slug: "search", Blurb: "Postgres full text over your content", Category: "Content" } },
+    // Icon, Word and Progress are this tenant's own field names, deliberately, because the engine
+    // lays its own names over the entry's data and must not take a field away doing it.
+    { id: "m1", slug: "search", data: { Name: "Search", Slug: "search", Blurb: "Postgres full text over your content", Category: "Content", Icon: "compass", Word: "Alpha", Progress: "60" } },
     { id: "m2", slug: "forms", data: { Name: "Forms", Slug: "forms", Blurb: "Submissions stored as content", Category: "Content" } },
     { id: "m3", slug: "audit", data: { Name: "Audit", Slug: "audit", Blurb: "Who changed what, and when", Category: "Operations" } },
 ];
@@ -602,5 +604,97 @@ describe("the baryo.dev fixture's settings", () => {
         }
         expect(applied.site.name).toBe(raw.Name);
         expect(applied.home?.path).toBe(raw.HomePath);
+    });
+});
+
+/*
+ * The rest of what a review found by measuring. Each is silent: the page renders, and what it draws
+ * is not what the block says it draws.
+ */
+describe("what a v3 block does with input nobody types on purpose", () => {
+    it("draws a comparison whose rows were typed with blank lines between them", async () => {
+        const rows = ["Thing | A | B", "", "One | yes | no", "", "Two | no | yes"].join("\n");
+        const html = await render([{ type: "comparisonTable", props: { rows } }]);
+
+        expect(html).toContain("<table");
+        expect(html).toContain("One");
+        expect(html).toContain("Two");
+    });
+
+    it("draws a comparison that was padded past its row budget with blank lines", async () => {
+        const rows = "\n".repeat(21) + "Thing | A\nOne | yes";
+        const html = await render([{ type: "comparisonTable", props: { rows } }]);
+
+        expect(html).toContain("<table");
+        expect(html).toContain("One");
+    });
+
+    it("draws a bar for a percentage that is not a round number", async () => {
+        const html = await render([{ type: "progressBar", props: { label: "Two of three", value: "66.666667" } }]);
+
+        expect(html).toContain('role="progressbar"');
+        expect(html).toContain('aria-valuenow="66.666667"');
+    });
+
+    /*
+     * `walk` reads a path with `Object.hasOwn`, so a key set to `undefined` is a hit and not a miss.
+     * A collection whose own field is called Icon, on a site that declared no option styles, used to
+     * lose it: the engine's name went over the top holding nothing.
+     */
+    it("leaves a tenant's own Icon, Word and Progress fields alone when the site declared none", async () => {
+        const plain = defineConfig({
+            site: { name: "Plain", url: "https://plain.example" },
+            cmsUrl: CMS,
+            collections: {
+                modules: { type: "module", route: "/modules", fields: { title: "Name", slug: "Slug", summary: "Blurb" } },
+            },
+        });
+        const reg = createBlockRegistry(plain);
+        const resolved = resolveBlocks(
+            [
+                {
+                    type: "section",
+                    props: {
+                        content: [
+                            [
+                                {
+                                    type: "source",
+                                    props: {
+                                        collection: "modules",
+                                        mode: "list",
+                                        content: [
+                                            [
+                                                {
+                                                    type: "repeat",
+                                                    props: {
+                                                        content: [
+                                                            [
+                                                                { type: "text", props: { value: "{{item.Icon}}" } },
+                                                                { type: "text", props: { value: "{{item.Word}}" } },
+                                                                { type: "text", props: { value: "{{item.Progress}}" } },
+                                                            ],
+                                                        ],
+                                                    },
+                                                },
+                                            ],
+                                        ],
+                                    },
+                                },
+                            ],
+                        ],
+                    },
+                },
+            ],
+            reg,
+            { perViewer: false },
+        );
+        const bound = await bindBlocks(resolved, { config: plain, registry: reg, scopes: {} });
+        const html = renderToStaticMarkup(<BlockList blocks={bound} theme={plain.theme} />);
+
+        // The entries carry these under their own names, and this site declared no option styles and
+        // no progress role, so nothing of the engine's may be laid over them.
+        expect(html).toContain("compass");
+        expect(html).toContain("Alpha");
+        expect(html).toContain("60");
     });
 });

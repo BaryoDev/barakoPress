@@ -66,13 +66,24 @@ fi
 CMS_URL="http://127.0.0.1:$CMS_PORT" CMS_DEFAULT_TENANT="$SITE" npx next start --port "$APP_PORT" > "$TMP/app.log" 2>&1 &
 APP_PID=$!
 
-up() { curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$APP_PORT/"; }
+# Checked the same way and for the same reason as the CMS above. `next start` exits 1 on a port
+# that is taken, and something else answering 200 on it looks exactly like success: the run would
+# then measure a stale server and report a number that reads as authoritative and is not. So the
+# process has to still be alive, and the page has to be the one this CMS is serving.
+NAME=$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).Name ?? ""))' "$DIR/site.json")
+up() { curl -s "http://127.0.0.1:$APP_PORT/"; }
 for _ in $(seq 1 60); do
-  [ "$(up)" = "200" ] && break
+  kill -0 "$APP_PID" 2>/dev/null || break
+  up | grep -qF "$NAME" && break
   sleep 1
 done
-if [ "$(up)" != "200" ]; then
-  echo "the rebuilt site did not come up on port $APP_PORT (last status $(up))"
+if ! kill -0 "$APP_PID" 2>/dev/null; then
+  echo "the rebuilt site stopped before it answered on port $APP_PORT"
+  tail -40 "$TMP/app.log"
+  exit 1
+fi
+if ! up | grep -qF "$NAME"; then
+  echo "whatever is answering on port $APP_PORT is not this fixture's site: it does not say \"$NAME\""
   tail -40 "$TMP/app.log"
   tail -10 "$TMP/cms.log"
   exit 1
