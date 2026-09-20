@@ -71,6 +71,12 @@ APP_PID=$!
 # then measure a stale server and report a number that reads as authoritative and is not. So the
 # process has to still be alive, and the page has to be the one this CMS is serving.
 NAME=$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).Name ?? ""))' "$DIR/site.json")
+# The name is the whole of the check, so an empty one is refused rather than run with. `grep -qF ""`
+# matches any response at all, which would put the hole straight back.
+if [ -z "$NAME" ]; then
+  echo "$DIR/site.json names no \"Name\", so there is nothing to tell this site's pages apart from whatever else is on port $APP_PORT"
+  exit 2
+fi
 up() { curl -s "http://127.0.0.1:$APP_PORT/"; }
 for _ in $(seq 1 60); do
   kill -0 "$APP_PID" 2>/dev/null || break
