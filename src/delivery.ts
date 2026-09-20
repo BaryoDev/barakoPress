@@ -709,3 +709,39 @@ export async function semantic(
         return [];
     }
 }
+
+/*
+ * Full text search, from `GET /api/public/{type}/search`.
+ *
+ * The same shape as `semantic` and for the same reason: a type that is not publicly deliverable
+ * answers 404, and a search box is part of a page rather than the page itself. So every failure is an
+ * empty list. Unlike `semantic` this needs no module: it is in the core API, matching only over the
+ * fields a type publishes, which is why a draft or a sensitive entry can never come back.
+ */
+export interface SearchResponse {
+    results: PublicContent[];
+    count: number;
+    query: string;
+}
+
+/** The API clamps this itself. Repeated here so a caller asking for 500 sends a legal request. */
+const MAX_SEARCH_LIMIT = 50;
+
+export async function search(
+    config: PressConfig,
+    type: string,
+    query: string,
+    limit: number,
+): Promise<PublicContent[]> {
+    const q = query.trim();
+    // The API answers empty under two characters. Not spending a request to be told that.
+    if (q.length < 2) return [];
+
+    const params = new URLSearchParams({ q, limit: String(Math.max(1, Math.min(limit, MAX_SEARCH_LIMIT))) });
+    try {
+        const res = await get<SearchResponse>(config, `/api/public/${encodeURIComponent(type)}/search?${params}`, { type });
+        return Array.isArray(res.results) ? res.results : [];
+    } catch {
+        return [];
+    }
+}
