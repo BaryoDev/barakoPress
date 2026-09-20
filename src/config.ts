@@ -361,8 +361,15 @@ export interface CollectionTree {
     order?: FieldNames;
     /** The field holding the slug of the item this one hangs under, or a reference to it. */
     parent?: FieldNames;
-    /** The field naming the product an item documents, matched against a product's key. */
-    product?: FieldNames;
+    /**
+     * The field naming the product an item documents, matched against a product's key.
+     *
+     * One field name and not a list, unlike the roles above, because this one goes into an API
+     * filter: a tree read for a product asks the CMS for that product's pages so the limit is spent
+     * on them. A fallback list cannot be one filter, and reading every product and filtering here
+     * would spend the limit before the wanted pages were reached.
+     */
+    product?: string;
     /**
      * The sections, in the order the sidebar shows them. A section not named here follows the ones
      * that are, in the order its first item came back in.
@@ -377,6 +384,16 @@ export interface CollectionTree {
      * what the `product` field holds, so the switcher can mark the one being read.
      */
     products?: TreeProduct[];
+    /**
+     * Where the search box submits, and whether one is drawn at all.
+     *
+     * Named rather than assumed, because only the site knows which of its routes reads the query.
+     * An index answers `?q=` when its route file passes `search: true`, and a page of blocks answers
+     * through the `search` block; both make the route dynamic, which is the consumer's call to make.
+     * Unset, no box is drawn, since a search box whose query nothing reads is a control that looks
+     * like it works.
+     */
+    searchPath?: string;
     /**
      * Where "edit this page" points. The item's `editPath`, or its slug, is appended, so
      * `https://github.com/owner/repo/edit/master/` plus `docs/webhooks.md` is the whole link. Unset,

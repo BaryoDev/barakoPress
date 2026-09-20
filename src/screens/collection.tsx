@@ -177,8 +177,15 @@ export function ItemView(props: ItemViewProps) {
             aside={
                 <>
                     <TreeSwitcher config={config} collection={item.collection} current={item.product} />
-                    {route && (
-                        <SearchBox config={config} action={route} param="q" id={`bp-search-${item.collection}`} />
+                    {/* Only where the site named a route that reads the query. A box submitting
+                        somewhere that ignores `q` is a control that looks like it works. */}
+                    {col.tree.searchPath && (
+                        <SearchBox
+                            config={config}
+                            action={col.tree.searchPath}
+                            param="q"
+                            id={`bp-search-${item.collection}`}
+                        />
                     )}
                     <TreeSidebar config={config} tree={tree} current={item.slug} />
                 </>
@@ -361,6 +368,9 @@ export async function CollectionIndexView({
     );
 
     if (!col.tree) return list;
+    // This route answers `?q=` when it was given one, so the box may point here; otherwise wherever
+    // the tree says search lives, and nowhere at all when it says nothing.
+    const searchAt = query !== undefined ? col.route : col.tree.searchPath;
     const tree = await collectionTree(config, collection);
     return (
         <TreeShell
@@ -368,8 +378,10 @@ export async function CollectionIndexView({
             aside={
                 <>
                     <TreeSwitcher config={config} collection={collection} />
-                    {col.route !== undefined && (
-                        <SearchBox config={config} action={col.route} param="q" query={query} id={`bp-search-${collection}`} />
+                    {/* This index reads the query only when its route file said so, so the box is
+                        drawn only then, or where the tree names somewhere else that does. */}
+                    {searchAt !== undefined && (
+                        <SearchBox config={config} action={searchAt} param="q" query={query} id={`bp-search-${collection}`} />
                     )}
                     <TreeSidebar config={config} tree={tree} />
                 </>
@@ -398,7 +410,10 @@ export function createCollectionIndex(base: PressConfig, collection: string, opt
          * route dynamic and `output: "export"` refuses a build over it (#55). An index with no search
          * never touches it and prerenders exactly as it did.
          */
-        const query = options.search && searchParams ? (await searchParams).q : undefined;
+        const asked = options.search && searchParams ? (await searchParams).q : undefined;
+        // Repeated `?q=` arrives as an array, which nothing downstream can trim. Search was not asked
+        // for in a shape this answers, so the index lists.
+        const query = typeof asked === "string" ? asked : options.search ? "" : undefined;
         return CollectionIndexView({ config, collection, ...options, query });
     };
 }

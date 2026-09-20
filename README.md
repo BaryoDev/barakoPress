@@ -246,6 +246,7 @@ sits. `tree` names them, and the settings beside them say what the sidebar and t
     "tree": {
       "section": "Section", "order": "Order", "parent": "Parent", "product": "Product",
       "sections": ["Getting started", "Guides", "Reference"],
+      "searchPath": "/docs",
       "editPath": "Source",
       "editBase": "https://github.com/owner/repo/edit/master/",
       "products": [
@@ -262,12 +263,13 @@ sits. `tree` names them, and the settings beside them say what the sidebar and t
 | `section` | The field holding the heading a page is grouped under |
 | `order` | The field holding its position in that section. A page with none comes after those with one |
 | `parent` | The field holding the slug of the page it hangs under, or a reference to it. A parent nobody has leaves the page at the top of its section rather than dropping it |
-| `product` | The field naming the product it documents, matched against a product's `key` |
+| `product` | The field naming the product it documents, matched against a product's `key`. One field name and not a list, since this one goes into an API filter |
 | `sections` | The sections in the order the sidebar shows them. One not named here follows those that are. Named rather than worked out, because no ordering of the pages says which section comes first |
 | `products` | What the switcher offers: a key, the word a reader sees, and where it goes. A destination that is not a site path or an http URL is dropped |
+| `searchPath` | Where the search box submits, and whether one is drawn at all. Unset, no box, because only the site knows which of its routes reads the query |
 | `editPath` | The field holding the page's path in whatever repository it is written in. Its slug when unset |
 | `editBase` | Where "edit this page" points, with that path appended. Unset, no such link is drawn |
-| `limit` | The most pages read to build the tree. 500 unless set |
+| `limit` | The most pages read to build the tree. 500 unless set, and 500 is the ceiling as well as the default |
 
 An item page in such a collection draws the sidebar with the page being read marked, the switcher,
 a search box, previous and next from the tree's reading order, and the edit link. The sidebar is a
@@ -282,8 +284,13 @@ refuses it, which is why it is off unless asked for. The box is a `form`, the re
 the keyboard handling on top ("/" to focus, the arrow keys to walk the results, escape to clear) is the
 one client component in the package. The root catch-all answers `?q=` on a collection index too, but
 only where the route may be dynamic: a request-time site rewrites to a kept route, and a kept route
-asking for the query fails rather than bailing out, so there the index lists and the search block on a
-page of blocks is where a reader searches.
+asking for the query fails rather than bailing out, so there the index lists and a page of blocks
+holding the `search` block is where a reader searches.
+
+Which is why `searchPath` exists rather than the box pointing at the collection's own route. Only the
+site knows which of its routes reads the query, and a box submitting somewhere that ignores `q` sends
+a reader to an unfiltered index that looks like a search which matched everything. Name the route that
+answers, or name nothing and get no box.
 
 **As blocks.** `docsSidebar`, `docsSwitcher` and `search` draw the same three on a page of blocks, each
 taking a collection key. `search` takes a bindable `query`, so a landing page binds `{{query.q}}` and

@@ -14,8 +14,10 @@
   needs them with no blocks. Search goes through barakoCMS's own `/api/public/{type}/search`, which
   matches only over the fields a type publishes, so a draft or a field held back from public delivery
   can never surface as a hit; `createCollectionIndex(config, key, { search: true })` answers `?q=` the
-  same way. The box is a form and the results are links, so a reader with no script gets a working
-  search, and the keyboard handling on top of it is the package's first client component. Old paths
+  same way. The box is drawn where `tree.searchPath` names a route that reads the query and nowhere
+  else, since only the site knows which of its routes does and one pointing elsewhere is a control
+  that looks like it works. The box is a form and the results are links, so a reader with no script
+  gets a working search, and the keyboard handling on top of it is the package's first client component. Old paths
   move through the redirects feature the catch-all already asks. (#23)
 - The generic item view renders an article, and the blog's post exports are wrappers over it. A
   reading column, a byline, a read time and a band of neighbours are what long-form content wants

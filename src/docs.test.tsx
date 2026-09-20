@@ -80,6 +80,7 @@ const DOCS_COLLECTION = {
         parent: "Parent",
         product: "Product",
         editPath: "Source",
+        searchPath: "/docs",
         editBase: "https://github.com/BaryoDev/barakoCMS/edit/master/",
         products: [
             { key: "cms", label: "barakoCMS", href: "/docs" },
@@ -115,7 +116,7 @@ const SETTINGS = {
 type Call = { path: string };
 let calls: Call[] = [];
 
-function cms() {
+function cms(settings: Record<string, unknown> = SETTINGS) {
     return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const url = new URL(String(input));
         const tenant = new Headers(init?.headers).get("x-tenant");
@@ -139,7 +140,7 @@ function cms() {
             });
         };
 
-        if (url.pathname === "/api/public/site") return paged([{ id: "s", data: SETTINGS }]);
+        if (url.pathname === "/api/public/site") return paged([{ id: "s", data: settings }]);
         if (url.pathname === "/api/public/doc/search") {
             const q = (url.searchParams.get("q") ?? "").toLowerCase();
             const results = DOCS.filter((d) => String(d.data.Title).toLowerCase().includes(q));
@@ -306,13 +307,28 @@ describe("a docs page", () => {
         expect(html).toContain("Edit this page");
     });
 
-    it("draws a search box the reader can use with no script at all", async () => {
-        const config = await site();
+    it("draws a search box the reader can use with no script at all, where the tree says search lives", async () => {
+        requestHeaders = new Headers({ host: "barakocms.com" });
         const html = await markup(createPage(base)({ params: Promise.resolve({ path: ["docs", "webhooks"] }) }));
 
         expect(html).toContain('role="search"');
         expect(html).toContain('action="/docs"');
         expect(html).toContain('name="q"');
+    });
+
+    /*
+     * Only the site knows which of its routes reads the query, and a kept route cannot. A box
+     * submitting somewhere that ignores `q` would send a reader to an unfiltered index and look
+     * like a search that found everything.
+     */
+    it("draws no search box when the tree names nowhere that reads the query", async () => {
+        const quiet = { ...SETTINGS, Collections: { docs: { ...DOCS_COLLECTION, tree: { ...DOCS_COLLECTION.tree, searchPath: undefined } } } };
+        vi.stubGlobal("fetch", cms(quiet));
+        requestHeaders = new Headers({ host: "barakocms.com" });
+        const html = await markup(createPage(base)({ params: Promise.resolve({ path: ["docs", "webhooks"] }) }));
+
+        expect(html).toContain("Webhooks and actions");
+        expect(html).not.toContain('role="search"');
     });
 
     it("answers a query on the index with what the API matched", async () => {
@@ -450,7 +466,7 @@ describe("a manual whose CMS stopped answering", () => {
 
         expect(html).toContain("Webhooks and actions");
         expect(html).toContain("Signed.");
-        // The search box is chrome the tree does not need a read for, so it stays.
+        // The search box needs no read of its own, so it stays while the sidebar cannot be drawn.
         expect(html).toContain('role="search"');
         // The sidebar had nothing to draw, so it drew nothing rather than throwing.
         expect(html).not.toContain('href="/docs/quickstart"');

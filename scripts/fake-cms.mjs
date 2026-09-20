@@ -26,6 +26,8 @@ const MANUAL = [
     { id: "m1", slug: "start", data: { Title: "Getting going", Slug: "start", Body: "Install it.", Section: "Start", Order: 1, Product: "press", Source: "docs/start.md" } },
     { id: "m2", slug: "blocks", data: { Title: "Blocks", Slug: "blocks", Body: "Arrange them.", Section: "Reference", Order: 2, Product: "press" } },
     { id: "m3", slug: "bindings", data: { Title: "Bindings", Slug: "bindings", Body: "Bind them.", Section: "Reference", Order: 1, Parent: "blocks", Product: "press" } },
+    // The other product's own page, which is where its switcher entry points.
+    { id: "m4", slug: "cms", data: { Title: "The CMS", Slug: "cms", Body: "Run it.", Section: "Start", Order: 1, Product: "cms" } },
 ];
 const MANUAL_COLLECTION = {
     type: "manual",
@@ -41,6 +43,8 @@ const MANUAL_COLLECTION = {
         product: "Product",
         editPath: "Source",
         editBase: "https://github.com/BaryoDev/barakoPress/edit/master/",
+        // Where the box submits. This site answers it from a page of blocks holding the search block.
+        searchPath: "/manual-search",
         products: [
             { key: "press", label: "barakoPress", href: "/manual" },
             { key: "cms", label: "barakoCMS", href: "/manual/cms" },
@@ -115,6 +119,16 @@ const tenants = {
             "/about": pageAt("about", "About", "About BaryoDev", [["About", "/about"]]),
             "/about/team": pageAt("team", "Team", "Meet the team", [["About", "/about"], ["Team", "/about/team"]]),
             "/docs": pageAt("docs", "Docs", "The docs"),
+            // Where the manual's search box submits: a search block bound to the request's query.
+            "/manual-search": {
+                id: "ms",
+                slug: "manual-search",
+                data: {
+                    Title: "Search the manual",
+                    Slug: "manual-search",
+                    Blocks: [{ type: "search", props: { collection: "manual", query: "{{query.q}}" } }],
+                },
+            },
             // A {{query.X}} binding on a route the renderer keeps (#55). It renders as nothing
             // rather than failing the page: a route that needs the query stays dynamic.
             "/search": {

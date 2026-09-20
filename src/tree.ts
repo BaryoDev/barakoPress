@@ -152,7 +152,7 @@ export async function collectionTree(
     const product = options.product?.trim();
     const filter = { ...options.filter };
     // Asked of the API rather than filtered here, so the limit is spent on the product being read.
-    if (product && typeof tree.product === "string") filter[tree.product] = product;
+    if (product && tree.product) filter[tree.product] = product;
 
     let items: Item[];
     let truncated: boolean;
@@ -183,9 +183,14 @@ export async function collectionTree(
     return { sections, order: flattenTree(sections), truncated };
 }
 
+/*
+ * `TREE_LIMIT` is the ceiling and not only the default. A tenant's number is already held to it in
+ * site.ts, and a build-time config passing `collections` straight in was not: a typo there is an
+ * unbounded run of reads against the CMS on every render of every page in the collection.
+ */
 function limitOf(tree: CollectionTree): number {
     const asked = tree.limit;
-    return typeof asked === "number" && Number.isInteger(asked) && asked >= 1 ? asked : TREE_LIMIT;
+    return typeof asked === "number" && Number.isInteger(asked) && asked >= 1 ? Math.min(asked, TREE_LIMIT) : TREE_LIMIT;
 }
 
 export interface TreeNeighbours {

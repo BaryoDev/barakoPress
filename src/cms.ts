@@ -90,7 +90,13 @@ export function postFromItem(config: PressConfig, item: Item): Post {
         title: item.title,
         excerpt: item.summary,
         body: item.body,
-        publishedAt: item.date,
+        /*
+         * The blueprint's post collection reads `["PublishedAt", "@createdAt"]`, so the fallback the
+         * old `toPost` had is already in the field map. A tenant that replaced `post` names one date
+         * field and may leave it empty, and this export promised a date, so the entry's own
+         * `createdAt` stands in there too.
+         */
+        publishedAt: item.date ?? item.content.createdAt,
         coverImage: item.image,
         coverImageAlt: item.imageAlt,
         featured: item.featured,

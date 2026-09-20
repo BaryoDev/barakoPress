@@ -103,12 +103,21 @@ grep -q 'href="/manual/blocks"' "$TMP/manual.html" || fail "the sidebar does not
 grep -q 'aria-current="page"' "$TMP/manual.html" || fail "the sidebar does not mark the page being read"
 grep -q 'rel="prev"' "$TMP/manual.html" || fail "the manual page has no previous link"
 grep -q "https://github.com/BaryoDev/barakoPress/edit/master/bindings" "$TMP/manual.html" || fail "the edit link is not built from the setting"
-grep -q 'role="search"' "$TMP/manual.html" || fail "the manual page has no search box"
+grep -q 'action="/manual-search"' "$TMP/manual.html" || fail "the search box does not submit where the tree says search lives"
 grep -q "barakoCMS" "$TMP/manual.html" || fail "the product switcher does not offer the other product"
-# Not `?q=` here: this catch-all is the rewritten, kept route, and reading the query is what would
-# make it dynamic. A request-time site searches from a page of blocks, or from its own route file.
+# The other product's entry points at a page that exists, and that page draws that product's tree
+# and not this one's.
+grep -q 'href="/manual/cms"' "$TMP/manual.html" || fail "the switcher does not link the other product"
+page baryo.dev /manual/cms > "$TMP/manual-cms.html"
+grep -q "Run it." "$TMP/manual-cms.html" || fail "the other product's page does not render"
+if grep -q "Getting going" "$TMP/manual-cms.html"; then fail "the sidebar shows another product's pages"; fi
+# A nested page is drawn under its parent, and the page being read is marked rather than linked, so
+# this is read off a sibling's page where "bindings" is still a link.
+if grep -q 'href="/manual/bindings"' "$TMP/manual.html"; then fail "the sidebar links the page being read"; fi
+page baryo.dev /manual/start > "$TMP/manual-start.html"
+grep -q 'href="/manual/bindings"' "$TMP/manual-start.html" || fail "the sidebar does not link a nested page"
 [ "$(status rckoronadal.org /manual)" = "404" ] || fail "rckoronadal.org serves baryo.dev's manual"
-echo "ok: baryo.dev renders its manual as a tree, with a sidebar, previous and next, an edit link and a search box"
+echo "ok: baryo.dev renders its manual as a tree per product, with a sidebar, previous and next, an edit link and a search box pointing where search lives"
 
 # The footer as a block region (#48). rckoronadal.org names a page at /site/footer; baryo.dev names
 # nothing and keeps the built-in footer, which is the compatibility case a deployed site is in.

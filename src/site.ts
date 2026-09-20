@@ -701,10 +701,16 @@ function treeFrom(v: unknown): CollectionTree | undefined {
     if (!t) return undefined;
 
     const tree: CollectionTree = {};
-    for (const role of ["section", "order", "parent", "product", "editPath"] as const) {
+    for (const role of ["section", "order", "parent", "editPath"] as const) {
         const names = fieldNames(t[role]);
         if (names) tree[role] = names;
     }
+    // One name, because this one goes into an API filter rather than being read off an entry.
+    const product = str(t.product);
+    if (product && FIELD_NAME.test(product)) tree.product = product;
+
+    const searchPath = sitePath(t.searchPath);
+    if (searchPath) tree.searchPath = searchPath;
 
     const sections = array(t.sections)
         ?.slice(0, MAX_SECTIONS)
