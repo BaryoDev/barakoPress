@@ -12,6 +12,14 @@
   out of the list stops every link to it, the built-in one and its preconnects included, and no
   setting can put one back. A family name on its own renders the Google Fonts link it always did.
   (#54)
+- An asset can be used exactly as supplied. `AssetsAsSupplied` lists the marks a site must not
+  restyle, `LogoAsSupplied` says it of the logo and the footer logo, and each carries a minimum clear
+  space from the spacing scale. A marked asset is drawn from the file with that space held around it,
+  and no tint, border, corner, shadow, filter or crop reaches it: a block that asked for a frame draws
+  the mark alone. It holds in the header, the footer, the holding page, a region, a page block, a
+  preset, a post cover, a collection item and an image inside markdown, because every image the engine
+  draws now goes through one component and a test walks all of them. An `image` block can mark its own
+  file with `asSupplied` and `clearSpace`. A site that marks nothing renders exactly as it did. (#29)
 - One reader for every environment value, `readEnv` in `src/env.ts`, called where the value is used.
   `CMS_URL` and `CMS_TENANT` were read inside `defineConfig`, which runs when a site's
   `press.config.ts` is first imported, while `CMS_DEFAULT_TENANT`, `CMS_RENDERER_KEY`,

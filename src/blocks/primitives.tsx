@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
+import { Asset, renderProse } from "../assets.js";
 import type { PressConfig } from "../config.js";
-import { renderMarkdown } from "../markdown.js";
 import type { PressTheme } from "../theme.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
 import {
@@ -402,18 +402,31 @@ const richText = defineBlock<{ markdown: string; width?: string }>({
         <div
             className={PROSE_CLASS}
             style={{ maxWidth: widthOf(theme, props.width ?? "prose") }}
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(props.markdown) }}
+            dangerouslySetInnerHTML={{ __html: renderProse(props.markdown, theme) }}
         />
     ),
 });
 
-type ImageProps = { src: string; alt?: string; caption?: string; radius?: string; width?: string; frame?: boolean };
+type ImageProps = {
+    src: string;
+    alt?: string;
+    caption?: string;
+    radius?: string;
+    width?: string;
+    frame?: boolean;
+    asSupplied?: boolean;
+    clearSpace?: string;
+};
 
 /*
  * Also the `image` that shipped in 0.3.0, which is why the frame is on unless a block turns it off:
  * a page stored before the primitives existed carries src, alt and caption and nothing else, and it
  * still renders a framed, rounded, captioned figure. `radius`, `width` and `frame` are the new
  * tokens, all optional, and the caption gap now comes off the spacing scale.
+ *
+ * `asSupplied` marks this one image, for a mark the site has not listed. Marked either way, the
+ * corner, the frame and anything else this block asks for are dropped rather than applied: a block
+ * that cannot honour the rule draws the mark alone (#29).
  */
 const image = defineBlock<ImageProps>({
     type: "image",
@@ -426,13 +439,17 @@ const image = defineBlock<ImageProps>({
         { name: "radius", kind: "select", label: "Corners", options: [...RADII] },
         { name: "width", kind: "select", label: "Width", options: [...WIDTHS] },
         { name: "frame", kind: "boolean", label: "Hairline frame" },
+        { name: "asSupplied", kind: "boolean", label: "Use exactly as supplied" },
+        { name: "clearSpace", kind: "select", label: "Clear space", options: [...SPACES] },
     ],
     component: ({ props, theme }) => (
         <figure style={{ margin: 0, maxWidth: widthOf(theme, props.width ?? "full") }}>
-            <img
+            <Asset
                 src={props.src}
-                alt={props.alt ?? ""}
+                alt={props.alt}
+                theme={theme}
                 loading="lazy"
+                supplied={{ asSupplied: props.asSupplied, clearSpace: props.clearSpace }}
                 style={{
                     display: "block",
                     maxWidth: "100%",

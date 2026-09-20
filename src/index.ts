@@ -73,6 +73,7 @@ export { DEFAULT_THEME, resolveTheme, proseCss, relatedCss, themeVariablesCss } 
 export type {
     PressTheme,
     PressThemeInput,
+    SuppliedAsset,
     ThemeColors,
     FontRole,
     ThemeFontSources,
@@ -159,6 +160,9 @@ export type { NavigationProps, BreadcrumbsProps } from "./screens/navigation.js"
 
 export { renderMarkdown, isSafeHref, anchor } from "./markdown.js";
 export type { RenderMarkdownOptions } from "./markdown.js";
+
+export { Asset, renderProse, suppliedAssetFor, suppliedAssetOn, clearSpaceOf } from "./assets.js";
+export type { AssetProps, SuppliedProps } from "./assets.js";
 
 export { createBlogIndex, Card } from "./screens/blog-index.js";
 export {

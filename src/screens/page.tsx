@@ -14,7 +14,7 @@ import {
     type Breadcrumb,
     type Page,
 } from "../cms.js";
-import { renderMarkdown } from "../markdown.js";
+import { renderProse } from "../assets.js";
 import { proseCss } from "../theme.js";
 import { siteConfig } from "../site.js";
 import { BLOCK_PROSE_CLASS } from "../blocks/built-in.js";
@@ -137,7 +137,7 @@ export async function PageView({
                         <div
                             className={BLOCK_PROSE_CLASS}
                             style={{ maxWidth: t.layout.prose }}
-                            dangerouslySetInnerHTML={{ __html: renderMarkdown(page.body) }}
+                            dangerouslySetInnerHTML={{ __html: renderProse(page.body, t) }}
                         />
                     )
                 )}

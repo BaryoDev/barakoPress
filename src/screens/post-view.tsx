@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { Asset, renderProse } from "../assets.js";
 import type { PressConfig } from "../config.js";
 import { formatDate, type Post } from "../cms.js";
-import { renderMarkdown } from "../markdown.js";
 import { initials, readingMinutes } from "../reading-time.js";
 import type { RelatedPost } from "../related.js";
 import { proseCss, relatedCss } from "../theme.js";
@@ -276,10 +276,10 @@ export function PostView({
                     {post.coverImage && (
                         // Not next/image: the CMS resizes on request with ?w=, so the optimiser
                         // would be a second resizer in front of the first.
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
+                        <Asset
                             src={post.coverImage}
                             alt={post.coverImageAlt ?? ""}
+                            theme={t}
                             style={{
                                 width: "100%",
                                 marginBottom: "36px",
@@ -291,7 +291,7 @@ export function PostView({
 
                     <div
                         className={PROSE_CLASS}
-                        dangerouslySetInnerHTML={{ __html: renderMarkdown(post.body) }}
+                        dangerouslySetInnerHTML={{ __html: renderProse(post.body, t) }}
                     />
 
                     {afterBody}
