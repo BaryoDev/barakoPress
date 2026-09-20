@@ -69,9 +69,17 @@ function unguarded(css: string): string {
  * animated stack has nothing left here.
  */
 function readable(html: string): string {
-    // The stylesheets go first. A count-up's target number is in its keyframes, so leaving them in
-    // would let a block with no readable copy of its figure pass on its own CSS.
-    let out = html.replace(/<style[^>]*>[\s\S]*?<\/style>/g, "");
+    /*
+     * The stylesheets go first. A count-up's target number is in its keyframes, so leaving them in
+     * would let a block with no readable copy of its figure pass on its own CSS. Cut by index and
+     * repeated until there is none left, rather than one pass of a pattern: a single pass over
+     * markup can leave behind the very thing it was removing.
+     */
+    let out = html;
+    for (let at = out.indexOf("<style"); at !== -1; at = out.indexOf("<style")) {
+        const end = out.indexOf("</style>", at);
+        out = end === -1 ? out.slice(0, at) : out.slice(0, at) + out.slice(end + "</style>".length);
+    }
     for (;;) {
         const found = out.search(/<([a-z]+)[^>]*aria-hidden="true"/);
         if (found === -1) return out;
