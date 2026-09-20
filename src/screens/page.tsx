@@ -16,13 +16,12 @@ import {
 } from "../cms.js";
 import { renderProse } from "../assets.js";
 import { proseCss } from "../theme.js";
-import { siteConfig } from "../site.js";
 import { BLOCK_PROSE_CLASS } from "../blocks/built-in.js";
 import { BlockList } from "../blocks/render.js";
 import { createBlockRegistry, registryFor } from "../blocks/registry.js";
 import { resolveBlocks, type BlockRegistry, type ResolvedBlock } from "../blocks/schema.js";
 import { bindBlocks, pageScope, queryScope, siteScope } from "../blocks/bind.js";
-import { getGlobals } from "../site.js";
+import { getGlobals, routeFromParams, siteConfig } from "../site.js";
 import { collectionAt, collectionOf, getItem } from "../collections.js";
 import { CollectionIndexView, itemMetadata, renderCollectionDetail } from "./collection.js";
 import { Breadcrumbs } from "./navigation.js";
@@ -33,7 +32,7 @@ import { Breadcrumbs } from "./navigation.js";
  * segments, resolved by the Pages module, which is the only thing that knows which page lives at
  * /about/team.
  */
-type PageRouteParams = { slug?: string; path?: string[] };
+type PageRouteParams = { slug?: string; path?: string[]; site?: string };
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 /*
  * `searchParams` is taken but never awaited unless a block binds `{{query.X}}`. Awaiting it is what
@@ -226,11 +225,35 @@ async function missing(config: PressConfig, p: PageRouteParams): Promise<never> 
  *
  * Without a registry, both render with the built-in blocks.
  */
-export function createPage(base: PressConfig, registry?: BlockRegistry) {
+/*
+ * `{{query.X}}` and the render cache (barakoPress #55).
+ *
+ * Awaiting the query is what makes a route dynamic, and a route that exports `generateStaticParams`
+ * is one Next has been told to keep: asking there is not a bail-out to a dynamic render, it fails
+ * the route, and catching the throw does not help because Next records the usage either way. So a
+ * page served through a rewritten path is not handed the query at all, and a binding for it is
+ * reported as an unbound scope and renders as nothing, the same as any other binding that cannot be
+ * resolved.
+ *
+ * A site that wants query bindings says so, in the route file that would carry
+ * `generateStaticParams` and now does not:
+ *
+ *     export default createPage(config, blocks, { query: true });
+ *
+ * which is the same division as `revalidate`: whether a route may be kept is the consumer's call,
+ * made in the consumer's file.
+ */
+export interface PageOptions {
+    /** Hand blocks the request's query. The route must then be dynamic: no `generateStaticParams`. */
+    query?: boolean;
+}
+
+export function createPage(base: PressConfig, registry?: BlockRegistry, options: PageOptions = {}) {
     let blocks = registry;
     return async function BlockPage({ params, searchParams }: PageParams) {
-        const config = await siteConfig(base);
+        const config = await siteConfig(base, params);
         const p = await params;
+        const query = options.query ?? (await routeFromParams(params)) === null;
         const hit = collectionHit(config, p);
         if (hit) {
             return hit.slug === undefined
@@ -245,7 +268,7 @@ export function createPage(base: PressConfig, registry?: BlockRegistry) {
             page: found.page,
             breadcrumbs: found.breadcrumbs,
             registry: registryFor(config, blocks),
-            searchParams,
+            searchParams: query ? searchParams : undefined,
         });
     };
 }
@@ -254,7 +277,7 @@ export function createViewerPage(base: PressConfig, registry?: BlockRegistry) {
     let blocks = registry;
     return async function ViewerPage({ params, searchParams }: PageParams) {
         await connection();
-        const config = await siteConfig(base);
+        const config = await siteConfig(base, params);
         const p = await params;
         const hit = collectionHit(config, p);
         if (hit) {
@@ -278,7 +301,7 @@ export function createViewerPage(base: PressConfig, registry?: BlockRegistry) {
 
 export function createPageMetadata(base: PressConfig) {
     return async function generateMetadata({ params }: PageParams): Promise<Metadata> {
-        const config = await siteConfig(base);
+        const config = await siteConfig(base, params);
         const p = await params;
         const hit = collectionHit(config, p);
         if (hit) return collectionMetadata(config, hit);
@@ -296,6 +319,19 @@ export function createPageMetadata(base: PressConfig) {
             robots: seo?.noIndex ? { index: false, follow: false } : undefined,
             openGraph: { title, description, images: seo?.imageUrl ? [seo.imageUrl] : undefined },
         };
+    };
+}
+
+/**
+ * No paths at build for a request-time site: the tenant is named by a request, not by the build.
+ *
+ * A page route still exports one, because that is how Next is told a route with a dynamic segment
+ * may be rendered on demand and then kept. Without it the route is dynamic and every visitor pays
+ * for a render of their own (barakoPress #55).
+ */
+export function createSiteStaticParams() {
+    return async function generateStaticParams(): Promise<Record<string, never>[]> {
+        return [];
     };
 }
 

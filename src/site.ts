@@ -24,6 +24,7 @@ import {
 import { readEnv } from "./env.js";
 import { CmsError, isTenantHandle, list, tenantForHost } from "./delivery.js";
 import { readSecret } from "./secret.js";
+import { parseSiteSegment, type SiteRoute } from "./site-route.js";
 import { presetsFrom } from "./blocks/presets.js";
 import { SPACES, TONES, type ToneName } from "./blocks/tokens.js";
 import type {
@@ -57,6 +58,19 @@ import { FONT_FAMILY, FONT_ROLES, fontStylesheetHref } from "./fonts.js";
  * tenant means a 404, never another tenant's site. Nothing here is read at module scope, because a
  * value read there is baked into whatever is prerendered at build. Every environment value comes
  * through `readEnv` (barakoPress #51).
+ *
+ * There are two ways in, and which one a page takes decides whether its render can be cached
+ * (barakoPress #55):
+ *
+ *   from the request   `siteConfig(config)` reads the host out of the headers, exactly as above.
+ *                      Reading a header makes the route dynamic, so nothing rendered is cached.
+ *   from the path      `siteConfig(config, params)` reads the tenant, the gate and the host out of
+ *                      the `[site]` segment the proxy rewrote to. Nothing is read from the
+ *                      request, so Next stores the render under that path, and the tenant is in
+ *                      the path, so two tenants cannot share an entry.
+ *
+ * Both stay, because a site that has not adopted the proxy keeps working: a page that calls
+ * `siteConfig(config)` with no params behaves exactly as it did before #55.
  */
 
 /** The host a request named, lowercased, without a port or a trailing dot. Null if it is not a DNS name. */
@@ -118,6 +132,31 @@ export function tenantVary(config: PressConfig): string | null {
     return vary.length > 0 ? vary.join(", ") : null;
 }
 
+/*
+ * A page's own params, as Next hands them over. Only `site` is read, and only when it parses as a
+ * segment this package's proxy wrote.
+ */
+export type SiteParams =
+    | Record<string, unknown>
+    | Promise<Record<string, unknown>>
+    | undefined;
+
+/** The route a rewritten page is being served under, or null when the page was not rewritten. */
+export async function routeFromParams(params: SiteParams): Promise<SiteRoute | null> {
+    if (!params) return null;
+    const p = (await params) as { site?: unknown } | null | undefined;
+    return parseSiteSegment(p?.site);
+}
+
+/**
+ * The config for a route the proxy already resolved. Reads no header and no cookie, which is
+ * what leaves the render cacheable.
+ */
+export async function siteFromRoute(config: PressConfig, route: SiteRoute): Promise<PressConfig> {
+    const scoped: PressConfig = { ...config, tenant: route.tenant };
+    return applySiteSettings(scoped, await readSettings(scoped), route.host);
+}
+
 /** The config a request renders with, or null when the request belongs to no tenant. */
 export async function resolveSite(
     config: PressConfig,
@@ -139,9 +178,9 @@ export async function resolveSite(
  * That second one is what keeps a page's content and its metadata out of the response: the page
  * stops here, before it reads anything, and the layout renders the holding page in its place.
  */
-export async function siteConfig(config: PressConfig): Promise<PressConfig> {
-    const resolved = await siteConfigOrNull(config);
-    if (!resolved || (await showsHoldingPage(resolved))) notFound();
+export async function siteConfig(config: PressConfig, params?: SiteParams): Promise<PressConfig> {
+    const resolved = await siteConfigOrNull(config, params);
+    if (!resolved || (await showsHoldingPage(resolved, params))) notFound();
     return resolved;
 }
 
@@ -206,16 +245,26 @@ export function shareCookieValid(
     return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
-/** True when this request gets the holding page: the tenant is holding and the request has no valid session. */
-export async function showsHoldingPage(config: PressConfig): Promise<boolean> {
+/**
+ * True when this request gets the holding page: the tenant is holding and the request has no valid
+ * session.
+ *
+ * A rewritten page reads the answer off its path, where the proxy put it after checking the cookie
+ * once. A page that was not rewritten reads the cookie here, as it always did.
+ */
+export async function showsHoldingPage(config: PressConfig, params?: SiteParams): Promise<boolean> {
     if (!config.holding) return false;
+    const route = await routeFromParams(params);
+    if (route) return route.gate !== "shared";
     const jar = await cookies();
     return !shareCookieValid(jar.get(SHARE_COOKIE)?.value, pinnedTenant(config), shareSecret());
 }
 
 /** As `siteConfig`, but null rather than a 404, for a layout or a handler that answers for itself. */
-export async function siteConfigOrNull(config: PressConfig): Promise<PressConfig | null> {
+export async function siteConfigOrNull(config: PressConfig, params?: SiteParams): Promise<PressConfig | null> {
     if (!config.sites) return config;
+    const route = await routeFromParams(params);
+    if (route) return siteFromRoute(config, route);
     return resolveSite(config, await headers());
 }
 

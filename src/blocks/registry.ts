@@ -1,5 +1,5 @@
 import { pinnedTenant, type PressConfig } from "../config.js";
-import { builtInBlocks } from "./built-in.js";
+import { boundToSite, builtInBlocks } from "./built-in.js";
 import { libraryPresets } from "./library.js";
 import { withPresets, type BlockPreset } from "./presets.js";
 import { checkDefinition, type BlockDefinition, type BlockRegistry } from "./schema.js";
@@ -44,12 +44,22 @@ export function createBlockRegistry(
 }
 
 /**
- * The registry a request renders with: the site's, plus the tenant's own presets.
+ * The registry a request renders with: the site's, plus the tenant's own presets, with the blocks
+ * that read the site bound to the config this request resolved.
  *
  * Built once per request and not once per process, because on a request-time site the presets are
- * the tenant's data and two tenants share the container. It is a copy of a small map when the
- * tenant has presets and the same map when it does not.
+ * the tenant's data and two tenants share the container. It is a copy of a small map when there is
+ * something to change and the same map when there is not.
+ *
+ * `holding` is passed down rather than asked for: a block that asked the request whether the site
+ * is holding would read a cookie, and the page holding that block would stop being cacheable
+ * (barakoPress #55). The caller already knows, because it decided which document to render.
  */
-export function registryFor(config: PressConfig, registry: BlockRegistry): BlockRegistry {
-    return withPresets(registry, config.presets, () => pinnedTenant(config));
+export function registryFor(
+    config: PressConfig,
+    registry: BlockRegistry,
+    options: { holding?: boolean } = {},
+): BlockRegistry {
+    const bound = boundToSite(registry, config, options.holding === true);
+    return withPresets(bound, config.presets, () => pinnedTenant(config));
 }

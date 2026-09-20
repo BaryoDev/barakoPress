@@ -15,7 +15,7 @@ import {
 } from "../collections.js";
 import { CmsError } from "../delivery.js";
 import { Asset, renderProse } from "../assets.js";
-import { siteConfig } from "../site.js";
+import { siteConfig, type SiteParams } from "../site.js";
 
 /*
  * The collection screens: an index, a detail page, their metadata and static params, and the card and
@@ -256,8 +256,8 @@ export async function CollectionIndexView({
  *     export const revalidate = 300;
  */
 export function createCollectionIndex(base: PressConfig, collection: string, options: CollectionIndexOptions = {}) {
-    return async function CollectionIndex() {
-        const config = await siteConfig(base);
+    return async function CollectionIndex({ params }: { params?: SiteParams } = {}) {
+        const config = await siteConfig(base, params);
         return CollectionIndexView({ config, collection, ...options });
     };
 }
@@ -302,13 +302,17 @@ export async function renderCollectionDetail(
     return view({ config, item, related, preview: Boolean(previewToken), backHref: options.backHref });
 }
 
-type DetailParams = { params: Promise<{ slug: string }>; searchParams?: Promise<{ preview?: string }> };
+type DetailParams = { params: Promise<{ slug: string; site?: string }>; searchParams?: Promise<{ preview?: string }> };
 
 export function createCollectionDetail(base: PressConfig, collection: string, options: CollectionDetailOptions = {}) {
     return async function CollectionDetail({ params, searchParams }: DetailParams) {
-        const config = await siteConfig(base);
+        const config = await siteConfig(base, params);
         const { slug } = await params;
-        // A token routes to the uncached read, so a draft never enters the shared cache.
+        /*
+         * A token routes to the uncached read, so a draft never enters the shared cache. Awaiting
+         * `searchParams` is also what keeps this route out of the render cache, which is why the
+         * route file that wants preview is the one that leaves `generateStaticParams` out (#55).
+         */
         const token = options.preview && searchParams ? (await searchParams).preview : undefined;
         return renderCollectionDetail(config, collection, slug, options, token);
     };
@@ -347,8 +351,8 @@ export function itemMetadata(item: Item): Metadata {
 }
 
 export function createCollectionMetadata(base: PressConfig, collection: string) {
-    return async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
-        const config = await siteConfig(base);
+    return async function generateMetadata({ params }: { params: Promise<{ slug: string; site?: string }> }): Promise<Metadata> {
+        const config = await siteConfig(base, params);
         const { slug } = await params;
         const item = await getItem(config, collection, slug);
         return item ? itemMetadata(item) : { title: "Not found" };

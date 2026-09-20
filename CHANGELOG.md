@@ -2,6 +2,29 @@
 
 ## 0.4.0 (unreleased)
 
+- A request-time site no longer renders every page for every visitor. Resolving the tenant meant
+  reading the request host, reading a header makes a route dynamic, and Next never keeps a dynamic
+  route, so one container serving many domains re-rendered every page on every view with every read
+  under it already cached. A `proxy.ts` resolves the tenant and the share session once and rewrites
+  to `/_press/<tenant>~<gate>~<host>/<path>`; the pages read all three out of that segment and read
+  nothing from the request. The tenant is in the path and the path is the whole of Next's key, so two
+  tenants cannot share an entry and a request carrying a share session cannot be answered from one
+  made without it. A path that arrives under `/_press` from outside is a 404. `revalidateTag` drops a
+  tenant's renders with its reads, so the webhook that purged one now purges both. Measured on the
+  reference app against the stand-in CMS: 19ms a view before, 9ms after, with no CMS read either way.
+  **A request-time site moves its page routes under `app/%5Fpress/[site]/` and adds `proxy.ts`; see
+  the README.** A build-time site changes nothing. Routes that read `?preview=` or bind `{{query.X}}`
+  stay dynamic on purpose, and which routes are kept is the consumer's call in the consumer's route
+  file, the same as `revalidate`. (#55)
+- `createPage` takes `{ query: true }` for a page that binds `{{query.X}}`. On a route Next keeps,
+  the query is not handed to the blocks at all, so the binding is reported as an unbound scope and
+  renders as nothing rather than failing the route. (#55)
+- `registryFor` binds the blocks that read the site to the config the request resolved, and takes
+  `{ holding: true }` for a holding page. The `collection` block used to resolve the request itself,
+  once per block per view, which kept every page holding one out of the render cache. A site that
+  registered its own `collection` keeps its own. A consumer rendering `PageView` with a registry that
+  never went through `registryFor` now gets a loud error on a request-time site instead of a read
+  that resolved itself. (#55)
 - Fonts from somewhere other than Google Fonts. A `Fonts` entry may name the stylesheet that loads a
   face, `{ "family": "Zilla Slab", "url": "https://type.school.example/zilla.css" }`, which is how a
   school with a licensed face on its own host or a tenant that must not send visitor addresses to a
