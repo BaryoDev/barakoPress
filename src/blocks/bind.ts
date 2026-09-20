@@ -344,6 +344,11 @@ export function itemScope(config: PressConfig, item: Item): Record<string, unkno
         Tags: item.tags,
         Option: item.option,
         Color: item.color,
+        Progress: item.progress,
+        // The option's style, so a card can draw the glyph and the word the site declared for that
+        // option (#52) without a block naming either. Absent, the blocks that read them drop.
+        Icon: item.style?.icon,
+        Word: item.style?.label ?? item.option,
         ...(route !== undefined && item.slug ? { Href: `${route}/${item.slug}` } : {}),
         ...Object.fromEntries(Object.entries(item.refs).map(([field, ref]) => [field, ref ? { ...ref } : undefined])),
     };

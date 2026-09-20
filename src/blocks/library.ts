@@ -367,6 +367,7 @@ const cardGrid: BlockPreset = {
         columns,
         padding,
         choice("hueRotate", "Rotate card hues", HUE_STEPS),
+        choice("option", "Show each entry's option", ["none", "show"]),
     ],
     blocks: [
         section({ tone: p("tone"), padding: p("padding", "xl"), width: "wide" }, [
@@ -383,6 +384,21 @@ const cardGrid: BlockPreset = {
                         repeat({ empty: p("empty") }, [
                             panel({ padding: "lg" }, [
                                 stack({ gap: "xs" }, [
+                                    /*
+                                     * The glyph and the word the site declared for this entry's
+                                     * option (#52), which is what turns a card grid into the module
+                                     * grid barakocms.com wants: `filterField` picks the category and
+                                     * this marks each card with it. Both read the option's style, so
+                                     * no block here names an icon or a category. An entry with no
+                                     * option, or a site that declared no style for it, drops them
+                                     * rather than drawing an empty row.
+                                     */
+                                    showIf({ value: p("option", "none"), equals: "show" }, [
+                                        flow({ columns: "auto", gap: "xs", align: "center" }, [
+                                            b("icon", { name: "{{item.Icon}}", size: "sm" }),
+                                            t("{{item.Word}}", "meta", { tone: "accent" }),
+                                        ]),
+                                    ]),
                                     t("{{item.Date | date}}", "meta"),
                                     b("link", { label: "{{item.Title}}", href: "{{item.Href}}" }),
                                     t("{{item.Summary}}"),
@@ -421,6 +437,205 @@ const map: BlockPreset = {
 };
 
 /*
+ * A snippet somebody is meant to run, with the other ways of running it behind it.
+ *
+ * The first sample is drawn plainly, because a quickstart is for the line you type and hiding it
+ * behind a tab is hiding the point of the page. The rest are `codeTab`s, and two of them sharing a
+ * group behave as a tab strip does: opening one closes the last. That is the bargain `tabs` already
+ * made, for the same reason. A tab strip is a script or a stylesheet with sibling selectors, and a
+ * block ships neither.
+ */
+const codeTabs: BlockPreset = {
+    type: "codeTabs",
+    label: "Code tabs",
+    fields: [
+        heading,
+        text("body", "Body"),
+        text("code", "Code", true),
+        text("language", "Language"),
+        text("selectLabel", "Say this above it, for copying"),
+        tone,
+        padding,
+        width,
+        holds("items", "The other ways"),
+    ],
+    blocks: [
+        section({ tone: p("tone"), padding: p("padding", "xl"), width: p("width", "prose") }, [
+            t(p("heading"), "title"),
+            t(p("body"), "lead"),
+            b("codeSample", { code: p("code"), language: p("language"), selectLabel: p("selectLabel") }),
+            slot("items"),
+        ]),
+    ],
+};
+
+/** One more way to run it. Several with the same `group` open one at a time. */
+const codeTab: BlockPreset = {
+    type: "codeTab",
+    label: "Code tab",
+    fields: [
+        text("label", "Label", true),
+        text("code", "Code", true),
+        text("language", "Language"),
+        text("selectLabel", "Say this above it, for copying"),
+        text("group", "Only one open in this group"),
+    ],
+    blocks: [
+        holding("disclosure", { label: p("label"), group: p("group", "codeTabs") }, [
+            b("codeSample", { code: p("code"), language: p("language"), selectLabel: p("selectLabel") }),
+        ]),
+    ],
+};
+
+/*
+ * How far along each of a list of things is: the roadmap, the milestones, the targets.
+ *
+ * The figure comes from the collection's `progress` field role, so the block reads `{{item.Progress}}`
+ * and the tenant says which of its own fields that is. The bar carries the entry's title as its
+ * label rather than repeating it in a heading above, because a progress bar has to be named for
+ * anything to read it, and naming it twice reads it twice.
+ */
+const progressList: BlockPreset = {
+    type: "progressList",
+    label: "Progress list",
+    fields: [
+        heading,
+        text("collection", "Collection", true),
+        text("filterField", "Only entries whose field"),
+        text("filterValue", "Holds the value"),
+        text("empty", "Say this when there is nothing"),
+        tone,
+        padding,
+        width,
+    ],
+    blocks: [
+        section({ tone: p("tone"), padding: p("padding", "xl"), width: p("width", "prose") }, [
+            t(p("heading"), "title"),
+            source(
+                {
+                    collection: p("collection"),
+                    mode: "list",
+                    filterField: p("filterField"),
+                    filterValue: p("filterValue"),
+                },
+                [
+                    repeat({ empty: p("empty") }, [
+                        stack({ gap: "xs" }, [
+                            b("progressBar", { label: "{{item.Title}}", value: "{{item.Progress}}" }),
+                            t("{{item.Summary}}", "small"),
+                        ]),
+                    ]),
+                ],
+            ),
+        ]),
+    ],
+};
+
+/*
+ * Release entries, newest first, each with its version, the kind of release it was and what changed.
+ *
+ * Grouped by kind is `filterField` and `filterValue`, one band per kind with its own heading, rather
+ * than a grouping this block does: a block that grouped would have to know which field holds the
+ * kind, and that is the tenant's field name. The chip on each entry is the option's own word (#52),
+ * so an entry with no option shows none.
+ */
+const changelogList: BlockPreset = {
+    type: "changelogList",
+    label: "Changelog",
+    fields: [
+        heading,
+        text("collection", "Collection", true),
+        text("filterField", "Only entries whose field"),
+        text("filterValue", "Holds the value"),
+        text("empty", "Say this when there is nothing"),
+        tone,
+        padding,
+        width,
+    ],
+    blocks: [
+        section({ tone: p("tone"), padding: p("padding", "xl"), width: p("width", "prose") }, [
+            t(p("heading"), "title"),
+            source(
+                {
+                    collection: p("collection"),
+                    mode: "list",
+                    filterField: p("filterField"),
+                    filterValue: p("filterValue"),
+                },
+                [
+                    repeat({ empty: p("empty") }, [
+                        stack({ gap: "xs" }, [
+                            flow({ columns: "auto", gap: "sm", align: "center" }, [
+                                t("{{item.Title}}", "heading"),
+                                t("{{item.Word}}", "meta", { tone: "accent" }),
+                                t("{{item.Date | date}}", "meta"),
+                            ]),
+                            b("richText", { markdown: "{{item.Body}}", width: "full" }),
+                        ]),
+                    ]),
+                ],
+            ),
+        ]),
+    ],
+};
+
+/*
+ * Questions that open, and what it does not do.
+ *
+ * No group, which is the whole difference from `tabs`: a reader comparing two answers wants both
+ * open, and a tab strip takes the first one away when they open the second.
+ */
+const faq: BlockPreset = {
+    type: "faq",
+    label: "Questions",
+    fields: [heading, text("body", "Body"), tone, padding, width, holds("items", "Questions")],
+    blocks: [
+        section({ tone: p("tone"), padding: p("padding", "xl"), width: p("width", "prose") }, [
+            t(p("heading"), "title"),
+            t(p("body"), "lead"),
+            slot("items"),
+        ]),
+    ],
+};
+
+const faqItem: BlockPreset = {
+    type: "faqItem",
+    label: "Question",
+    fields: [text("question", "Question", true), text("answer", "Answer", true), tone],
+    blocks: [
+        holding("disclosure", { label: p("question"), tone: p("tone") }, [
+            b("richText", { markdown: p("answer"), width: "full" }),
+        ]),
+    ],
+};
+
+/** The one line a site puts above everything, and it stays there while the page moves under it. */
+const announcement: BlockPreset = {
+    type: "announcement",
+    label: "Announcement bar",
+    fields: [
+        text("message", "Message", true),
+        text("label", "Link label"),
+        url("href", "Link"),
+        tone,
+        choice("edge", "Sticks to", ["top", "bottom"]),
+        align,
+    ],
+    blocks: [
+        holding(
+            "stickyBar",
+            { tone: p("tone", "inverse"), edge: p("edge", "top"), padding: "sm", align: p("align", "center") },
+            [
+                flow({ columns: "auto", gap: "sm", align: "center", justify: p("align", "center") }, [
+                    t(p("message"), "small"),
+                    b("link", { label: p("label"), href: p("href") }),
+                ]),
+            ],
+        ),
+    ],
+};
+
+/*
  * Sections that open one at a time, each holding whatever blocks were dropped into it.
  *
  * The issue calls this tabs. It is a column of `disclosure` blocks rather than a tab strip, because
@@ -445,6 +660,7 @@ const tabs: BlockPreset = {
  */
 export function libraryPresets(): BlockPreset[] {
     return [
+        announcement,
         hero,
         band,
         statBand,
@@ -454,6 +670,10 @@ export function libraryPresets(): BlockPreset[] {
         steps,
         tiers,
         keyValueTable,
+        codeTabs,
+        progressList,
+        changelogList,
+        faq,
         tabs,
         map,
         stat,
@@ -462,5 +682,7 @@ export function libraryPresets(): BlockPreset[] {
         tier,
         person,
         keyValueRow,
+        codeTab,
+        faqItem,
     ];
 }

@@ -138,10 +138,12 @@ export function defineBlock<P extends BlockProps = BlockProps, S extends string 
  *
  * The depth is what a preset body needs rather than what a page needs. A card grid is a band, a
  * heading beside a source, a flow, a repeat, a card and the stack inside it before a single word of
- * content, which is seven lists deep and used to render as nothing below the fourth.
+ * content, which is seven lists deep and used to render as nothing below the fourth. The option row
+ * on a card (#24) puts a `showIf` and a row inside that stack, which is nine, and the library test
+ * that counts a compiled body against its source is what said so.
  */
 export const MAX_BLOCKS = 100;
-export const MAX_DEPTH = 8;
+export const MAX_DEPTH = 10;
 
 /** Refuses a definition that could never render, at startup rather than on some page later. */
 export function checkDefinition(definition: BlockDefinition): void {
