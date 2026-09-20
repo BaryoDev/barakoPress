@@ -18,6 +18,36 @@ const PROJECTS = [
 ];
 const PROJECTS_COLLECTION = { type: "project", route: "/projects", label: "Projects", sort: "Title", colorBy: "AreaOfFocus", fields: { title: "Title", slug: "Slug", summary: "Summary" } };
 
+/*
+ * baryo.dev's manual, a collection configured as a tree (#23). Its order fields do not match the
+ * alphabet and one page has none, so a sidebar that ignored the field would be visible in the output.
+ */
+const MANUAL = [
+    { id: "m1", slug: "start", data: { Title: "Getting going", Slug: "start", Body: "Install it.", Section: "Start", Order: 1, Product: "press", Source: "docs/start.md" } },
+    { id: "m2", slug: "blocks", data: { Title: "Blocks", Slug: "blocks", Body: "Arrange them.", Section: "Reference", Order: 2, Product: "press" } },
+    { id: "m3", slug: "bindings", data: { Title: "Bindings", Slug: "bindings", Body: "Bind them.", Section: "Reference", Order: 1, Parent: "blocks", Product: "press" } },
+];
+const MANUAL_COLLECTION = {
+    type: "manual",
+    route: "/manual",
+    label: "The manual",
+    layout: "article",
+    fields: { title: "Title", slug: "Slug", body: "Body" },
+    tree: {
+        section: "Section",
+        sections: ["Start", "Reference"],
+        order: "Order",
+        parent: "Parent",
+        product: "Product",
+        editPath: "Source",
+        editBase: "https://github.com/BaryoDev/barakoPress/edit/master/",
+        products: [
+            { key: "press", label: "barakoPress", href: "/manual" },
+            { key: "cms", label: "barakoCMS", href: "/manual/cms" },
+        ],
+    },
+};
+
 function nav(id, title, path, order, children = []) {
     return { id, title, slug: path.split("/").pop(), path, order, children };
 }
@@ -66,7 +96,14 @@ const tenants = {
     },
     baryo: {
         host: "baryo.dev",
-        settings: { Name: "BaryoDev", Url: "https://baryo.dev", Colors: { accent: "#1A6B41" }, Fonts: { heading: "Sora" } },
+        settings: {
+            Name: "BaryoDev",
+            Url: "https://baryo.dev",
+            Colors: { accent: "#1A6B41" },
+            Fonts: { heading: "Sora" },
+            Collections: { manual: MANUAL_COLLECTION },
+        },
+        content: { manual: MANUAL },
         post: "shipping-notes",
         // The CMS order, with `order` deliberately not ascending: the renderer draws it as given.
         navigation: [
@@ -189,6 +226,13 @@ createServer((req, res) => {
     if (url.pathname === "/api/public/redirects/resolve") {
         const moved = tenant.redirects?.[url.searchParams.get("path") ?? ""];
         return moved ? send(res, 200, moved) : send(res, 404);
+    }
+    const search = url.pathname.match(/^\/api\/public\/([^/]+)\/search$/);
+    if (search) {
+        const entries = tenant.content?.[search[1]] ?? [];
+        const q = (url.searchParams.get("q") ?? "").toLowerCase();
+        const results = q.length < 2 ? [] : entries.filter((e) => String(e.data.Title ?? "").toLowerCase().includes(q));
+        return send(res, 200, { results, count: results.length, query: q });
     }
     const [, type, slug] = url.pathname.match(/^\/api\/public\/([^/]+)(?:\/([^/]+))?$/) ?? [];
     const entries = type ? tenant.content?.[type] : undefined;

@@ -93,6 +93,23 @@ page rckoronadal.org /sitemap.xml > "$TMP/rotary-sitemap.xml"
 grep -q "<loc>https://rckoronadal.org/projects/clean-water</loc>" "$TMP/rotary-sitemap.xml" || fail "the sitemap does not list rckoronadal.org's projects"
 echo "ok: rckoronadal.org renders its projects collection from its settings, coloured by option, and baryo.dev does not"
 
+# baryo.dev's manual, a collection configured as a tree (#23). Rendered by a real Next server, which
+# is the only thing that proves the sidebar's key handling resolves as a client boundary out of the
+# published package: a build that compiled it is not a page that served it.
+page baryo.dev /manual/bindings > "$TMP/manual.html"
+grep -q "Bind them." "$TMP/manual.html" || fail "the manual page does not render its body"
+grep -q "Getting going" "$TMP/manual.html" || fail "the sidebar does not list the tree"
+grep -q 'href="/manual/blocks"' "$TMP/manual.html" || fail "the sidebar does not link a sibling"
+grep -q 'aria-current="page"' "$TMP/manual.html" || fail "the sidebar does not mark the page being read"
+grep -q 'rel="prev"' "$TMP/manual.html" || fail "the manual page has no previous link"
+grep -q "https://github.com/BaryoDev/barakoPress/edit/master/bindings" "$TMP/manual.html" || fail "the edit link is not built from the setting"
+grep -q 'role="search"' "$TMP/manual.html" || fail "the manual page has no search box"
+grep -q "barakoCMS" "$TMP/manual.html" || fail "the product switcher does not offer the other product"
+# Not `?q=` here: this catch-all is the rewritten, kept route, and reading the query is what would
+# make it dynamic. A request-time site searches from a page of blocks, or from its own route file.
+[ "$(status rckoronadal.org /manual)" = "404" ] || fail "rckoronadal.org serves baryo.dev's manual"
+echo "ok: baryo.dev renders its manual as a tree, with a sidebar, previous and next, an edit link and a search box"
+
 # The footer as a block region (#48). rckoronadal.org names a page at /site/footer; baryo.dev names
 # nothing and keeps the built-in footer, which is the compatibility case a deployed site is in.
 grep -q 'data-press="footer"' "$TMP/rotary.html" || fail "rckoronadal.org does not draw its footer region"
