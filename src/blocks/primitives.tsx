@@ -5,6 +5,18 @@ import type { PressConfig } from "../config.js";
 import type { PressTheme } from "../theme.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
 import {
+    HIDDEN_CLASS,
+    HUE_STEPS,
+    countTarget,
+    countUpCss,
+    hueCss,
+    linesOf,
+    motionClass,
+    revealCss,
+    rotatingCss,
+    typingCss,
+} from "./motion.js";
+import {
     type Tone,
     ALIGNMENTS,
     RADII,
@@ -204,7 +216,7 @@ const grid = defineBlock<GridProps, "items">({
     ),
 });
 
-type FlowProps = { columns?: string; gap?: string; align?: string; justify?: string };
+type FlowProps = { columns?: string; gap?: string; align?: string; justify?: string; hueRotate?: string };
 
 /** How many columns a flow may ask for. A choice and not a number, for the reason below. */
 export const FLOW_COLUMNS = ["auto", "1", "2", "3", "4", "5", "6"];
@@ -236,6 +248,7 @@ const flow = defineBlock<FlowProps, "content">({
             kind: "select",
             options: ["start", "center", "end", "between"],
         },
+        { name: "hueRotate", kind: "select", label: "Rotate cell hues", options: HUE_STEPS },
         { name: "content", kind: "slots", label: "Content", required: true, min: 1, max: 1 },
     ],
     component: ({ props, slots, theme }) => {
@@ -254,7 +267,15 @@ const flow = defineBlock<FlowProps, "content">({
             alignItems: props.align ? alignOf(props.align) : "stretch",
             justifyContent: props.justify === "between" ? "space-between" : alignOf(props.justify),
         } as CSSProperties;
-        return <div style={style}>{slots.content?.[0]}</div>;
+        const hue = hueCss(props.hueRotate ?? "none");
+        return (
+            <>
+                {hue && <style dangerouslySetInnerHTML={{ __html: hue }} />}
+                <div style={style} data-bp-hue={hue ? props.hueRotate : undefined}>
+                    {slots.content?.[0]}
+                </div>
+            </>
+        );
     },
 });
 
@@ -343,7 +364,7 @@ const divider = defineBlock<{ tone?: string; space?: string }>({
 
 /* --------------------------------------------------------------- content */
 
-type TextProps = { value: string; variant?: string; tone?: string; align?: string; weight?: string };
+type TextProps = { value: string; variant?: string; tone?: string; align?: string; weight?: string; motion?: string };
 
 const INK: Record<string, ToneVar> = {
     ink: "ink",
@@ -351,6 +372,9 @@ const INK: Record<string, ToneVar> = {
     muted: "muted",
     accent: "accent",
 };
+
+/** What a text block can do besides sit there. A select, so a preset can pass its own prop through. */
+export const TEXT_MOTIONS = ["none", "countUp"];
 
 const text = defineBlock<TextProps>({
     type: "text",
@@ -362,6 +386,7 @@ const text = defineBlock<TextProps>({
         { name: "tone", kind: "select", label: "Ink", options: Object.keys(INK) },
         { name: "align", label: "Align", ...alignSelect },
         { name: "weight", kind: "select", label: "Weight", options: ["regular", "medium", "bold"] },
+        { name: "motion", kind: "select", label: "Motion", options: TEXT_MOTIONS },
     ],
     component: ({ props, theme }) => {
         const variant = TEXT_VARIANTS[props.variant ?? "body"] ?? TEXT_VARIANTS.body;
@@ -378,9 +403,31 @@ const text = defineBlock<TextProps>({
             textAlign: textAlignOf(props.align),
             textWrap: heading ? "balance" : "pretty",
         };
-        return <Tag style={style}>{props.value}</Tag>;
+        /*
+         * A figure counts up to what is already written here. The number stays the element's own
+         * text, so a browser that runs no animation, and a visitor who asked for none, read the
+         * figure itself rather than an empty box waiting for a script that is not coming.
+         *
+         * Two copies, because while the count runs the drawn figure is covered and the counter over
+         * it is generated content, which is not a value anything reads out. The drawn one is
+         * presentational either way and the off-screen one is the figure, so what is read is the
+         * same whether the count runs or not.
+         */
+        const to = props.motion === "countUp" ? countTarget(props.value) : null;
+        if (to === null) return <Tag style={style}>{props.value}</Tag>;
+        const cls = motionClass("cu", to);
+        return (
+            <>
+                <style dangerouslySetInnerHTML={{ __html: countUpCss(cls, to) }} />
+                <Tag style={style} className={cls}>
+                    <span className={HIDDEN_CLASS}>{props.value}</span>
+                    <span data-bp-counted aria-hidden="true">{props.value}</span>
+                </Tag>
+            </>
+        );
     },
 });
+
 
 /*
  * The markdown primitive is `richText`, the name stored pages already use, and its field is still
@@ -809,6 +856,222 @@ const disclosure = defineBlock<DisclosureProps, "content">({
     },
 });
 
+/* ---------------------------------------------------------------- motion */
+
+/*
+ * The motion blocks of #22. Each one is drawn in its finished state and the animation only takes it
+ * away and puts it back, so the page a visitor gets with JavaScript off, or with reduced motion
+ * asked for, is the page with the terminal typed out, the figure at its number and the first word of
+ * the rotation standing. See motion.ts for why that shape is the whole design.
+ */
+
+const reveal = defineBlock<{ style?: string }, "content">({
+    type: "reveal",
+    label: "Reveal",
+    layer: "primitive",
+    fields: [
+        { name: "style", kind: "select", label: "How", options: ["rise", "fade"] },
+        { name: "content", kind: "slots", label: "Content", required: true, min: 1, max: 1 },
+    ],
+    component: ({ props, slots }) => (
+        <>
+            <style dangerouslySetInnerHTML={{ __html: revealCss() }} />
+            <div data-bp-reveal={props.style === "fade" ? "fade" : "rise"}>{slots.content?.[0]}</div>
+        </>
+    ),
+});
+
+/** The most words one rotation turns through, and the longest a turn may be. */
+const MAX_ROTATING = 8;
+
+/*
+ * One line where a word is swapped for the next.
+ *
+ * The words are a comma separated list rather than a slot per word, because this is a tagline and an
+ * editor types one. It is also what makes it read a field: a choice field bound with
+ * `{{item.Tags}}` arrives here as "a, b, c", which is exactly this shape.
+ */
+const rotatingText = defineBlock<{ items: string; variant?: string; tone?: string; seconds?: number }>({
+    type: "rotatingText",
+    label: "Rotating text",
+    layer: "primitive",
+    fields: [
+        { name: "items", kind: "text", label: "Words, separated by commas", required: true },
+        { name: "variant", kind: "select", label: "Variant", options: TEXT_VARIANT_NAMES },
+        { name: "tone", kind: "select", label: "Ink", options: Object.keys(INK) },
+        { name: "seconds", kind: "number", label: "Seconds each", min: 1, max: 20 },
+    ],
+    component: ({ props, theme }) => {
+        const words = props.items
+            .split(",")
+            .map((w) => w.trim())
+            .filter((w) => w !== "")
+            .slice(0, MAX_ROTATING);
+        if (words.length === 0) return null;
+        const variant = TEXT_VARIANTS[props.variant ?? "body"] ?? TEXT_VARIANTS.body;
+        const heading = variant.tag !== "p";
+        const seconds = props.seconds ?? 3;
+        const cls = motionClass("rt", seconds, ...words);
+        return (
+            <>
+                <style dangerouslySetInnerHTML={{ __html: rotatingCss(cls, words.length, seconds) }} />
+                <span
+                    style={{
+                        position: "relative",
+                        fontFamily: heading ? theme.fonts.heading : theme.fonts.body,
+                        fontSize: theme.text[variant.role],
+                        fontWeight: heading ? 600 : 400,
+                        lineHeight: heading ? 1.15 : 1.7,
+                        color: inherited(theme, INK[props.tone ?? ""] ?? "accent"),
+                    }}
+                >
+                    {/*
+                     * The words are stacked and only one is drawn, but opacity hides nothing from a
+                     * reader: the stack would be read as every word in a row. So the stack is
+                     * presentational and the word that stands at rest is what is read.
+                     */}
+                    <span className={HIDDEN_CLASS}>{words[0]}</span>
+                    <span className={cls} aria-hidden="true">
+                        {words.map((word, i) => (
+                            <span key={i}>{word}</span>
+                        ))}
+                    </span>
+                </span>
+            </>
+        );
+    },
+});
+
+/** The most lines a terminal or a code sample holds. Past this it is a document, not a panel. */
+const MAX_LINES = 20;
+
+/*
+ * A panel of commands, typed in sequence. The lines are the block's own text, one per line, and the
+ * width each one types to is its own length in `ch`, which is a measurement of the text rather than
+ * a size this block invented.
+ */
+const typingTerminal = defineBlock<{ lines: string; prompt?: string; seconds?: number; radius?: string }>({
+    type: "typingTerminal",
+    label: "Typing terminal",
+    layer: "primitive",
+    fields: [
+        { name: "lines", kind: "text", label: "Lines, one per line", required: true },
+        { name: "prompt", kind: "text", label: "Prompt" },
+        { name: "seconds", kind: "number", label: "Seconds for the whole loop", min: 2, max: 120 },
+        { name: "radius", kind: "select", label: "Corners", options: [...RADII] },
+    ],
+    component: ({ props, theme }) => {
+        const prompt = props.prompt ?? "";
+        const lines = linesOf(props.lines, MAX_LINES)
+            .map((line) => (prompt ? `${prompt} ${line}` : line))
+            .filter((line) => line.trim() !== "");
+        if (lines.length === 0) return null;
+        const seconds = props.seconds ?? Math.max(4, lines.length * 2);
+        const cls = motionClass("tt", seconds, ...lines);
+        const tone = toneOf(theme, "inverse");
+        return (
+            <>
+                <style dangerouslySetInnerHTML={{ __html: typingCss(cls, lines.map((l) => l.length), seconds) }} />
+                <div
+                    className={cls}
+                    style={{
+                        ...toneVars(tone),
+                        boxSizing: "border-box",
+                        padding: theme.space.lg,
+                        background: tone.bg,
+                        color: theme.colors.code,
+                        borderRadius: radiusOf(theme, props.radius ?? "panel"),
+                        fontFamily: theme.fonts.mono,
+                        fontSize: theme.text.small,
+                        lineHeight: 1.8,
+                        overflowX: "auto",
+                    }}
+                >
+                    {lines.map((line, i) => (
+                        <span key={i} style={{ "--bp-w": `${line.length}ch` } as CSSProperties}>
+                            {line}
+                        </span>
+                    ))}
+                </div>
+            </>
+        );
+    },
+});
+
+/*
+ * A snippet somebody is meant to take away.
+ *
+ * `selectLabel` is the whole of the copy affordance, and it says what it does: one click selects the
+ * snippet, and the visitor copies it. A copy button is a control that needs the clipboard API, and
+ * this package ships no client component, so a <button> here would be a control that does nothing
+ * without JavaScript. That is the same trade `disclosure` made against a tab strip. A site that
+ * wants the button registers its own block under this name.
+ */
+const codeSample = defineBlock<{
+    code: string;
+    language?: string;
+    selectLabel?: string;
+    radius?: string;
+}>({
+    type: "codeSample",
+    label: "Code sample",
+    layer: "primitive",
+    fields: [
+        { name: "code", kind: "text", label: "Code", required: true },
+        { name: "language", kind: "text", label: "Language" },
+        { name: "selectLabel", kind: "text", label: "Say this above it, for copying" },
+        { name: "radius", kind: "select", label: "Corners", options: [...RADII] },
+    ],
+    component: ({ props, theme }) => {
+        const lines = linesOf(props.code, MAX_LINES);
+        const tone = toneOf(theme, "inverse");
+        const meta = { fontFamily: theme.fonts.mono, fontSize: theme.text.meta, color: tone.muted };
+        return (
+            <div
+                style={{
+                    ...toneVars(tone),
+                    boxSizing: "border-box",
+                    padding: theme.space.lg,
+                    background: tone.bg,
+                    borderRadius: radiusOf(theme, props.radius ?? "panel"),
+                }}
+            >
+                {(props.language || props.selectLabel) && (
+                    <div
+                        style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: theme.space.sm,
+                            justifyContent: "space-between",
+                            marginBottom: theme.space.sm,
+                            ...meta,
+                        }}
+                    >
+                        <span>{props.language}</span>
+                        <span>{props.selectLabel}</span>
+                    </div>
+                )}
+                <pre
+                    style={{
+                        margin: 0,
+                        // One click takes the whole snippet, which is the copy step a page can offer
+                        // with nothing loaded.
+                        userSelect: "all",
+                        whiteSpace: "pre",
+                        overflowX: "auto",
+                        fontFamily: theme.fonts.mono,
+                        fontSize: theme.text.small,
+                        lineHeight: 1.8,
+                        color: theme.colors.code,
+                    }}
+                >
+                    {lines.join("\n")}
+                </pre>
+            </div>
+        );
+    },
+});
+
 /** Every primitive, layout then content. `config` is only read for the embed allow list. */
 export function primitiveBlocks(config: PressConfig): BlockDefinition[] {
     return [
@@ -830,6 +1093,10 @@ export function primitiveBlocks(config: PressConfig): BlockDefinition[] {
         anchorBlock("link", "Link", "quiet"),
         list,
         disclosure,
+        reveal,
+        rotatingText,
+        typingTerminal,
+        codeSample,
     ];
 }
 

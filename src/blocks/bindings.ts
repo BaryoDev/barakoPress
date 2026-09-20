@@ -49,6 +49,19 @@ export interface Binding {
 export interface BindingProblem {
     binding: string;
     reason: "unknown scope" | "unbound scope" | "no value";
+    /**
+     * The block type and the prop the placeholder was typed into, when the caller knows them. An
+     * editor fixes a binding by opening the field that holds it, so a report that names the reason
+     * and not the field leaves them reading every block on the page (#63).
+     */
+    block?: string;
+    field?: string;
+}
+
+/** Where a template came from, carried into every problem it reports. */
+export interface BindingWhere {
+    block: string;
+    field: string;
 }
 
 /*
@@ -304,6 +317,7 @@ function plain(value: unknown): string | null {
 export async function bindText(
     template: string,
     source: BindingSource,
+    where?: BindingWhere,
 ): Promise<{ text: string; bound: boolean; missing: BindingProblem[] }> {
     const bindings = readBindings(template);
     if (bindings.length === 0) return { text: template, bound: false, missing: [] };
@@ -311,7 +325,7 @@ export async function bindText(
     const missing: BindingProblem[] = [];
     const resolved = new Map<string, string>();
     const report = (binding: Binding, reason: BindingProblem["reason"]): void => {
-        const problem: BindingProblem = { binding: binding.raw, reason };
+        const problem: BindingProblem = { binding: binding.raw, reason, ...where };
         missing.push(problem);
         source.options.onProblem?.(problem);
     };

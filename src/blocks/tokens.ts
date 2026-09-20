@@ -10,7 +10,7 @@ import type { PressTheme, ThemeSpace, ThemeText } from "../theme.js";
  * those slots, so renaming them is a change here and nowhere else.
  */
 
-export const TONES = ["page", "surface", "accent", "inverse"] as const;
+export const TONES = ["page", "surface", "accent", "inverse", "gradient"] as const;
 export type ToneName = (typeof TONES)[number];
 
 export interface Tone {
@@ -46,6 +46,22 @@ export function toneOf(theme: PressTheme, name: string | undefined): Tone {
                 hairline: c.accentTintBorder,
                 accent: c.accentInk,
                 onAccent: c.surface,
+            };
+        /*
+         * The inverse band with its stops spread across it. The colours are the theme's own three
+         * dark roles, in that order, so a tenant that restyles gets its own gradient and no block
+         * anywhere names a colour. `bg` is a background rather than a colour, which is what both
+         * the section and the panel already set it as.
+         */
+        case "gradient":
+            return {
+                bg: `linear-gradient(145deg, ${c.inverse} 0%, ${c.accentInk} 55%, ${c.inverseAccent} 100%)`,
+                ink: c.surface,
+                secondaryInk: c.inverseInk,
+                muted: c.inverseInk,
+                hairline: c.inverseChrome,
+                accent: c.inverseAccent,
+                onAccent: c.inverse,
             };
         case "inverse":
             return {

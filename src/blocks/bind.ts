@@ -152,7 +152,7 @@ async function bindProps(
     for (const field of fields) {
         const value = props[field.name];
         if (typeof value !== "string" || !isBindable(field) || !hasBinding(value)) continue;
-        const { text } = await bindText(value, source);
+        const { text } = await bindText(value, source, { block: block.definition.type, field: field.name });
         if (text === "") {
             if (options.allowEmpty) {
                 props[field.name] = "";
@@ -173,7 +173,7 @@ async function boundString(block: ResolvedBlock, source: BindingSource, name: st
     const value = block.props[name];
     if (typeof value !== "string") return "";
     if (!hasBinding(value)) return value;
-    return (await bindText(value, source)).text;
+    return (await bindText(value, source, { block: block.definition.type, field: name })).text;
 }
 
 /* ------------------------------------------------------------- control blocks */

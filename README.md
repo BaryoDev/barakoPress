@@ -95,6 +95,7 @@ decision, not the engine's.
 | `app/doctors/page.tsx` | `default` | `createCollectionIndex(config, "doctors")` |
 | `app/doctors/[slug]/page.tsx` | `default`, `generateMetadata`, `generateStaticParams` | `createCollectionDetail(config, "doctors")`, `createCollectionMetadata(config, "doctors")`, `createCollectionStaticParams(config, "doctors")` |
 | `app/api/blocks/route.ts` | `GET`, `OPTIONS` | `createBlockSchemaRoute(blocks)`, `createBlockSchemaPreflight()` |
+| `app/api/blocks/bindings/route.ts` | `GET`, `OPTIONS` | `createBindingReportRoute(config, blocks)`, `createBindingReportPreflight()` |
 | `app/layout.tsx` | `default`, `generateMetadata` | `createSiteLayout(config, { blocks })`, `createSiteMetadata(config)` |
 | `app/%5Fshare/route.ts` | `GET` | `createSharePage()` |
 | `app/api/share/redeem/route.ts` | `POST` | `createShareRedeemRoute(config)` |
@@ -110,6 +111,17 @@ Mount only what you want. Nothing requires anything else. The paths only have to
 It reads `searchParams`, which forces the route dynamic, so a site using `output: "export"` takes
 `createBlogPost` and gives up preview. `createPostStaticParams` and `createArchiveStaticParams` exist
 for that static case.
+
+The binding report says why a binding on a page did not resolve, so an editor fixes it in barakoBrew
+instead of asking whoever can read the server log. Ask for one page at a time, by `?slug=` or
+`?path=`, and each problem names the binding as typed, the reason (`unknown scope`, `unbound scope`
+or `no value`), and the block and field it came from. It reports the page as rendered, not as
+stored, so a `{{item.X}}` outside a repeat is reported as an unbound scope. Give it the same `query`
+option the page route has: off, which is the default, a `{{query.X}}` is an unbound scope for every
+visitor and the report says so, and a report that resolved one anyway would tell an editor a field
+works where it does not. It is never anonymous:
+the caller presents the tenant's key as `Authorization: Bearer`, derived from `PRESS_SECRET` and
+printed by `barakopress bindings-key <tenant>`. Answers are never cached.
 
 `Card` and `PostView` are exported too, for a site that wants its own page but the engine's markup.
 
@@ -302,8 +314,24 @@ because only a string field takes a binding, and a preset has to pass its own `c
 `icon`, `button`, `link`, `list` and `disclosure` (a labelled section that opens; give several the
 same `group` and only one is open at a time).
 
+**Motion primitives** are drawn finished and animate only away from that: `reveal` (a wrapper whose
+content lifts and fades in as it scrolls into view), `rotatingText` (a comma separated list of words,
+one shown at a time), `typingTerminal` (lines typed in sequence, held, then started again) and
+`codeSample` (a snippet with its language and one click to select the whole of it). `text` takes a
+`motion` of `countUp`, which counts a plain number up to the figure already written in the markup,
+and `flow` takes a `hueRotate` of `subtle` or `wide`, which turns each cell's hue through the
+theme's own colours in a cycle of three.
+
+All of it is CSS. There is no script, so a page with JavaScript off renders the terminal typed out,
+the figure at its number and the first word of the rotation standing, and every animation sits inside
+`prefers-reduced-motion: no-preference`, so a visitor who asked for less motion gets exactly the same
+finished page. "When it comes into view" is `animation-timeline: view()`, and a browser without it
+shows the finished state too. `src/blocks/motion.test.tsx` strips the guards out of every stylesheet
+these emit and fails if anything left animates or hides anything.
+
 Every primitive takes theme tokens and never a colour or a pixel value. Tones are `page`, `surface`,
-`accent` and `inverse`; spacing is `none` to `xxl` from `theme.space`; type is a role from
+`accent`, `inverse` and `gradient` (the inverse band with the theme's three dark roles spread across
+it); spacing is `none` to `xxl` from `theme.space`; type is a role from
 `theme.text`; corners are `none`, `control`, `panel` or `pill`. A tenant that changes the scale
 changes every page built from primitives, and nobody can put one client's blue into a block.
 
@@ -460,7 +488,7 @@ one to look different saves its own under the same name and that one wins.
 | `hero` | The band at the head of a page | heading, body, image, imageAlt, primaryLabel, primaryHref, secondaryLabel, secondaryHref, tone, columns, align, padding |
 | `band` | Copy with one call to action | tone, heading, body, label, href, align, padding, width |
 | `statBand` | A row of figures | heading, tone, columns, padding, items |
-| `cardGrid` | Cards from a collection | heading, collection, filterField, filterValue, empty, tone, columns, padding |
+| `cardGrid` | Cards from a collection | heading, collection, filterField, filterValue, empty, tone, columns, padding, hueRotate |
 | `peopleGrid` | People from a collection, typed in place, or both | heading, collection, filterField, filterValue, role, tone, columns, padding, items |
 | `timeline` | Dated entries | heading, tone, padding, width, items |
 | `steps` | Numbered entries | heading, tone, padding, width, items |
@@ -468,7 +496,7 @@ one to look different saves its own under the same name and that one wins.
 | `keyValueTable` | A panel of facts | heading, tone, padding, radius, rows |
 | `tabs` | Sections that open | heading, tone, padding, width, items |
 | `map` | An embedded map, held to `embedHosts` | src, title, heading, aspect, tone, padding |
-| `stat` | One figure and its label | value, label, align |
+| `stat` | One figure and its label | value, label, align, motion |
 | `timelineEntry` | One dated entry | date, title, body |
 | `step` | One numbered step | number, title, body |
 | `tier` | One tier | name, amount, body, label, href, tone |

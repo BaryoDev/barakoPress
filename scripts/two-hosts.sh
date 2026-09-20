@@ -159,6 +159,14 @@ if cors GET https://evil.example | grep -qi '^access-control-allow-origin'; then
 if cors GET https://brew.example | grep -qi '^access-control-allow-credentials'; then fail "/api/blocks allows credentials"; fi
 echo "ok: /api/blocks answers the console origin only"
 
+# The binding report names field paths, so the one thing that must hold here is that nobody reads it
+# without the tenant's key. This app is started with the older REVALIDATE_SECRET and no PRESS_SECRET,
+# which is the unconfigured case for this purpose, and unconfigured refuses rather than opens up.
+report() { curl -s -o /dev/null -w '%{http_code}' -H "Host: baryo.dev" "$@" "$APP/api/blocks/bindings?path=/about"; }
+[ "$(report)" != "200" ] || fail "the binding report answered a caller with no key"
+[ "$(report -H 'authorization: Bearer not-the-key')" != "200" ] || fail "the binding report answered a wrong key"
+echo "ok: the binding report answers nobody without the tenant's key"
+
 # soon.example is holding, its holding page is the page at /coming-soon, and KEY is a share link the
 # stand-in CMS redeems for it with 30 days left. SHORT has one hour left.
 KEY=soon-share-key-0123456789

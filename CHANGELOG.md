@@ -61,6 +61,40 @@
   where they were 26px and 32px written into the block, so a tenant with a larger type scale gets
   larger block headings. A page title is `Text.pageTitle`. A tenant that sets nothing renders exactly
   as it did. (#49)
+- The related band reads the post collection, not the blueprint's type. A tenant that replaced
+  `post` in its settings still had its similarity search sent to `types.post`, so the band rendered,
+  and rendered another collection's neighbours. Both reads go through the collection now, the search
+  and the second read that fills in the date and the blurb, so the cards are the tenant's own entries
+  under the names the tenant gave them. A site that did not replace `post` sends exactly the requests
+  it sent before. (#78)
+- An editor can see why a binding did not resolve. The three reasons were already worked out where
+  a page binds, and they went to the server log, so the person who could read them was never the
+  person who typed the binding: the page rendered with the placeholder left as typed, or the block
+  quietly dropped, and nothing said why. `createBindingReportRoute(config, blocks)` answers for one
+  page and one tenant, and each problem names the binding as typed, the reason, and the block and
+  the field it came from, so barakoBrew marks the field rather than printing a list. It reports the
+  page as rendered rather than as stored, which is what catches an `{{item.X}}` outside a repeat as
+  well as a typo, and it takes the page route's own `query` option so a `{{query.X}}` is reported as
+  unbound wherever the visitor's page leaves it unbound. A report names field paths, so it is never anonymous: the caller presents the
+  tenant's own key, derived from `PRESS_SECRET` under its own purpose label and printed by
+  `barakopress bindings-key <tenant>`, and the answer is never cached. (#63)
+- Motion in the block library, and none of it in JavaScript. `reveal` lifts its content in as it
+  scrolls into view, `rotatingText` turns a comma separated list of words one at a time,
+  `typingTerminal` types its lines in sequence and holds and loops, `codeSample` shows a snippet with
+  its language and one click to select the whole of it, `text` takes `motion: "countUp"` to count a
+  plain figure up, and `flow` takes `hueRotate` to turn each cell's hue through the theme's own
+  colours in a cycle of three, which is what a card grid of featured work wanted. `section` takes a
+  `gradient` tone, the inverse band with the theme's three dark roles spread across it. Every one of
+  them is drawn in its finished state first and the animation only takes it away and puts it back, so
+  a page with JavaScript off renders the terminal typed out and the figure at its number, and every
+  animation sits inside `prefers-reduced-motion: no-preference`, so a visitor who asked for less
+  motion gets the same finished page. "When it comes into view" is `animation-timeline: view()`, and
+  a browser without that shows the finished state too. What a block animates is presentation and
+  never the only copy of what it says: the rotating stack and the covered figure are `aria-hidden`
+  and each carries one plain copy off screen, so a reader is read one word and one number rather than
+  every word at once or nothing at all. Two tests hold both rules, one stripping the motion guards
+  out of every stylesheet these emit and one stripping every `aria-hidden` subtree out of the
+  markup. (#22)
 
 ## 0.4.0 (2026-09-20)
 
