@@ -1,6 +1,6 @@
-import type { PressConfig } from "./config.js";
-import { bySlug, semantic, type SemanticHit } from "./delivery.js";
-import { toPost, type Post } from "./cms.js";
+import { POST_COLLECTION, type PressConfig } from "./config.js";
+import { semantic, type SemanticHit } from "./delivery.js";
+import type { Post } from "./cms.js";
 import { collectionOf, getItem, listReferencing, type Item } from "./collections.js";
 
 /*
@@ -110,25 +110,29 @@ export async function listRelatedItems(
 }
 
 async function relatedPosts(config: PressConfig, post: Post, limit: number): Promise<RelatedPost[]> {
-    const hits = await semantic(config, config.types.post, post.title, limit + OVERFETCH);
+    /*
+     * The post collection's type, which is the tenant's own when it replaced `post` (#78). Reading
+     * `types.post` here asked the blueprint's type on a school whose news lives in `article`, so the
+     * band rendered, and rendered another collection's neighbours.
+     */
+    const type = collectionOf(config, POST_COLLECTION)?.type ?? config.types.post;
+    const hits = await semantic(config, type, post.title, limit + OVERFETCH);
     const candidates = pickRelated(hits, post.slug, limit);
 
     if (candidates.length === 0) return [];
 
     /*
      * The endpoint returns a slug, a title and a score, so the date and the blurb are a second
-     * read each. They are cached and tagged like every other read, so this costs three reads once
-     * per publish rather than three per page view, and a read that fails leaves the card with the
-     * title and score it already had rather than dropping it.
+     * read each. They go through the collection, so they are read under the names the tenant gave
+     * them. They are cached and tagged like every other read, so this costs three reads once per
+     * publish rather than three per page view, and a read that fails leaves the card with the title
+     * and score it already had rather than dropping it.
      */
     return Promise.all(
-        candidates.map(async (h): Promise<RelatedPost> => {
-            const base = h;
+        candidates.map(async (base): Promise<RelatedPost> => {
             try {
-                const content = await bySlug(config, config.types.post, h.slug);
-                if (!content) return base;
-                const full = toPost(config, content);
-                return { ...base, publishedAt: full.publishedAt, excerpt: full.excerpt };
+                const item = await getItem(config, POST_COLLECTION, base.slug);
+                return item ? { ...base, publishedAt: item.date, excerpt: item.summary } : base;
             } catch {
                 return base;
             }

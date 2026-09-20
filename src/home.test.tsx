@@ -243,10 +243,10 @@ describe("a tenant that replaces the blog's collections", () => {
         expect(post).toContain("The office is open from eight.");
         expect(post).not.toContain("Untitled");
 
-        // Every read went to the type the tenant named. (The related band still asks the blueprint's
-        // type for its similarity search, which is the one thing left reading `types.post`.)
+        // Every read went to the type the tenant named, the related band's similarity search
+        // included (#78).
         expect(calls.some((c) => c.startsWith("/api/public/article"))).toBe(true);
-        expect(calls.filter((c) => /^\/api\/public\/post(\?|\/[^s])/.test(c))).toEqual([]);
+        expect(calls.filter((c) => /^\/api\/public\/post(\?|\/|$)/.test(c))).toEqual([]);
     });
 
     it("shows no feed link and no feed alternate when no collection has a feed", async () => {

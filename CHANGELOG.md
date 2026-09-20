@@ -61,6 +61,12 @@
   where they were 26px and 32px written into the block, so a tenant with a larger type scale gets
   larger block headings. A page title is `Text.pageTitle`. A tenant that sets nothing renders exactly
   as it did. (#49)
+- The related band reads the post collection, not the blueprint's type. A tenant that replaced
+  `post` in its settings still had its similarity search sent to `types.post`, so the band rendered,
+  and rendered another collection's neighbours. Both reads go through the collection now, the search
+  and the second read that fills in the date and the blurb, so the cards are the tenant's own entries
+  under the names the tenant gave them. A site that did not replace `post` sends exactly the requests
+  it sent before. (#78)
 
 ## 0.4.0 (2026-09-20)
 
