@@ -9,7 +9,8 @@
       "secondaryLabel": "Read the docs",
       "secondaryHref": "https://docs.baryo.dev",
       "columns": "2",
-      "padding": "xxl"
+      "padding": "xxl",
+      "tone": "wash"
     }
   },
   {
@@ -19,6 +20,7 @@
       "code": "dotnet add package BarakoCMS\ndocker compose up -d\nbarako open",
       "language": "shell",
       "selectLabel": "Click to select",
+      "primaryLabel": "barakoCMS",
       "width": "wide",
       "items": [
         [
@@ -121,6 +123,82 @@
     }
   },
   {
+    "type": "cardGrid",
+    "props": {
+      "heading": "Libraries",
+      "columns": "3",
+      "items": [
+        [
+          {
+            "type": "card",
+            "props": {
+              "title": "Mapsicle",
+              "tag": "C#",
+              "icon": "arrow",
+              "tint": "#4C63D2",
+              "body": "Object mapping, fourteen packages. Benchmarked on x64 and arm64 against AutoMapper and Mapperly, and the numbers say where it loses too.",
+              "meta": "nuget 2.2.0 · 82,489 downloads"
+            }
+          },
+          {
+            "type": "card",
+            "props": {
+              "title": "barakoCMS",
+              "tag": "C#",
+              "icon": "check",
+              "tint": "#7C5CE0",
+              "body": "Event-sourced headless CMS on Marten and Postgres. 164 endpoints, 2,274 tests against real Postgres and MinIO. MPL-2.0, every module included.",
+              "meta": "nuget 4.0.1 · 24,186 downloads"
+            }
+          },
+          {
+            "type": "card",
+            "props": {
+              "title": "Verdict",
+              "tag": "C#",
+              "icon": "check",
+              "tint": "#1D9187",
+              "body": "Result pattern, eight packages. The zero-allocation promise is enforced by benchmark: 0 B measured over 1.6M operations on 8 threads.",
+              "meta": "nuget 2.8.0 · 13,217 downloads"
+            }
+          },
+          {
+            "type": "card",
+            "props": {
+              "title": "Carom",
+              "tag": "C#",
+              "icon": "clock",
+              "tint": "#D9863B",
+              "body": "Retry, timeout, circuit breaker, bulkhead, rate limiting, fallback, hedging. 503 tests on .NET 8 and .NET 10. A leaner Polly.",
+              "meta": "nuget 2.2.0 · 7,835 downloads"
+            }
+          },
+          {
+            "type": "card",
+            "props": {
+              "title": "Talaan",
+              "tag": "C#",
+              "icon": "info",
+              "tint": "#D94F86",
+              "body": "Spreadsheet and CSV reader, zero dependencies. barakoCMS consumes it as a published package, so the packaging is exercised for real.",
+              "meta": "nuget 3.6.0 · 7,344 downloads"
+            }
+          },
+          {
+            "type": "card",
+            "props": {
+              "title": "Everything else",
+              "tag": "NuGet",
+              "icon": "plus",
+              "tint": "#6B6B70",
+              "body": "The two Umbraco packages and an early utility library, published under the same profile."
+            }
+          }
+        ]
+      ]
+    }
+  },
+  {
     "type": "comparisonTable",
     "props": {
       "caption": "Merged upstream",
@@ -136,6 +214,37 @@
           { "type": "keyValueRow", "props": { "label": "Languages and backend", "value": "C#, TypeScript, Go" } },
           { "type": "keyValueRow", "props": { "label": "Data and cloud", "value": "Postgres, Marten, AWS" } },
           { "type": "keyValueRow", "props": { "label": "Gates I trust", "value": "Testcontainers, Playwright, CodeQL" } }
+        ]
+      ]
+    }
+  },
+  {
+    "type": "cardGrid",
+    "props": {
+      "heading": "Writing",
+      "columns": "2",
+      "items": [
+        [
+          {
+            "type": "card",
+            "props": {
+              "title": "Hardening belongs in the deploy tool",
+              "meta": "Sep 2026 · CodeToDeploy · 6 min read",
+              "body": "What a cheap VM's auth log says, and the two commands we added because of it.",
+              "href": "https://medium.com/@arnelirobles/hardening-belongs-in-the-deploy-tool",
+              "linkLabel": "Read more"
+            }
+          },
+          {
+            "type": "card",
+            "props": {
+              "title": "I started on an AS/400. Here is what AI-driven development actually changed",
+              "meta": "Sep 2026 · Medium · 8 min read",
+              "body": "My first programming job was in 2012, writing RPG on an IBM midrange system. Fourteen years later I shipped a headless CMS with 126 endpoints.",
+              "href": "https://medium.com/@arnelirobles/i-started-on-an-as-400",
+              "linkLabel": "Read more"
+            }
+          }
         ]
       ]
     }
