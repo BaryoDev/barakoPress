@@ -348,7 +348,9 @@ const peopleGrid: BlockPreset = {
 };
 
 /*
- * A grid of cards from a collection: the signature projects, every project, the news rail.
+ * A grid of cards from a collection: the signature projects, every project, the news rail. Or,
+ * with no `collection` set, from `card`s typed in place, the same choice `peopleGrid` already
+ * gives: a live grid and a hand-kept one are the same band on different pages.
  *
  * The card's title is a link, so a collection with no route of its own renders cards with no title.
  * That is the right way round: a card grid is a way into the detail pages, and a collection without
@@ -359,7 +361,7 @@ const cardGrid: BlockPreset = {
     label: "Card grid",
     fields: [
         heading,
-        text("collection", "Collection", true),
+        text("collection", "Collection"),
         text("filterField", "Only entries whose field"),
         text("filterValue", "Holds the value"),
         text("empty", "Say this when there is nothing"),
@@ -368,22 +370,31 @@ const cardGrid: BlockPreset = {
         padding,
         choice("hueRotate", "Rotate card hues", HUE_STEPS),
         choice("option", "Show each entry's option", ["none", "show"]),
+        holds("items", "Cards typed in place"),
     ],
     blocks: [
         section({ tone: p("tone"), padding: p("padding", "xl"), width: "wide" }, [
             t(p("heading"), "title"),
-            source(
-                {
-                    collection: p("collection"),
-                    mode: "list",
-                    filterField: p("filterField"),
-                    filterValue: p("filterValue"),
-                },
-                [
-                    flow({ columns: p("columns", "3"), gap: "lg", hueRotate: p("hueRotate", "none") }, [
+            flow({ columns: p("columns", "3"), gap: "lg", hueRotate: p("hueRotate", "none") }, [
+                source(
+                    {
+                        collection: p("collection"),
+                        mode: "list",
+                        filterField: p("filterField"),
+                        filterValue: p("filterValue"),
+                    },
+                    [
                         repeat({ empty: p("empty") }, [
                             panel({ padding: "lg" }, [
                                 stack({ gap: "xs" }, [
+                                    showIf({ value: "{{item.Image}}" }, [
+                                        b("image", {
+                                            src: "{{item.Image}}",
+                                            alt: "{{item.ImageAlt}}",
+                                            radius: "panel",
+                                            width: "full",
+                                        }),
+                                    ]),
                                     /*
                                      * The glyph and the word the site declared for this entry's
                                      * option (#52), which is what turns a card grid into the module
@@ -391,11 +402,13 @@ const cardGrid: BlockPreset = {
                                      * this marks each card with it. Both read the option's style, so
                                      * no block here names an icon or a category. An entry with no
                                      * option, or a site that declared no style for it, drops them
-                                     * rather than drawing an empty row.
+                                     * rather than drawing an empty row. `tint` is the option's own
+                                     * colour (barakoPress #91): a card whose entry carries a brand of
+                                     * its own draws that brand's badge instead of the theme's accent.
                                      */
                                     showIf({ value: p("option", "none"), equals: "show" }, [
                                         flow({ columns: "auto", gap: "xs", align: "center" }, [
-                                            b("icon", { name: "{{item.Icon}}", size: "sm" }),
+                                            b("icon", { name: "{{item.Icon}}", size: "sm", tint: "{{item.Color}}" }),
                                             t("{{item.Word}}", "meta", { tone: "accent" }),
                                         ]),
                                     ]),
@@ -405,9 +418,49 @@ const cardGrid: BlockPreset = {
                                 ]),
                             ]),
                         ]),
-                    ]),
-                ],
-            ),
+                    ],
+                ),
+                slot("items"),
+            ]),
+        ]),
+    ],
+};
+
+/**
+ * One card of a `cardGrid` with no `collection`: the package family grid, the tool list, anything a
+ * page author keeps by hand rather than in a collection. `tint` is a colour written out rather than
+ * a `tone`, because the whole point is a card whose colour is its own rather than the theme's.
+ */
+const card: BlockPreset = {
+    type: "card",
+    label: "Card",
+    fields: [
+        text("title", "Title", true),
+        text("tag", "Short tag"),
+        text("body", "Body"),
+        text("meta", "Footer line"),
+        text("icon", "Icon"),
+        text("tint", "Colour from the entry, over the tone"),
+        text("linkLabel", "Link label"),
+        url("href", "Link"),
+        url("image", "Image"),
+        text("imageAlt", "Image alternative text"),
+    ],
+    blocks: [
+        panel({ padding: "lg" }, [
+            stack({ gap: "sm" }, [
+                showIf({ value: p("image") }, [
+                    b("image", { src: p("image"), alt: p("imageAlt"), radius: "panel", width: "full" }),
+                ]),
+                flow({ columns: "auto", gap: "xs", align: "center" }, [
+                    b("icon", { name: p("icon"), size: "sm", tint: p("tint") }),
+                    t(p("title"), "heading"),
+                    showIf({ value: p("tag") }, [t(p("tag"), "meta", { tone: "muted" })]),
+                ]),
+                showIf({ value: p("body") }, [t(p("body"))]),
+                showIf({ value: p("meta") }, [t(p("meta"), "meta")]),
+                showIf({ value: p("href") }, [b("link", { label: p("linkLabel", "Learn more"), href: p("href") })]),
+            ]),
         ]),
     ],
 };
@@ -437,13 +490,17 @@ const map: BlockPreset = {
 };
 
 /*
- * A snippet somebody is meant to run, with the other ways of running it behind it.
+ * A snippet somebody is meant to run, with the other ways of running it beside it as a real tab
+ * strip (barakoPress #91).
  *
- * The first sample is drawn plainly, because a quickstart is for the line you type and hiding it
- * behind a tab is hiding the point of the page. The rest are `codeTab`s, and two of them sharing a
- * group behave as a tab strip does: opening one closes the last. That is the bargain `tabs` already
- * made, for the same reason. A tab strip is a script or a stylesheet with sibling selectors, and a
- * block ships neither.
+ * The first sample stays open to begin with, because a quickstart is for the line you type and
+ * hiding it behind a click is hiding the point of the page; it is a `tabPanel` and not a plain
+ * `codeSample` now only so it sits in the same strip as the rest, and it renders exactly as before
+ * for a reader with no script. `codeTab`s used `disclosure` for the reason `tabs` still does: the
+ * package had no client component and a strip needs either one or a stylesheet, and it had neither.
+ * It now has `tabGroup` and `tabPanel`, which are the stylesheet (see primitives.tsx), so this is
+ * the one place that constraint changed. `tabs` stays `disclosure`: it holds whatever a page drops
+ * into it, and a strip is the wrong shape for content nobody has measured against a design.
  */
 const codeTabs: BlockPreset = {
     type: "codeTabs",
@@ -454,6 +511,7 @@ const codeTabs: BlockPreset = {
         text("code", "Code", true),
         text("language", "Language"),
         text("selectLabel", "Say this above it, for copying"),
+        text("primaryLabel", "Tab label for the code above"),
         tone,
         padding,
         width,
@@ -463,8 +521,12 @@ const codeTabs: BlockPreset = {
         section({ tone: p("tone"), padding: p("padding", "xl"), width: p("width", "prose") }, [
             t(p("heading"), "title"),
             t(p("body"), "lead"),
-            b("codeSample", { code: p("code"), language: p("language"), selectLabel: p("selectLabel") }),
-            slot("items"),
+            holding("tabGroup", { gap: "xs" }, [
+                holding("tabPanel", { label: p("primaryLabel", "Run it"), open: true, group: "codeTabs" }, [
+                    b("codeSample", { code: p("code"), language: p("language"), selectLabel: p("selectLabel") }),
+                ]),
+                slot("items"),
+            ]),
         ]),
     ],
 };
@@ -481,7 +543,7 @@ const codeTab: BlockPreset = {
         text("group", "Only one open in this group"),
     ],
     blocks: [
-        holding("disclosure", { label: p("label"), group: p("group", "codeTabs") }, [
+        holding("tabPanel", { label: p("label"), group: p("group", "codeTabs") }, [
             b("codeSample", { code: p("code"), language: p("language"), selectLabel: p("selectLabel") }),
         ]),
     ],
@@ -684,5 +746,6 @@ export function libraryPresets(): BlockPreset[] {
         keyValueRow,
         codeTab,
         faqItem,
+        card,
     ];
 }

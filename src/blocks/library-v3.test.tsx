@@ -79,7 +79,7 @@ const config = defineConfig({
     },
     optionStyles: {
         "module.Category": {
-            Content: { icon: "star", label: "Content" },
+            Content: { icon: "star", label: "Content", tone: "#4c63d2" },
             Operations: { icon: "clock", label: "Operations" },
         },
         "release.Kind": { feature: { label: "New" }, fix: { label: "Fixed" } },
@@ -436,6 +436,38 @@ describe("the v3 blocks on their own", () => {
         const html = await render([{ type: "cardGrid", props: { heading: "Modules", collection: "modules" } }]);
         expect(html).toContain("Search");
         expect(html).not.toContain("<svg");
+    });
+
+    /*
+     * barakoPress #91: the entry's own colour on its card, not the theme's accent. "Content" is
+     * configured with a tone of its own above; "Operations" (module m3) is configured with none, so
+     * that entry keeps drawing in the theme's accent exactly as it always did.
+     */
+    it("tints a card grid's option glyph with the entry's own colour where one is configured", async () => {
+        const html = await render([
+            { type: "cardGrid", props: { heading: "Modules", collection: "modules", option: "show" } },
+        ]);
+        expect(html).toContain("color-mix(in srgb, #4c63d2");
+    });
+
+    it("draws a card grid's cards typed in place when it has no collection to read", async () => {
+        const html = await render([
+            {
+                type: "cardGrid",
+                props: {
+                    heading: "Tools",
+                    items: [
+                        [
+                            { type: "card", props: { title: "Mapsicle", tag: "C#", icon: "star", tint: "#4c63d2" } },
+                            { type: "card", props: { title: "Verdict", tag: "C#" } },
+                        ],
+                    ],
+                },
+            },
+        ]);
+        expect(html).toContain("Mapsicle");
+        expect(html).toContain("Verdict");
+        expect(html).toContain("color-mix(in srgb, #4c63d2");
     });
 
     it("opens one code tab at a time, and every tab in the group closes the last", async () => {

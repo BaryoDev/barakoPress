@@ -10,7 +10,7 @@ import type { PressTheme, ThemeSpace, ThemeText } from "../theme.js";
  * those slots, so renaming them is a change here and nowhere else.
  */
 
-export const TONES = ["page", "surface", "accent", "inverse", "gradient"] as const;
+export const TONES = ["page", "surface", "accent", "inverse", "gradient", "wash"] as const;
 export type ToneName = (typeof TONES)[number];
 
 export interface Tone {
@@ -72,6 +72,22 @@ export function toneOf(theme: PressTheme, name: string | undefined): Tone {
                 hairline: c.inverseChrome,
                 accent: c.inverseAccent,
                 onAccent: c.inverse,
+            };
+        /*
+         * A page wash: the page's own background with the accent tint glowing from behind the top
+         * of the band, for a hero that sits over decoration rather than a flat colour. Declared from
+         * the theme's own tokens, the same way `gradient` is, so a tenant that restyles gets its own
+         * wash and no primitive anywhere writes a colour of its own.
+         */
+        case "wash":
+            return {
+                bg: `radial-gradient(120% 100% at 50% -20%, ${c.accentTint} 0%, ${c.pageBg} 60%)`,
+                ink: c.ink,
+                secondaryInk: c.secondaryInk,
+                muted: c.muted,
+                hairline: c.hairline,
+                accent: c.accent,
+                onAccent: c.surface,
             };
         default:
             return {

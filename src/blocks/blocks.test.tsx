@@ -201,6 +201,8 @@ describe("createBlockRegistry", () => {
             "link",
             "list",
             "disclosure",
+            "tabGroup",
+            "tabPanel",
             "comparisonTable",
             "progressBar",
             "reveal",

@@ -86,6 +86,20 @@ function toneVars(tone: Tone): CSSProperties {
     return style as CSSProperties;
 }
 
+/*
+ * Whether a bound value reads as a colour, before it goes into an inline style.
+ *
+ * An inline style is set through the CSSOM property setter rather than parsed out of a stylesheet
+ * text, so a value that fails this cannot break out into a new declaration or a new selector the
+ * way it could in a `<style>` block. This check is a courtesy on top of that: a value that does not
+ * look like a colour draws nothing tinted rather than an invisible or broken swatch.
+ */
+const COLOR_LIKE = /^(#[0-9a-f]{3,8}|(rgb|rgba|hsl|hsla|oklch|oklab)\([0-9.,%\s/+-]{1,60}\)|[a-z]{3,30})$/i;
+
+function colorLike(value: string | undefined): string | undefined {
+    return value && COLOR_LIKE.test(value) ? value : undefined;
+}
+
 /* ---------------------------------------------------------------- layout */
 
 type SectionProps = { tone?: string; width?: string; padding?: string; align?: string };
@@ -742,7 +756,7 @@ export function IconGlyph({ name, size, color }: { name: string; size: string; c
     );
 }
 
-const icon = defineBlock<{ name: string; size?: string; tone?: string; label?: string }>({
+const icon = defineBlock<{ name: string; size?: string; tone?: string; tint?: string; label?: string }>({
     type: "icon",
     label: "Icon",
     layer: "primitive",
@@ -750,19 +764,27 @@ const icon = defineBlock<{ name: string; size?: string; tone?: string; label?: s
         { name: "name", kind: "select", label: "Icon", required: true, options: Object.keys(ICONS) },
         { name: "size", kind: "select", label: "Size", options: Object.keys(ICON_SIZES) },
         { name: "tone", kind: "select", label: "Ink", options: Object.keys(INK) },
+        /*
+         * A colour bound from the entry rather than chosen from `tone`'s fixed list (barakoPress
+         * #91): a card grid whose cards each carry their own brand puts `{{item.Color}}` here, which
+         * is the same colour `OptionStyle` already resolved for the option's dot (#52), one level up
+         * from a dot to a badge. Unset, this draws exactly as it always did.
+         */
+        { name: "tint", kind: "text", label: "Colour from the entry, over the tone" },
         { name: "label", kind: "text", label: "Read out as" },
     ],
     component: ({ props, theme }) => {
         const path = ICONS[props.name];
         if (!path) return null;
         const size = theme.text[ICON_SIZES[props.size ?? "md"] ?? "lead"];
-        return (
+        const tint = colorLike(props.tint);
+        const glyph = (
             <svg
                 viewBox="0 0 24 24"
                 width={size}
                 height={size}
                 fill="none"
-                stroke={inherited(theme, INK[props.tone ?? ""] ?? "accent")}
+                stroke={tint ?? inherited(theme, INK[props.tone ?? ""] ?? "accent")}
                 strokeWidth={1.8}
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -773,6 +795,21 @@ const icon = defineBlock<{ name: string; size?: string; tone?: string; label?: s
             >
                 <path d={path} />
             </svg>
+        );
+        if (!tint) return glyph;
+        return (
+            <span
+                style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: theme.space.xs,
+                    borderRadius: radiusOf(theme, "control"),
+                    background: `color-mix(in srgb, ${tint} 16%, ${theme.colors.surface})`,
+                }}
+            >
+                {glyph}
+            </span>
         );
     },
 });
@@ -890,12 +927,12 @@ const list = defineBlock<{ style?: string; gap?: string }, "items">({
 type DisclosureProps = { label: string; open?: boolean; group?: string; tone?: string };
 
 /*
- * A labelled section that opens. `details` and not a scripted tab strip: a tab strip needs either
- * JavaScript or a stylesheet with sibling selectors, and a primitive can emit neither. What it can
- * emit is the one element the browser already knows how to open and close, which works with the
- * keyboard, is found by the browser's own find-in-page, and needs nothing loaded.
+ * A labelled section that opens: the accordion shape, right for a `faq` where a reader may want two
+ * answers open at once, or a `tabs` band of arbitrary content nobody has measured against a design.
+ * `codeTabs` wants an actual strip instead; see `tabGroup` below for that one.
  *
- * Two disclosures sharing a `group` behave as a tab strip does: opening one closes the other.
+ * Two disclosures sharing a `group` behave as a tab strip does: opening one closes the other, which
+ * `<details name>` already does with nothing loaded.
  */
 const disclosure = defineBlock<DisclosureProps, "content">({
     type: "disclosure",
@@ -931,6 +968,107 @@ const disclosure = defineBlock<DisclosureProps, "content">({
             </details>
         );
     },
+});
+
+/*
+ * The rules a real tab strip needs and a `disclosure` does not (barakoPress #91): the marker a
+ * `details` draws by default hidden, cross-browser, and the open tab picked out in the theme's own
+ * accent. `[data-bp-tab][open]` reads the same `open` attribute `<details name>` already toggles
+ * with nothing loaded, so this is a stylesheet and not a script, the same trade `hueCss` made for a
+ * flow's cell colours. It is emitted once by `tabGroup`, not per tab, since every rule here is fixed
+ * rather than derived from what a page happens to hold.
+ */
+const TAB_STRIP_CSS =
+    "details[data-bp-tab]>summary{list-style:none}" +
+    "details[data-bp-tab]>summary::-webkit-details-marker{display:none}" +
+    "details[data-bp-tab][open]>summary{background:var(--bp-accent);color:var(--bp-on-accent)}";
+
+type TabGroupProps = { gap?: string; tone?: string };
+
+/*
+ * A strip of tabs and the panel of whichever one is open, from independent `tabPanel` siblings and
+ * no script.
+ *
+ * Every `tabPanel` is `transparent` (see schema.ts), so its own wrapper never reaches the page and
+ * its `summary` and its panel `div` land here as two ordinary flex children instead. `order` sorts
+ * every summary before every panel regardless of which tab is open or where its markup sits in the
+ * list, and the open panel's `flexBasis: "100%"` is what wraps it, and everything after it, onto the
+ * row below a strip of any width. At most one panel exists in the tree at a time: a closed `details`
+ * renders nothing past its own `summary`, which is what makes this the one line of layout `flow`'s
+ * `hueRotate` needed a whole stylesheet for.
+ */
+const tabGroup = defineBlock<TabGroupProps, "content">({
+    type: "tabGroup",
+    label: "Tab group",
+    layer: "primitive",
+    fields: [
+        { name: "gap", label: "Gap", ...spaceSelect },
+        { name: "tone", label: "Tone", ...toneSelect },
+        { name: "content", kind: "slots", label: "Tabs", required: true, min: 1, max: 1 },
+    ],
+    component: ({ props, slots, theme }) => {
+        const tone = toneOf(theme, props.tone);
+        return (
+            <>
+                <style dangerouslySetInnerHTML={{ __html: TAB_STRIP_CSS }} />
+                <div
+                    style={{
+                        ...toneVars(tone),
+                        "--bp-list": "contents",
+                        display: "flex",
+                        flexWrap: "wrap",
+                        alignItems: "flex-end",
+                        gap: gap(theme, props.gap, "xs"),
+                    } as CSSProperties}
+                >
+                    {slots.content?.[0]}
+                </div>
+            </>
+        );
+    },
+});
+
+type TabPanelProps = { label: string; open?: boolean; group?: string };
+
+/** One tab of a `tabGroup`: the button in the strip and the panel it opens, from one `details`. */
+const tabPanel = defineBlock<TabPanelProps, "content">({
+    type: "tabPanel",
+    label: "Tab",
+    layer: "primitive",
+    transparent: true,
+    fields: [
+        { name: "label", kind: "text", label: "Label", required: true },
+        { name: "open", kind: "boolean", label: "Open to begin with" },
+        { name: "group", kind: "text", label: "Only one open in this group" },
+        { name: "content", kind: "slots", label: "Content", required: true, min: 1, max: 1 },
+    ],
+    component: ({ props, slots, theme }) => (
+        <details data-bp-tab="" name={props.group} open={props.open === true} style={{ display: "contents" }}>
+            <summary
+                style={{
+                    order: 0,
+                    cursor: "pointer",
+                    borderRadius: radiusOf(theme, "control"),
+                    padding: `${theme.space.xs} ${theme.space.md}`,
+                    fontFamily: theme.fonts.heading,
+                    fontWeight: 600,
+                    fontSize: theme.text.small,
+                    color: inherited(theme, "ink"),
+                }}
+            >
+                {props.label}
+            </summary>
+            <div
+                style={{
+                    order: 1,
+                    flexBasis: "100%",
+                    width: "100%",
+                }}
+            >
+                {slots.content?.[0]}
+            </div>
+        </details>
+    ),
 });
 
 /** The most rows and columns a comparison holds. Past either it is a spreadsheet, not a comparison. */
@@ -1376,6 +1514,8 @@ export function primitiveBlocks(config: PressConfig): BlockDefinition[] {
         anchorBlock("link", "Link", "quiet"),
         list,
         disclosure,
+        tabGroup,
+        tabPanel,
         comparisonTable,
         progressBar,
         reveal,

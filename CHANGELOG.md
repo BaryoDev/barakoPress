@@ -2,6 +2,18 @@
 
 ## 0.7.0 (unreleased)
 
+- Four things the block library v4 look check said it could not draw yet, measured against the
+  baryo.dev fixture (#83, #91). A `cardGrid` card can carry a colour of its own: `{{item.Color}}`,
+  the same tone `OptionStyle` (#52) already resolves for an option, now reaches a badge behind the
+  card's icon instead of only a word in the theme's accent, and `cardGrid` can also draw `card`s
+  typed in place, with no `collection`, for a page author's own package list or feed. `section` and
+  every block that takes a `tone` gained `wash`, a radial gradient from the theme's own page and
+  accent tint colours, declared rather than hand-written. `codeTabs` draws a real strip of tabs
+  now, `tabGroup` and `tabPanel`, in CSS alone: no script, and `disclosure` stays what `tabs` and
+  `faq` use. Measured against the fixture: 48.863% different at 1280px and 59.434% at 390px before,
+  29.950% and 35.536% after. The mascot, the bio panel, the sticky translucent header and the
+  richer "Four products" cards are not blocks yet; the gap that is left is written down in the pull
+  request rather than closed by guessing at a shape nobody asked for.
 - The blocks barakocms.com adds. `comparisonTable` draws a real table from rows typed as lines with
   `|` between the cells, headings on both the columns and the rows, so a cell is announced with the
   option it belongs to. `progressBar` is `role="progressbar"` with the three values that role needs,

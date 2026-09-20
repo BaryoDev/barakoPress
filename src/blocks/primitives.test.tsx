@@ -38,6 +38,18 @@ describe("layout primitives", () => {
         expect(html).toContain(`max-width:${config.theme.layout.prose}`);
     });
 
+    /*
+     * barakoPress #91: a decorative page wash, declared from the theme's own tokens rather than
+     * hand-written, for a hero that sits over decoration instead of a flat colour.
+     */
+    it("draws a wash tone as a radial gradient from the theme's own page and accent tint colours", () => {
+        const html = render([{ type: "section", props: { tone: "wash", content: [[]] } }]);
+
+        expect(html).toContain("radial-gradient(");
+        expect(html).toContain(config.theme.colors.accentTint);
+        expect(html).toContain(config.theme.colors.pageBg);
+    });
+
     it("follows the tenant's own scale, with no size of its own", () => {
         const roomy = defineConfig({
             site: { name: "T", url: "https://t.example" },
@@ -112,11 +124,13 @@ describe("layout primitives", () => {
     /*
      * The other side of that. Every screen and region renders through BlockList, so taking a wrapper
      * out of the box tree is a change to all of them unless exactly the blocks that ask for it get
-     * it. One block asks.
+     * it. `stickyBar` asks so a sticky band can move in the page's own containing block; `tabPanel`
+     * asks so its `summary` and its panel land as ordinary flex children of `tabGroup` (#91) rather
+     * than nested inside a wrapper `tabGroup` never asked for.
      */
     it("leaves every other block's wrapper where it was", () => {
         const asking = [...registry.values()].filter((b) => b.transparent === true).map((b) => b.type);
-        expect(asking).toEqual(["stickyBar"]);
+        expect(asking).toEqual(["stickyBar", "tabPanel"]);
 
         const html = render([
             { type: "section", props: { content: [[{ type: "text", props: { value: "Plain" } }]] } },
@@ -206,6 +220,34 @@ describe("content primitives", () => {
         expect(render([{ type: "icon", props: { name: "sparkles" } }])).not.toContain("<svg");
     });
 
+    /*
+     * barakoPress #91: a card grid whose entries each carry their own colour, one level up from
+     * the option dot #52 already draws. Unset, an icon renders exactly as it did before this prop
+     * existed, which is the config-default rule: a site that never sets a tint keeps its accent.
+     */
+    describe("an icon's colour bound from the entry rather than chosen from tone", () => {
+        it("draws a tinted badge behind the glyph when a colour is bound", () => {
+            const html = render([{ type: "icon", props: { name: "arrow", tint: "#4c63d2" } }]);
+            expect(html).toContain("<svg");
+            expect(html).toContain("#4c63d2");
+            // The badge is the wrapper this prop adds, not the bare glyph an untinted icon draws.
+            expect(html).toContain("color-mix(in srgb, #4c63d2");
+        });
+
+        it("draws exactly as it always did when no tint is bound", () => {
+            const untinted = render([{ type: "icon", props: { name: "arrow" } }]);
+            expect(untinted).not.toContain("color-mix");
+        });
+
+        it("refuses a value that does not read as a colour, rather than writing it into a style", () => {
+            const html = render([
+                { type: "icon", props: { name: "arrow", tint: "red; } body { display: none" } },
+            ]);
+            expect(html).not.toContain("color-mix");
+            expect(html).not.toContain("display: none");
+        });
+    });
+
     it("renders a button as a link, because a button that navigates is one", () => {
         const html = render([{ type: "button", props: { label: "Read more", href: "/blog" } }]);
 
@@ -229,6 +271,73 @@ describe("content primitives", () => {
     it("numbers a list when asked and bullets it otherwise", () => {
         expect(render([{ type: "list", props: { style: "number", items: [[]] } }])).toContain("<ol");
         expect(render([{ type: "list", props: { items: [[]] } }])).toContain("<ul");
+    });
+});
+
+/*
+ * A real tab strip, no script (barakoPress #91). `tabPanel` is `transparent`, so its `summary` and
+ * its panel land as ordinary children of `tabGroup` rather than nested inside a wrapper of their
+ * own, which is what lets `order` put every summary before every panel regardless of which tab is
+ * open or where its markup sits in the list.
+ */
+describe("a tab group", () => {
+    const strip = (open: string) =>
+        render([
+            {
+                type: "tabGroup",
+                props: {
+                    content: [
+                        [
+                            {
+                                type: "tabPanel",
+                                props: {
+                                    label: "One",
+                                    open: open === "One",
+                                    group: "g",
+                                    content: [[{ type: "text", props: { value: "first" } }]],
+                                },
+                            },
+                            {
+                                type: "tabPanel",
+                                props: {
+                                    label: "Two",
+                                    open: open === "Two",
+                                    group: "g",
+                                    content: [[{ type: "text", props: { value: "second" } }]],
+                                },
+                            },
+                        ],
+                    ],
+                },
+            },
+        ]);
+
+    it("draws every tab's button, whichever one is open", () => {
+        const html = strip("One");
+        expect(html).toContain("One");
+        expect(html).toContain("Two");
+    });
+
+    /*
+     * A browser hides a `details` that is not `open` by default, with nothing added here, so the
+     * static markup this asserts on still carries both panels: that is what lets a reader with no
+     * script open the other tab, and what lets the browser's own find-in-page reach into it.
+     */
+    it("marks exactly one tab open, and only one", () => {
+        const html = strip("One");
+        expect(html).toContain("first");
+        expect(html).toContain("second");
+        expect([...html.matchAll(/<details[^>]*\bopen(?:=""|(?=[\s>]))/g)]).toHaveLength(1);
+        expect(html.indexOf('open=""')).toBeLessThan(html.indexOf("Two"));
+    });
+
+    it("shares one exclusivity group across the strip, the same as a disclosure would", () => {
+        const html = strip("One");
+        expect([...html.matchAll(/name="g"/g)]).toHaveLength(2);
+    });
+
+    it("hides the details marker, so the buttons read as tabs and not an accordion", () => {
+        expect(strip("One")).toContain("::-webkit-details-marker");
     });
 });
 
