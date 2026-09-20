@@ -2,7 +2,7 @@ import { Fragment, type ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { AUTHOR_COLLECTION, CATEGORY_COLLECTION, POST_COLLECTION, type PressConfig } from "../config.js";
+import { AUTHOR_COLLECTION, CATEGORY_COLLECTION, POST_COLLECTION, type CollectionConfig, type PressConfig } from "../config.js";
 import { formatDate, type Post, type Ref } from "../cms.js";
 import {
     collectionOf,
@@ -14,6 +14,8 @@ import {
     type Item,
 } from "../collections.js";
 import { CmsError } from "../delivery.js";
+import { listRelatedItems } from "../related.js";
+import { readingMinutes } from "../reading-time.js";
 import { Asset, renderProse } from "../assets.js";
 import { siteConfig, type SiteParams } from "../site.js";
 
@@ -132,16 +134,28 @@ export interface ItemViewProps {
     backHref?: string;
 }
 
-/** A detail page: the item, and the items that reference it, as an author's archive always was. */
+/** A detail page: the item, and the items listed under it, as an author's archive always was. */
 export function ItemView({ config, item, related, backHref = "/" }: ItemViewProps) {
     const noun = related ? collectionOf(config, related.collection)?.noun : undefined;
     const count = related?.items.length ?? 0;
+    // Worked out from the body rather than typed, so there is no field to keep in step with the prose.
+    const col = collectionOf(config, item.collection);
+    const minutes = col?.readingTime && item.body ? readingMinutes(item.body) : undefined;
     return (
         <div className="shell">
             <p className="meta">
                 <Link href={backHref}>Back</Link>
             </p>
+            {item.photo && (
+                <Asset
+                    src={item.photo}
+                    alt={item.title}
+                    theme={config.theme}
+                    style={{ width: "120px", height: "120px", objectFit: "cover", borderRadius: config.theme.radii.pill }}
+                />
+            )}
             <h1>{item.title}</h1>
+            {minutes !== undefined && <p className="meta">{minutes} min read</p>}
             {item.option && <OptionLine item={item} />}
             {item.image && (
                 <Asset
@@ -270,12 +284,42 @@ export interface CollectionDetailOptions {
     preview?: boolean;
     /**
      * The items listed under this one: a collection and the reference field on it that points here.
-     * Unset, the first collection that references this one; false, none.
+     * Unset, the collection's own `related` setting decides; false, none.
      */
     related?: { collection: string; via: string } | false;
     backHref?: string;
     /** Renders the page in place of `ItemView`. It gets no related items unless `related` names them. */
     view?: (props: ItemViewProps) => ReactNode | Promise<ReactNode>;
+}
+
+/*
+ * What goes under an item, in the order the decisions were made.
+ *
+ * A route file naming `related` wins, because it is the consumer's own file. A custom view gets
+ * nothing unless it named it, which is what `createBlogPost` relies on. Then the collection's own
+ * setting: "semantic" asks the CMS for its nearest neighbours, false lists nothing, and anything else
+ * is the first collection referencing this one, which is what every collection did before the setting
+ * existed. An empty semantic list is no band at all rather than a heading over nothing, the same as
+ * the post page, since a site with no AI module gets one every time.
+ */
+async function relatedFor(
+    config: PressConfig,
+    collection: string,
+    col: CollectionConfig,
+    item: Item,
+    options: CollectionDetailOptions,
+): Promise<{ collection: string; items: Item[] } | undefined> {
+    const byReference = async (link: { collection: string; via: string } | undefined) =>
+        link ? { collection: link.collection, items: await listReferencing(config, link.collection, item.id, link.via) } : undefined;
+
+    if (options.related !== undefined) return byReference(options.related || undefined);
+    if (options.view) return undefined;
+    if (col.related === "semantic") {
+        const items = await listRelatedItems(config, collection, item);
+        return items.length > 0 ? { collection, items } : undefined;
+    }
+    if (col.related === false) return undefined;
+    return byReference(referencedBy(config, collection));
 }
 
 /** A detail page, rendered for an already resolved config. A catch-all serving a collection calls this. */
@@ -286,17 +330,14 @@ export async function renderCollectionDetail(
     options: CollectionDetailOptions = {},
     previewToken?: string,
 ): Promise<ReactNode> {
-    if (!collectionOf(config, collection)) notFound();
+    const col = collectionOf(config, collection);
+    if (!col) notFound();
     const item = previewToken
         ? await getItemPreview(config, collection, slug, previewToken)
         : await getItem(config, collection, slug);
     if (!item) notFound();
 
-    const link =
-        options.related === undefined ? (options.view ? undefined : referencedBy(config, collection)) : options.related || undefined;
-    const related = link
-        ? { collection: link.collection, items: await listReferencing(config, link.collection, item.id, link.via) }
-        : undefined;
+    const related = await relatedFor(config, collection, col, item, options);
 
     const view = options.view ?? ItemView;
     return view({ config, item, related, preview: Boolean(previewToken), backHref: options.backHref });

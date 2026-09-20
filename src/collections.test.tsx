@@ -38,14 +38,14 @@ vi.mock("next/link", () => ({
 
 const { defineConfig } = await import("./config.js");
 const { forgetCachedReads } = await import("./delivery.js");
-const { isReservedPath } = await import("./cms.js");
-const { collectionAt, listCollection, toItem } = await import("./collections.js");
+const { getTerm, isReservedPath } = await import("./cms.js");
+const { collectionAt, forgetCollectionWarnings, listAllCollection, listCollection, toItem } = await import("./collections.js");
 const { listRelated } = await import("./related.js");
 const { applySiteSettings, getGlobals, siteConfig } = await import("./site.js");
 const { createPage } = await import("./screens/page.js");
 const { createCollectionDetail, createCollectionIndex, createCollectionMetadata, createCollectionStaticParams } =
     await import("./screens/collection.js");
-const { createSitemap } = await import("./routes/sitemap.js");
+const { createSitemap, forgetSitemapWarnings } = await import("./routes/sitemap.js");
 const { createFeed } = await import("./routes/feed.js");
 const { createBlockRegistry, registryFor } = await import("./blocks/registry.js");
 const { DEFAULT_THEME } = await import("./theme.js");
@@ -68,6 +68,31 @@ const DOCTORS: Entry[] = [
     { id: "doc1", slug: "dr-reyes", data: { Name: "Dr Reyes", Slug: "dr-reyes", Specialty: "Heart surgery", Department: DEPARTMENTS[0] } },
     { id: "doc2", slug: "dr-santos", data: { Name: "Dr Santos", Slug: "dr-santos", Specialty: "Children", Department: DEPARTMENTS[1] } },
 ];
+
+/** Long enough to be worth a read time: 500 words is three minutes at the engine's 200 a minute. */
+const STORY = Array.from({ length: 500 }, () => "word").join(" ");
+
+const CASES: Entry[] = [
+    { id: "c1", slug: "harbour-rebrand", data: { Title: "Harbour rebrand", Slug: "harbour-rebrand", Story: STORY } },
+    { id: "c2", slug: "ferry-timetable", data: { Title: "Ferry timetable", Slug: "ferry-timetable", Story: "Short." } },
+    { id: "c3", slug: "market-signage", data: { Title: "Market signage", Slug: "market-signage", Story: "Also short." } },
+];
+const PEOPLE: Entry[] = [
+    { id: "pe1", slug: "mara", data: { Name: "Mara Cruz", Slug: "mara", Bio: "Runs the studio.", Portrait: "https://files.example/mara.jpg" } },
+];
+
+/** Longer than the API's page cap on purpose: one page of these proves nothing about paging. */
+const NOTICES: Entry[] = Array.from({ length: 250 }, (_, i) => ({
+    id: `n${i + 1}`,
+    slug: `notice-${i + 1}`,
+    data: { Title: `Notice ${i + 1}`, Slug: `notice-${i + 1}` },
+}));
+
+const NOTICES_COLLECTION = {
+    type: "notice",
+    route: "/notices",
+    fields: { title: "Title", slug: "Slug" },
+};
 
 const PROJECTS_COLLECTION = {
     type: "project",
@@ -123,12 +148,48 @@ const TENANTS: Record<string, Tenant> = {
         },
         content: { department: DEPARTMENTS, doctor: DOCTORS, post: [] },
     },
+    agency: {
+        host: "agency.example",
+        settings: {
+            Name: "Tide and Co",
+            Url: "https://agency.example",
+            Collections: {
+                cases: {
+                    type: "case",
+                    route: "/cases",
+                    fields: { title: "Title", slug: "Slug", body: "Story" },
+                    related: "semantic",
+                    readingTime: true,
+                    noun: ["case study", "case studies"],
+                },
+                // Authors and categories in all but name: the same shape, none of the blueprint's field names.
+                people: {
+                    type: "person",
+                    route: "/people",
+                    fields: { title: "Name", slug: "Slug", body: "Bio", photo: "Portrait" },
+                },
+            },
+        },
+        content: { case: CASES, person: PEOPLE, post: [] },
+    },
+    school: {
+        host: "school.example",
+        settings: {
+            Name: "Saint Jude",
+            Url: "https://school.example",
+            Collections: { notices: NOTICES_COLLECTION },
+        },
+        content: { notice: NOTICES, post: [] },
+    },
     soon: {
         host: "soon.example",
         settings: { Name: "Soon Club", Url: "https://soon.example", Mode: "Holding", Collections: { projects: PROJECTS_COLLECTION } },
         content: { project: PROJECTS, post: [] },
     },
 };
+
+/** barakoCMS clamps a public list at this, whatever was asked for. `MaxPageSize` in PaginationModels.cs. */
+const MAX_PAGE_SIZE = 100;
 
 type Call = { path: string; tenant: string | null; tags: string[] };
 let calls: Call[] = [];
@@ -146,9 +207,39 @@ function cms() {
         }
         const t = tenant ? TENANTS[tenant] : undefined;
         if (!t) return new Response("", { status: 404 });
-        const paged = (items: unknown[]) =>
-            Response.json({ items, page: 1, pageSize: 20, totalItems: items.length, totalPages: 1, hasNextPage: false });
+        /*
+         * Paged the way barakoCMS pages, clamp included. A public list is capped with Math.Min, so
+         * asking for more rows than MAX_PAGE_SIZE is answered with that many and no error at all. A
+         * mock that handed back every row whatever was asked for would let a caller that never pages
+         * look correct (#72).
+         */
+        const paged = (items: unknown[]) => {
+            const page = Math.max(1, Number(url.searchParams.get("page") ?? 1));
+            const size = Math.min(Number(url.searchParams.get("pageSize") ?? 20), MAX_PAGE_SIZE);
+            const from = (page - 1) * size;
+            const rows = items.slice(from, from + size);
+            return Response.json({
+                items: rows,
+                page,
+                pageSize: size,
+                totalItems: items.length,
+                totalPages: Math.max(1, Math.ceil(items.length / size)),
+                hasNextPage: from + rows.length < items.length,
+            });
+        };
         if (url.pathname === "/api/public/site") return paged([{ id: "s", data: t.settings }]);
+
+        const nearest = url.pathname.match(/^\/api\/public\/([^/]+)\/semantic$/);
+        if (nearest) {
+            const entries = t.content[nearest[1]] ?? [];
+            return Response.json({
+                results: entries.map((e, i) => ({
+                    slug: e.slug,
+                    title: String(e.data.Title ?? e.data.Name ?? ""),
+                    score: 0.9 - i / 100,
+                })),
+            });
+        }
 
         const [type, slug] = url.pathname.replace(/^\/api\/public\//, "").split("/");
         const entries = t.content[type];
@@ -202,6 +293,8 @@ function cardFor(html: string, title: string): string {
 
 beforeEach(() => {
     forgetCachedReads();
+    forgetCollectionWarnings();
+    forgetSitemapWarnings();
     requestHeaders = null;
     requestCookies = {};
     calls = [];
@@ -459,6 +552,103 @@ describe("collections from a tenant's settings", () => {
         expect(isReservedPath(rotary, "/projects")).toBe(true);
         expect(isReservedPath(hospital, "/projects")).toBe(false);
         expect(isReservedPath(hospital, "/doctors/anyone")).toBe(true);
+    });
+
+    it("shows a read time and its nearest items on a collection that is not the post collection", async () => {
+        visit("agency.example");
+        const study = await route(config, ["cases", "harbour-rebrand"]);
+
+        expect(study).toContain("<h1>Harbour rebrand</h1>");
+        expect(study).toContain("3 min read");
+        expect(study).toMatch(/2(<!-- -->)? (<!-- -->)?case studies/);
+        expect(study).toContain('href="/cases/ferry-timetable"');
+        expect(study).toContain('href="/cases/market-signage"');
+        // Its own closest match is itself, and a card linking back to the page you are on is noise.
+        expect(study).not.toContain('href="/cases/harbour-rebrand"');
+        expect(calls.map((c) => c.path)).toContain("/api/public/case/semantic?q=Harbour+rebrand&limit=5");
+
+        // A collection that asks for neither shows neither, which is every collection that was here before.
+        calls = [];
+        visit("hospital.example");
+        const doctor = await route(config, ["doctors", "dr-reyes"]);
+        expect(doctor).toContain("Dr Reyes");
+        expect(doctor).not.toContain("min read");
+        expect(calls.map((c) => c.path).filter((path) => path.includes("/semantic"))).toEqual([]);
+    });
+
+    it("shows a photo from the field the collection named, rather than one field name read in one place", async () => {
+        visit("agency.example");
+        const person = await route(config, ["people", "mara"]);
+        expect(person).toContain("<h1>Mara Cruz</h1>");
+        expect(person).toContain("https://files.example/mara.jpg");
+        expect(person).toContain("Runs the studio.");
+
+        // Same entry through getTerm, which read only `Photo` off the entry before this.
+        const renamed = defineConfig({
+            site: { name: "Tide and Co", url: "https://agency.example" },
+            cmsUrl: CMS,
+            tenant: "agency",
+            types: { author: "person" },
+            collections: {
+                author: { type: "person", route: "/people", fields: { title: "Name", slug: "Slug", body: "Bio", photo: "Portrait" } },
+            },
+        });
+        const term = await getTerm(renamed, "author", "mara");
+        expect(term).not.toBeNull();
+        expect(term?.name).toBe("Mara Cruz");
+        expect(term?.photo).toBe("https://files.example/mara.jpg");
+        expect(term?.description).toBe("Runs the studio.");
+    });
+
+    it("pages a collection past the API's cap into the sitemap, at the size the API allows", async () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        visit("school.example");
+        const urls = (await createSitemap(config)()).map((e) => e.url);
+
+        // Every notice, not the first hundred. The hundred-and-first is the one master loses.
+        expect(urls).toHaveLength(1 + NOTICES.length);
+        expect(urls[0]).toBe("https://school.example");
+        expect(urls).toContain("https://school.example/notices/notice-1");
+        expect(urls).toContain("https://school.example/notices/notice-101");
+        expect(urls).toContain("https://school.example/notices/notice-250");
+        expect(new Set(urls).size).toBe(urls.length);
+
+        // The bound is asked for once; what the API answered with decides every page after it.
+        const asked = listed("notice").map((c) => new URL(`${CMS}${c.path}`).searchParams.get("pageSize"));
+        expect(asked).toEqual(["1000", "100", "100"]);
+        expect(warn.mock.calls.flat().join(" ")).toContain('"notices" was asked for 1000 entries a page and the API allows 100');
+    });
+
+    it("stops a sitemap at the entries the site lists, and says so rather than absorbing it", async () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        const buildTime = defineConfig({
+            site: { name: "Saint Jude", url: "https://school.example" },
+            cmsUrl: CMS,
+            tenant: "school",
+            pageSizes: { sitemap: 120 },
+            collections: { notices: NOTICES_COLLECTION },
+        });
+        const urls = (await createSitemap(buildTime)()).map((e) => e.url);
+
+        expect(urls).toHaveLength(121);
+        expect(urls).toContain("https://school.example/notices/notice-120");
+        expect(urls).not.toContain("https://school.example/notices/notice-121");
+        expect(warn.mock.calls.flat().join(" ")).toContain('"notices" for tenant "school" holds more than the 120 entries');
+    });
+
+    it("reads a collection to its end under a bound, and says it stopped short", async () => {
+        const school = await site("school.example");
+
+        const all = await listAllCollection(school, "notices", { limit: 1000 });
+        expect(all.items).toHaveLength(250);
+        expect(all.items.map((i) => i.slug)).toContain("notice-250");
+        expect(all.items.map((i) => i.slug)).toEqual([...new Set(all.items.map((i) => i.slug))]);
+        expect(all.truncated).toBe(false);
+
+        const bounded = await listAllCollection(school, "notices", { limit: 150 });
+        expect(bounded.items).toHaveLength(150);
+        expect(bounded.items[149].slug).toBe("notice-150");
+        expect(bounded.truncated).toBe(true);
     });
 
     it("lists slugs for a static export on a build-time site, and none on a request-time one", async () => {

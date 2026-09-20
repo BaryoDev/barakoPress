@@ -130,7 +130,7 @@ export type {
     ShareRedeemCaller,
 } from "./delivery.js";
 
-export { listRelated, pickRelated } from "./related.js";
+export { listRelated, listRelatedItems, pickRelated } from "./related.js";
 export type { RelatedPost } from "./related.js";
 
 export {
@@ -174,8 +174,8 @@ export {
 export { createArchive, createArchiveStaticParams } from "./screens/archive.js";
 export { PostView } from "./screens/post-view.js";
 
-export { listCollection, getItem, getItemPreview, toItem, collectionOf, referencedBy } from "./collections.js";
-export type { Item, ListCollectionOptions, CollectionPage } from "./collections.js";
+export { listAllCollection, listCollection, getItem, getItemPreview, toItem, collectionOf, referencedBy } from "./collections.js";
+export type { Item, ListCollectionOptions, CollectionPage, CollectionRun } from "./collections.js";
 export {
     createCollectionIndex,
     createCollectionDetail,
@@ -287,5 +287,5 @@ export type { SharePageOptions } from "./routes/share.js";
 export type { RevalidateOptions } from "./routes/revalidate.js";
 export { createFeed } from "./routes/feed.js";
 export type { FeedOptions } from "./routes/feed.js";
-export { createSitemap } from "./routes/sitemap.js";
+export { createSitemap, SITEMAP_MAX_URLS } from "./routes/sitemap.js";
 export { createRobots } from "./routes/robots.js";
