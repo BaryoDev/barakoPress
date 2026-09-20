@@ -125,7 +125,10 @@
   showing three English lines to the visitor who follows a share link, which is the visitor most
   likely to be a client being shown their own site. A host that belongs to no tenant is a 404; a CMS
   that cannot be reached still opens the link, in the words the config file carries. The label scan
-  test reads the share route the way it reads the screens. (#77)
+  test reads the share route the way it reads the screens. A consumer mounting this route passes
+  its config now, so `app/_share/route.ts` changes from `createSharePage()` to
+  `createSharePage(config)`, and the route resolves a tenant per request rather than being
+  static. (#77)
 
 ## 0.4.0 (2026-09-20)
 
