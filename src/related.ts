@@ -1,7 +1,7 @@
 import type { PressConfig } from "./config.js";
 import { bySlug, semantic, type SemanticHit } from "./delivery.js";
 import { toPost, type Post } from "./cms.js";
-import { listReferencing, type Item } from "./collections.js";
+import { collectionOf, getItem, listReferencing, type Item } from "./collections.js";
 
 /*
  * Related posts, computed rather than curated.
@@ -73,6 +73,40 @@ export async function listRelated(
         return listReferencing(config, target, second.id, options.via, options.pageSize);
     }
     return relatedPosts(config, target, typeof second === "number" ? second : 3);
+}
+
+/**
+ * The items of a collection closest to one of its items by meaning, as items of that same collection.
+ *
+ * The same idea as the post band, for any collection whose `related` is "semantic": an agency's case
+ * studies want the nearest case study the way a post wants the nearest post. It degrades to nothing
+ * for the same reason `relatedPosts` does, since `semantic` swallows the 404 a CMS with no AI module
+ * answers and the empty list an unenabled one gives, so a site without the module renders no band.
+ *
+ * Full items rather than hits, because the item card is what draws them and it needs the fields the
+ * search does not return. Each read is cached and tagged like every other, and one that fails drops
+ * that card rather than the band.
+ */
+export async function listRelatedItems(
+    config: PressConfig,
+    collection: string,
+    item: Pick<Item, "slug" | "title">,
+    limit = 3,
+): Promise<Item[]> {
+    const col = collectionOf(config, collection);
+    if (!col || !item.title) return [];
+    const hits = await semantic(config, col.type, item.title, limit + OVERFETCH);
+    const picked = pickRelated(hits, item.slug, limit);
+    const found = await Promise.all(
+        picked.map(async (h) => {
+            try {
+                return await getItem(config, collection, h.slug);
+            } catch {
+                return null;
+            }
+        }),
+    );
+    return found.filter((i): i is Item => i !== null);
 }
 
 async function relatedPosts(config: PressConfig, post: Post, limit: number): Promise<RelatedPost[]> {

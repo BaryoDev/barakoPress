@@ -1,5 +1,5 @@
 import type { PressConfig } from "./config.js";
-import { includesFor } from "./config.js";
+import { AUTHOR_COLLECTION, CATEGORY_COLLECTION, includesFor } from "./config.js";
 import {
     bySlug,
     bySlugPreview,
@@ -10,6 +10,7 @@ import {
     type PublicContent,
     type Seo,
 } from "./delivery.js";
+import { toItem } from "./collections.js";
 import { samePath, siteHref } from "./site.js";
 
 export type { Seo };
@@ -171,10 +172,9 @@ export interface Term {
 /*
  * An author or category entry, for the heading of its archive page.
  *
- * These secondary types keep the blueprint's names with the post type's title and slug as
- * fallbacks. One flat field map cannot describe three types, and a model whose author type
- * differs wholesale wants its own screen. That is a fair boundary for the engine, and it is
- * stated here so nobody discovers it by reading the source.
+ * Every name is read through the collection's own field map rather than off the entry, so a school
+ * whose teachers keep their portrait in `Portrait` says so in `fields.photo` and gets it. The blog
+ * blueprint's names are what those roles default to, so a blueprint site reads exactly as it did.
  */
 export async function getTerm(
     config: PressConfig,
@@ -184,18 +184,18 @@ export async function getTerm(
     const type = config.types[which];
     if (!type) return null;
     const c = await bySlug(config, type, slug);
-    return c ? toTerm(config, c) : null;
+    return c ? toTerm(config, which, c) : null;
 }
 
-function toTerm(config: PressConfig, c: PublicContent): Term {
-    const d = c.data;
+function toTerm(config: PressConfig, which: "author" | "category", c: PublicContent): Term {
+    const item = toItem(config, which === "author" ? AUTHOR_COLLECTION : CATEGORY_COLLECTION, c);
     return {
-        id: c.id,
-        slug: c.slug ?? (str(field(d, config.fields.slug)) || str(d.Slug)),
-        name: str(d.Name) || str(d.Title) || str(field(d, config.fields.title)) || "Untitled",
-        description: str(d.Description) || str(d.Bio) || undefined,
-        photo: str(d.Photo) || undefined,
-        website: str(d.Website) || undefined,
+        id: item.id,
+        slug: item.slug,
+        name: item.title,
+        description: item.body || undefined,
+        photo: item.photo,
+        website: item.url,
     };
 }
 
@@ -208,7 +208,7 @@ export async function listTerms(
     const type = config.types[which];
     if (!type) return [];
     const res = await list(config, type, { pageSize });
-    return res.items.map((c) => toTerm(config, c));
+    return res.items.map((c) => toTerm(config, which, c));
 }
 
 export interface Page {
