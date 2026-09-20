@@ -206,7 +206,7 @@ describe("createBlockRegistry", () => {
             "codeSample",
         ]);
         expect(layers.data).toEqual(["source", "repeat", "showIf", "slot", "pager"]);
-        expect(layers.block).toEqual(["columns", "callToAction", "collection"]);
+        expect(layers.block).toEqual(["columns", "callToAction", "collection", "docsSidebar", "docsSwitcher", "search"]);
     });
 
     it("refuses one type registered twice by the site", () => {

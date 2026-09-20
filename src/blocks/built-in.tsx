@@ -5,6 +5,7 @@ import { collectionOf, listCollection } from "../collections.js";
 import { IconGlyph, PROSE_CLASS, primitiveBlocks } from "./primitives.js";
 import { dataBlocks } from "./data.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
+import { treeBlocks } from "./tree-blocks.js";
 
 /*
  * The blocks every site gets: the primitives and the data blocks of barakoPress #33, plus the named
@@ -158,8 +159,23 @@ type CollectionBlockProps = {
     filterValue?: string;
 };
 
-/** Definitions this package built, so `boundToSite` rebinds only its own. Held by identity. */
-const readsTheSite = new WeakSet<BlockDefinition>();
+/**
+ * Definitions this package built that read the site, each paired with how to build it again for the
+ * config a request resolved. Held by identity, so a site that registered its own block of the same
+ * name keeps its own.
+ *
+ * A set was not enough once there was more than one such block: rebinding looked every definition up
+ * in the set and replaced it with a freshly built `collection`, so a site with a `docsSidebar` on a
+ * page got a second collection list where the sidebar should have been.
+ */
+export type SiteBound = (config: PressConfig, holding: boolean) => BlockDefinition;
+const readsTheSite = new WeakMap<BlockDefinition, SiteBound>();
+
+/** Marks a definition as one that reads the site, and says how to build it for another config. */
+export function boundToConfig(definition: BlockDefinition, build: SiteBound): BlockDefinition {
+    readsTheSite.set(definition, build);
+    return definition;
+}
 
 /*
  * The collections offered are the ones this site has a route for, so an editor cannot pick one that
@@ -283,12 +299,11 @@ function collection(config: PressConfig, holding = false): BlockDefinition {
         },
     });
 
-    readsTheSite.add(definition);
-    return definition;
+    return boundToConfig(definition, (resolved, held) => collection(resolved, held));
 }
 
 export function builtInBlocks(config: PressConfig): BlockDefinition[] {
-    return [...primitiveBlocks(config), ...dataBlocks(config), columns, callToAction, collection(config)];
+    return [...primitiveBlocks(config), ...dataBlocks(config), columns, callToAction, collection(config), ...treeBlocks(config)];
 }
 
 /*
@@ -311,9 +326,10 @@ export function boundToSite(
 ): ReadonlyMap<string, BlockDefinition> {
     let bound: Map<string, BlockDefinition> | undefined;
     for (const [type, definition] of registry) {
-        if (!readsTheSite.has(definition)) continue;
+        const build = readsTheSite.get(definition);
+        if (!build) continue;
         bound ??= new Map(registry);
-        bound.set(type, collection(config, holding));
+        bound.set(type, build(config, holding));
     }
     return bound ?? registry;
 }
