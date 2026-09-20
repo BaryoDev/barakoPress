@@ -8,3 +8,5 @@ out
 next-env.d.ts
 dist
 look-results
+test-results
+look/*.generated.html

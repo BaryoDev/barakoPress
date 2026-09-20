@@ -46,6 +46,7 @@
     "look:capture": "node look/capture-fixture.ts",
     "look:site": "scripts/look-site.sh",
     "look:selftest": "scripts/look-check-selftest.sh",
+    "look:components": "npm run build:package && NODE_OPTIONS=--import=./look/next-stub-register.mjs node look/build-tab-strip-fixture.mjs && playwright test --config look/component.pw.config.ts",
     "prepare": "npm run build:package"
   },
   "dependencies": {
