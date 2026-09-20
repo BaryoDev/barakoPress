@@ -988,6 +988,13 @@ const disclosure = defineBlock<DisclosureProps, "content">({
  * panel once every tab in the strip is a flex sibling of every other. `motionClass` already exists
  * for exactly this, a stable class derived from a block's own content rather than counted, so two
  * renders of the same tab produce the same id and nothing depends on render order.
+ *
+ * Two tabs in one group with the same label hash to the same id, which is the one input this does
+ * not check: an id an HTML page repeats resolves a `<label for>` to the first element wearing it, so
+ * the second tab's own label activates the first tab's radio and its panel can never be reached.
+ * Reachable only by a page author typing one label twice in one strip, and `disclosure` already
+ * shares this shape (`<details name>` with two of the same label reads no differently to a visitor
+ * either), so this is not a new class of mistake, only the same one on a different element.
  */
 const TAB_STRIP_CSS =
     "[data-bp-tabpanel]{display:none;order:1;flex-basis:100%;width:100%}" +
