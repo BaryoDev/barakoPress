@@ -32,6 +32,14 @@
   so a four column stat band made a page 1144px wide. The tracks are a share of the row now, with
   the floor still under them, and as many fit as the row can hold: the column count on a desktop,
   fewer on a phone. (#83)
+- A sticky bar sticks. `BlockList` wraps every block in a div that is exactly as tall as what it
+  holds, and a `position: sticky` element can only move inside its own containing block, so the band
+  scrolled away with the page: its top went from 0 to -400 after a 400px scroll, measured. A block
+  definition may now ask for that wrapper to be `display: contents`, and `stickyBar` is the one that
+  does. Nothing else in the library asks, so nothing else moves. (#24)
+- A flow asked for no gap keeps its columns. `space.none` is "0", which is a number and not a
+  length, so `100% - 2 * 0` was a type error that took the whole track list with it and left every
+  cell in one column with nothing said. (#83)
 - A page may hold four hundred blocks rather than a hundred. A band from the library is a preset
   that expands into eight or ten, and the binder spends the budget on everything it walks through as
   well as everything that comes out, so a page of eight bands ran out on the seventh and rendered as

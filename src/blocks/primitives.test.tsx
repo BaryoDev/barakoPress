@@ -109,6 +109,22 @@ describe("layout primitives", () => {
         expect(html).toContain("Open");
     });
 
+    /*
+     * The other side of that. Every screen and region renders through BlockList, so taking a wrapper
+     * out of the box tree is a change to all of them unless exactly the blocks that ask for it get
+     * it. One block asks.
+     */
+    it("leaves every other block's wrapper where it was", () => {
+        const asking = [...registry.values()].filter((b) => b.transparent === true).map((b) => b.type);
+        expect(asking).toEqual(["stickyBar"]);
+
+        const html = render([
+            { type: "section", props: { content: [[{ type: "text", props: { value: "Plain" } }]] } },
+        ]);
+        expect(html).toContain('data-block="section"');
+        expect(html).not.toContain("display:contents");
+    });
+
     it("renders nested blocks inside the layout that holds them, in order", () => {
         const html = render([
             box([
