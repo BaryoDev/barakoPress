@@ -372,6 +372,12 @@ export interface Labels {
     failedNote: string;
     /** The notice on the holding page after a share link that did not open. */
     shareInvalid: string;
+    /** The title of the page a share link lands on while it is being opened. */
+    shareTitle: string;
+    /** What that page says to a visitor whose browser runs no script. */
+    shareNoScript: string;
+    /** The line it shows while the link is being redeemed. */
+    shareOpening: string;
 }
 
 export const DEFAULT_LABELS: Labels = {
@@ -391,6 +397,9 @@ export const DEFAULT_LABELS: Labels = {
     failed: "This page could not be loaded.",
     failedNote: "Please try again shortly.",
     shareInvalid: "This link is not valid or has expired.",
+    shareTitle: "Opening a share link",
+    shareNoScript: "This share link needs JavaScript to open. Turn JavaScript on for this site, then open the link again.",
+    shareOpening: "Opening the site.",
 };
 
 export const LABEL_KEYS = Object.keys(DEFAULT_LABELS) as (keyof Labels)[];

@@ -1,4 +1,4 @@
-import type { PressConfig } from "../config.js";
+import type { Labels, PressConfig } from "../config.js";
 import { readEnv } from "../env.js";
 import { redeemShareLink } from "../delivery.js";
 import { normaliseHost, resolveSite, SHARE_COOKIE, SHARE_SESSION_MAX_SECONDS, shareSecret, signShareCookie } from "../site.js";
@@ -126,20 +126,29 @@ export function createShareRedeemRoute(base: PressConfig) {
     };
 }
 
-function html(redeemPath: string): string {
+/** Every word below is a tenant's to set, so each one is escaped into the markup it lands in. */
+function escape(value: string): string {
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
+function html(redeemPath: string, labels: Labels, locale: string): string {
     const action = JSON.stringify(redeemPath).replace(/</g, "\\u003c");
     return `<!doctype html>
-<html lang="en">
+<html lang="${escape(locale)}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<title>Opening a share link</title>
+<title>${escape(labels.shareTitle)}</title>
 </head>
 <body style="font-family: system-ui, sans-serif; margin: 0; padding: 48px 20px; max-width: 36rem">
-<noscript><p>This share link needs JavaScript to open. Turn JavaScript on for this site, then open the link again.</p></noscript>
-<p id="opening" hidden>Opening the site.</p>
+<noscript><p>${escape(labels.shareNoScript)}</p></noscript>
+<p id="opening" hidden>${escape(labels.shareOpening)}</p>
 <form id="redeem" method="post" hidden><input type="hidden" name="key"></form>
 <script>
 (function () {
@@ -159,11 +168,31 @@ function html(redeemPath: string): string {
 `;
 }
 
-/** The `/_share` page. Mount it at `app/%5Fshare/route.ts`, since Next keeps `_` folders out of routing. */
-export function createSharePage(options: SharePageOptions = {}) {
+/*
+ * The `/_share` page. Mount it at `app/%5Fshare/route.ts`, since Next keeps `_` folders out of routing.
+ *
+ * It takes the config and resolves the site per request, which no other route file of this shape
+ * does, because its three lines of visitor text are the tenant's words like every other line a
+ * visitor reads (barakoPress #77). A Tagalog site that set every label it was offered was still
+ * showing English to the one visitor who follows a share link, which is the visitor most likely to
+ * be a client being shown their own site.
+ *
+ * A host that belongs to no tenant is a 404, the same as every other route. A CMS that cannot be
+ * reached is not: the page falls back to the words the config file carries, because a share link
+ * that opens in English beats one that answers 500.
+ */
+export function createSharePage(base: PressConfig, options: SharePageOptions = {}) {
     const redeemPath = options.redeemPath ?? "/api/share/redeem";
-    const body = html(redeemPath);
-    return async function GET(): Promise<Response> {
-        return new Response(body, { headers: { ...NO_STORE, "content-type": "text/html; charset=utf-8" } });
+    return async function GET(request: Request): Promise<Response> {
+        let config: PressConfig | null = base;
+        try {
+            config = await resolveSite(base, request.headers);
+        } catch {
+            config = base;
+        }
+        if (!config) return new Response("Not found", { status: 404, headers: NO_STORE });
+        return new Response(html(redeemPath, config.labels, config.locale), {
+            headers: { ...NO_STORE, "content-type": "text/html; charset=utf-8" },
+        });
     };
 }

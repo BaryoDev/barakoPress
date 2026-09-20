@@ -201,6 +201,8 @@ describe("visitor text from the tenant's labels", () => {
                 .map((f) => `src/screens/${f}`),
             "src/collections.ts",
             "src/cms.ts",
+            // Not a screen, but the three lines a share link lands on are visitor text all the same (#77).
+            "src/routes/share.ts",
         ];
         expect(files.length).toBeGreaterThan(5);
         expect(LABEL_KEYS.length).toBe(Object.keys(DEFAULT_LABELS).length);
