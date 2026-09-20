@@ -66,12 +66,25 @@ function sameSignature(a: string, b: string): boolean {
  * "unlimited work for five minutes" into "one". It goes through the store, so a fleet sharing one
  * honours a replayed delivery once rather than once per container (barakoPress #57). Written only
  * when the key was absent, which is why the store's `add` has to be atomic.
+ *
+ * The claim is given back when the purge it was claimed for does not finish, so the CMS's retry
+ * does the work rather than being told it has already happened.
  */
-async function alreadyHonoured(config: PressConfig, tags: string[], signature: string, windowSeconds: number): Promise<boolean> {
-    // Keyed by what was purged as well as the signature, so an honoured delivery can only ever
-    // stand in for the same purge. A handle has no spaces, so the key cannot be read two ways.
-    const key = `replay:${tags.join(" ")} ${signature}`;
-    return !(await storeFor(config).add(key, "1", windowSeconds));
+// Keyed by what was purged as well as the signature, so an honoured delivery can only ever stand in
+// for the same purge. A handle has no spaces, so the key cannot be read two ways.
+const claimKey = (tags: string[], signature: string) => `replay:${tags.join(" ")} ${signature}`;
+
+async function claimDelivery(config: PressConfig, key: string, windowSeconds: number): Promise<boolean> {
+    return storeFor(config).add(key, "1", windowSeconds);
+}
+
+async function giveBackClaim(config: PressConfig, key: string) {
+    try {
+        await storeFor(config).delete(key);
+    } catch {
+        // The delivery failed and so did giving the claim back. Nothing useful is left to do here,
+        // and throwing from a catch would replace the real reason with this one.
+    }
 }
 
 /*
@@ -227,15 +240,24 @@ export function createRevalidateRoute(config: PressConfig, options: RevalidateOp
         const tags = purgeTagsFor(site, changedBy(site, raw));
 
         // After the tenant resolved, so a lookup that failed with the CMS down leaves the retry free to purge.
-        if (await alreadyHonoured(site, tags, signature, tolerance)) {
+        const claim = claimKey(tags, signature);
+        if (!(await claimDelivery(site, claim, tolerance))) {
             // Honest 200: the purge this delivery asked for has already happened, so the CMS has
             // no reason to retry. A 401 here would make a legitimate retry look like an attack.
             return NextResponse.json({ revalidated: true, repeated: true });
         }
 
-        for (const tag of tags) revalidateTag(tag, { expire: 0 });
-        // For the containers this delivery did not reach.
-        await markPurged(storeFor(site), tags);
+        try {
+            for (const tag of tags) revalidateTag(tag, { expire: 0 });
+            // For the containers this delivery did not reach.
+            await markPurged(site, tags);
+        } catch (e) {
+            // A purge that did not finish is not one to tell the next delivery about: a store that
+            // refused the generation write leaves the other containers on their old copies, and the
+            // retry is what fixes that.
+            await giveBackClaim(site, claim);
+            throw e;
+        }
 
         // The delivery id is echoed only after the signature verified, so an anonymous caller
         // cannot put text of their choosing into this server's log.

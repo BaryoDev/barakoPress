@@ -157,9 +157,18 @@ export function purgeTagsFor(config: PressConfig, target: ReadTarget = {}): stri
  * The value is a timestamp, but only its changing matters. It is written as one past the current
  * value when a clock reads behind it, so two containers with drifting clocks can never walk a
  * generation backwards onto a key one of them still has cached.
+ *
+ * It has to outlive what it is holding back, because a read that finds no generation asks for the
+ * URL it asked for before the purge, and another container may still be holding that entry. With a
+ * backstop, nothing in the data cache outlives it, so twice the backstop is more than enough; with
+ * the backstop off, a cached entry never expires and neither may the generation.
  */
 const GENERATION_PARAM = "_purge";
 const GENERATION_TTL_SECONDS = 24 * 60 * 60;
+
+function generationTtl(config: PressConfig): number {
+    return config.backstopSeconds > 0 ? Math.max(GENERATION_TTL_SECONDS, config.backstopSeconds * 2) : 0;
+}
 
 const generationKey = (tag: string) => `gen:${tag}`;
 
@@ -174,11 +183,13 @@ async function newestGeneration(store: PressStore, tags: string[]): Promise<stri
 }
 
 /** Records a purge against each tag it dropped, for every container that did not receive it. */
-export async function markPurged(store: PressStore, tags: string[]) {
+export async function markPurged(config: PressConfig, tags: string[]) {
+    const store = storeFor(config);
+    const ttl = generationTtl(config);
     for (const tag of tags) {
         const current = Number(await store.get(generationKey(tag)));
         const next = Math.max(Date.now(), (Number.isFinite(current) ? current : 0) + 1);
-        await store.set(generationKey(tag), String(next), GENERATION_TTL_SECONDS);
+        await store.set(generationKey(tag), String(next), ttl);
     }
 }
 

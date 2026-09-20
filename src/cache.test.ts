@@ -215,26 +215,34 @@ describe("the cache class the API declares", () => {
     });
 });
 
-describe("two containers", () => {
-    const shared = (): PressStore => {
-        const held = new Map<string, string>();
-        return {
-            async get(key) {
-                return held.get(key) ?? null;
-            },
-            async set(key, value) {
-                held.set(key, value);
-            },
-            async delete(key) {
-                held.delete(key);
-            },
-            async add(key, value) {
-                if (held.has(key)) return false;
-                held.set(key, value);
-                return true;
-            },
-        };
+/** A store that records what it was asked to keep, and for how long. */
+function recording(): PressStore & { ttls: Record<string, number>; failOnGenerations: boolean } {
+    const held = new Map<string, string>();
+    const store = {
+        ttls: {} as Record<string, number>,
+        failOnGenerations: false,
+        async get(key: string) {
+            return held.get(key) ?? null;
+        },
+        async set(key: string, value: string, ttlSeconds: number) {
+            if (store.failOnGenerations && key.startsWith("gen:")) throw new Error("the store refused the write");
+            store.ttls[key] = ttlSeconds;
+            held.set(key, value);
+        },
+        async delete(key: string) {
+            held.delete(key);
+        },
+        async add(key: string, value: string) {
+            if (held.has(key)) return false;
+            held.set(key, value);
+            return true;
+        },
     };
+    return store;
+}
+
+describe("two containers", () => {
+    const shared = (): PressStore => recording();
 
     it("serves the corrected entry from the container the purge never reached", async () => {
         const store = shared();
@@ -283,6 +291,42 @@ describe("two containers", () => {
         const again = await on(apart[1], () => apart[1].deliver(body, timestamp));
         expect(again.revalidated).toBe(true);
         expect(again.repeated).toBeUndefined();
+    });
+
+    /*
+     * The generation holds a container back from a URL another one may still have cached, and with
+     * the backstop off nothing in that cache ever expires, so neither may the generation.
+     */
+    it("keeps the generation as long as a cached entry could outlive it", async () => {
+        const { defineConfig } = await import("./config.js");
+        const { markPurged } = await import("./delivery.js");
+        const store = recording();
+
+        await markPurged(defineConfig({ sites: {}, cmsUrl: CMS, store, backstopSeconds: 0 }), ["cms:baryo"]);
+        expect(store.ttls["gen:cms:baryo"]).toBe(0);
+
+        await markPurged(defineConfig({ sites: {}, cmsUrl: CMS, store, backstopSeconds: 30 * 60 }), ["cms:baryo"]);
+        expect(store.ttls["gen:cms:baryo"]).toBeGreaterThanOrEqual(2 * 30 * 60);
+    });
+
+    /*
+     * A purge that did not finish must not be remembered as one that did, or the CMS's retry is
+     * told it has already happened and the other containers keep their old copies.
+     */
+    it("gives the claim back when the purge does not finish, so the retry does it", async () => {
+        const store = recording();
+        const app = await startContainer(store);
+        const body = published("alpha");
+        const timestamp = String(Math.floor(Date.now() / 1000));
+
+        store.failOnGenerations = true;
+        await expect(on(app, () => app.deliver(body, timestamp))).rejects.toThrow("the store refused the write");
+
+        store.failOnGenerations = false;
+        const retry = await on(app, () => app.deliver(body, timestamp));
+        expect(retry.revalidated).toBe(true);
+        expect(retry.repeated).toBeUndefined();
+        expect(store.ttls["gen:cms:baryo:entry:post:alpha"]).toBeGreaterThan(0);
     });
 
     it("answers a host the other container already resolved without asking the CMS", async () => {
