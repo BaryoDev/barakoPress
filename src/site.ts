@@ -6,6 +6,7 @@ import {
     embedHosts,
     type CollectionConfig,
     type CollectionReference,
+    type CollectionTree,
     type FieldNames,
     type FooterColumn,
     type Holding,
@@ -21,7 +22,9 @@ import {
     type SiteLink,
     type SocialLink,
     type TopBar,
+    type TreeProduct,
     pinnedTenant,
+    TREE_LIMIT,
 } from "./config.js";
 import { readEnv } from "./env.js";
 import { CmsError, isTenantHandle, list, tenantForHost } from "./delivery.js";
@@ -655,6 +658,7 @@ function collectionFrom(v: unknown): CollectionConfig | undefined {
 
     const sort = str(c.sort);
     const colorBy = str(c.colorBy);
+    const layout = c.layout === "article" || c.layout === "list" ? c.layout : undefined;
     // Only the three values mean anything. Anything else leaves the default, which lists whatever
     // references this collection, rather than turning the band off on a typo.
     const related = c.related === "semantic" || c.related === "reference" || c.related === false ? c.related : undefined;
@@ -675,7 +679,65 @@ function collectionFrom(v: unknown): CollectionConfig | undefined {
         colorBy: colorBy && DATA_FIELD.test(colorBy) ? colorBy : undefined,
         related,
         readingTime: c.readingTime === true,
+        ...(layout ? { layout } : {}),
+        ...(treeFrom(c.tree) ? { tree: treeFrom(c.tree) } : {}),
     };
+}
+
+/*
+ * `tree`: the four fields that turn a collection into a manual, plus the products the switcher offers
+ * and where "edit this page" points (#23).
+ *
+ * Held to the same rules as everything else a tenant writes. A field name has to read as one, since it
+ * goes into an API query; a product's destination goes through `siteHref`, since it goes into a link;
+ * and the whole thing is dropped rather than half applied when its shape is wrong, so a typo leaves
+ * the collection a flat list rather than a broken tree.
+ */
+const MAX_PRODUCTS = 12;
+const MAX_SECTIONS = 50;
+
+function treeFrom(v: unknown): CollectionTree | undefined {
+    const t = record(v);
+    if (!t) return undefined;
+
+    const tree: CollectionTree = {};
+    for (const role of ["section", "order", "parent", "editPath"] as const) {
+        const names = fieldNames(t[role]);
+        if (names) tree[role] = names;
+    }
+    // One name, because this one goes into an API filter rather than being read off an entry.
+    const product = str(t.product);
+    if (product && FIELD_NAME.test(product)) tree.product = product;
+
+    const searchPath = sitePath(t.searchPath);
+    if (searchPath) tree.searchPath = searchPath;
+
+    const sections = array(t.sections)
+        ?.slice(0, MAX_SECTIONS)
+        .flatMap((raw) => {
+            const name = short(raw, 80);
+            return name ? [name] : [];
+        });
+    if (sections && sections.length > 0) tree.sections = sections;
+
+    const products = array(t.products)
+        ?.slice(0, MAX_PRODUCTS)
+        .flatMap((raw): TreeProduct[] => {
+            const p = record(raw);
+            const key = short(p?.key, 64);
+            const label = short(p?.label, 80);
+            const href = siteHref(p?.href);
+            return key && label && href ? [{ key, label, href }] : [];
+        });
+    if (products && products.length > 0) tree.products = products;
+
+    const editBase = siteHref(t.editBase);
+    if (editBase) tree.editBase = editBase;
+
+    const limit = t.limit;
+    if (typeof limit === "number" && Number.isInteger(limit) && limit >= 1 && limit <= TREE_LIMIT) tree.limit = limit;
+
+    return Object.keys(tree).length > 0 ? tree : undefined;
 }
 
 function collectionsFrom(base: Record<string, CollectionConfig>, v: unknown): Record<string, CollectionConfig> {

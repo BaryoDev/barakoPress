@@ -54,6 +54,10 @@ export function pickRelated(
  * Two lists share this name. Given a post, the posts closest to it by semantic search. Given a
  * collection key, an item and the reference field `via`, the items of that collection pointing at the
  * item, such as a department's doctors.
+ *
+ * @deprecated Since 0.7.0. Use `listRelatedItems(config, collection, item)` for the nearest items of a
+ * collection by meaning, or `listCollection(config, key, { filter })` for the items pointing at one.
+ * Removed no earlier than 1.0.0.
  */
 export function listRelated(config: PressConfig, post: Post, limit?: number): Promise<RelatedPost[]>;
 export function listRelated(

@@ -1,16 +1,7 @@
 import type { PressConfig } from "./config.js";
-import { AUTHOR_COLLECTION, CATEGORY_COLLECTION, includesFor } from "./config.js";
-import {
-    bySlug,
-    bySlugPreview,
-    list,
-    navigationTree,
-    pageAtPath,
-    redirectAt,
-    type PublicContent,
-    type Seo,
-} from "./delivery.js";
-import { toItem } from "./collections.js";
+import { AUTHOR_COLLECTION, CATEGORY_COLLECTION, POST_COLLECTION } from "./config.js";
+import { bySlug, list, navigationTree, pageAtPath, redirectAt, type PublicContent, type Seo } from "./delivery.js";
+import { collectionOf, getItem, getItemPreview, listCollection, toItem, type Item } from "./collections.js";
 import { samePath, siteHref } from "./site.js";
 
 export type { Seo };
@@ -67,98 +58,136 @@ function toRef(config: PressConfig, v: unknown): Ref | undefined {
     return { id: str(d.id), slug, name: name || slug };
 }
 
-export function toPost(config: PressConfig, c: PublicContent): Post {
-    const d = c.data;
-    const f = config.fields;
-    const tags = field(d, f.tags);
+/*
+ * The blog reads, as wrappers over the collection path (barakoPress #75).
+ *
+ * `post` is a collection like any other. `defineConfig` derives it from `types`, `fields` and
+ * `routes`, a tenant may replace it in its settings, and everything below reads it the way a
+ * hospital's doctors are read: one field map, one sort, one set of includes, one cache tag. The five
+ * exports stay because they shipped in 0.4.0 and a consumer may be pinning them, and each is
+ * `@deprecated` pointing at the collection call that does the same thing.
+ *
+ * Mapping an item onto a `Post` is what is left of the shape. It is the one direction that still
+ * needs saying, because `Post` names the blog's roles (`excerpt`, `coverImage`, `author`) and an item
+ * names roles any collection has.
+ */
+
+/** Which reference of the post collection points into a collection, by field name. */
+function refField(config: PressConfig, target: string): string | undefined {
+    const references = collectionOf(config, POST_COLLECTION)?.references ?? {};
+    return Object.entries(references).find(([, ref]) => ref.collection === target)?.[0];
+}
+
+/** An item of the post collection as a `Post`. */
+export function postFromItem(config: PressConfig, item: Item): Post {
+    const refIn = (target: string): Ref | undefined => {
+        const field = refField(config, target);
+        return field ? item.refs[field] : undefined;
+    };
     return {
-        id: c.id,
-        slug: c.slug ?? str(field(d, f.slug)),
-        title: str(field(d, f.title)) || config.labels.untitled,
-        excerpt: str(field(d, f.excerpt)) || undefined,
-        body: str(field(d, f.body)),
-        publishedAt: str(field(d, f.publishedAt)) || c.createdAt || undefined,
-        coverImage: str(field(d, f.coverImage)) || undefined,
-        coverImageAlt: str(field(d, f.coverImageAlt)) || undefined,
-        featured: field(d, f.featured) === true,
-        tags: Array.isArray(tags) ? tags.filter((t): t is string => typeof t === "string") : [],
-        author: toRef(config, field(d, f.author)),
-        category: toRef(config, field(d, f.category)),
-        seo: c.seo ?? undefined,
+        id: item.id,
+        slug: item.slug,
+        title: item.title,
+        excerpt: item.summary,
+        body: item.body,
+        /*
+         * The blueprint's post collection reads `["PublishedAt", "@createdAt"]`, so the fallback the
+         * old `toPost` had is already in the field map. A tenant that replaced `post` names one date
+         * field and may leave it empty, and this export promised a date, so the entry's own
+         * `createdAt` stands in there too.
+         */
+        publishedAt: item.date ?? item.content.createdAt,
+        coverImage: item.image,
+        coverImageAlt: item.imageAlt,
+        featured: item.featured,
+        tags: item.tags,
+        author: refIn(AUTHOR_COLLECTION),
+        category: refIn(CATEGORY_COLLECTION),
+        seo: item.seo,
     };
 }
 
-/*
- * Ordering is asked of the API, not done here.
+/**
+ * A stored entry as a post.
  *
- * Sorting the page that came back only orders those rows, so on a blog past one page the "newest"
- * list is newest-of-an-arbitrary-page. The API can order every row, so it does.
+ * @deprecated Since 0.7.0. Use `toItem(config, "post", entry)`. Removed no earlier than 1.0.0.
  */
-function sortKey(config: PressConfig): string | undefined {
-    return config.fields.publishedAt ? `-${config.fields.publishedAt}` : undefined;
+export function toPost(config: PressConfig, c: PublicContent): Post {
+    return postFromItem(config, toItem(config, POST_COLLECTION, c));
 }
 
+/**
+ * A page of posts, newest first.
+ *
+ * @deprecated Since 0.7.0. Use `listCollection(config, "post")`. Removed no earlier than 1.0.0.
+ */
 export async function listPosts(
     config: PressConfig,
     opts: { page?: number; pageSize?: number } = {},
 ): Promise<{ posts: Post[]; total: number; hasNextPage: boolean }> {
-    const res = await list(config, config.types.post, {
-        page: opts.page ?? 1,
-        pageSize: opts.pageSize ?? config.pageSizes.index,
-        include: includesFor(config),
-        sort: sortKey(config),
-    });
+    const res = await listCollection(config, POST_COLLECTION, opts);
     return {
-        posts: res.items.map((c) => toPost(config, c)),
-        total: res.totalItems,
+        posts: res.items.map((item) => postFromItem(config, item)),
+        total: res.total,
         hasNextPage: res.hasNextPage,
     };
 }
 
+/**
+ * One post by slug.
+ *
+ * @deprecated Since 0.7.0. Use `getItem(config, "post", slug)`. Removed no earlier than 1.0.0.
+ */
 export async function getPost(config: PressConfig, slug: string): Promise<Post | null> {
-    const c = await bySlug(config, config.types.post, slug);
-    return c ? toPost(config, c) : null;
+    const item = await getItem(config, POST_COLLECTION, slug);
+    return item ? postFromItem(config, item) : null;
 }
 
+/**
+ * One draft post, read uncached with a preview token.
+ *
+ * @deprecated Since 0.7.0. Use `getItemPreview(config, "post", slug, token)`. Removed no earlier
+ * than 1.0.0.
+ */
 export async function getPostPreview(
     config: PressConfig,
     slug: string,
     token: string,
 ): Promise<Post | null> {
-    const c = await bySlugPreview(config, config.types.post, slug, token);
-    return c ? toPost(config, c) : null;
+    const item = await getItemPreview(config, POST_COLLECTION, slug, token);
+    return item ? postFromItem(config, item) : null;
 }
 
-/*
- * Filtering by a reference takes the target's id, not its slug, so an archive is two calls:
- * resolve the slug, then filter. Both are cached and tagged, so it costs two reads once.
+/**
+ * Posts by author or category. Null when the site has no such type, or the slug is unknown.
+ *
+ * Null and not an empty list, which is the one thing this keeps that `listCollection` does not say:
+ * an archive route uses it to tell "nobody by that name" from "nothing written yet".
+ *
+ * @deprecated Since 0.7.0. Use `listCollection(config, "post", { filter: { [field]: slug } })`, where
+ * the field is the post collection's reference into that collection. Removed no earlier than 1.0.0.
  */
-async function idForSlug(config: PressConfig, type: string, slug: string): Promise<string | null> {
-    const c = await bySlug(config, type, slug);
-    return c?.id ?? null;
-}
-
-/** Posts by author or category. Null when the site has no such type, or the slug is unknown. */
 export async function listPostsBy(
     config: PressConfig,
     which: "author" | "category",
     slug: string,
 ): Promise<Post[] | null> {
-    const type = config.types[which];
-    const fieldName = config.fields[which];
-    if (!type || !fieldName) return null;
+    const target = termCollection(which);
+    const field = refField(config, target);
+    const col = collectionOf(config, target);
+    if (!field || !col) return null;
+    // Asked before the list, because a slug nobody has and a term with nothing filed under it are
+    // the same empty list and a caller has to tell them apart.
+    if (!(await bySlug(config, col.type, slug))) return null;
 
-    const id = await idForSlug(config, type, slug);
-    if (!id) return null;
-
-    const res = await list(config, config.types.post, {
+    const res = await listCollection(config, POST_COLLECTION, {
         pageSize: config.pageSizes.archive,
-        include: includesFor(config),
-        filter: [[fieldName, "eq", id]],
-        sort: sortKey(config),
+        filter: { [field]: slug },
     });
-    return res.items.map((c) => toPost(config, c));
+    return res.items.map((item) => postFromItem(config, item));
 }
+
+const termCollection = (which: "author" | "category") => (which === "author" ? AUTHOR_COLLECTION : CATEGORY_COLLECTION);
 
 export interface Term {
     id: string;
@@ -181,14 +210,11 @@ export async function getTerm(
     which: "author" | "category",
     slug: string,
 ): Promise<Term | null> {
-    const type = config.types[which];
-    if (!type) return null;
-    const c = await bySlug(config, type, slug);
-    return c ? toTerm(config, which, c) : null;
+    const item = await getItem(config, termCollection(which), slug);
+    return item ? toTerm(item) : null;
 }
 
-function toTerm(config: PressConfig, which: "author" | "category", c: PublicContent): Term {
-    const item = toItem(config, which === "author" ? AUTHOR_COLLECTION : CATEGORY_COLLECTION, c);
+function toTerm(item: Item): Term {
     return {
         id: item.id,
         slug: item.slug,
@@ -205,10 +231,8 @@ export async function listTerms(
     which: "author" | "category",
     pageSize: number,
 ): Promise<Term[]> {
-    const type = config.types[which];
-    if (!type) return [];
-    const res = await list(config, type, { pageSize });
-    return res.items.map((c) => toTerm(config, which, c));
+    const { items } = await listCollection(config, termCollection(which), { pageSize });
+    return items.map(toTerm);
 }
 
 export interface Page {

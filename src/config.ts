@@ -332,6 +332,90 @@ export interface CollectionConfig {
     related?: "reference" | "semantic" | false;
     /** Whether an item page shows a read time worked out from its body. Off unless set. */
     readingTime?: boolean;
+    /**
+     * How an item page is drawn. "list" is the shell markup every collection has had, class based
+     * against `barakopress/styles.css`. "article" is the reading column: a hero header, a byline, a
+     * read time and a band of neighbours under it, styled inline from the theme so it looks right with
+     * no stylesheet imported. The blog's posts are drawn that way and always were.
+     */
+    layout?: "list" | "article";
+    /**
+     * Set when the collection is a tree rather than a flat list: a manual with sections, an order and
+     * pages nested under other pages. Unset, nothing about the collection changes.
+     */
+    tree?: CollectionTree;
+}
+
+/**
+ * A collection whose items form a documentation tree (#23).
+ *
+ * Every name here is a field on the collection's own type, because the shape of a manual is content,
+ * not code: which section a page sits in, where it comes in the order, what it hangs under, and which
+ * product it documents. A site keeping its docs in a hand-written manifest replaces the manifest with
+ * four fields and a setting.
+ */
+export interface CollectionTree {
+    /** The field holding the heading an item is grouped under, for example "Getting started". */
+    section?: FieldNames;
+    /** The field holding the item's position. A number, or a string that reads as one. */
+    order?: FieldNames;
+    /** The field holding the slug of the item this one hangs under, or a reference to it. */
+    parent?: FieldNames;
+    /**
+     * The field naming the product an item documents, matched against a product's key.
+     *
+     * One field name and not a list, unlike the roles above, because this one goes into an API
+     * filter: a tree read for a product asks the CMS for that product's pages so the limit is spent
+     * on them. A fallback list cannot be one filter, and reading every product and filtering here
+     * would spend the limit before the wanted pages were reached.
+     */
+    product?: string;
+    /**
+     * The sections, in the order the sidebar shows them. A section not named here follows the ones
+     * that are, in the order its first item came back in.
+     *
+     * Named rather than worked out from the items, because every rule that derives it is wrong for
+     * somebody: a manual whose first page is "Quickstart" and whose second is "Access control" wants
+     * Getting started above Reference, and no ordering of the pages says that on its own.
+     */
+    sections?: string[];
+    /**
+     * The products the switcher offers: a key, the word a reader sees, and where it goes. The key is
+     * what the `product` field holds, so the switcher can mark the one being read.
+     */
+    products?: TreeProduct[];
+    /**
+     * Where the search box submits, and whether one is drawn at all.
+     *
+     * Named rather than assumed, because only the site knows which of its routes reads the query.
+     * An index answers `?q=` when its route file passes `search: true`, and a page of blocks answers
+     * through the `search` block; both make the route dynamic, which is the consumer's call to make.
+     * Unset, no box is drawn, since a search box whose query nothing reads is a control that looks
+     * like it works.
+     */
+    searchPath?: string;
+    /**
+     * Where "edit this page" points. The item's `editPath`, or its slug, is appended, so
+     * `https://github.com/owner/repo/edit/master/` plus `docs/webhooks.md` is the whole link. Unset,
+     * no such link is drawn.
+     */
+    editBase?: string;
+    /** The field holding the item's path in whatever repository it is written in. Its slug when unset. */
+    editPath?: FieldNames;
+    /** The most items read to build the tree. `TREE_LIMIT` unless set. */
+    limit?: number;
+}
+
+/** The most items read to build a tree when the collection does not say, and the most it may ask for. */
+export const TREE_LIMIT = 500;
+
+export interface TreeProduct {
+    /** What the item's `product` field holds. */
+    key: string;
+    /** What the switcher shows. */
+    label: string;
+    /** Where the switcher sends a reader. A site path, or an http or https URL. */
+    href: string;
 }
 
 /**
@@ -378,6 +462,20 @@ export interface Labels {
     shareNoScript: string;
     /** The line it shows while the link is being redeemed. */
     shareOpening: string;
+    /** The label and placeholder on the search box. */
+    search: string;
+    /** What the search box says when a query matched nothing. */
+    searchEmpty: string;
+    /** The link to the item before this one in a tree's reading order. */
+    previous: string;
+    /** The link to the item after it. */
+    next: string;
+    /** The link to wherever the page is written. */
+    editPage: string;
+    /** What the collapsed sidebar says on a phone. */
+    contents: string;
+    /** The label on the product switcher. */
+    products: string;
 }
 
 export const DEFAULT_LABELS: Labels = {
@@ -400,6 +498,13 @@ export const DEFAULT_LABELS: Labels = {
     shareTitle: "Opening a share link",
     shareNoScript: "This share link needs JavaScript to open. Turn JavaScript on for this site, then open the link again.",
     shareOpening: "Opening the site.",
+    search: "Search",
+    searchEmpty: "Nothing matches that.",
+    previous: "Previous",
+    next: "Next",
+    editPage: "Edit this page",
+    contents: "Contents",
+    products: "Products",
 };
 
 export const LABEL_KEYS = Object.keys(DEFAULT_LABELS) as (keyof Labels)[];

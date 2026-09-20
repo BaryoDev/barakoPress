@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.7.0 (unreleased)
+
+- Docs are a configured collection with a tree, not a Next app of their own. A collection's `tree`
+  names four fields on the tenant's own type: the section a page sits under, where it comes in the
+  order, the page it hangs under, and the product it documents. The section order and the products
+  the switcher offers are settings beside them, so what used to be a hand-kept manifest in a site
+  repository is content an editor changes in barakoBrew. An item page in such a collection draws the
+  sidebar with the page being read marked, the product switcher, a search box, previous and next from
+  the tree's reading order, and a link to wherever the page is written, built from `tree.editBase` and
+  the item's own source path. The same three are blocks as well, `docsSidebar`, `docsSwitcher` and
+  `search`, over one implementation, because a landing page needs them with no item and an item page
+  needs them with no blocks. Search goes through barakoCMS's own `/api/public/{type}/search`, which
+  matches only over the fields a type publishes, so a draft or a field held back from public delivery
+  can never surface as a hit; `createCollectionIndex(config, key, { search: true })` answers `?q=` the
+  same way. The box is drawn where `tree.searchPath` names a route that reads the query and nowhere
+  else, since only the site knows which of its routes does and one pointing elsewhere is a control
+  that looks like it works. The box is a form and the results are links, so a reader with no script
+  gets a working search, and the keyboard handling on top of it is the package's first client component. Old paths
+  move through the redirects feature the catch-all already asks. (#23)
+- The generic item view renders an article, and the blog's post exports are wrappers over it. A
+  reading column, a byline, a read time and a band of neighbours are what long-form content wants
+  rather than what a blog wants, so a collection asks for them with `layout: "article"` and a law
+  firm's briefings get the page the blog has always had. `PostView` produces every byte of that markup
+  through the shared layout, and `test/blog-wrappers.golden.json` still passes byte for byte, which is
+  the whole claim. `Post`, `PostView`, `createArchive`, `listPostsBy` and `listRelated` are
+  `@deprecated` naming what to use instead and are removed no earlier than 1.0.0, since they shipped
+  one release ago. What changed underneath is that `toPost`, `listPosts`, `getPost`, `getPostPreview`,
+  `listPostsBy`, `getTerm` and `listTerms` read the post collection's own field map, so a tenant that
+  replaced `post` in its settings gets its own names where it used to get the image's. What stays
+  blog-shaped on purpose is the three composition slots on `PostView`, which exist for a consumer
+  assembling its own post page. (#75)
+- A block that reads the site is rebound to the config a request resolved as itself. Every one of them
+  used to be replaced with a freshly built `collection` block, whatever it was, so a page holding a
+  docs sidebar would have rendered a list of documents where the sidebar belonged. (#23)
+
 ## 0.6.0 (unreleased)
 
 - A collection with more entries than the API hands back in one page is in the sitemap whole. The
