@@ -12,6 +12,7 @@ import {
     type FieldNames,
     type FooterColumn,
     type Holding,
+    type PageSizes,
     type PressConfig,
     type Region,
     type SiteIdentity,
@@ -703,6 +704,61 @@ function optionColorsFrom(
     return { ...base, ...Object.fromEntries(read) };
 }
 
+/*
+ * `PageSizes`: how many items this tenant's index, feed, sitemap and archive ask for (#53).
+ *
+ * One image serves every tenant, so a count written in press.config.ts is the same count for all of
+ * them: a bakery wanting 50 products and an agency wanting 9 case studies both got 20. The four keys
+ * merge one at a time, the way a theme token does, so a tenant that sets `index` keeps the configured
+ * feed size. A value that is not a whole number in range is dropped and the configured one stands.
+ *
+ * The ceiling is the largest number the config ships (`sitemap`, 1000). It is not a promise of rows:
+ * barakoCMS clamps a public list at 100 whatever is asked for, so a bigger number here buys nothing
+ * and is refused only when it is obviously not a page size.
+ */
+const PAGE_SIZE_KEYS = ["index", "feed", "sitemap", "archive"] as const;
+const MAX_PAGE_SIZE = 1000;
+
+function pageSizesFrom(base: PageSizes, v: unknown): PageSizes {
+    const input = record(v);
+    if (!input) return base;
+    const out = { ...base };
+    for (const key of PAGE_SIZE_KEYS) {
+        const size = input[key];
+        if (typeof size === "number" && Number.isInteger(size) && size >= 1 && size <= MAX_PAGE_SIZE) out[key] = size;
+    }
+    return out;
+}
+
+/*
+ * `ReservedSlugs`: first path segments a root-mounted page may not take, added to the configured
+ * ones (#53).
+ *
+ * Additive only, and that is the design rather than a shortcut. The configured list is the app's own
+ * routes and the engine's own files, so a tenant that could drop one would put a page on a path Next
+ * resolves to a route file first, and the page would render nowhere while looking fine in the menu.
+ * What a tenant can add is what sits in front of its own domain: a proxy answering /shop or /status
+ * is a per-domain fact, not a per-image one, and reserving it keeps that path out of the menu and the
+ * sitemap instead of linking somewhere this site never serves. So an empty list keeps the configured
+ * slugs here, where everywhere else in this file an empty list clears.
+ *
+ * A tenant's collection routes need no entry: `isReservedPath` reads them off the resolved config.
+ */
+const RESERVED_SLUG = /^[A-Za-z0-9._~-]{1,64}$/;
+const MAX_RESERVED_SLUGS = 50;
+
+function reservedSlugsFrom(base: string[], v: unknown): string[] {
+    const listed = array(v);
+    if (!listed) return base;
+    const added = listed.slice(0, MAX_RESERVED_SLUGS).flatMap((raw) => {
+        const written = str(raw);
+        if (!written) return [];
+        const slug = withoutTrailingSlashes(written.startsWith("/") ? written.slice(1) : written).toLowerCase();
+        return RESERVED_SLUG.test(slug) ? [slug] : [];
+    });
+    return [...new Set([...base, ...added])];
+}
+
 export function applySiteSettings(
     config: PressConfig,
     data: Record<string, unknown> | undefined,
@@ -759,6 +815,8 @@ export function applySiteSettings(
         presets: array(d.Presets) ? presetsFrom(array(d.Presets), pinnedTenant(config)) : config.presets,
         collections: collectionsFrom(config.collections, d.Collections),
         optionColors: optionColorsFrom(config.optionColors, theme, d.Colors, d.OptionColors),
+        pageSizes: pageSizesFrom(config.pageSizes, d.PageSizes),
+        reservedSlugs: reservedSlugsFrom(config.reservedSlugs, d.ReservedSlugs),
         ...(bands ? { regions: bands } : {}),
         ...(held ? { holding: held } : {}),
     };

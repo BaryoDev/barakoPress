@@ -2,6 +2,15 @@
 
 ## 0.4.0 (unreleased)
 
+- Two build-time keys are a tenant's to set. `PageSizes` gives a site its own index, feed, sitemap
+  and archive counts, so a bakery listing 50 products and an agency listing 9 case studies run the
+  same image instead of one of them needing a build; a key the entry leaves out keeps the configured
+  count, and a collection's own `pageSize` still wins. `ReservedSlugs` adds to the reserved first
+  segments, which is how a tenant keeps a path its proxy answers out of the menu and the sitemap. It
+  only ever adds: the configured list is the app's own routes, and a page freed onto one of those
+  would sit behind a route file and render nowhere. The pages mount stays operator-only, because
+  Next resolves the catch-all by where its file sits and no setting can move a file. A tenant that
+  sets neither renders exactly as it did. (#53)
 - A request-time site no longer renders every page for every visitor. Resolving the tenant meant
   reading the request host, reading a header makes a route dynamic, and Next never keeps a dynamic
   route, so one container serving many domains re-rendered every page on every view with every read

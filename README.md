@@ -474,25 +474,38 @@ without: the engine never asks the API for that data and never renders an empty 
 reference type you do not have is worse than useless, because `include=Author` is a 400 from the API
 for a post type with no such field.
 
-| Key | Default | What |
-| --- | --- | --- |
-| `site` | required | Name, tagline and absolute origin. Every absolute link is built from the origin |
-| `types` | `post`, `author`, `category` | The content type names |
-| `fields` | the blueprint's PascalCase names | Which field holds what |
-| `routes` | `/blog`, `/authors`, `/categories` | Where you mounted each route |
-| `pageSizes` | 20, 50, 1000, 50 | Index, feed, sitemap, archive |
-| `cacheTag` | `cms` | The tag this site purges. Two sites on one server need two tags |
-| `backstopSeconds` | 300 | How long a cached read may live with no webhook. 0 disables it |
-| `cmsTimeoutMs` | 5000 | How long any one call to the CMS may take, a share link redemption included. Past it the call has failed, and a request-time site answers from its last good copy |
-| `locale` | `en-GB` | Passed to `toLocaleDateString` |
-| `cmsUrl` | `CMS_URL`, or `http://localhost:5005` | Where the CMS is, from this server. The variable is read when the CMS is called, not when this file runs |
-| `tenant` | `CMS_TENANT` | Tenant slug, for a multi-tenant deployment. On a request-time site, pins every host to it. The variable is read when the CMS is called, not when this file runs |
-| `sites` | off | Request-time identity and theme from the tenant's site settings. See below |
-| `pages` | off | Where the Pages module's pages are mounted. `""` is the site root |
-| `reservedSlugs` | the routes and the engine's files | First path segments a root-mounted page may not take. Adds to the defaults |
-| `collections` | the blog's `post`, `author` and `category` | Content types rendered as lists and detail pages. See Collections |
-| `optionColors` | none | CSS colours by `type.field` and option, for `colorBy` |
-| `theme` | the barakoCMS palette | Colours, faces, radii and column widths. See below |
+| Key | Default | Tenant setting | What |
+| --- | --- | --- | --- |
+| `site` | required | `Name`, `Tagline`, `Url` and one per field | Name, tagline and absolute origin. Every absolute link is built from the origin |
+| `types` | `post`, `author`, `category` | operator only | The content type names |
+| `fields` | the blueprint's PascalCase names | operator only | Which field holds what |
+| `pageFields` | the blueprint's PascalCase names | operator only | Which field on the page type holds what |
+| `routes` | `/blog`, `/authors`, `/categories` | operator only | Where you mounted each route |
+| `pageSizes` | 20, 50, 1000, 50 | `PageSizes` | Index, feed, sitemap, archive |
+| `cacheTag` | `cms` | operator only | The tag this site purges. Two sites on one server need two tags |
+| `backstopSeconds` | 300 | operator only | How long a cached read may live with no webhook. 0 disables it |
+| `cmsTimeoutMs` | 5000 | operator only | How long any one call to the CMS may take, a share link redemption included. Past it the call has failed, and a request-time site answers from its last good copy |
+| `locale` | `en-GB` | `Locale` | Passed to `toLocaleDateString` |
+| `currency` | none | `Currency` | The ISO code a `money` binding formats with. Unset, an amount renders as a plain number |
+| `embedHosts` | seven player hosts | `EmbedHosts` | The hosts an `embed` block may frame |
+| `presets` | none | `Presets` | Named blocks saved as arrangements of primitives. See Presets |
+| `cmsUrl` | `CMS_URL`, or `http://localhost:5005` | operator only | Where the CMS is, from this server. The variable is read when the CMS is called, not when this file runs |
+| `tenant` | `CMS_TENANT` | operator only | Tenant slug, for a multi-tenant deployment. On a request-time site, pins every host to it. The variable is read when the CMS is called, not when this file runs |
+| `sites` | off | operator only | Request-time identity and theme from the tenant's site settings. See below |
+| `pages` | off | operator only | Where the Pages module's pages are mounted. `""` is the site root. It has to match a route file on disk, which is why it is not a tenant's to set |
+| `reservedSlugs` | the routes and the engine's files | `ReservedSlugs`, added to them | First path segments a root-mounted page may not take. Adds to the defaults |
+| `regions` | off | `HeaderPath`, `HeaderTone`, `FooterPath`, `FooterTone` | The header and the footer as block regions |
+| `collections` | the blog's `post`, `author` and `category` | `Collections` | Content types rendered as lists and detail pages. See Collections |
+| `optionColors` | none | `OptionColors` | CSS colours by `type.field` and option, for `colorBy` |
+| `theme` | the barakoCMS palette | `Colors`, `Fonts`, `Radii`, `Layout`, `Space`, `Text` | Colours, faces, radii and column widths. See below |
+
+The third column is the whole of the split. A key marked operator only is one the image decides for
+every tenant it serves, and each is that for a reason you can name: `types`, `fields`, `pageFields`
+and `routes` are what the blog factories compile against, `cacheTag`, `backstopSeconds`,
+`cmsTimeoutMs`, `cmsUrl`, `tenant` and `sites` are facts about the deployment rather than the site,
+and `pages` has to match a route file on disk. Everything else is that tenant's data, edited in
+barakoBrew, and wins over what this file said. A tenant that sets nothing renders exactly as the
+file says.
 
 ### The environment
 
@@ -579,10 +592,8 @@ The settings are the singleton `site` type from barakoCMS `docs/site-settings.md
 `Tagline`, `Url`, `Locale`, `Logo`, `LogoAlt`, `FooterLogo`, `Favicon`, `ShareImage`, `Copyright`,
 `Colors` (the theme slots), `Fonts` (a family name per role, and the stylesheet that loads it),
 `Radii`, `Layout`, `TopBar`, `HeaderLinks`, `FooterColumns`, `SocialLinks`, `HeaderPath`,
-`HeaderTone`, `FooterPath` and `FooterTone`. `Collections` and `OptionColors` are read as the collections section
-`Colors` (the theme slots), `Fonts` (Google Fonts family names), `Radii`, `Layout`, `TopBar`,
-`HeaderLinks`, `FooterColumns`, `SocialLinks`, `HeaderPath`, `HeaderTone`, `FooterPath`,
-`FooterTone`, `AssetsAsSupplied`, `LogoAsSupplied` and `LogoClearSpace`. `Collections` and `OptionColors` are read as the collections section
+`HeaderTone`, `FooterPath`, `FooterTone`, `AssetsAsSupplied`, `LogoAsSupplied`, `LogoClearSpace`,
+`PageSizes` and `ReservedSlugs`. `Collections` and `OptionColors` are read as the collections section
 describes. `Variants` are not rendered yet. Every value is checked for shape; one that fails, and any the
 entry leaves out, keeps the configured value, so a half-filled theme renders. A link is a path on the
 site or an absolute http or https URL. Set `Url`: without it the feed and sitemap fall back to the
@@ -590,6 +601,29 @@ host the tenant was found by.
 
 `createSiteLayout` and `createSiteMetadata` render the root layout from all of this: `lang`, the
 faces, the palette, the top bar, header links, footer columns, social links and the copyright line.
+
+**How many items, per tenant.** `PageSizes` sets the four counts for this site, each on its own:
+
+```json
+{ "PageSizes": { "index": 50 } }
+```
+
+A bakery listing 50 products and an agency listing 9 case studies run the same image. A key the
+entry leaves out keeps the configured count, and a collection's own `pageSize` still wins over the
+site's. barakoCMS clamps a public list at 100 whatever is asked for, so a larger number is not an
+error and does not buy more rows.
+
+**Paths this site does not serve.** `ReservedSlugs` adds to the configured reserved list:
+
+```json
+{ "ReservedSlugs": ["shop", "status"] }
+```
+
+A first segment on it is left out of the menu and the sitemap, and a page there is never asked for.
+It is what a proxy in front of this domain answers instead of the renderer, which is a fact about
+one tenant rather than about the image. It only ever adds: a tenant cannot free a segment the app's
+own routes already hold, because a page there would sit behind a route file and render nowhere. A
+tenant's collection routes need no entry, since those are read off its settings already.
 
 **Fonts, from an allow list.** A family name on its own is loaded from Google Fonts, which is what it
 has always meant:
