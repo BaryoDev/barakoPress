@@ -45,7 +45,9 @@ const { createCollectionIndex } = await import("./screens/collection.js");
 const { createBlockRegistry, registryFor } = await import("./blocks/registry.js");
 const { resolveBlocks } = await import("./blocks/schema.js");
 const { BlockList } = await import("./blocks/render.js");
-const { bindBlocks, queryScope } = await import("./blocks/bind.js");
+const { bindBlocks, itemScope, queryScope } = await import("./blocks/bind.js");
+const { getItem } = await import("./collections.js");
+const { createSitemap } = await import("./routes/sitemap.js");
 
 const CMS = "http://cms.test";
 
@@ -57,7 +59,7 @@ type Entry = { id: string; slug: string; data: Record<string, unknown> };
  */
 const DOCS: Entry[] = [
     { id: "d1", slug: "quickstart", data: { Title: "Quickstart", Slug: "quickstart", Body: "Start here.", Section: "Getting started", Order: 1, Product: "cms", Source: "quickstart/README.md" } },
-    { id: "d2", slug: "webhooks", data: { Title: "Webhooks and actions", Slug: "webhooks", Body: "Signed.", Section: "Reference", Product: "cms", Source: "docs/webhooks.md" } },
+    { id: "d2", slug: "webhooks", data: { Title: "Webhooks and actions", Slug: "webhooks", Body: "Signed.", Section: "Reference", Product: "cms", Source: "docs/webhooks.md", Order: "not a number" } },
     { id: "d3", slug: "delivery-api", data: { Title: "Public delivery API", Slug: "delivery-api", Body: "Read it.", Section: "Reference", Order: 1, Product: "cms" } },
     { id: "d4", slug: "delivery-paging", data: { Title: "Paging", Slug: "delivery-paging", Body: "A page at a time.", Section: "Reference", Order: 2, Parent: "delivery-api", Product: "cms" } },
     { id: "d5", slug: "press-quickstart", data: { Title: "Rendering with barakoPress", Slug: "press-quickstart", Body: "Install it.", Section: "Getting started", Order: 1, Product: "press" } },
@@ -384,5 +386,81 @@ describe("the docs blocks", () => {
         expect(html).toContain('href="/docs/delivery-api"');
         expect(html).not.toContain("Rendering with barakoPress");
         expect(calls.some((c) => c.path.startsWith("/api/public/doc/search?"))).toBe(true);
+    });
+});
+
+/*
+ * The unchanged callers of what this changed (the interaction surface), each crossed here rather
+ * than argued about: `blocks/bind.ts` reads an `Item` and now sees one with four more roles on it,
+ * and `routes/sitemap.ts` pages a collection that is now a tree. Both are files this branch did not
+ * touch, and both would fail in a way the tests above cannot see.
+ */
+describe("what else reads an item of a tree", () => {
+    it("binds the tenant's own field names, and gains no engine name that could shadow one", async () => {
+        const config = await site();
+        const item = await getItem(config, "docs", "webhooks");
+        expect(item).not.toBeNull();
+        const scope = itemScope(config, item!);
+
+        // The tenant's own names, straight off the entry.
+        expect(scope.Section).toBe("Reference");
+        expect(scope.Product).toBe("cms");
+        expect(scope.Source).toBe("docs/webhooks.md");
+        // `Order` on this entry is not a number, which is what the tree drops and a binding must not.
+        // If the scope ever grew an engine-named `Order`, this would read undefined instead.
+        expect(item!.order).toBeUndefined();
+        expect(scope.Order).toBe("not a number");
+        // The roles the tree reads are on the item, and deliberately not extra binding names.
+        expect(item!.section).toBe("Reference");
+        expect(Object.keys(scope)).not.toContain("Parent");
+        expect(Object.keys(scope)).not.toContain("EditPath");
+    });
+
+    it("puts a tree collection's pages in the sitemap, every product of them", async () => {
+        requestHeaders = new Headers({ host: "barakocms.com" });
+        const entries = await createSitemap(base)();
+
+        expect(entries.length).toBeGreaterThan(0);
+        const urls = entries.map((e) => e.url);
+        expect(urls).toContain("https://barakocms.com/docs/webhooks");
+        expect(urls).toContain("https://barakocms.com/docs/press-quickstart");
+    });
+});
+
+describe("a manual whose CMS stopped answering", () => {
+    /** Every read fails except the one entry being read, which is what a half-gone CMS looks like. */
+    function failing() {
+        return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+            const url = new URL(String(input));
+            const tenant = new Headers(init?.headers).get("x-tenant");
+            if (url.pathname === "/api/tenants/by-host/barakocms.com") return Response.json({ handle: "cms" });
+            if (tenant !== "cms") return new Response("", { status: 404 });
+            if (url.pathname === "/api/public/site") {
+                return Response.json({ items: [{ id: "s", data: SETTINGS }], page: 1, pageSize: 20, totalItems: 1, totalPages: 1, hasNextPage: false });
+            }
+            const found = DOCS.find((d) => url.pathname === `/api/public/doc/${d.slug}`);
+            return found ? Response.json(found) : new Response("", { status: 500 });
+        });
+    }
+
+    it("still serves the page, and loses the sidebar rather than the page", async () => {
+        vi.stubGlobal("fetch", failing());
+        requestHeaders = new Headers({ host: "barakocms.com" });
+        const html = await markup(createPage(base)({ params: Promise.resolve({ path: ["docs", "webhooks"] }) }));
+
+        expect(html).toContain("Webhooks and actions");
+        expect(html).toContain("Signed.");
+        // The search box is chrome the tree does not need a read for, so it stays.
+        expect(html).toContain('role="search"');
+        // The sidebar had nothing to draw, so it drew nothing rather than throwing.
+        expect(html).not.toContain('href="/docs/quickstart"');
+    });
+
+    it("leaves the manual out of the sitemap rather than throwing, which would fail a build", async () => {
+        vi.stubGlobal("fetch", failing());
+        requestHeaders = new Headers({ host: "barakocms.com" });
+        const entries = await createSitemap(base)();
+
+        expect(entries.map((e) => e.url).some((url) => url.includes("/docs/"))).toBe(false);
     });
 });
