@@ -6,19 +6,26 @@
  * signature made for one purpose never verifies as another. When PRESS_SECRET is unset, each purpose
  * reads the variable it used before, so a deployment that set those keeps working unchanged.
  *
- * This file imports nothing, because `barakopress revalidate-key` runs under plain Node, which cannot
- * resolve `next/headers` from `site.ts`.
+ * The values come from `readEnv` like every other environment value (barakoPress #51), untrimmed:
+ * a secret with a trailing space is a different HMAC key, so trimming it would stop every webhook
+ * that verifies today.
+ *
+ * Its one import is `env.js`, which imports nothing, because `barakopress revalidate-key` runs under
+ * plain Node, which cannot resolve `next/headers` from `site.ts`.
  */
+
+import { ENV_NAMES, readEnv, type Env } from "./env.js";
 
 /** Below this a secret is a guess away. The same rule for every purpose. */
 export const MIN_SECRET_LENGTH = 32;
 
-const OLDER_NAMES = {
-    revalidate: "REVALIDATE_SECRET",
-    "press-share": "PRESS_PREVIEW_SECRET",
+/** The `PressEnv` key each purpose falls back to while `PRESS_SECRET` is unset. */
+const OLDER = {
+    revalidate: "revalidateSecret",
+    "press-share": "previewSecret",
 } as const;
 
-export type SecretPurpose = keyof typeof OLDER_NAMES;
+export type SecretPurpose = keyof typeof OLDER;
 
 export interface PressSecret {
     value: string;
@@ -29,11 +36,9 @@ export interface PressSecret {
 }
 
 /** The secret for a purpose, read when called: PRESS_SECRET, else the purpose's older name. Null when neither is set. */
-export function readSecret(
-    purpose: SecretPurpose,
-    env: Record<string, string | undefined> = process.env,
-): PressSecret | null {
-    const name = env.PRESS_SECRET ? "PRESS_SECRET" : OLDER_NAMES[purpose];
-    const value = env[name];
-    return value ? { value, name, short: value.length < MIN_SECRET_LENGTH } : null;
+export function readSecret(purpose: SecretPurpose, env?: Env): PressSecret | null {
+    const values = readEnv(env);
+    const key = values.secret ? "secret" : OLDER[purpose];
+    const value = values[key];
+    return value ? { value, name: ENV_NAMES[key], short: value.length < MIN_SECRET_LENGTH } : null;
 }

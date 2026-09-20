@@ -25,6 +25,13 @@
  * router.
  */
 
+/*
+ * `readEnv` and the two resolvers over it, `cmsUrlFor` and `pinnedTenant`, are deliberately not
+ * exported here. Nothing outside src/ uses them, and this is a published package: exporting one
+ * ahead of a caller means whoever removes it later is making a breaking change for whoever picked
+ * it up in between. The pull request that first needs one adds the line, where the reason is in
+ * the diff beside the use.
+ */
 export {
     defineConfig,
     includesFor,

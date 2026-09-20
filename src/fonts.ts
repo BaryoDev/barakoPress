@@ -1,4 +1,5 @@
 import type { FontRole, PressTheme, ThemeFontSources } from "./theme.js";
+import { readEnv } from "./env.js";
 
 /*
  * Where a site's faces come from (#54).
@@ -96,7 +97,7 @@ function originOf(value: string): string | undefined {
  * baked into whatever is prerendered at build.
  */
 export function allowedFontOrigins(
-    raw: string | undefined = process.env.PRESS_FONT_ORIGINS,
+    raw: string | undefined = readEnv().fontOrigins,
 ): ReadonlySet<string> {
     const written = raw?.trim();
     if (!written) return new Set([GOOGLE_FONTS_ORIGIN]);

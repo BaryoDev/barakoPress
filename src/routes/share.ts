@@ -1,4 +1,5 @@
 import type { PressConfig } from "../config.js";
+import { readEnv } from "../env.js";
 import { redeemShareLink } from "../delivery.js";
 import { normaliseHost, resolveSite, SHARE_COOKIE, SHARE_SESSION_MAX_SECONDS, shareSecret, signShareCookie } from "../site.js";
 
@@ -110,7 +111,7 @@ export function createShareRedeemRoute(base: PressConfig) {
 
         const now = Date.now();
         const answer = await redeemShareLink(config, key, now, {
-            rendererKey: process.env.CMS_RENDERER_KEY?.trim() || undefined,
+            rendererKey: readEnv().rendererKey?.trim() || undefined,
             visitorIp: visitorIp(config, request),
         });
         if (answer.kind !== "valid") return refused();

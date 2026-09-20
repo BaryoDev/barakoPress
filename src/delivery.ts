@@ -1,5 +1,6 @@
 import { isIP } from "node:net";
-import type { PressConfig } from "./config.js";
+import { cmsUrlFor, pinnedTenant, type PressConfig } from "./config.js";
+import { readEnv } from "./env.js";
 
 /*
  * The delivery layer: typed calls against barakoCMS's public API.
@@ -13,9 +14,15 @@ import type { PressConfig } from "./config.js";
  * the moment the CMS says something changed, and carries a backstop so a deployment whose webhook
  * was never wired up still refreshes on its own.
  *
- * Nothing here reads process.env or a module-level constant: every call takes the config, because
- * two sites served by one build must be able to differ, and because a value read at module scope
- * is baked into a prerender at build time.
+ * Nothing here holds a module-level constant, and nothing reads the environment at module scope:
+ * every call takes the config, because two sites served by one build must be able to differ, and
+ * because a value read at module scope is baked into a prerender at build time. Where the CMS is
+ * and which tenant a call carries come from `cmsUrlFor` and `pinnedTenant`, which put the config
+ * first and read `CMS_URL` and `CMS_TENANT` on the call that needs them (barakoPress #51).
+ *
+ * Every call to the CMS is bounded by `cmsTimeoutMs`, the redemption below included. A visitor
+ * waiting on a share link is waiting on a CMS call like any other, and an operator who lowers the
+ * timeout for a slow network meant that one too.
  */
 
 export interface PublicContent {
@@ -56,7 +63,8 @@ export class CmsError extends Error {
 }
 
 function headers(config: PressConfig): HeadersInit {
-    return config.tenant ? { "X-Tenant": config.tenant } : {};
+    const tenant = pinnedTenant(config);
+    return tenant ? { "X-Tenant": tenant } : {};
 }
 
 /**
@@ -68,8 +76,9 @@ function headers(config: PressConfig): HeadersInit {
  */
 export function cacheTagFor(config: PressConfig): string {
     if (!config.sites) return config.cacheTag;
-    if (!config.tenant) throw new Error("a request-time site has to be resolved before it reads");
-    return `${config.cacheTag}:${config.tenant}`;
+    const tenant = pinnedTenant(config);
+    if (!tenant) throw new Error("a request-time site has to be resolved before it reads");
+    return `${config.cacheTag}:${tenant}`;
 }
 
 /*
@@ -158,7 +167,7 @@ async function read<T>(config: PressConfig, path: string, opts: ReadOptions): Pr
         }
     }
     try {
-        const res = await fetch(`${config.cmsUrl}${path}`, {
+        const res = await fetch(`${cmsUrlFor(config)}${path}`, {
             headers: opts.headers,
             signal: AbortSignal.timeout(config.cmsTimeoutMs),
             next: {
@@ -180,23 +189,24 @@ async function read<T>(config: PressConfig, path: string, opts: ReadOptions): Pr
         if (kept === undefined || !worthServingStale(e)) throw e;
         markFailed(opts.staleKey!);
         const why = e instanceof Error ? e.message : String(e);
-        console.warn(`cms: ${path} for tenant "${config.tenant ?? ""}" failed (${why}), serving the last good answer`);
+        console.warn(`cms: ${path} for tenant "${pinnedTenant(config) ?? ""}" failed (${why}), serving the last good answer`);
         return JSON.parse(kept) as T;
     }
 }
 
 /** A cached, tagged read. Everything a visitor sees comes through here. */
 async function get<T>(config: PressConfig, path: string): Promise<T> {
+    const env = readEnv();
     return read<T>(config, path, {
         headers: headers(config),
         tag: cacheTagFor(config),
-        staleKey: config.sites ? `${config.cmsUrl}|t:${config.tenant}|${path}` : undefined,
+        staleKey: config.sites ? `${cmsUrlFor(config, env)}|t:${pinnedTenant(config, env)}|${path}` : undefined,
     });
 }
 
 /** An uncached read, for a draft. A cached draft would be served to the next visitor. */
 async function getFresh<T>(config: PressConfig, path: string): Promise<T | null> {
-    const res = await fetch(`${config.cmsUrl}${path}`, {
+    const res = await fetch(`${cmsUrlFor(config)}${path}`, {
         headers: headers(config),
         cache: "no-store",
         signal: AbortSignal.timeout(config.cmsTimeoutMs),
@@ -233,7 +243,7 @@ export async function tenantForHost(config: PressConfig, host: string): Promise<
     const path = `/api/tenants/by-host/${encodeURIComponent(host)}`;
     let tenant: string | null;
     try {
-        const res = await fetch(`${config.cmsUrl}${path}`, { cache: "no-store", signal: AbortSignal.timeout(config.cmsTimeoutMs) });
+        const res = await fetch(`${cmsUrlFor(config)}${path}`, { cache: "no-store", signal: AbortSignal.timeout(config.cmsTimeoutMs) });
         if (res.status === 404) tenant = null;
         else if (!res.ok) throw new CmsError(path, res.status);
         else {
@@ -335,7 +345,7 @@ export function speaksPagesContract(contract: unknown): boolean {
 
 function warnContract(config: PressConfig, what: string, contract: unknown) {
     console.warn(
-        `pages: ${what} for tenant "${config.tenant ?? ""}" speaks contract ${String(contract)}, this renderer reads ${PAGES_CONTRACT.min} to ${PAGES_CONTRACT.max}`,
+        `pages: ${what} for tenant "${pinnedTenant(config) ?? ""}" speaks contract ${String(contract)}, this renderer reads ${PAGES_CONTRACT.min} to ${PAGES_CONTRACT.max}`,
     );
 }
 
@@ -402,9 +412,6 @@ export async function redirectAt(
     }
 }
 
-/** A redemption waits this long for the CMS. A visitor is waiting on the answer, and a slow one is a failed one. */
-const SHARE_REDEEM_TIMEOUT_MS = 5_000;
-
 export type ShareRedeemAnswer =
     | { kind: "valid"; expiresAt: number }
     | { kind: "invalid" }
@@ -431,6 +438,8 @@ export function singleIp(raw: string | null | undefined): string | null {
  * `{ expiresAt }` for a link that is valid now, 404 otherwise, 429 when throttled.
  *
  * One uncached request, never retried, since a retry would spend the caller's throttle allowance.
+ * It is bounded by `cmsTimeoutMs` like every other CMS call: a visitor is waiting on the answer, and
+ * a slow redemption is a failed one (barakoPress #51).
  * The key goes in the body, not the URL, so no access log records it. Nothing here logs it either.
  * A 200 whose expiry is missing, unreadable or already past counts as a failure: there is nothing
  * safe to sign. A redirect is refused rather than followed, because a 307 or 308 would send the key
@@ -447,13 +456,13 @@ export async function redeemShareLink(
     const visitorIp = singleIp(caller.visitorIp);
     if (visitorIp) sent["X-Barako-Visitor-IP"] = visitorIp;
     try {
-        const res = await fetch(`${config.cmsUrl}/api/public/site/share-links/redeem`, {
+        const res = await fetch(`${cmsUrlFor(config)}/api/public/site/share-links/redeem`, {
             method: "POST",
             headers: sent,
             body: JSON.stringify({ key }),
             cache: "no-store",
             redirect: "error",
-            signal: AbortSignal.timeout(SHARE_REDEEM_TIMEOUT_MS),
+            signal: AbortSignal.timeout(config.cmsTimeoutMs),
         });
         if (res.status === 404) return { kind: "invalid" };
         if (res.status === 429) return { kind: "throttled" };
