@@ -17,6 +17,7 @@ import { CmsError } from "../delivery.js";
 import { listRelatedItems } from "../related.js";
 import { readingMinutes } from "../reading-time.js";
 import { Asset, renderProse } from "../assets.js";
+import { IconGlyph } from "../blocks/primitives.js";
 import { siteConfig, type SiteParams } from "../site.js";
 
 /*
@@ -58,7 +59,13 @@ function itemFromPost(config: PressConfig, post: Post): Item {
     };
 }
 
-function OptionLine({ item }: { item: Item }) {
+/*
+ * The option an item holds, as the site shows it (#52): the tone as a dot, the icon beside it, and
+ * the style's own word in place of the option's value. A tenant that set only a colour gets the dot
+ * and the value, which is what this drew before styles existed.
+ */
+function OptionLine({ config, item }: { config: PressConfig; item: Item }) {
+    const style = item.style;
     return (
         <p className="meta" data-option={item.option}>
             {item.color && (
@@ -74,7 +81,12 @@ function OptionLine({ item }: { item: Item }) {
                     }}
                 />
             )}
-            {item.option}
+            {style?.icon && (
+                <span style={{ marginRight: "6px" }}>
+                    <IconGlyph name={style.icon} size={config.theme.text.small} color={item.color ?? "currentColor"} />
+                </span>
+            )}
+            {style?.label ?? item.option}
         </p>
     );
 }
@@ -98,7 +110,7 @@ export function Card(props: CardProps) {
             className={featured ? "card featured-card" : "card"}
             style={item.color ? { borderLeft: `4px solid ${item.color}` } : undefined}
         >
-            {featured && <span className="chip">Featured</span>}
+            {featured && <span className="chip">{config.labels.featured}</span>}
             <h2>{col?.route !== undefined ? <Link href={`${col.route}/${item.slug}`}>{item.title}</Link> : item.title}</h2>
             <p className="meta">
                 {item.date && <time dateTime={item.date}>{formatDate(config, item.date)}</time>}
@@ -109,7 +121,7 @@ export function Card(props: CardProps) {
                     </Fragment>
                 ))}
             </p>
-            {item.option && <OptionLine item={item} />}
+            {item.option && <OptionLine config={config} item={item} />}
             {item.summary && <p className="excerpt">{item.summary}</p>}
             {item.tags.length > 0 && (
                 <p className="tags">
@@ -144,7 +156,7 @@ export function ItemView({ config, item, related, backHref = "/" }: ItemViewProp
     return (
         <div className="shell">
             <p className="meta">
-                <Link href={backHref}>Back</Link>
+                <Link href={backHref}>{config.labels.back}</Link>
             </p>
             {item.photo && (
                 <Asset
@@ -155,8 +167,12 @@ export function ItemView({ config, item, related, backHref = "/" }: ItemViewProp
                 />
             )}
             <h1>{item.title}</h1>
-            {minutes !== undefined && <p className="meta">{minutes} min read</p>}
-            {item.option && <OptionLine item={item} />}
+            {minutes !== undefined && (
+                <p className="meta">
+                    {minutes} {config.labels.minRead}
+                </p>
+            )}
+            {item.option && <OptionLine config={config} item={item} />}
             {item.image && (
                 <Asset
                     src={item.image}
@@ -237,18 +253,18 @@ export async function CollectionIndexView({
             {failure && (
                 <div className="notice error">
                     <p>
-                        <strong>This page could not be loaded.</strong>
+                        <strong>{config.labels.failed}</strong>
                     </p>
-                    <p>Please try again shortly.</p>
+                    <p>{config.labels.failedNote}</p>
                 </div>
             )}
 
             {!failure && items.length === 0 && (
                 <div className="notice">
                     <p>
-                        <strong>Nothing published yet.</strong>
+                        <strong>{config.labels.empty}</strong>
                     </p>
-                    <p>Only published entries of a type opted into public delivery appear here.</p>
+                    <p>{config.labels.emptyNote}</p>
                 </div>
             )}
 

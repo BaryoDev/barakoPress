@@ -38,15 +38,64 @@ export interface ThemeColors {
     accentInk: string;
     accentTint: string;
     accentTintBorder: string;
-    accentTintBorderStrong: string;
-    /** Code panels and the footer band. */
-    darkPanel: string;
-    /** Controls sitting on the dark panel. */
-    darkPanelChrome: string;
-    darkPanelInk: string;
-    darkPanelAccent: string;
-    codeGreen: string;
+    /** The accent border where it has to hold its own: under a control, or on a filled tint. */
+    accentBorderStrong: string;
+    /** The band that reverses the page: the footer, a code panel, an inverse block. */
+    inverse: string;
+    /** Controls and rules on the inverse band. */
+    inverseChrome: string;
+    /** Copy on the inverse band. */
+    inverseInk: string;
+    /** The accent on the inverse band, which is rarely the accent on the page. */
+    inverseAccent: string;
+    /** Code, the one thing in a palette named after what it marks up rather than where it sits. */
+    code: string;
     success: string;
+    /** @deprecated 0.6.0, removed in 2.0.0. Use `accentBorderStrong`; the two are kept in step. */
+    accentTintBorderStrong: string;
+    /** @deprecated 0.6.0, removed in 2.0.0. Use `inverse`; the two are kept in step. */
+    darkPanel: string;
+    /** @deprecated 0.6.0, removed in 2.0.0. Use `inverseChrome`; the two are kept in step. */
+    darkPanelChrome: string;
+    /** @deprecated 0.6.0, removed in 2.0.0. Use `inverseInk`; the two are kept in step. */
+    darkPanelInk: string;
+    /** @deprecated 0.6.0, removed in 2.0.0. Use `inverseAccent`; the two are kept in step. */
+    darkPanelAccent: string;
+    /** @deprecated 0.6.0, removed in 2.0.0. Use `code`; the two are kept in step. */
+    codeGreen: string;
+}
+
+/*
+ * The slot names that shipped in 0.3.0, and the role each one is now (#49).
+ *
+ * The old names are barakocms.com's design read back as a palette: a bakery with a cream footer had
+ * to put cream in `darkPanel`, and a school with no code sample still set `codeGreen`. The roles say
+ * what the colour is for instead.
+ *
+ * Both names stay, and stay equal. A tenant's `Colors` entry holds whichever name it was saved with,
+ * and a consumer's own component may read either, so setting one sets the other and neither becomes
+ * the odd one out. Set both to different colours and the role wins, since that is the name that
+ * survives.
+ */
+export const COLOR_ALIASES: Readonly<Record<string, keyof ThemeColors>> = {
+    accentTintBorderStrong: "accentBorderStrong",
+    darkPanel: "inverse",
+    darkPanelChrome: "inverseChrome",
+    darkPanelInk: "inverseInk",
+    darkPanelAccent: "inverseAccent",
+    codeGreen: "code",
+};
+
+/** Colours merged over a base, with each old slot and its role name left holding the same colour. */
+export function mergeColors(base: ThemeColors, named: Partial<Record<string, string>>): ThemeColors {
+    const out = { ...base } as Record<string, string>;
+    const set = (key: string) => typeof named[key] === "string" && named[key] !== "";
+    for (const key of Object.keys(base)) if (set(key)) out[key] = named[key] as string;
+    for (const [old, role] of Object.entries(COLOR_ALIASES)) {
+        if (set(role)) out[old] = named[role] as string;
+        else if (set(old)) out[role] = named[old] as string;
+    }
+    return out as unknown as ThemeColors;
 }
 
 export interface ThemeFonts {
@@ -110,6 +159,8 @@ export interface ThemeText {
     heading: string;
     title: string;
     display: string;
+    /** A page's own h1, the one size that scales with the viewport rather than sitting still. */
+    pageTitle: string;
 }
 
 /**
@@ -168,13 +219,19 @@ export const DEFAULT_THEME: PressTheme = {
         accentInk: "#4034A8",
         accentTint: "#EEEBFD",
         accentTintBorder: "#DED8FB",
+        accentBorderStrong: "#C9C1F5",
+        inverse: "#101223",
+        inverseChrome: "#2A2C45",
+        inverseInk: "#DED8FB",
+        inverseAccent: "#A99BF7",
+        code: "#7BE0C4",
+        success: "#0B7A6B",
         accentTintBorderStrong: "#C9C1F5",
         darkPanel: "#101223",
         darkPanelChrome: "#2A2C45",
         darkPanelInk: "#DED8FB",
         darkPanelAccent: "#A99BF7",
         codeGreen: "#7BE0C4",
-        success: "#0B7A6B",
     },
     fonts: {
         heading: "'Sora', ui-sans-serif, system-ui, sans-serif",
@@ -210,6 +267,7 @@ export const DEFAULT_THEME: PressTheme = {
         heading: "21px",
         title: "26px",
         display: "38px",
+        pageTitle: "clamp(32px, 4.4vw, 52px)",
     },
     asSupplied: [],
 };
@@ -228,7 +286,7 @@ export function resolveTheme(input: PressThemeInput | undefined): PressTheme {
     // here is a missing face rather than a link to nowhere in every page.
     const sources = fontSourcesFrom(input?.fontSources);
     return {
-        colors: { ...DEFAULT_THEME.colors, ...input?.colors },
+        colors: mergeColors(DEFAULT_THEME.colors, input?.colors ?? {}),
         fonts: { ...DEFAULT_THEME.fonts, ...input?.fonts },
         ...(sources ? { fontSources: sources } : {}),
         radii: { ...DEFAULT_THEME.radii, ...input?.radii },
@@ -276,7 +334,7 @@ export function proseCss(theme: PressTheme, scope: string): string {
         // No background on inline code. The handoff calls for it, and a tinted chip inside a
         // 17.5px line is the thing that makes body copy look like documentation.
         `${s} code{font-family:${css(f.mono)};font-size:16px;color:${css(c.ink)}}`,
-        `${s} pre{margin:30px 0 0;padding:18px 16px;border-radius:${css(theme.radii.panel)};background:${css(c.darkPanel)};color:${css(c.darkPanelInk)};font-family:${css(f.mono)};font-size:13.5px;line-height:1.85;overflow-x:auto}`,
+        `${s} pre{margin:30px 0 0;padding:18px 16px;border-radius:${css(theme.radii.panel)};background:${css(c.inverse)};color:${css(c.inverseInk)};font-family:${css(f.mono)};font-size:13.5px;line-height:1.85;overflow-x:auto}`,
         `${s} pre code{font-size:inherit;color:inherit}`,
         `${s} blockquote{margin:24px 0 0;padding:2px 0 2px 18px;border-left:2px solid ${css(c.accentTintBorder)};color:${css(c.secondaryInk)}}`,
         `${s} img{max-width:100%;height:auto;border-radius:${css(theme.radii.panel)};border:1px solid ${css(c.hairline)}}`,

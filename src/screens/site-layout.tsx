@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Asset } from "../assets.js";
-import type { PressConfig, Region } from "../config.js";
+import { hasFeed, type PressConfig, type Region } from "../config.js";
 import { showsHoldingPage, siteConfigOrNull, type SiteParams } from "../site.js";
 import {
     allowedFontOrigins,
@@ -212,9 +212,9 @@ async function HoldingDocument({ cfg, registry, loadFonts }: { cfg: PressConfig;
                 <p
                     id={SHARE_INVALID_FRAGMENT}
                     role="status"
-                    style={{ margin: 0, padding: `12px ${t.layout.gutter}`, background: t.colors.darkPanel, color: t.colors.darkPanelInk }}
+                    style={{ margin: 0, padding: `12px ${t.layout.gutter}`, background: t.colors.inverse, color: t.colors.inverseInk }}
                 >
-                    This link is not valid or has expired.
+                    {cfg.labels.shareInvalid}
                 </p>
                 {page && registry ? (
                     <div data-press="holding">
@@ -229,7 +229,7 @@ async function HoldingDocument({ cfg, registry, loadFonts }: { cfg: PressConfig;
                             {s.logo && (
                                 <Asset src={s.logo} alt={s.logoAlt ?? s.name} theme={t} style={{ height: "48px", width: "auto" }} />
                             )}
-                            <h1 style={{ margin: "24px 0 0", fontFamily: t.fonts.heading, fontSize: "clamp(32px, 4.4vw, 52px)", lineHeight: 1.08 }}>
+                            <h1 style={{ margin: "24px 0 0", fontFamily: t.fonts.heading, fontSize: t.text.pageTitle, lineHeight: 1.08 }}>
                                 {s.name}
                             </h1>
                             {s.tagline && <p style={{ margin: "12px 0 0", color: t.colors.secondaryInk }}>{s.tagline}</p>}
@@ -261,7 +261,7 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
     return (
         <>
             {s.topBar && (
-                <div style={{ background: c.darkPanel, color: c.darkPanelInk, fontSize: "13px" }}>
+                <div style={{ background: c.inverse, color: c.inverseInk, fontSize: "13px" }}>
                     <div style={{ ...band, display: "flex", flexWrap: "wrap", gap: "8px 20px", padding: `8px ${t.layout.gutter}` }}>
                         {s.topBar.text && <span>{s.topBar.text}</span>}
                         {s.topBar.links.map((l) => (
@@ -303,9 +303,9 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
                                 {l.label}
                             </a>
                         ))}
-                        {!cfg.holding && (
+                        {!cfg.holding && hasFeed(cfg) && (
                             <a href="/feed.xml" style={{ ...linkStyle, fontFamily: t.fonts.mono, fontSize: "13px", color: c.muted }}>
-                                RSS
+                                {cfg.labels.feed}
                             </a>
                         )}
                     </span>
@@ -323,7 +323,7 @@ function BuiltInFooter({ cfg }: { cfg: PressConfig }) {
     const linkStyle = { color: "inherit", textDecoration: "none" } as const;
 
     return (
-        <footer style={{ background: c.darkPanel, color: c.darkPanelInk, marginTop: "48px" }}>
+        <footer style={{ background: c.inverse, color: c.inverseInk, marginTop: "48px" }}>
             <div style={{ ...band, paddingTop: "40px", paddingBottom: "40px" }}>
                 {s.footerLogo && (
                     <Asset src={s.footerLogo} alt={s.logoAlt ?? s.name} theme={t} style={{ height: "40px", width: "auto" }} />
@@ -332,7 +332,7 @@ function BuiltInFooter({ cfg }: { cfg: PressConfig }) {
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(180px, 100%), 1fr))", gap: "24px", marginTop: "24px" }}>
                         {(s.footerColumns ?? []).map((col, i) => (
                             <div key={`${col.heading}-${i}`}>
-                                {col.heading && <p style={{ margin: 0, fontWeight: 600, color: c.darkPanelAccent }}>{col.heading}</p>}
+                                {col.heading && <p style={{ margin: 0, fontWeight: 600, color: c.inverseAccent }}>{col.heading}</p>}
                                 <ul style={{ listStyle: "none", margin: "10px 0 0", padding: 0 }}>
                                     {col.links.map((l) => (
                                         <li key={l.href} style={{ margin: "6px 0" }}>
@@ -439,7 +439,12 @@ export function createSiteMetadata(config: PressConfig) {
             icons: s.favicon ? { icon: s.favicon } : undefined,
             openGraph: { siteName: s.name, images: s.shareImage ? [s.shareImage] : undefined },
             // While holding nothing is indexed, session or not, and there is no feed to point at.
-            alternates: s.url && !cfg.holding ? { types: { "application/rss+xml": `${s.url}/feed.xml` } } : undefined,
+            // No feed link for a site with no feed: a tenant whose collections are all `feed: false`
+            // has nothing at /feed.xml, and pointing a reader at it is a 404 with a promise on it.
+            alternates:
+                s.url && !cfg.holding && hasFeed(cfg)
+                    ? { types: { "application/rss+xml": `${s.url}/feed.xml` } }
+                    : undefined,
             robots: cfg.holding ? { index: false, follow: false } : undefined,
         };
     };

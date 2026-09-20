@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { PressConfig } from "../config.js";
 import { formatDate } from "../cms.js";
 import { collectionOf, listCollection } from "../collections.js";
-import { PROSE_CLASS, primitiveBlocks } from "./primitives.js";
+import { IconGlyph, PROSE_CLASS, primitiveBlocks } from "./primitives.js";
 import { dataBlocks } from "./data.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
 
@@ -27,13 +27,13 @@ const columns = defineBlock<{}, "columns">({
     label: "Columns",
     layer: "block",
     fields: [{ name: "columns", kind: "slots", label: "Columns", required: true, min: 1, max: 4 }],
-    component: ({ slots }) => (
+    component: ({ slots, theme }) => (
         <div
             style={{
                 display: "grid",
                 // Stacks on a narrow screen instead of squeezing four columns into it.
                 gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))",
-                gap: "32px",
+                gap: theme.space.lg,
             }}
         >
             {(slots.columns ?? []).map((column, i) => (
@@ -59,7 +59,7 @@ const callToAction = defineBlock<{ heading: string; text?: string; label: string
         return (
             <aside
                 style={{
-                    padding: "32px",
+                    padding: theme.space.lg,
                     borderRadius: theme.radii.panel,
                     background: c.accentTint,
                     border: `1px solid ${c.accentTintBorder}`,
@@ -70,7 +70,7 @@ const callToAction = defineBlock<{ heading: string; text?: string; label: string
                         margin: 0,
                         fontFamily: theme.fonts.heading,
                         fontWeight: 600,
-                        fontSize: "26px",
+                        fontSize: theme.text.title,
                         letterSpacing: "-.03em",
                         color: c.ink,
                     }}
@@ -87,7 +87,7 @@ const callToAction = defineBlock<{ heading: string; text?: string; label: string
                     rel={external ? "noopener noreferrer" : undefined}
                     style={{
                         display: "inline-block",
-                        marginTop: "20px",
+                        marginTop: theme.space.md,
                         padding: "11px 20px",
                         borderRadius: theme.radii.control,
                         background: c.accent,
@@ -108,8 +108,12 @@ export interface CollectionItem {
     title: string;
     date?: string;
     summary?: string;
-    /** From the collection's `colorBy` option, when the site maps that option to a colour. */
+    /** The tone of the item's option style, which is what `OptionColors` set on its own. */
     color?: string;
+    /** The icon that style names (#52). */
+    icon?: string;
+    /** The word that style gives the option, or the option's own value when it gives none. */
+    badge?: string;
 }
 
 /** The most a collection block lists. The API caps a page anyway; this keeps the schema honest. */
@@ -138,6 +142,8 @@ export async function collectionItems(
                 date: item.date ? formatDate(config, item.date) : undefined,
                 summary: item.summary,
                 ...(item.color ? { color: item.color } : {}),
+                ...(item.style?.icon ? { icon: item.style.icon } : {}),
+                ...(item.style && (item.style.label || item.style.icon) ? { badge: item.style.label ?? item.option } : {}),
             }));
     } catch {
         return [];
@@ -194,10 +200,10 @@ function collection(config: PressConfig, holding = false): BlockDefinition {
                     {props.heading && (
                         <h2
                             style={{
-                                margin: "0 0 20px",
+                                margin: `0 0 ${theme.space.md}`,
                                 fontFamily: theme.fonts.heading,
                                 fontWeight: 600,
-                                fontSize: "26px",
+                                fontSize: theme.text.title,
                                 letterSpacing: "-.03em",
                                 color: c.ink,
                             }}
@@ -219,7 +225,7 @@ function collection(config: PressConfig, holding = false): BlockDefinition {
                             <li
                                 key={item.href}
                                 style={{
-                                    padding: "20px",
+                                    padding: theme.space.md,
                                     borderRadius: theme.radii.panel,
                                     background: c.surface,
                                     border: `1px solid ${c.hairline}`,
@@ -232,12 +238,32 @@ function collection(config: PressConfig, holding = false): BlockDefinition {
                                 >
                                     {item.title}
                                 </Link>
+                                {(item.icon || item.badge) && (
+                                    <p
+                                        style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: theme.space.xs,
+                                            margin: `${theme.space.xs} 0 0`,
+                                            fontFamily: theme.fonts.mono,
+                                            fontSize: theme.text.meta,
+                                            letterSpacing: ".08em",
+                                            textTransform: "uppercase",
+                                            color: item.color ?? c.muted,
+                                        }}
+                                    >
+                                        {item.icon && (
+                                            <IconGlyph name={item.icon} size={theme.text.small} color={item.color ?? c.muted} />
+                                        )}
+                                        {item.badge}
+                                    </p>
+                                )}
                                 {item.date && (
                                     <p
                                         style={{
                                             margin: "8px 0 0",
                                             fontFamily: theme.fonts.mono,
-                                            fontSize: "12.5px",
+                                            fontSize: theme.text.meta,
                                             color: c.muted,
                                         }}
                                     >

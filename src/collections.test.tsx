@@ -148,6 +148,24 @@ const TENANTS: Record<string, Tenant> = {
         },
         content: { department: DEPARTMENTS, doctor: DOCTORS, post: [] },
     },
+    // Styles per option: a tone, an icon and a word, and one entry that is none of those.
+    styled: {
+        host: "styled.example",
+        settings: {
+            Name: "Styled Club",
+            Url: "https://styled.example",
+            Colors: { sky: "#00A2E0" },
+            OptionColors: { "project.AreaOfFocus": { "Supporting education": "#F7A81B" } },
+            OptionStyles: {
+                "project.AreaOfFocus": {
+                    "Providing clean water": { tone: "sky", icon: "location", label: "Water" },
+                    "Promoting peace": { icon: "no-such-icon", label: "x".repeat(60) },
+                },
+            },
+            Collections: { projects: PROJECTS_COLLECTION },
+        },
+        content: { project: PROJECTS, post: [] },
+    },
     agency: {
         host: "agency.example",
         settings: {
@@ -434,7 +452,80 @@ describe("collections from a tenant's settings", () => {
         expect(cardFor(index, "Clean water")).not.toContain("border-left");
     });
 
-    it("reads only well-formed collections from the settings, and never replaces the blog's with a broken one", () => {
+    it("shows an option's icon and label on a card, and keeps a colour-only option as it was", async () => {
+        visit("styled.example");
+        const html = await route(config, ["projects"]);
+        expect(html.split("<article").slice(1)).toHaveLength(3);
+
+        // Tone, icon and label together.
+        const water = cardFor(html, "Clean water");
+        expect(water).toContain("border-left:4px solid #00A2E0");
+        expect(water).toContain("<svg");
+        // The style's word is what a visitor reads. The option's own value stays on the element,
+        // where a site's own CSS has always been able to find it.
+        expect(water).toContain("</span>Water</p>");
+        expect(water).toContain('data-option="Providing clean water"');
+
+        // Saved as an OptionColors entry, so it is a tone and nothing else, exactly as before.
+        const books = cardFor(html, "School books");
+        expect(books).toContain("border-left:4px solid #F7A81B");
+        expect(books).toContain("Supporting education");
+        expect(books).not.toContain("<svg");
+
+        // A label past the cap is dropped, so the option's own value stands, and an icon name the
+        // engine has no glyph for draws nothing rather than a gap.
+        const peace = cardFor(html, "Peace talks");
+        expect(peace).toContain("Promoting peace");
+        expect(peace).not.toContain("<svg");
+        expect(peace).not.toContain("border-left");
+    });
+
+    it("reads OptionStyles over OptionColors, field by field", () => {
+        const out = applySiteSettings({ ...config, tenant: "t" }, TENANTS.styled.settings, null);
+        expect(Object.keys(out.optionStyles["project.AreaOfFocus"])).toHaveLength(3);
+        expect(out.optionStyles["project.AreaOfFocus"]).toEqual({
+            "Providing clean water": { tone: "#00A2E0", icon: "location", label: "Water" },
+            "Supporting education": { tone: "#F7A81B" },
+            // The label was past the cap. The icon reads as a name, and is one nothing draws.
+            "Promoting peace": { icon: "no-such-icon" },
+        });
+
+        // A tenant that saved only colours reads as styles carrying a tone.
+        const colorsOnly = applySiteSettings({ ...config, tenant: "t" }, TENANTS.rckoronadal.settings, null);
+        expect(colorsOnly.optionStyles["project.AreaOfFocus"]).toEqual({
+            "Providing clean water": { tone: "#00A2E0" },
+            "Supporting education": { tone: "#F7A81B" },
+        });
+
+        // And a build-time site says either of them in its config file.
+        const buildTime = defineConfig({
+            site: { name: "R", url: "https://r.example" },
+            collections: { projects: PROJECTS_COLLECTION },
+            optionColors: { "project.AreaOfFocus": { "Promoting peace": "#0000AA" } },
+            optionStyles: { "project.AreaOfFocus": { "Promoting peace": { icon: "star" } } },
+        });
+        expect(buildTime.optionStyles["project.AreaOfFocus"]["Promoting peace"]).toEqual({ tone: "#0000AA", icon: "star" });
+    });
+
+    it("puts an option's icon and label on a collection block item", async () => {
+        visit("styled.example");
+        const resolved = await siteConfig(config);
+        const block = registryFor(resolved, createBlockRegistry(config)).get("collection");
+        const component = block?.component as unknown as (p: {
+            props: Record<string, unknown>;
+            slots: Record<string, ReactNode[]>;
+            theme: typeof DEFAULT_THEME;
+        }) => Promise<ReactNode>;
+        const html = renderToStaticMarkup(
+            await component({ props: { collection: "projects", limit: 6 }, slots: {}, theme: DEFAULT_THEME }),
+        );
+        expect(html).toContain('href="/projects/clean-water"');
+        expect(html).toContain("border-left:4px solid #00A2E0");
+        expect(html).toContain("Water");
+        expect(html).toContain("<svg");
+    });
+
+    it("reads only well-formed collections from the settings, the blog's own keys included", () => {
         const out = applySiteSettings(
             { ...config, tenant: "t" },
             {
@@ -470,8 +561,9 @@ describe("collections from a tenant's settings", () => {
             pageSize: 12,
         });
         expect(Object.keys(out.collections.good.references ?? {})).toEqual(["Owner"]);
-        expect(out.collections.post).toEqual(config.collections.post);
-        expect(out.collections.author).toEqual(config.collections.author);
+        // A tenant may replace the blog's own collections now (#44), so these are the entries it saved.
+        expect(out.collections.post).toMatchObject({ type: "article", route: "/blog", fields: { title: "Headline" } });
+        expect(out.collections.author).toMatchObject({ type: "person", route: "/people", fields: { title: "Name" } });
         expect(out.collections.badValues).toMatchObject({ sort: undefined, pageSize: undefined, colorBy: undefined });
     });
 

@@ -1,12 +1,13 @@
 import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { connection } from "next/server";
 import type { Metadata } from "next";
-import type { PressConfig } from "../config.js";
+import { POST_COLLECTION, type PressConfig } from "../config.js";
 import {
     flattenNavigation,
     getNavigation,
     getPage,
     getPageByPath,
+    getPageAtPath,
     getRedirect,
     isReservedPath,
     listPages,
@@ -121,7 +122,7 @@ export async function PageView({
                             margin: "0 0 40px",
                             fontFamily: t.fonts.heading,
                             fontWeight: 600,
-                            fontSize: "clamp(32px, 4.4vw, 52px)",
+                            fontSize: t.text.pageTitle,
                             lineHeight: 1.08,
                             letterSpacing: "-.035em",
                         }}
@@ -296,6 +297,78 @@ export function createViewerPage(base: PressConfig, registry?: BlockRegistry) {
             searchParams,
             perViewer: true,
         });
+    };
+}
+
+/*
+ * The home page (barakoPress #44).
+ *
+ * The root used to be the post index for every site, because that is what the route file mounted and
+ * nothing else could be named. A tenant picks it now: `HomePath` is a page, `HomeCollection` is a
+ * collection's index, and neither is the post index, so a site that says nothing renders what it
+ * always did.
+ *
+ * Nothing served at the named path falls back to the index rather than 404ing the front page. That
+ * is the same call `HoldingPath` makes, and for the same reason: naming a page before writing it
+ * should leave the site standing.
+ */
+async function homePage(config: PressConfig, path: string): Promise<Page | null> {
+    try {
+        return await getPageAtPath(config, path);
+    } catch (e) {
+        if (e && typeof e === "object" && "digest" in e) throw e;
+        const why = e instanceof Error ? e.message : String(e);
+        console.warn(`home: the page at ${path} could not be read (${why})`);
+        return null;
+    }
+}
+
+/** The collection the root lists: the one the tenant named, else the posts. */
+function homeCollection(config: PressConfig): string {
+    const named = config.home?.collection;
+    return named && collectionOf(config, named) ? named : POST_COLLECTION;
+}
+
+export function createHome(base: PressConfig, registry?: BlockRegistry, options: PageOptions = {}) {
+    let blocks = registry;
+    return async function Home({ params, searchParams }: PageParams) {
+        const config = await siteConfig(base, params);
+        const path = config.home?.path;
+        const page = path ? await homePage(config, path) : null;
+        if (page) {
+            const query = options.query ?? (await routeFromParams(params)) === null;
+            blocks ??= createBlockRegistry(base);
+            return PageView({
+                config,
+                page,
+                registry: registryFor(config, blocks),
+                searchParams: query ? searchParams : undefined,
+            });
+        }
+        return CollectionIndexView({ config, collection: homeCollection(config) });
+    };
+}
+
+/** The home page's metadata: the page the tenant named, else whatever the layout already says. */
+export function createHomeMetadata(base: PressConfig) {
+    return async function generateMetadata({ params }: PageParams): Promise<Metadata> {
+        const config = await siteConfig(base, params);
+        const path = config.home?.path;
+        const page = path ? await homePage(config, path) : null;
+        if (!page) {
+            const label = collectionOf(config, homeCollection(config))?.label;
+            return label ? { title: label } : {};
+        }
+        const seo = page.seo;
+        const title = seo?.title ?? page.title;
+        const description = seo?.description ?? page.summary;
+        return {
+            title,
+            description,
+            alternates: seo?.canonicalUrl ? { canonical: seo.canonicalUrl } : undefined,
+            robots: seo?.noIndex ? { index: false, follow: false } : undefined,
+            openGraph: { title, description, images: seo?.imageUrl ? [seo.imageUrl] : undefined },
+        };
     };
 }
 

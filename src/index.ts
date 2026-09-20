@@ -35,11 +35,13 @@
 export {
     defineConfig,
     includesFor,
+    DEFAULT_LABELS,
     POST_COLLECTION,
     AUTHOR_COLLECTION,
     CATEGORY_COLLECTION,
     SETTINGS_TYPE,
     EMBED_HOSTS,
+    hasFeed,
 } from "./config.js";
 export {
     siteConfig,
@@ -105,6 +107,9 @@ export type {
     CollectionFields,
     CollectionReference,
     FieldNames,
+    OptionStyle,
+    Labels,
+    Home,
 } from "./config.js";
 
 export {
@@ -267,6 +272,8 @@ export type { BlockPreset } from "./blocks/presets.js";
 export { BlockList } from "./blocks/render.js";
 export {
     createPage,
+    createHome,
+    createHomeMetadata,
     createViewerPage,
     createPageMetadata,
     createPageStaticParams,

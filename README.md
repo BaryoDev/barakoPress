@@ -83,7 +83,7 @@ decision, not the engine's.
 
 | Create | Export | From |
 | --- | --- | --- |
-| `app/page.tsx` | `default` | `createBlogIndex(config)` |
+| `app/page.tsx` | `default`, `generateMetadata` | `createHome(config, blocks)`, `createHomeMetadata(config)` |
 | `app/blog/[slug]/page.tsx` | `default`, `generateMetadata` | `createBlogPost(config)`, `createPostMetadata(config)` |
 | `app/authors/[slug]/page.tsx` | `default` | `createArchive(config, "author")` |
 | `app/categories/[slug]/page.tsx` | `default` | `createArchive(config, "category")` |
@@ -98,6 +98,10 @@ decision, not the engine's.
 | `app/layout.tsx` | `default`, `generateMetadata` | `createSiteLayout(config, { blocks })`, `createSiteMetadata(config)` |
 | `app/%5Fshare/route.ts` | `GET` | `createSharePage()` |
 | `app/api/share/redeem/route.ts` | `POST` | `createShareRedeemRoute(config)` |
+
+`createHome` serves whatever the tenant picked for `/`: the page at `HomePath`, the index of
+`HomeCollection`, or the post index when it picked neither, which is what `createBlogIndex` did and
+still does for a site that mounts that instead.
 
 Mount only what you want. Nothing requires anything else. The paths only have to agree with the
 `routes` in your config, which is what every generated link is built from.
@@ -180,12 +184,30 @@ reference field by the target's slug and any other field by the value it holds, 
 option. The API takes five filters. `createCollectionIndex(config, key, { filter })` takes the same,
 and the `collection` block has `filterField` and `filterValue`.
 
-**A colour per option.** With `colorBy: "AreaOfFocus"` on a `project` collection, the site settings
-`OptionColors` entry `{ "project.AreaOfFocus": { "Providing clean water": "sky" } }` names a colour
-from `Colors` (a theme slot or a colour written out also works). Each card, item page and collection
-block item carries it as a left border, with the option beside it. A name that does not resolve to
-something readable as a colour is dropped. A build-time site passes `optionColors` with the colours
-written out.
+**A style per option.** With `colorBy: "AreaOfFocus"` on a `project` collection, the site settings
+`OptionStyles` entry says how each option of that field is shown:
+
+```json
+{
+  "OptionStyles": {
+    "project.AreaOfFocus": {
+      "Providing clean water": { "tone": "sky", "icon": "location", "label": "Water" }
+    }
+  }
+}
+```
+
+`tone` names a colour from `Colors`, a theme slot, or a colour written out, and each card, item page
+and collection block item carries it as a left border. `icon` is one of the engine's icon names, and
+`label` is the word a visitor reads in place of the option's own value; the value stays on the element
+as `data-option`, where a site's own CSS can still find it. A tone that does not resolve to something
+readable as a colour is dropped, a label past 40 characters is dropped, and an icon name nothing
+draws draws nothing, each on its own rather than losing the whole entry.
+
+`OptionColors` is the same thing said shorter, `{ "project.AreaOfFocus": { "Providing clean water":
+"sky" } }`, an option whose style is a tone and nothing else. A tenant that saved colours keeps them,
+and a style for the same option wins field by field. A build-time site passes `optionStyles`, or
+`optionColors`, in the same shapes.
 
 `Card` and `ItemView` are exported for a site that wants its own page, and `Card` still takes a `post`.
 `getItem`, `listCollection` and `getGlobals(config)`, the tenant's settings entry as stored, are
@@ -503,7 +525,10 @@ for a post type with no such field.
 | `reservedSlugs` | the routes and the engine's files | `ReservedSlugs`, added to them | First path segments a root-mounted page may not take. Adds to the defaults |
 | `regions` | off | `HeaderPath`, `HeaderTone`, `FooterPath`, `FooterTone` | The header and the footer as block regions |
 | `collections` | the blog's `post`, `author` and `category` | `Collections` | Content types rendered as lists and detail pages. See Collections |
-| `optionColors` | none | `OptionColors` | CSS colours by `type.field` and option, for `colorBy` |
+| `optionStyles` | none | `OptionStyles` | Tone, icon and label by `type.field` and option, for `colorBy` |
+| `optionColors` | none | `OptionColors` | The same, when a tone is all an option has. Read as `optionStyles` |
+| `labels` | English | `Labels` | The words the screens print for a visitor. See below |
+| `home` | the post index | `HomePath`, `HomeCollection` | What `createHome` serves at `/`. See below |
 | `theme` | the barakoCMS palette | `Colors`, `Fonts`, `Radii`, `Layout`, `Space`, `Text` | Colours, faces, radii and column widths. See below |
 
 The third column is the whole of the split. A key marked operator only is one the image decides for
@@ -600,7 +625,7 @@ The settings are the singleton `site` type from barakoCMS `docs/site-settings.md
 `Colors` (the theme slots), `Fonts` (a family name per role, and the stylesheet that loads it),
 `Radii`, `Layout`, `TopBar`, `HeaderLinks`, `FooterColumns`, `SocialLinks`, `HeaderPath`,
 `HeaderTone`, `FooterPath`, `FooterTone`, `AssetsAsSupplied`, `LogoAsSupplied`, `LogoClearSpace`,
-`PageSizes` and `ReservedSlugs`. `Collections` and `OptionColors` are read as the collections section
+`PageSizes`, `ReservedSlugs`, `Labels`, `HomePath` and `HomeCollection`. `Collections`, `OptionStyles` and `OptionColors` are read as the collections section
 describes. `Variants` are not rendered yet. Every value is checked for shape; one that fails, and any the
 entry leaves out, keeps the configured value, so a half-filled theme renders. A link is a path on the
 site or an absolute http or https URL. Set `Url`: without it the feed and sitemap fall back to the
@@ -608,6 +633,70 @@ host the tenant was found by.
 
 `createSiteLayout` and `createSiteMetadata` render the root layout from all of this: `lang`, the
 faces, the palette, the top bar, header links, footer columns, social links and the copyright line.
+
+**What the site serves at `/`.** Every site used to be a blog at the root, because the root route
+mounted the post index and nothing else could be named:
+
+| Field | Type | What |
+| --- | --- | --- |
+| `HomePath` | string | A site path such as `/home`. The page the Pages module serves there is the home page. Nothing served there falls back to the index, so naming a page before writing it is safe |
+| `HomeCollection` | string | The key of a collection. Its index is the home page. `HomePath` wins when both are set |
+
+Neither set, `/` is the post index, which is what it was. The blog's own `post`, `author` and
+`category` are ordinary `Collections` entries now, so a school whose news lives in `article` with a
+`Headline` replaces `post` in its settings and gets both its list and its item pages from that entry.
+The RSS link in the built-in header, and the feed alternate in the page metadata, appear only when
+some collection has `feed` on, so a clinic with no posts stops advertising an empty feed.
+
+**The words a visitor reads.** `Labels` is the visitor-facing copy, key by key. A school setting
+`Locale` to `fil-PH` used to get Filipino dates beside English "min read" and "Related":
+
+```json
+{ "Labels": { "minRead": "minutong pagbasa", "by": "ni", "related": "Kaugnay" } }
+```
+
+| Key | English |
+| --- | --- |
+| `minRead` | `min read` |
+| `by` | `by` |
+| `related` | `Related` |
+| `relatedNote` | `cosine similarity, computed on load, not curated` |
+| `featured` | `Featured` |
+| `back` | `Back` |
+| `home` | `Home` |
+| `preview` | The banner over a draft being previewed |
+| `untitled` | `Untitled` |
+| `feed` | `RSS` |
+| `empty`, `emptyNote` | The notice on an index with nothing published |
+| `failed`, `failedNote` | The notice on an index whose read failed |
+| `shareInvalid` | `This link is not valid or has expired.` |
+
+A key left out, or saved as anything but a word, keeps the English, so a half-filled map reads. A
+build-time site passes `labels` to `defineConfig`. Nothing about a site's own content is here: a
+collection's heading is its `label` and how its count reads is its `noun`.
+
+**The colour slots, by role.** `Colors` sets any slot of the palette, one at a time. The slots are
+`pageBg`, `surface`, `ink`, `proseInk`, `secondaryInk`, `muted`, `hairline`, `accent`, `accentHover`,
+`accentInk`, `accentTint`, `accentTintBorder`, `accentBorderStrong`, `inverse`, `inverseChrome`,
+`inverseInk`, `inverseAccent`, `code` and `success`. A role says where a colour goes rather than what
+it looks like: `inverse` is the band that reverses the page, the footer and a code panel and an
+inverse block, so a bakery with a cream footer sets `inverse` to cream and reads right doing it.
+
+```json
+{ "Colors": { "accent": "#17458F", "inverse": "#F4E3C1", "inverseInk": "#3B2A17" } }
+```
+
+Six slots shipped in 0.3.0 under barakocms.com's own names, and those still work: `darkPanel`,
+`darkPanelChrome`, `darkPanelInk`, `darkPanelAccent`, `codeGreen` and `accentTintBorderStrong` are
+read into `inverse`, `inverseChrome`, `inverseInk`, `inverseAccent`, `code` and `accentBorderStrong`.
+Setting either name sets both, so a tenant saved before the rename keeps its site and a consumer's
+own component reading `theme.colors.darkPanel` keeps compiling. The old names are deprecated and go
+in 2.0.0. An `OptionStyles` or `OptionColors` entry naming an old slot resolves too.
+
+Sizes work the same way. `Text` is the type scale by role, `meta`, `small`, `body`, `lead`,
+`subheading`, `heading`, `title`, `display` and `pageTitle`, and `Space` is the spacing scale. The
+blocks and the screens read those names, so a tenant that wants bigger headings sets `title` once
+instead of asking for a release.
 
 **How many items, per tenant.** `PageSizes` sets the four counts for this site, each on its own:
 

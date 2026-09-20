@@ -215,6 +215,21 @@ export interface Holding {
 }
 
 /**
+ * What a site serves at `/` (#44).
+ *
+ * Every site was a blog at the root, because the root route mounted the post index and nothing else
+ * could be named. rckoronadal.org's home is a Pages page, and a clinic with no posts at all still
+ * got an empty post index there. `path` is a page, the way `HoldingPath` is; `collection` is a
+ * collection's index. Neither set, the post index renders, which is what every site did before this.
+ */
+export interface Home {
+    /** `HomePath`: the site path of the page served at the root. */
+    path?: string;
+    /** `HomeCollection`: the key of the collection whose index is served at the root. */
+    collection?: string;
+}
+
+/**
  * A block region: a page whose blocks are drawn as the site's header or footer.
  *
  * The same idea as `HoldingPath`. The header and the footer used to be drawn in code, with only
@@ -318,6 +333,83 @@ export interface CollectionConfig {
     readingTime?: boolean;
 }
 
+/**
+ * The words a screen prints for a visitor, so a tenant writing in Filipino is not stuck with ours
+ * (#47).
+ *
+ * The defaults are the English every site rendered before this existed, so a site that sets nothing
+ * reads exactly as it did. A request-time site reads its tenant's `Labels` setting, key by key: set
+ * `minRead` and the rest stay English. Anything that names the site's own content is not here, since
+ * that is the entry's data or the collection's `label` and `noun`.
+ */
+export interface Labels {
+    /** After the reading time on a post: "7 min read". */
+    minRead: string;
+    /** Before the author's name on a post. */
+    by: string;
+    /** The heading over the related posts band. */
+    related: string;
+    /** The line under that heading saying how the list was made. */
+    relatedNote: string;
+    /** The chip on a featured card. */
+    featured: string;
+    /** The link back from an item page to its list. */
+    back: string;
+    /** The back link on a post whose route is the site root. */
+    home: string;
+    /** The banner over a post being previewed as a draft. */
+    preview: string;
+    /** The title of an entry whose title field is empty. */
+    untitled: string;
+    /** The feed link in the built-in header. */
+    feed: string;
+    /** The notice on an index with nothing published. */
+    empty: string;
+    emptyNote: string;
+    /** The notice on an index whose read failed. */
+    failed: string;
+    failedNote: string;
+    /** The notice on the holding page after a share link that did not open. */
+    shareInvalid: string;
+}
+
+export const DEFAULT_LABELS: Labels = {
+    minRead: "min read",
+    by: "by",
+    related: "Related",
+    relatedNote: "cosine similarity, computed on load, not curated",
+    featured: "Featured",
+    back: "Back",
+    home: "Home",
+    preview:
+        "Preview. This is how the post will look. It is not published, and it is served uncached so nothing here reaches another reader.",
+    untitled: "Untitled",
+    feed: "RSS",
+    empty: "Nothing published yet.",
+    emptyNote: "Only published entries of a type opted into public delivery appear here.",
+    failed: "This page could not be loaded.",
+    failedNote: "Please try again shortly.",
+    shareInvalid: "This link is not valid or has expired.",
+};
+
+export const LABEL_KEYS = Object.keys(DEFAULT_LABELS) as (keyof Labels)[];
+
+/**
+ * How one option of a choice field is shown (#52).
+ *
+ * `OptionColors` painted a 4px border and nothing else, and every planned sibling was the same idea
+ * again: a colour per option on a card grid, a glyph per entry, a short badge per grade level. So an
+ * option carries a style, and each block decides what to do with it.
+ */
+export interface OptionStyle {
+    /** A colour: a name from `Colors`, a theme slot, or a colour written out, resolved to the colour. */
+    tone?: string;
+    /** An icon name. One of the `ICONS` the engine draws; anything else draws nothing. */
+    icon?: string;
+    /** What to show in place of the option's own value, for example "P1" for "Primary one". */
+    label?: string;
+}
+
 export interface PressConfig {
     types: TypeNames;
     fields: FieldMap;
@@ -392,9 +484,19 @@ export interface PressConfig {
     collections: Record<string, CollectionConfig>;
     /**
      * Colours by `type.field`, then by option value, as CSS colours. A request-time site reads them from
-     * the tenant's `OptionColors` setting.
+     * the tenant's `OptionColors` setting. Sugar over `optionStyles`: an entry here is an option whose
+     * style is a tone and nothing else, and both end up in `optionStyles`, which is what the blocks read.
      */
     optionColors: Record<string, Record<string, string>>;
+    /**
+     * How each option of a choice field is shown, by `type.field` then by option. A request-time site
+     * reads `OptionStyles`, merged over whatever `OptionColors` said.
+     */
+    optionStyles: Record<string, Record<string, OptionStyle>>;
+    /** The words the screens print. A request-time site reads the tenant's `Labels` setting. */
+    labels: Labels;
+    /** What `createHome` serves at the root. A request-time site reads `HomePath` and `HomeCollection`. */
+    home?: Home;
 }
 
 export type PressConfigInput = {
@@ -411,7 +513,11 @@ export type PressConfigInput = {
      */
     theme?: PressThemeInput;
     sites?: Partial<SitesConfig>;
-} & Partial<Omit<PressConfig, "types" | "fields" | "pageFields" | "routes" | "site" | "pageSizes" | "theme" | "sites" | "holding">>;
+    /** Partial, so a site renaming one word keeps the English for the rest. */
+    labels?: Partial<Labels>;
+} & Partial<
+    Omit<PressConfig, "types" | "fields" | "pageFields" | "routes" | "site" | "pageSizes" | "theme" | "sites" | "holding" | "labels">
+>;
 
 /**
  * The `blog` blueprint, which is what `POST /api/content-types/blueprints/blog` creates.
@@ -531,6 +637,24 @@ function mountPath(value: string): string {
     return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 }
 
+/** The two option maps as one: a colour is a style whose only field is its tone, and a style wins. */
+function withOptionColors(
+    colors: Record<string, Record<string, string>> | undefined,
+    styles: Record<string, Record<string, OptionStyle>> | undefined,
+): Record<string, Record<string, OptionStyle>> {
+    const out: Record<string, Record<string, OptionStyle>> = {};
+    for (const [key, options] of Object.entries(colors ?? {})) {
+        out[key] = Object.fromEntries(Object.entries(options).map(([option, tone]) => [option, { tone }]));
+    }
+    for (const [key, options] of Object.entries(styles ?? {})) {
+        out[key] = { ...out[key] };
+        for (const [option, style] of Object.entries(options)) {
+            out[key][option] = { ...out[key][option], ...style };
+        }
+    }
+    return out;
+}
+
 function reservedSlugs(routes: (string | undefined)[], extra: string[] | undefined): string[] {
     const named = [...RESERVED_AT_ROOT, ...routes.map(firstSegment), ...(extra ?? []).map((s) => s.trim().toLowerCase())];
     return [...new Set(named.filter((s): s is string => Boolean(s)))];
@@ -582,6 +706,9 @@ export function defineConfig(
         theme: resolveTheme(input.theme),
         collections,
         optionColors: input.optionColors ?? {},
+        optionStyles: withOptionColors(input.optionColors, input.optionStyles),
+        labels: { ...DEFAULT_LABELS, ...input.labels },
+        ...(input.home ? { home: input.home } : {}),
         reservedSlugs: reservedSlugs(
             [routes.post, routes.author, routes.category, ...Object.values(collections).map((c) => c.route)],
             input.reservedSlugs,
@@ -634,6 +761,16 @@ export function pinnedTenant(config: Pick<PressConfig, "tenant">, env: PressEnv 
  * from the API for any post type without both fields, which is every model that is not the blog
  * blueprint.
  */
+/**
+ * True when some collection this site renders has a feed, so a feed link points somewhere.
+ *
+ * The blog's post collection has one, so a blog answers true as it always did. A tenant whose
+ * collections are all `feed: false` shows no RSS link and no feed alternate (#44).
+ */
+export function hasFeed(config: PressConfig): boolean {
+    return Object.values(config.collections).some((c) => c.feed === true && c.route !== undefined);
+}
+
 export function includesFor(config: PressConfig): string[] {
     const wanted: (string | undefined)[] = [
         config.types.author ? config.fields.author : undefined,
