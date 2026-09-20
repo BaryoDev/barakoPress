@@ -14,6 +14,11 @@
   29.950% and 35.536% after. The mascot, the bio panel, the sticky translucent header and the
   richer "Four products" cards are not blocks yet; the gap that is left is written down in the pull
   request rather than closed by guessing at a shape nobody asked for.
+- A page over its block budget says so, once, instead of rendering short with nothing said (#90).
+  Raising the limit from a hundred to four hundred (#83) bought room; it did not make going over it
+  visible, which is how baryo.dev's eighth band went missing with a 200 and no error. `resolveBlocks`
+  still renders everything that fits, so a static export still builds, and warns once through the
+  same `sayOnce` shape the sitemap and the font allow list already use.
 - The blocks barakocms.com adds. `comparisonTable` draws a real table from rows typed as lines with
   `|` between the cells, headings on both the columns and the rows, so a cell is announced with the
   option it belongs to. `progressBar` is `role="progressbar"` with the three values that role needs,

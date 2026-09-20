@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { defineConfig } from "../config.js";
 import { toPage } from "../cms.js";
@@ -9,6 +9,7 @@ import {
     MAX_DEPTH,
     blockSchema,
     defineBlock,
+    forgetBlockBudgetWarnings,
     resolveBlocks,
     type BlockRegistry,
 } from "./schema.js";
@@ -114,6 +115,49 @@ describe("resolveBlocks", () => {
     it("reads at most MAX_BLOCKS from one list", () => {
         const raw = Array.from({ length: MAX_BLOCKS + 5 }, (_, i) => text(`b${i}`));
         expect(types(raw)).toHaveLength(MAX_BLOCKS);
+    });
+
+    /*
+     * #90: a page over its budget used to render as though it ended there, with nothing anywhere
+     * saying so, which is how baryo.dev's eighth band went missing with a 200 and no error. The
+     * fix is the sitemap's and the font allow list's own shape, a warning said once rather than a
+     * partial marker threaded through every caller, so this asserts on the warning rather than on
+     * some new field every reader of `resolveBlocks` would otherwise have to know to check.
+     */
+    describe("a page over the block budget", () => {
+        beforeEach(() => {
+            forgetBlockBudgetWarnings();
+        });
+        afterEach(() => {
+            vi.restoreAllMocks();
+        });
+
+        it("still renders every block that fits, rather than refusing the page", () => {
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+            const raw = Array.from({ length: MAX_BLOCKS + 5 }, (_, i) => text(`b${i}`));
+
+            expect(types(raw)).toHaveLength(MAX_BLOCKS);
+            expect(warn).toHaveBeenCalled();
+        });
+
+        it("says so once, rather than leaving the page looking like it simply ended", () => {
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+            const raw = Array.from({ length: MAX_BLOCKS + 5 }, (_, i) => text(`b${i}`));
+
+            resolveBlocks(raw, registry, { perViewer: false });
+
+            const messages = warn.mock.calls.map((call) => String(call[0]));
+            expect(messages).toHaveLength(1);
+            expect(messages[0]).toContain(`${MAX_BLOCKS}`);
+        });
+
+        it("says nothing when a page is at or under the budget", () => {
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+            const raw = Array.from({ length: MAX_BLOCKS }, (_, i) => text(`b${i}`));
+
+            expect(types(raw)).toHaveLength(MAX_BLOCKS);
+            expect(warn).not.toHaveBeenCalled();
+        });
     });
 
     it("spends one budget across nested lists, not one per list", () => {

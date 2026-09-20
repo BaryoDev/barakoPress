@@ -272,8 +272,42 @@ export interface ResolveOptions {
     perViewer: boolean;
 }
 
+/*
+ * A page over its budget used to render as though it ended there, with nothing said (#90): the
+ * eighth of eight bands went missing on baryo.dev and the only symptom was a section a visitor
+ * never saw. Raising the number from a hundred to four hundred (#83) bought room; it did not make
+ * going over it visible. This is the sitemap's and the font allow list's own shape, `sayOnce` over a
+ * bounded set: a page over budget still renders everything that fits, so a static export still
+ * builds and a request still answers, but the drop is said once instead of guessed at from a
+ * screenshot.
+ */
+const SAID_MAX = 200;
+const said = new Set<string>();
+
+function sayOnce(message: string): void {
+    if (said.has(message)) return;
+    if (said.size >= SAID_MAX) said.clear();
+    said.add(message);
+    console.warn(message);
+}
+
+/** For tests: say every message again. */
+export function forgetBlockBudgetWarnings(): void {
+    said.clear();
+}
+
 export function resolveBlocks(raw: unknown, registry: BlockRegistry, options: ResolveOptions): ResolvedBlock[] {
-    return resolveList(raw, registry, options, 0, { remaining: MAX_BLOCKS });
+    const budget = { remaining: MAX_BLOCKS, truncated: false };
+    const resolved = resolveList(raw, registry, options, 0, budget);
+    if (budget.truncated) {
+        sayOnce(
+            `blocks: a page held more than ${MAX_BLOCKS} blocks once its bands were expanded into what they draw, ` +
+                "so the rest were dropped and do not render. The budget counts every block a band expands into, " +
+                "not only the bands a page author placed, because that is what the work costs; split the page " +
+                "into more than one, or raise MAX_BLOCKS, rather than reordering bands to work around it.",
+        );
+    }
+    return resolved;
 }
 
 /*
@@ -285,13 +319,16 @@ function resolveList(
     registry: BlockRegistry,
     options: ResolveOptions,
     depth: number,
-    budget: { remaining: number },
+    budget: { remaining: number; truncated: boolean },
 ): ResolvedBlock[] {
     if (!Array.isArray(raw) || depth >= MAX_DEPTH) return [];
 
     const resolved: ResolvedBlock[] = [];
     for (const item of raw) {
-        if (budget.remaining <= 0) break;
+        if (budget.remaining <= 0) {
+            budget.truncated = true;
+            break;
+        }
         budget.remaining--;
         if (!isRecord(item) || typeof item.type !== "string") continue;
         const definition = registry.get(item.type);
@@ -308,7 +345,10 @@ function resolveList(
             const lists = (props[field.name] as unknown[][] | undefined) ?? [];
             slots[field.name] = [];
             for (const list of lists) {
-                if (budget.remaining <= 0) break;
+                if (budget.remaining <= 0) {
+                    budget.truncated = true;
+                    break;
+                }
                 slots[field.name].push(resolveList(list, registry, options, depth + 1, budget));
             }
             delete props[field.name];
