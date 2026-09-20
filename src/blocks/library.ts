@@ -501,6 +501,12 @@ const map: BlockPreset = {
  * It now has `tabGroup` and `tabPanel`, which are the stylesheet (see primitives.tsx), so this is
  * the one place that constraint changed. `tabs` stays `disclosure`: it holds whatever a page drops
  * into it, and a strip is the wrong shape for content nobody has measured against a design.
+ *
+ * The primary sample is now one of the strip's tabs, which it was not when it stood alone, so it
+ * needs the same `group` its `codeTab`s share or the two halves of one strip toggle as two strips.
+ * `group` defaults to "codeTabs" on both this preset and `codeTab`, so a page that never sets either
+ * gets one strip; a page with `codeTab`s already given their own group (to keep two `codeTabs` bands
+ * on one page from crossing) has to set this preset's own `group` to match, not only the children's.
  */
 const codeTabs: BlockPreset = {
     type: "codeTabs",
@@ -512,6 +518,7 @@ const codeTabs: BlockPreset = {
         text("language", "Language"),
         text("selectLabel", "Say this above it, for copying"),
         text("primaryLabel", "Tab label for the code above"),
+        text("group", "Only one open in this group"),
         tone,
         padding,
         width,
@@ -522,7 +529,7 @@ const codeTabs: BlockPreset = {
             t(p("heading"), "title"),
             t(p("body"), "lead"),
             holding("tabGroup", { gap: "xs" }, [
-                holding("tabPanel", { label: p("primaryLabel", "Run it"), open: true, group: "codeTabs" }, [
+                holding("tabPanel", { label: p("primaryLabel", "Run it"), open: true, group: p("group", "codeTabs") }, [
                     b("codeSample", { code: p("code"), language: p("language"), selectLabel: p("selectLabel") }),
                 ]),
                 slot("items"),
@@ -531,7 +538,7 @@ const codeTabs: BlockPreset = {
     ],
 };
 
-/** One more way to run it. Several with the same `group` open one at a time. */
+/** One more way to run it. Several with the same `group` open one at a time, `codeTabs`'s own included. */
 const codeTab: BlockPreset = {
     type: "codeTab",
     label: "Code tab",
