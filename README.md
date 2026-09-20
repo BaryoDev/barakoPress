@@ -177,12 +177,30 @@ reference field by the target's slug and any other field by the value it holds, 
 option. The API takes five filters. `createCollectionIndex(config, key, { filter })` takes the same,
 and the `collection` block has `filterField` and `filterValue`.
 
-**A colour per option.** With `colorBy: "AreaOfFocus"` on a `project` collection, the site settings
-`OptionColors` entry `{ "project.AreaOfFocus": { "Providing clean water": "sky" } }` names a colour
-from `Colors` (a theme slot or a colour written out also works). Each card, item page and collection
-block item carries it as a left border, with the option beside it. A name that does not resolve to
-something readable as a colour is dropped. A build-time site passes `optionColors` with the colours
-written out.
+**A style per option.** With `colorBy: "AreaOfFocus"` on a `project` collection, the site settings
+`OptionStyles` entry says how each option of that field is shown:
+
+```json
+{
+  "OptionStyles": {
+    "project.AreaOfFocus": {
+      "Providing clean water": { "tone": "sky", "icon": "location", "label": "Water" }
+    }
+  }
+}
+```
+
+`tone` names a colour from `Colors`, a theme slot, or a colour written out, and each card, item page
+and collection block item carries it as a left border. `icon` is one of the engine's icon names, and
+`label` is the word a visitor reads in place of the option's own value; the value stays on the element
+as `data-option`, where a site's own CSS can still find it. A tone that does not resolve to something
+readable as a colour is dropped, a label past 40 characters is dropped, and an icon name nothing
+draws draws nothing, each on its own rather than losing the whole entry.
+
+`OptionColors` is the same thing said shorter, `{ "project.AreaOfFocus": { "Providing clean water":
+"sky" } }`, an option whose style is a tone and nothing else. A tenant that saved colours keeps them,
+and a style for the same option wins field by field. A build-time site passes `optionStyles`, or
+`optionColors`, in the same shapes.
 
 `Card` and `ItemView` are exported for a site that wants its own page, and `Card` still takes a `post`.
 `getItem`, `listCollection` and `getGlobals(config)`, the tenant's settings entry as stored, are
@@ -500,7 +518,8 @@ for a post type with no such field.
 | `reservedSlugs` | the routes and the engine's files | `ReservedSlugs`, added to them | First path segments a root-mounted page may not take. Adds to the defaults |
 | `regions` | off | `HeaderPath`, `HeaderTone`, `FooterPath`, `FooterTone` | The header and the footer as block regions |
 | `collections` | the blog's `post`, `author` and `category` | `Collections` | Content types rendered as lists and detail pages. See Collections |
-| `optionColors` | none | `OptionColors` | CSS colours by `type.field` and option, for `colorBy` |
+| `optionStyles` | none | `OptionStyles` | Tone, icon and label by `type.field` and option, for `colorBy` |
+| `optionColors` | none | `OptionColors` | The same, when a tone is all an option has. Read as `optionStyles` |
 | `labels` | English | `Labels` | The words the screens print for a visitor. See below |
 | `home` | the post index | `HomePath`, `HomeCollection` | What `createHome` serves at `/`. See below |
 | `theme` | the barakoCMS palette | `Colors`, `Fonts`, `Radii`, `Layout`, `Space`, `Text` | Colours, faces, radii and column widths. See below |
@@ -599,7 +618,7 @@ The settings are the singleton `site` type from barakoCMS `docs/site-settings.md
 `Colors` (the theme slots), `Fonts` (a family name per role, and the stylesheet that loads it),
 `Radii`, `Layout`, `TopBar`, `HeaderLinks`, `FooterColumns`, `SocialLinks`, `HeaderPath`,
 `HeaderTone`, `FooterPath`, `FooterTone`, `AssetsAsSupplied`, `LogoAsSupplied`, `LogoClearSpace`,
-`PageSizes`, `ReservedSlugs`, `Labels`, `HomePath` and `HomeCollection`. `Collections` and `OptionColors` are read as the collections section
+`PageSizes`, `ReservedSlugs`, `Labels`, `HomePath` and `HomeCollection`. `Collections`, `OptionStyles` and `OptionColors` are read as the collections section
 describes. `Variants` are not rendered yet. Every value is checked for shape; one that fails, and any the
 entry leaves out, keeps the configured value, so a half-filled theme renders. A link is a path on the
 site or an absolute http or https URL. Set `Url`: without it the feed and sitemap fall back to the

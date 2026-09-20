@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { PressConfig } from "../config.js";
 import { formatDate } from "../cms.js";
 import { collectionOf, listCollection } from "../collections.js";
-import { PROSE_CLASS, primitiveBlocks } from "./primitives.js";
+import { IconGlyph, PROSE_CLASS, primitiveBlocks } from "./primitives.js";
 import { dataBlocks } from "./data.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
 
@@ -108,8 +108,12 @@ export interface CollectionItem {
     title: string;
     date?: string;
     summary?: string;
-    /** From the collection's `colorBy` option, when the site maps that option to a colour. */
+    /** The tone of the item's option style, which is what `OptionColors` set on its own. */
     color?: string;
+    /** The icon that style names (#52). */
+    icon?: string;
+    /** The word that style gives the option, or the option's own value when it gives none. */
+    badge?: string;
 }
 
 /** The most a collection block lists. The API caps a page anyway; this keeps the schema honest. */
@@ -138,6 +142,8 @@ export async function collectionItems(
                 date: item.date ? formatDate(config, item.date) : undefined,
                 summary: item.summary,
                 ...(item.color ? { color: item.color } : {}),
+                ...(item.style?.icon ? { icon: item.style.icon } : {}),
+                ...(item.style && (item.style.label || item.style.icon) ? { badge: item.style.label ?? item.option } : {}),
             }));
     } catch {
         return [];
@@ -232,6 +238,26 @@ function collection(config: PressConfig, holding = false): BlockDefinition {
                                 >
                                     {item.title}
                                 </Link>
+                                {(item.icon || item.badge) && (
+                                    <p
+                                        style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: theme.space.xs,
+                                            margin: `${theme.space.xs} 0 0`,
+                                            fontFamily: theme.fonts.mono,
+                                            fontSize: theme.text.meta,
+                                            letterSpacing: ".08em",
+                                            textTransform: "uppercase",
+                                            color: item.color ?? c.muted,
+                                        }}
+                                    >
+                                        {item.icon && (
+                                            <IconGlyph name={item.icon} size={theme.text.small} color={item.color ?? c.muted} />
+                                        )}
+                                        {item.badge}
+                                    </p>
+                                )}
                                 {item.date && (
                                     <p
                                         style={{

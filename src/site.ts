@@ -12,6 +12,7 @@ import {
     type Home,
     type Labels,
     LABEL_KEYS,
+    type OptionStyle,
     type PageSizes,
     type PressConfig,
     type Region,
@@ -685,11 +686,76 @@ function collectionsFrom(base: Record<string, CollectionConfig>, v: unknown): Re
 }
 
 /*
- * `OptionColors`, keyed by `type.field` and then by option, each naming a colour in `Colors`, a theme
- * slot, or a colour written out. A name that resolves to nothing readable as a colour is dropped. The
+ * `OptionStyles` and `OptionColors`, keyed by `type.field` and then by option (#52).
+ *
+ * A style is a tone, an icon and a label, and a block decides what to do with them: the card draws a
+ * border in the tone and a badge with the icon and the label. `OptionColors` is the same thing said
+ * shorter, an option whose style is a tone and nothing else, so a tenant that saved colours keeps
+ * them and a style set for the same option wins field by field.
+ *
+ * A tone names a colour in `Colors`, a theme slot, or a colour written out, and one that resolves to
+ * nothing readable as a colour is dropped. An icon is a name the engine either draws or does not. A
  * tenant's options merge over the configured ones, so setting one option keeps the rest.
  */
 const OPTION_KEY = /^[A-Za-z][A-Za-z0-9_-]{0,62}\.[A-Za-z][A-Za-z0-9_]{0,62}$/;
+const ICON_NAME = /^[a-z][a-z0-9-]{0,30}$/;
+const MAX_OPTION_LABEL = 40;
+
+/** A colour named by a `Colors` key, a theme slot, or written out. Undefined for anything else. */
+function colorNamed(theme: PressTheme, colorsIn: unknown): (name: string) => string | undefined {
+    const named = record(colorsIn) ?? {};
+    const slots = theme.colors as unknown as Record<string, string>;
+    return (name: string) => {
+        const own = Object.hasOwn(named, name) ? str(named[name]) : undefined;
+        if (own) return COLOR.test(own) ? own : undefined;
+        if (Object.hasOwn(slots, name)) return slots[name];
+        return COLOR.test(name) ? name : undefined;
+    };
+}
+
+function optionStyleFrom(v: unknown, resolve: (name: string) => string | undefined): OptionStyle | undefined {
+    const written = record(v);
+    const tone = str(written ? written.tone : v);
+    const color = tone ? resolve(tone) : undefined;
+    const icon = str(written?.icon);
+    const label = short(written?.label, MAX_OPTION_LABEL);
+    const style: OptionStyle = {
+        ...(color ? { tone: color } : {}),
+        ...(icon && ICON_NAME.test(icon) ? { icon } : {}),
+        ...(label ? { label } : {}),
+    };
+    return Object.keys(style).length > 0 ? style : undefined;
+}
+
+function optionStylesFrom(
+    base: Record<string, Record<string, OptionStyle>>,
+    theme: PressTheme,
+    colorsIn: unknown,
+    colors: unknown,
+    styles: unknown,
+): Record<string, Record<string, OptionStyle>> {
+    const resolve = colorNamed(theme, colorsIn);
+    let out = base;
+    for (const input of [record(colors), record(styles)]) {
+        if (!input) continue;
+        const read = Object.entries(input)
+            .slice(0, 50)
+            .flatMap(([key, raw]): [string, Record<string, OptionStyle>][] => {
+                const options = record(raw);
+                if (!OPTION_KEY.test(key) || !options) return [];
+                const configured = Object.hasOwn(out, key) ? out[key] : {};
+                const read = Object.entries(options)
+                    .slice(0, 100)
+                    .flatMap(([option, value]): [string, OptionStyle][] => {
+                        const style = option.length <= 200 ? optionStyleFrom(value, resolve) : undefined;
+                        return style ? [[option, { ...configured[option], ...style }]] : [];
+                    });
+                return [[key, { ...configured, ...Object.fromEntries(read) }]];
+            });
+        out = { ...out, ...Object.fromEntries(read) };
+    }
+    return out;
+}
 
 function optionColorsFrom(
     base: Record<string, Record<string, string>>,
@@ -699,14 +765,7 @@ function optionColorsFrom(
 ): Record<string, Record<string, string>> {
     const input = record(v);
     if (!input) return base;
-    const named = record(colorsIn) ?? {};
-    const slots = theme.colors as unknown as Record<string, string>;
-    const resolve = (name: string): string | undefined => {
-        const own = Object.hasOwn(named, name) ? str(named[name]) : undefined;
-        if (own) return COLOR.test(own) ? own : undefined;
-        if (Object.hasOwn(slots, name)) return slots[name];
-        return COLOR.test(name) ? name : undefined;
-    };
+    const resolve = colorNamed(theme, colorsIn);
 
     const read = Object.entries(input)
         .slice(0, 50)
@@ -875,6 +934,7 @@ export function applySiteSettings(
         presets: array(d.Presets) ? presetsFrom(array(d.Presets), pinnedTenant(config)) : config.presets,
         collections: collectionsFrom(config.collections, d.Collections),
         optionColors: optionColorsFrom(config.optionColors, theme, d.Colors, d.OptionColors),
+        optionStyles: optionStylesFrom(config.optionStyles, theme, d.Colors, d.OptionColors, d.OptionStyles),
         pageSizes: pageSizesFrom(config.pageSizes, d.PageSizes),
         labels: labelsFrom(config.labels, d.Labels),
         reservedSlugs: reservedSlugsFrom(config.reservedSlugs, d.ReservedSlugs),

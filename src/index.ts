@@ -107,6 +107,7 @@ export type {
     CollectionFields,
     CollectionReference,
     FieldNames,
+    OptionStyle,
     Labels,
     Home,
 } from "./config.js";

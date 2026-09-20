@@ -2,6 +2,13 @@
 
 ## 0.6.0 (unreleased)
 
+- An option of a choice field carries a style, not just a colour. `OptionStyles`, keyed by
+  `type.field` and then by option, gives each one a tone, an icon and the word a visitor reads in
+  place of the option's own value, so a clinic can put an icon on each department and a school a
+  short badge on each grade level without another setting shaped exactly like the last one. The
+  cards, the item pages and the collection block draw all three; the option's stored value stays on
+  the element as `data-option`. `OptionColors` still works and means an option whose style is a tone
+  and nothing else, so a tenant that saved colours keeps exactly the border it had. (#52)
 - A tenant picks its home page. `HomePath` names a page, the way `HoldingPath` does, and
   `HomeCollection` names a collection whose index stands at the root; `createHome` serves whichever
   it is and the post index when it is neither, so a site that says nothing renders what it always

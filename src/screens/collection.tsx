@@ -15,6 +15,7 @@ import {
 } from "../collections.js";
 import { CmsError } from "../delivery.js";
 import { Asset, renderProse } from "../assets.js";
+import { IconGlyph } from "../blocks/primitives.js";
 import { siteConfig, type SiteParams } from "../site.js";
 
 /*
@@ -56,7 +57,13 @@ function itemFromPost(config: PressConfig, post: Post): Item {
     };
 }
 
-function OptionLine({ item }: { item: Item }) {
+/*
+ * The option an item holds, as the site shows it (#52): the tone as a dot, the icon beside it, and
+ * the style's own word in place of the option's value. A tenant that set only a colour gets the dot
+ * and the value, which is what this drew before styles existed.
+ */
+function OptionLine({ config, item }: { config: PressConfig; item: Item }) {
+    const style = item.style;
     return (
         <p className="meta" data-option={item.option}>
             {item.color && (
@@ -72,7 +79,12 @@ function OptionLine({ item }: { item: Item }) {
                     }}
                 />
             )}
-            {item.option}
+            {style?.icon && (
+                <span style={{ marginRight: "6px" }}>
+                    <IconGlyph name={style.icon} size={config.theme.text.small} color={item.color ?? "currentColor"} />
+                </span>
+            )}
+            {style?.label ?? item.option}
         </p>
     );
 }
@@ -107,7 +119,7 @@ export function Card(props: CardProps) {
                     </Fragment>
                 ))}
             </p>
-            {item.option && <OptionLine item={item} />}
+            {item.option && <OptionLine config={config} item={item} />}
             {item.summary && <p className="excerpt">{item.summary}</p>}
             {item.tags.length > 0 && (
                 <p className="tags">
@@ -142,7 +154,7 @@ export function ItemView({ config, item, related, backHref = "/" }: ItemViewProp
                 <Link href={backHref}>{config.labels.back}</Link>
             </p>
             <h1>{item.title}</h1>
-            {item.option && <OptionLine item={item} />}
+            {item.option && <OptionLine config={config} item={item} />}
             {item.image && (
                 <Asset
                     src={item.image}

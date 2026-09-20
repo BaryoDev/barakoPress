@@ -382,6 +382,22 @@ export const DEFAULT_LABELS: Labels = {
 
 export const LABEL_KEYS = Object.keys(DEFAULT_LABELS) as (keyof Labels)[];
 
+/**
+ * How one option of a choice field is shown (#52).
+ *
+ * `OptionColors` painted a 4px border and nothing else, and every planned sibling was the same idea
+ * again: a colour per option on a card grid, a glyph per entry, a short badge per grade level. So an
+ * option carries a style, and each block decides what to do with it.
+ */
+export interface OptionStyle {
+    /** A colour: a name from `Colors`, a theme slot, or a colour written out, resolved to the colour. */
+    tone?: string;
+    /** An icon name. One of the `ICONS` the engine draws; anything else draws nothing. */
+    icon?: string;
+    /** What to show in place of the option's own value, for example "P1" for "Primary one". */
+    label?: string;
+}
+
 export interface PressConfig {
     types: TypeNames;
     fields: FieldMap;
@@ -456,9 +472,15 @@ export interface PressConfig {
     collections: Record<string, CollectionConfig>;
     /**
      * Colours by `type.field`, then by option value, as CSS colours. A request-time site reads them from
-     * the tenant's `OptionColors` setting.
+     * the tenant's `OptionColors` setting. Sugar over `optionStyles`: an entry here is an option whose
+     * style is a tone and nothing else, and both end up in `optionStyles`, which is what the blocks read.
      */
     optionColors: Record<string, Record<string, string>>;
+    /**
+     * How each option of a choice field is shown, by `type.field` then by option. A request-time site
+     * reads `OptionStyles`, merged over whatever `OptionColors` said.
+     */
+    optionStyles: Record<string, Record<string, OptionStyle>>;
     /** The words the screens print. A request-time site reads the tenant's `Labels` setting. */
     labels: Labels;
     /** What `createHome` serves at the root. A request-time site reads `HomePath` and `HomeCollection`. */
@@ -602,6 +624,24 @@ function mountPath(value: string): string {
     return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 }
 
+/** The two option maps as one: a colour is a style whose only field is its tone, and a style wins. */
+function withOptionColors(
+    colors: Record<string, Record<string, string>> | undefined,
+    styles: Record<string, Record<string, OptionStyle>> | undefined,
+): Record<string, Record<string, OptionStyle>> {
+    const out: Record<string, Record<string, OptionStyle>> = {};
+    for (const [key, options] of Object.entries(colors ?? {})) {
+        out[key] = Object.fromEntries(Object.entries(options).map(([option, tone]) => [option, { tone }]));
+    }
+    for (const [key, options] of Object.entries(styles ?? {})) {
+        out[key] = { ...out[key] };
+        for (const [option, style] of Object.entries(options)) {
+            out[key][option] = { ...out[key][option], ...style };
+        }
+    }
+    return out;
+}
+
 function reservedSlugs(routes: (string | undefined)[], extra: string[] | undefined): string[] {
     const named = [...RESERVED_AT_ROOT, ...routes.map(firstSegment), ...(extra ?? []).map((s) => s.trim().toLowerCase())];
     return [...new Set(named.filter((s): s is string => Boolean(s)))];
@@ -653,6 +693,7 @@ export function defineConfig(
         theme: resolveTheme(input.theme),
         collections,
         optionColors: input.optionColors ?? {},
+        optionStyles: withOptionColors(input.optionColors, input.optionStyles),
         labels: { ...DEFAULT_LABELS, ...input.labels },
         ...(input.home ? { home: input.home } : {}),
         reservedSlugs: reservedSlugs(

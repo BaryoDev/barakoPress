@@ -593,6 +593,31 @@ const ICON_SIZES: Record<string, keyof PressTheme["text"]> = {
     lg: "display",
 };
 
+/**
+ * One of `ICONS`, drawn outside a block: an option's style puts one on a card (#52). A name the
+ * engine does not have draws nothing, the same as the icon block.
+ */
+export function IconGlyph({ name, size, color }: { name: string; size: string; color: string }) {
+    const path = ICONS[name];
+    if (!path) return null;
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            width={size}
+            height={size}
+            fill="none"
+            stroke={color}
+            strokeWidth={1.8}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+            style={{ display: "inline-block", verticalAlign: "middle" }}
+        >
+            <path d={path} />
+        </svg>
+    );
+}
+
 const icon = defineBlock<{ name: string; size?: string; tone?: string; label?: string }>({
     type: "icon",
     label: "Icon",

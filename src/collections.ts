@@ -1,4 +1,4 @@
-import { REFERENCE_FIELDS, type CollectionConfig, type FieldNames, type PressConfig } from "./config.js";
+import { REFERENCE_FIELDS, type CollectionConfig, type FieldNames, type OptionStyle, type PressConfig } from "./config.js";
 import { bySlug, bySlugPreview, list, type PublicContent, type Seo } from "./delivery.js";
 import type { Ref } from "./cms.js";
 import { siteHref } from "./site.js";
@@ -33,7 +33,9 @@ export interface Item {
     refs: Record<string, Ref | undefined>;
     /** The option the `colorBy` field holds. */
     option?: string;
-    /** The colour the site maps that option to. */
+    /** How the site shows that option: its tone, its icon and the word it goes by (#52). */
+    style?: OptionStyle;
+    /** The tone of that style, which is what `OptionColors` used to be on its own. */
     color?: string;
     seo?: Seo;
     /** The entry as the API returned it, for a site's own component. */
@@ -101,9 +103,9 @@ function optionOf(c: PublicContent, col: CollectionConfig): string | undefined {
     return undefined;
 }
 
-function colorOf(config: PressConfig, col: CollectionConfig, option: string | undefined): string | undefined {
+function styleOf(config: PressConfig, col: CollectionConfig, option: string | undefined): OptionStyle | undefined {
     if (!option || !col.colorBy) return undefined;
-    const byOption = config.optionColors[`${col.type}.${col.colorBy}`];
+    const byOption = config.optionStyles[`${col.type}.${col.colorBy}`];
     return byOption && Object.hasOwn(byOption, option) ? byOption[option] : undefined;
 }
 
@@ -113,6 +115,7 @@ export function toItem(config: PressConfig, key: string, c: PublicContent): Item
     const f = col.fields;
     const tags = value(c, f.tags);
     const option = optionOf(c, col);
+    const style = styleOf(config, col, option);
     const refs: Record<string, Ref | undefined> = {};
     for (const [field, ref] of Object.entries(col.references ?? {})) {
         refs[field] = toRef(config, ref.collection, read(c, field));
@@ -132,7 +135,8 @@ export function toItem(config: PressConfig, key: string, c: PublicContent): Item
         tags: Array.isArray(tags) ? tags.filter((t): t is string => typeof t === "string") : [],
         refs,
         option,
-        color: colorOf(config, col, option),
+        ...(style ? { style } : {}),
+        ...(style?.tone ? { color: style.tone } : {}),
         seo: c.seo ?? undefined,
         content: c,
     };
