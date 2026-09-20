@@ -5,6 +5,7 @@ import type { PressConfig } from "../config.js";
 import type { PressTheme } from "../theme.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
 import {
+    HIDDEN_CLASS,
     HUE_STEPS,
     countTarget,
     countUpCss,
@@ -406,6 +407,11 @@ const text = defineBlock<TextProps>({
          * A figure counts up to what is already written here. The number stays the element's own
          * text, so a browser that runs no animation, and a visitor who asked for none, read the
          * figure itself rather than an empty box waiting for a script that is not coming.
+         *
+         * Two copies, because while the count runs the drawn figure is covered and the counter over
+         * it is generated content, which is not a value anything reads out. The drawn one is
+         * presentational either way and the off-screen one is the figure, so what is read is the
+         * same whether the count runs or not.
          */
         const to = props.motion === "countUp" ? countTarget(props.value) : null;
         if (to === null) return <Tag style={style}>{props.value}</Tag>;
@@ -414,7 +420,8 @@ const text = defineBlock<TextProps>({
             <>
                 <style dangerouslySetInnerHTML={{ __html: countUpCss(cls, to) }} />
                 <Tag style={style} className={cls}>
-                    <span>{props.value}</span>
+                    <span className={HIDDEN_CLASS}>{props.value}</span>
+                    <span data-bp-counted aria-hidden="true">{props.value}</span>
                 </Tag>
             </>
         );
@@ -909,8 +916,8 @@ const rotatingText = defineBlock<{ items: string; variant?: string; tone?: strin
             <>
                 <style dangerouslySetInnerHTML={{ __html: rotatingCss(cls, words.length, seconds) }} />
                 <span
-                    className={cls}
                     style={{
+                        position: "relative",
                         fontFamily: heading ? theme.fonts.heading : theme.fonts.body,
                         fontSize: theme.text[variant.role],
                         fontWeight: heading ? 600 : 400,
@@ -918,9 +925,17 @@ const rotatingText = defineBlock<{ items: string; variant?: string; tone?: strin
                         color: inherited(theme, INK[props.tone ?? ""] ?? "accent"),
                     }}
                 >
-                    {words.map((word, i) => (
-                        <span key={i}>{word}</span>
-                    ))}
+                    {/*
+                     * The words are stacked and only one is drawn, but opacity hides nothing from a
+                     * reader: the stack would be read as every word in a row. So the stack is
+                     * presentational and the word that stands at rest is what is read.
+                     */}
+                    <span className={HIDDEN_CLASS}>{words[0]}</span>
+                    <span className={cls} aria-hidden="true">
+                        {words.map((word, i) => (
+                            <span key={i}>{word}</span>
+                        ))}
+                    </span>
                 </span>
             </>
         );

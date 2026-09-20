@@ -74,7 +74,8 @@
   page and one tenant, and each problem names the binding as typed, the reason, and the block and
   the field it came from, so barakoBrew marks the field rather than printing a list. It reports the
   page as rendered rather than as stored, which is what catches an `{{item.X}}` outside a repeat as
-  well as a typo. A report names field paths, so it is never anonymous: the caller presents the
+  well as a typo, and it takes the page route's own `query` option so a `{{query.X}}` is reported as
+  unbound wherever the visitor's page leaves it unbound. A report names field paths, so it is never anonymous: the caller presents the
   tenant's own key, derived from `PRESS_SECRET` under its own purpose label and printed by
   `barakopress bindings-key <tenant>`, and the answer is never cached. (#63)
 - Motion in the block library, and none of it in JavaScript. `reveal` lifts its content in as it
@@ -88,8 +89,12 @@
   a page with JavaScript off renders the terminal typed out and the figure at its number, and every
   animation sits inside `prefers-reduced-motion: no-preference`, so a visitor who asked for less
   motion gets the same finished page. "When it comes into view" is `animation-timeline: view()`, and
-  a browser without that shows the finished state too. A test strips the guards out of every
-  stylesheet these emit and fails if what is left animates or hides anything. (#22)
+  a browser without that shows the finished state too. What a block animates is presentation and
+  never the only copy of what it says: the rotating stack and the covered figure are `aria-hidden`
+  and each carries one plain copy off screen, so a reader is read one word and one number rather than
+  every word at once or nothing at all. Two tests hold both rules, one stripping the motion guards
+  out of every stylesheet these emit and one stripping every `aria-hidden` subtree out of the
+  markup. (#22)
 
 ## 0.4.0 (2026-09-20)
 

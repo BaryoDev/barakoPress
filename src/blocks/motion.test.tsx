@@ -63,6 +63,102 @@ function unguarded(css: string): string {
     return out.replace(/@supports[^{]*\{\s*\}/g, "");
 }
 
+/*
+ * The markup with every `aria-hidden` subtree cut out, tags counted so a nested one goes with it.
+ * What is left is what a reader is read, and a block whose only copy of its words was inside an
+ * animated stack has nothing left here.
+ */
+function readable(html: string): string {
+    // The stylesheets go first. A count-up's target number is in its keyframes, so leaving them in
+    // would let a block with no readable copy of its figure pass on its own CSS.
+    let out = html.replace(/<style[^>]*>[\s\S]*?<\/style>/g, "");
+    for (;;) {
+        const found = out.search(/<([a-z]+)[^>]*aria-hidden="true"/);
+        if (found === -1) return out;
+        const tag = /<([a-z]+)/.exec(out.slice(found))?.[1] ?? "";
+        const open = new RegExp(`<${tag}[\\s>]`, "g");
+        const close = `</${tag}>`;
+        let depth = 0;
+        let i = found;
+        for (; i < out.length; ) {
+            open.lastIndex = i;
+            const next = open.exec(out);
+            const shut = out.indexOf(close, i);
+            if (shut === -1) return out.slice(0, found);
+            if (next && next.index < shut) {
+                depth++;
+                i = next.index + 1;
+                continue;
+            }
+            if (--depth === 0) {
+                i = shut + close.length;
+                break;
+            }
+            i = shut + close.length;
+        }
+        out = out.slice(0, found) + out.slice(i);
+    }
+}
+
+/*
+ * The rule the two accessibility findings on #79 were both instances of: whatever a motion block
+ * animates is presentation, so it is never the only copy of what the block says. One test over every
+ * motion block, rather than one per block, because the next animated block is the one at risk.
+ */
+describe("what a motion block says is in the accessibility tree", () => {
+    const cases: { what: string; block: unknown; reads: string[] }[] = [
+        {
+            what: "a rotation",
+            block: { type: "rotatingText", props: { items: "fast, plain, yours", seconds: 2 } },
+            reads: ["fast"],
+        },
+        {
+            what: "a figure counting up",
+            block: { type: "text", props: { value: "1200", motion: "countUp" } },
+            reads: ["1200"],
+        },
+        {
+            what: "a terminal",
+            block: { type: "typingTerminal", props: { lines: "npm i barakopress", prompt: "$" } },
+            reads: ["$ npm i barakopress"],
+        },
+        {
+            what: "a revealed section",
+            block: { type: "reveal", props: { content: [[{ type: "text", props: { value: "Still here" } }]] } },
+            reads: ["Still here"],
+        },
+        {
+            what: "a code sample",
+            block: { type: "codeSample", props: { code: "npm i barakopress", language: "shell" } },
+            reads: ["npm i barakopress"],
+        },
+    ];
+
+    it.each(cases)("$what keeps one plain copy of what it says", async ({ block, reads }) => {
+        const html = await page([block]);
+        const left = readable(html);
+
+        expect(reads.length).toBeGreaterThan(0);
+        for (const word of reads) {
+            expect(html).toContain(word);
+            expect(left).toContain(word);
+        }
+    });
+
+    it("says a rotation's later words once, and not as one run of text", async () => {
+        const html = await page([{ type: "rotatingText", props: { items: "fast, plain, yours" } }]);
+
+        // Every word is drawn, and the stack they are drawn in is presentational, so what is read
+        // is the one word that stands when nothing animates.
+        expect(html).toContain(">plain<");
+        expect(html).toContain('aria-hidden="true"');
+        const left = readable(html);
+        expect(left).toContain("fast");
+        expect(left).not.toContain("plain");
+        expect(left).not.toContain("yours");
+    });
+});
+
 describe("motion blocks render their final state", () => {
     it("types a terminal out in full, and animates only where motion is welcome", async () => {
         const html = await page([

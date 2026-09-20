@@ -33,6 +33,12 @@ import { parseOrigins, type BlockSchemaRouteOptions } from "./block-schema.js";
  * the key that reads one tenant's problems reads no other tenant's and cannot purge anything. An
  * operator prints it with `barakopress bindings-key <tenant>`.
  *
+ * The query is off unless the page route has it on. `createPage` hands blocks the request's query
+ * only when it is mounted with `{ query: true }`, so a report that always supplied one would resolve
+ * a `{{query.X}}` the visitor's page leaves unbound, and say a binding works where it does not. A
+ * report that lies in that direction is worse than no report, so this takes the same option and
+ * defaults it the same way the page route's own default works out for a kept route.
+ *
  * Nothing here changes what a visitor gets. The page is bound a second time, for this caller, and
  * the answer is never cached.
  */
@@ -40,6 +46,13 @@ import { parseOrigins, type BlockSchemaRouteOptions } from "./block-schema.js";
 export interface BindingReportOptions extends BlockSchemaRouteOptions {
     /** Defaults to PRESS_SECRET. A request-time site derives each tenant's key from it. */
     secret?: string;
+    /**
+     * Whether the page being reported on is mounted with `createPage(config, blocks, { query: true })`.
+     * Off by default, which is what a page route without it does: a `{{query.X}}` on such a page is
+     * an unbound scope for every visitor, and the report has to say so. On, the report's own query
+     * string past `path` and `slug` is what the bindings read.
+     */
+    query?: boolean;
     /** The most problems one answer spells out. */
     maxProblems?: number;
 }
@@ -97,11 +110,11 @@ function expectedKey(config: PressConfig, secret: string): string {
 }
 
 /*
- * The query a reported page binds against.
+ * The query a reported page binds against, when the page route reads one at all.
  *
  * `path` and `slug` address the page and are this route's own, so they are taken out. Everything
  * else is handed to `{{query.X}}`, which is how a console asks what the page does with a given
- * value rather than being told every query binding is unbound.
+ * value.
  */
 function reportQuery(url: URL): Record<string, string> {
     const params = new URLSearchParams(url.searchParams);
@@ -165,7 +178,7 @@ export function createBindingReportRoute(
             scopes: {
                 site: async () => siteScope(config, await getGlobals(config)),
                 page: () => pageScope(page),
-                query: () => reportQuery(url),
+                ...(options.query === true ? { query: () => reportQuery(url) } : {}),
             },
             onProblem: (problem) => {
                 seen++;

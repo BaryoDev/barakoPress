@@ -116,7 +116,10 @@ The binding report says why a binding on a page did not resolve, so an editor fi
 instead of asking whoever can read the server log. Ask for one page at a time, by `?slug=` or
 `?path=`, and each problem names the binding as typed, the reason (`unknown scope`, `unbound scope`
 or `no value`), and the block and field it came from. It reports the page as rendered, not as
-stored, so a `{{item.X}}` outside a repeat is reported as an unbound scope. It is never anonymous:
+stored, so a `{{item.X}}` outside a repeat is reported as an unbound scope. Give it the same `query`
+option the page route has: off, which is the default, a `{{query.X}}` is an unbound scope for every
+visitor and the report says so, and a report that resolved one anyway would tell an editor a field
+works where it does not. It is never anonymous:
 the caller presents the tenant's key as `Authorization: Bearer`, derived from `PRESS_SECRET` and
 printed by `barakopress bindings-key <tenant>`. Answers are never cached.
 

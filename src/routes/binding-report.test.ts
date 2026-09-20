@@ -30,6 +30,7 @@ const TYPO = { type: "text", props: { value: "{{sight.Name}}" } };
 const RENAMED = { type: "text", props: { value: "{{page.Headline}}" } };
 const ITEM_OUTSIDE_A_REPEAT = { type: "text", props: { value: "{{item.Title}}" } };
 const FINE = { type: "text", props: { value: "{{site.Name}}" } };
+const FROM_THE_URL = { type: "text", props: { value: "{{query.campaign}}" } };
 
 const PAGES: Record<string, { id: string; slug: string; data: Record<string, unknown> }> = {
     about: {
@@ -42,6 +43,7 @@ const PAGES: Record<string, { id: string; slug: string; data: Record<string, unk
         },
     },
     clean: { id: "pg2", slug: "clean", data: { Title: "Clean", Slug: "clean", Blocks: [FINE] } },
+    campaign: { id: "pg3", slug: "campaign", data: { Title: "Campaign", Slug: "campaign", Blocks: [FROM_THE_URL] } },
 };
 
 const config = defineConfig({ sites: {}, cmsUrl: CMS, pageFields: { blocks: "Blocks" } });
@@ -154,6 +156,29 @@ describe("the binding report", () => {
 
         visit("nobody.example");
         expect((await report(ask("?slug=about"))).status).toBe(404);
+    });
+
+    /*
+     * `createPage` hands blocks the request's query only when it is mounted with `{ query: true }`.
+     * A report that always read one would resolve a binding the visitor's page leaves unbound, and
+     * tell an editor a field works where it does not, which is worse than saying nothing.
+     */
+    it("leaves a query binding unbound, the way a page route without the query does", async () => {
+        const res = await report(ask("?slug=campaign&campaign=spring"));
+        const body = (await res.json()) as BindingReport;
+
+        expect(body.problems).toHaveLength(1);
+        expect(body.problems[0]).toMatchObject({ binding: "{{query.campaign}}", reason: "unbound scope" });
+    });
+
+    it("resolves one when the page route it reports on reads the query", async () => {
+        const withQuery = createBindingReportRoute(config, registry, { secret: SECRET, query: true });
+
+        const res = await withQuery(ask("?slug=campaign&campaign=spring"));
+        const body = (await res.json()) as BindingReport;
+
+        expect(res.status).toBe(200);
+        expect(body.problems).toEqual([]);
     });
 
     it("preflights only the origins the site named", () => {
