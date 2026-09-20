@@ -97,7 +97,7 @@ decision, not the engine's.
 | `app/api/blocks/route.ts` | `GET`, `OPTIONS` | `createBlockSchemaRoute(blocks)`, `createBlockSchemaPreflight()` |
 | `app/api/blocks/bindings/route.ts` | `GET`, `OPTIONS` | `createBindingReportRoute(config, blocks)`, `createBindingReportPreflight()` |
 | `app/layout.tsx` | `default`, `generateMetadata` | `createSiteLayout(config, { blocks })`, `createSiteMetadata(config)` |
-| `app/%5Fshare/route.ts` | `GET` | `createSharePage()` |
+| `app/%5Fshare/route.ts` | `GET` | `createSharePage(config)` |
 | `app/api/share/redeem/route.ts` | `POST` | `createShareRedeemRoute(config)` |
 
 `createHome` serves whatever the tenant picked for `/`: the page at `HomePath`, the index of
@@ -556,13 +556,15 @@ for a post type with no such field.
 | `optionStyles` | none | `OptionStyles` | Tone, icon and label by `type.field` and option, for `colorBy` |
 | `optionColors` | none | `OptionColors` | The same, when a tone is all an option has. Read as `optionStyles` |
 | `labels` | English | `Labels` | The words the screens print for a visitor. See below |
+| `store` | in process | operator only | Where the state a fleet has to agree on is kept: kept answers, the host map, the replay guard, the generation of each cache tag. Needed only when more than one container serves the site. See below |
 | `home` | the post index | `HomePath`, `HomeCollection` | What `createHome` serves at `/`. See below |
 | `theme` | the barakoCMS palette | `Colors`, `Fonts`, `Radii`, `Layout`, `Space`, `Text` | Colours, faces, radii and column widths. See below |
 
 The third column is the whole of the split. A key marked operator only is one the image decides for
 every tenant it serves, and each is that for a reason you can name: `types`, `fields`, `pageFields`
 and `routes` are what the blog factories compile against, `cacheTag`, `backstopSeconds`,
-`cmsTimeoutMs`, `cmsUrl`, `tenant` and `sites` are facts about the deployment rather than the site,
+`cmsTimeoutMs`, `cmsUrl`, `tenant`, `sites` and `store` are facts about the deployment rather than
+the site,
 and `pages` has to match a route file on disk. Everything else is that tenant's data, edited in
 barakoBrew, and wins over what this file said. A tenant that sets nothing renders exactly as the
 file says.
@@ -823,12 +825,14 @@ The registry the regions render with is the one passed to `createSiteLayout(conf
 the built-in blocks when none was passed.
 
 **Caching per tenant.** Every read carries the tenant in `X-Tenant` and in its cache tag,
-`<cacheTag>:<tenant>`. The webhook purges the tag of the tenant its host resolves to, so point each
-tenant's webhook at `https://<that tenant's domain>/api/revalidate`, signed with that tenant's own key
-(see [One key per tenant](#one-key-per-tenant)). A publish on one tenant leaves every other tenant's
-cached reads in place.
+`<cacheTag>:<tenant>`, and a narrower tag beside it: `<tenant tag>:entry:<type>:<slug>` on a read of
+one entry, `<tenant tag>:type:<type>` on a list, a search, the settings and the page tree. The webhook
+purges the tags of the tenant its host resolves to, so point each tenant's webhook at
+`https://<that tenant's domain>/api/revalidate`, signed with that tenant's own key (see
+[One key per tenant](#one-key-per-tenant)). A publish on one tenant leaves every other tenant's cached
+reads in place.
 
-**When the CMS is down.** Each successful read is also kept in process, keyed by CMS, tenant and path.
+**When the CMS is down.** Each successful read is also kept in the store, keyed by CMS, tenant and path.
 A read that fails with a network error, a 5xx, or no answer within `cmsTimeoutMs` answers from the
 last good copy and logs a warning; the next successful read replaces it. For ten seconds after such a
 failure that read answers from the copy without asking the CMS, so an outage costs one request per
@@ -863,8 +867,8 @@ While a tenant is holding, for that tenant only:
 - route handlers (revalidate, blocks, `/_share`, `/api/share/redeem`) and `/_next/static` are served
   as usual.
 
-Switching `Mode` is a publish: the webhook purges the tenant's tag and the next request reads the new
-settings. No deploy.
+Switching `Mode` is a publish: the webhook drops the tag the settings read carries and the next
+request reads the new settings. No deploy.
 
 **Site share links.** barakoCMS creates, lists and revokes them; anyone who may update the `site` type
 can. A client is given `{site Url}/_share#{key}`. The key is in the fragment, so no server log, proxy
@@ -1030,6 +1034,49 @@ publish  ->  signed webhook  ->  revalidate  ->  next render reads once
 Every read in `src/delivery.ts` is tagged with your `cacheTag`. `POST /api/revalidate` drops that tag
 the moment barakoCMS says something changed, so a publish is live in one request and the steady state
 is no database reads.
+
+### What a publish drops
+
+A read carries a second, narrower tag beside the site's own: the entry's when it read one entry, the
+type's when it read a list, a search, the site settings or the page tree. barakoCMS names the content
+type and sends the entry's public data with every delivery, so a publish drops that type's tag and
+that entry's tag, and leaves every other entry of the type cached. Correcting one typo on a school
+with a thousand news posts re-renders that post and the lists it appears in, not the other 999.
+
+A delivery that names no content type, or one this site renders nothing of, drops the site's own tag,
+which is every read it has cached. That is what every delivery did before this, so a workflow posting
+a body of its own keeps working.
+
+A response barakoCMS marks `Cache-Control: no-store` is not cached: the class is remembered against
+that path and every later read of it asks the CMS uncached, carrying no tag. That is how a type that
+has to be fresh to the minute lives beside pages cached for hours.
+
+### Running more than one container
+
+The kept answers, the host to tenant map, the webhook replay guard and the generation of each cache
+tag are in process by default, which is right for one container and wrong for two: a purge reaches
+one of them through the load balancer, and the others keep serving their own copies until the
+backstop runs out.
+
+Pass a `store` on the config and they share it. It is three methods over anything the deployment
+already runs:
+
+```ts
+import type { PressStore } from "barakopress";
+
+const store: PressStore = {
+    async get(key) { return (await redis.get(key)) ?? null; },
+    async set(key, value, ttlSeconds) { await (ttlSeconds ? redis.set(key, value, { EX: ttlSeconds }) : redis.set(key, value)); },
+    async delete(key) { await redis.del(key); },
+    // Only when the key is absent, atomically. This is what honours a replayed delivery once.
+    async add(key, value, ttlSeconds) { return (await redis.set(key, value, { NX: true, ...(ttlSeconds ? { EX: ttlSeconds } : {}) })) !== null; },
+};
+```
+
+A purge one container receives then reaches the rest: the honoured delivery writes a generation
+against each tag it dropped, and a read carries the newest generation of its own tags in the URL it
+asks the CMS for, so a container that was never told is asking for something it has never cached.
+Next's own data cache stays per container; what crosses is the knowledge that it is out of date.
 
 Each read also carries a backstop, 300 seconds by default. That is not for correctness, it is for the
 deployment where nobody ever created the webhook: without it their blog would be empty forever and

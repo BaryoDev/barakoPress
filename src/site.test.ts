@@ -140,7 +140,8 @@ describe("a build-time site", () => {
         expect(calls).toHaveLength(2);
         for (const call of calls) {
             expect(call.url.startsWith("/api/public/post")).toBe(true);
-            expect(call.tags).toEqual(["cms"]);
+            // The configured tag, and the type's, which is what a purge naming the type drops (#56).
+            expect(call.tags).toEqual(["cms", "cms:type:post"]);
         }
     });
 });
@@ -319,7 +320,9 @@ describe("one build serving two sites", () => {
         expect(reads).toHaveLength(4);
         for (const read of reads) {
             expect(read.tenant).not.toBeNull();
-            expect(read.tags).toEqual([`cms:${read.tenant}`]);
+            // The tenant's tag on every read, whatever narrower tag it carries beside it.
+            expect(read.tags[0]).toBe(`cms:${read.tenant}`);
+            expect(read.tags.every((tag) => tag.startsWith(`cms:${read.tenant}`))).toBe(true);
         }
         const posts = reads.filter((r) => r.url.startsWith("/api/public/post"));
         expect(posts.map((r) => r.tenant)).toEqual(["rckoronadal", "baryo"]);

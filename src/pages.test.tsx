@@ -257,7 +257,10 @@ describe("navigation", () => {
         const reads = calls.filter((c) => c.path === "/api/public/pages/navigation");
         expect(reads).toHaveLength(2);
         expect(reads.map((r) => r.tenant)).toEqual(["baryo", "rckoronadal"]);
-        expect(reads.map((r) => r.tags)).toEqual([["cms:baryo"], ["cms:rckoronadal"]]);
+        expect(reads.map((r) => r.tags)).toEqual([
+            ["cms:baryo", "cms:baryo:type:page"],
+            ["cms:rckoronadal", "cms:rckoronadal:type:page"],
+        ]);
     });
 
     it("keeps the order and the paths the CMS gave, and drops only an item whose path is not a site path", async () => {

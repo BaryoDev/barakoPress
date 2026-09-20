@@ -342,8 +342,8 @@ describe("collections from a tenant's settings", () => {
         const reads = [...listed("project"), ...listed("doctor")];
         expect(reads).toHaveLength(2);
         expect(reads.map((r) => [r.path, r.tenant, r.tags])).toEqual([
-            ["/api/public/project?page=1&pageSize=20&sort=Title", "rckoronadal", ["cms:rckoronadal"]],
-            ["/api/public/doctor?page=1&pageSize=20&include=Department", "hospital", ["cms:hospital"]],
+            ["/api/public/project?page=1&pageSize=20&sort=Title", "rckoronadal", ["cms:rckoronadal", "cms:rckoronadal:type:project"]],
+            ["/api/public/doctor?page=1&pageSize=20&include=Department", "hospital", ["cms:hospital", "cms:hospital:type:doctor"]],
         ]);
     });
 

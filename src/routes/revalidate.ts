@@ -1,11 +1,12 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { revalidateTag } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
-import type { PressConfig } from "../config.js";
-import { cacheTagFor } from "../delivery.js";
+import type { CollectionConfig, FieldNames, PressConfig } from "../config.js";
+import { markPurged, purgeTagsFor, type ReadTarget } from "../delivery.js";
 import { revalidateKeyFor } from "../revalidate-key.js";
 import { MIN_SECRET_LENGTH, readSecret, type PressSecret } from "../secret.js";
-import { tenantFromHeaders } from "../site.js";
+import { resolveSite } from "../site.js";
+import { storeFor } from "../store.js";
 
 /*
  * The endpoint that makes the cache correct.
@@ -61,22 +62,74 @@ function sameSignature(a: string, b: string): boolean {
  * A replayed delivery is honoured once.
  *
  * A captured signature stays valid for the whole tolerance window, and each accepted purge costs
- * a re-render of every cached page. Remembering what has already been honoured turns "unlimited
- * work for five minutes" into "one". In-process, which is the same scope as the cache it
- * protects: another instance has its own cache and would do its own single purge anyway.
+ * a re-render of every cached page it drops. Remembering what has already been honoured turns
+ * "unlimited work for five minutes" into "one". It goes through the store, so a fleet sharing one
+ * honours a replayed delivery once rather than once per container (barakoPress #57). Written only
+ * when the key was absent, which is why the store's `add` has to be atomic.
+ *
+ * The claim is given back when the purge it was claimed for does not finish, so the CMS's retry
+ * does the work rather than being told it has already happened.
  */
-function makeReplayGuard(windowSeconds: number) {
-    const seen = new Map<string, number>();
-    // Keyed by what was purged as well as the signature, so an honoured delivery can only ever
-    // stand in for the same purge. A handle has no spaces, so the key cannot be read two ways.
-    return function alreadyHonoured(tag: string, signature: string): boolean {
-        const now = Date.now() / 1000;
-        for (const [key, at] of seen) if (now - at > windowSeconds) seen.delete(key);
-        const key = `${tag} ${signature}`;
-        if (seen.has(key)) return true;
-        seen.set(key, now);
-        return false;
-    };
+// Keyed by what was purged as well as the signature, so an honoured delivery can only ever stand in
+// for the same purge. A handle has no spaces, so the key cannot be read two ways.
+const claimKey = (tags: string[], signature: string) => `replay:${tags.join(" ")} ${signature}`;
+
+async function claimDelivery(config: PressConfig, key: string, windowSeconds: number): Promise<boolean> {
+    return storeFor(config).add(key, "1", windowSeconds);
+}
+
+async function giveBackClaim(config: PressConfig, key: string) {
+    try {
+        await storeFor(config).delete(key);
+    } catch {
+        // The delivery failed and so did giving the claim back. Nothing useful is left to do here,
+        // and throwing from a catch would replace the real reason with this one.
+    }
+}
+
+/*
+ * What this delivery says changed, as far as the site's own config can name it.
+ *
+ * barakoCMS sends the content type and the entry's public data with every delivery (its
+ * docs/webhooks.md), and a site's config is what says which field of that type holds a slug. A type
+ * this site renders nothing of, or a body that names none, leaves the target empty and the whole
+ * tenant is purged, which is what every delivery did before this.
+ */
+const TYPE_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,62}$/;
+const SLUG = /^[^\s]{1,200}$/;
+
+function slugField(config: PressConfig, type: string): FieldNames | undefined {
+    const collection = Object.values(config.collections).find((c: CollectionConfig) => c.type === type);
+    if (collection) return collection.fields.slug;
+    return type === config.types.page ? config.pageFields.slug : undefined;
+}
+
+function slugFrom(data: unknown, field: FieldNames | undefined): string | undefined {
+    if (!data || typeof data !== "object" || field === undefined) return undefined;
+    const held = data as Record<string, unknown>;
+    for (const name of Array.isArray(field) ? field : [field]) {
+        const value = held[name];
+        if (typeof value === "string" && SLUG.test(value.trim())) return value.trim();
+    }
+    return undefined;
+}
+
+function changedBy(config: PressConfig, raw: Buffer): ReadTarget {
+    let body: unknown;
+    try {
+        body = JSON.parse(raw.toString("utf8"));
+    } catch {
+        return {};
+    }
+    if (!body || typeof body !== "object") return {};
+    const type = (body as { contentType?: unknown }).contentType;
+    if (typeof type !== "string" || !TYPE_NAME.test(type)) return {};
+    const known =
+        type === config.types.page ||
+        type === (config.sites?.settingsType ?? "") ||
+        Object.values(config.collections).some((c: CollectionConfig) => c.type === type);
+    if (!known) return {};
+    return { type, slug: slugFrom((body as { data?: unknown }).data, slugField(config, type)) };
 }
 
 function configuredSecret(option: string | undefined): PressSecret | null {
@@ -87,7 +140,6 @@ function configuredSecret(option: string | undefined): PressSecret | null {
 export function createRevalidateRoute(config: PressConfig, options: RevalidateOptions = {}) {
     const tolerance = options.toleranceSeconds ?? TOLERANCE_SECONDS;
     const maxBody = options.maxBodyBytes ?? MAX_BODY_BYTES;
-    const alreadyHonoured = makeReplayGuard(tolerance);
     let warnedShort = false;
 
     async function POST(request: NextRequest) {
@@ -149,13 +201,17 @@ export function createRevalidateRoute(config: PressConfig, options: RevalidateOp
          * signature because the key depends on it; it is the same bounded, cached lookup any page
          * request makes.
          */
-        let tag = config.cacheTag;
+        let site = config;
         let key = secret;
         if (config.sites) {
-            const found = await tenantFromHeaders(config, request.headers);
-            if (!found) return NextResponse.json({ error: "no site for this host" }, { status: 404 });
-            tag = cacheTagFor({ ...config, tenant: found.tenant });
-            key = revalidateKeyFor(secret, found.tenant);
+            // The whole config, not the handle alone: which field of a type holds a slug is the
+            // tenant's `Collections` setting, and without it a delivery naming one entry can only be
+            // read as "something in this tenant changed". The settings read it costs is the cached,
+            // tagged one every page of this tenant makes.
+            const resolved = await resolveSite(config, request.headers);
+            if (!resolved?.tenant) return NextResponse.json({ error: "no site for this host" }, { status: 404 });
+            site = resolved;
+            key = revalidateKeyFor(secret, resolved.tenant);
         }
 
         const material = Buffer.concat([Buffer.from(`${timestamp}.`, "utf8"), raw]);
@@ -179,20 +235,35 @@ export function createRevalidateRoute(config: PressConfig, options: RevalidateOp
          * the response, and triple the work an attacker gets from one captured signature, for
          * nothing.
          */
+        // Read only after the signature verified: until then the body is whatever an anonymous
+        // caller sent, and what it says would decide which tags get dropped.
+        const tags = purgeTagsFor(site, changedBy(site, raw));
+
         // After the tenant resolved, so a lookup that failed with the CMS down leaves the retry free to purge.
-        if (alreadyHonoured(tag, signature)) {
+        const claim = claimKey(tags, signature);
+        if (!(await claimDelivery(site, claim, tolerance))) {
             // Honest 200: the purge this delivery asked for has already happened, so the CMS has
             // no reason to retry. A 401 here would make a legitimate retry look like an attack.
             return NextResponse.json({ revalidated: true, repeated: true });
         }
 
-        revalidateTag(tag, { expire: 0 });
+        try {
+            for (const tag of tags) revalidateTag(tag, { expire: 0 });
+            // For the containers this delivery did not reach.
+            await markPurged(site, tags);
+        } catch (e) {
+            // A purge that did not finish is not one to tell the next delivery about: a store that
+            // refused the generation write leaves the other containers on their old copies, and the
+            // retry is what fixes that.
+            await giveBackClaim(site, claim);
+            throw e;
+        }
 
         // The delivery id is echoed only after the signature verified, so an anonymous caller
         // cannot put text of their choosing into this server's log.
         const delivery = request.headers.get("x-barako-delivery") ?? "unknown";
-        console.log(`revalidate: dropped tag "${tag}" for delivery ${delivery}`);
-        return NextResponse.json({ revalidated: true, tag, delivery });
+        console.log(`revalidate: dropped ${tags.map((t) => `"${t}"`).join(", ")} for delivery ${delivery}`);
+        return NextResponse.json({ revalidated: true, tag: tags[0], tags, delivery });
     }
 
     /*

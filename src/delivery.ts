@@ -1,6 +1,7 @@
 import { isIP } from "node:net";
 import { cmsUrlFor, pinnedTenant, type PressConfig } from "./config.js";
 import { readEnv } from "./env.js";
+import { forgetInProcessStore, storeFor, type PressStore } from "./store.js";
 
 /*
  * The delivery layer: typed calls against barakoCMS's public API.
@@ -81,6 +82,153 @@ export function cacheTagFor(config: PressConfig): string {
     return `${config.cacheTag}:${tenant}`;
 }
 
+/**
+ * What a read is about, when it is about one thing: a content type, and one entry of it.
+ *
+ * The names are the CMS's own, which is what the webhook body carries too, so a tag a read wrote
+ * and a tag a delivery purges are the same string.
+ */
+export interface ReadTarget {
+    type?: string;
+    slug?: string;
+}
+
+/*
+ * Tags per read (barakoPress #56).
+ *
+ * Every read used to carry the tenant tag and nothing else, so correcting one typo re-rendered every
+ * cached page the tenant had. Three tags now, and which ones a read carries is what makes a purge
+ * narrow:
+ *
+ *   the tenant tag   on every read, so a delivery that does not say what changed still drops it all
+ *   a type tag       on a read over a type: a list, a search, the site settings, the page tree
+ *   an entry tag     on a read of one entry, instead of the type tag
+ *
+ * An entry read deliberately does not carry the type tag. If it did, a purge of the type would have
+ * to take every entry page with it, which is the behaviour this is here to end.
+ *
+ * Next refuses a tag longer than 256 characters, so a name long enough to pass that is left with the
+ * tags it has rather than truncated into one that could collide with another entry's.
+ */
+const MAX_TAG = 256;
+
+function narrower(base: string, kind: "type" | "entry", target: ReadTarget): string | null {
+    if (!target.type) return null;
+    const tag =
+        kind === "entry" && target.slug
+            ? `${base}:entry:${target.type}:${target.slug}`
+            : `${base}:type:${target.type}`;
+    return tag.length <= MAX_TAG ? tag : null;
+}
+
+/** The tags a read carries. */
+export function cacheTagsFor(config: PressConfig, target: ReadTarget = {}): string[] {
+    const base = cacheTagFor(config);
+    const narrow = narrower(base, target.slug ? "entry" : "type", target);
+    return narrow ? [base, narrow] : [base];
+}
+
+/**
+ * The tags a delivery drops. The entry's own tag and its type's, since the entry's page reads the
+ * one and every list it appears in reads the other. A delivery that names no type drops the tenant
+ * tag, which is every read this site has cached.
+ */
+export function purgeTagsFor(config: PressConfig, target: ReadTarget = {}): string[] {
+    const base = cacheTagFor(config);
+    if (!target.type) return [base];
+    const tags = [narrower(base, "type", target), narrower(base, "entry", target)];
+    const narrow = tags.filter((tag): tag is string => tag !== null);
+    return narrow.length > 0 ? narrow : [base];
+}
+
+/*
+ * A generation per tag, so a purge reaches a container that never received it (barakoPress #57).
+ *
+ * `revalidateTag` drops the entries one container holds. Every other container behind the load
+ * balancer kept serving its own copy until the backstop ran out, which is up to five minutes of a
+ * corrected notice being right on one replica and wrong on the next.
+ *
+ * So an honoured delivery writes the moment it happened against each tag it dropped, in the shared
+ * store, and a read carries the newest generation of its own tags in the URL it asks the CMS for.
+ * A container that never heard about the purge is asking for a URL it has never cached, so its
+ * answer is fresh without it having to be told. With no shared store configured the generation is
+ * this container's own, which is what a single container always did.
+ *
+ * The value is a timestamp, but only its changing matters. It is written as one past the current
+ * value when a clock reads behind it, so two containers with drifting clocks can never walk a
+ * generation backwards onto a key one of them still has cached.
+ *
+ * It has to outlive what it is holding back, because a read that finds no generation asks for the
+ * URL it asked for before the purge, and another container may still be holding that entry. With a
+ * backstop, nothing in the data cache outlives it, so twice the backstop is more than enough; with
+ * the backstop off, a cached entry never expires and neither may the generation.
+ */
+const GENERATION_PARAM = "_purge";
+const GENERATION_TTL_SECONDS = 24 * 60 * 60;
+
+function generationTtl(config: PressConfig): number {
+    return config.backstopSeconds > 0 ? Math.max(GENERATION_TTL_SECONDS, config.backstopSeconds * 2) : 0;
+}
+
+const generationKey = (tag: string) => `gen:${tag}`;
+
+async function newestGeneration(store: PressStore, tags: string[]): Promise<string | null> {
+    const held = await Promise.all(tags.map((tag) => store.get(generationKey(tag))));
+    let newest = 0;
+    for (const value of held) {
+        const at = Number(value);
+        if (Number.isFinite(at) && at > newest) newest = at;
+    }
+    return newest > 0 ? String(newest) : null;
+}
+
+/** Records a purge against each tag it dropped, for every container that did not receive it. */
+export async function markPurged(config: PressConfig, tags: string[]) {
+    const store = storeFor(config);
+    const ttl = generationTtl(config);
+    for (const tag of tags) {
+        const current = Number(await store.get(generationKey(tag)));
+        const next = Math.max(Date.now(), (Number.isFinite(current) ? current : 0) + 1);
+        await store.set(generationKey(tag), String(next), ttl);
+    }
+}
+
+function withGeneration(path: string, generation: string | null): string {
+    if (!generation) return path;
+    return `${path}${path.includes("?") ? "&" : "?"}${GENERATION_PARAM}=${generation}`;
+}
+
+/*
+ * The cache class the API declares on the answer (barakoPress #56).
+ *
+ * `Cache-Control: no-store` is barakoCMS saying this answer belongs to nobody but the caller: a
+ * draft today, a booking slot or a live count later. Storing it would serve it to the next visitor,
+ * so the class is remembered against the path and every later read of it asks uncached.
+ *
+ * The response that declared it is served to the visitor who asked for it and, on a site with the
+ * data cache on, written once before the class is known. It is never read back: from the next read
+ * on, this path is fetched uncached and carries no tag for a purge to drop.
+ *
+ * A positive `max-age` is deliberately not read as a lifetime. barakoCMS answers every public read
+ * with a flat `public, max-age=60` today, which is a hint for a CDN in front of it rather than a
+ * statement about this entry, and taking it as one would quietly cut every site's window from the
+ * backstop it configured to sixty seconds. A per-read class the API means as one is the API change
+ * barakoPress #56 asks for.
+ */
+const CLASS_TTL_SECONDS = 60 * 60;
+const NEVER_STORE = new Set(["no-store", "no-cache", "private", "max-age=0", "s-maxage=0"]);
+
+const classKey = (key: string) => `class:${key}`;
+
+function declaredNoStore(res: Response): boolean {
+    const header = res.headers.get("cache-control");
+    if (!header) return false;
+    return header
+        .toLowerCase()
+        .split(",")
+        .some((directive) => NEVER_STORE.has(directive.trim()));
+}
+
 /*
  * The last good answer per read, for a request-time site only.
  *
@@ -93,51 +241,50 @@ export function cacheTagFor(config: PressConfig): string {
  * The tenant is in the key, and that is the property that matters: tenant b asking for a path
  * tenant a has cached gets a's answer never, and an error if it has none of its own.
  *
- * Bounded by the characters held, oldest out first, so a site with a large sitemap cannot grow the
- * process without limit. In-process, like the cache it backs.
+ * Bounded by the characters the store holds, oldest out first, so a site with a large sitemap cannot
+ * grow the process without limit. Kept in the store, so a container that has never had a good answer
+ * of its own can serve one another container got (barakoPress #57).
  */
-const STALE_MAX_CHARS = 32 * 1024 * 1024;
-const stale = new Map<string, string>();
-let staleChars = 0;
+const staleStoreKey = (key: string) => `stale:${key}`;
 
-function remember(key: string, text: string) {
-    const old = stale.get(key);
-    if (old !== undefined) {
-        staleChars -= old.length;
-        stale.delete(key);
-    }
-    if (text.length > STALE_MAX_CHARS) return;
-    stale.set(key, text);
-    staleChars += text.length;
-    for (const [k, v] of stale) {
-        if (staleChars <= STALE_MAX_CHARS) break;
-        stale.delete(k);
-        staleChars -= v.length;
-    }
+async function remember(store: PressStore, key: string, text: string) {
+    await store.set(staleStoreKey(key), text, 0);
 }
 
 /*
  * When a read last failed, per kept answer. Until this has passed, the read answers from the kept copy
  * without asking the CMS, so during an outage a purged page costs one request every few seconds and
- * not one per visitor, each waiting out the timeout. Only a key with a kept answer gets a marker, and
- * the map is capped like the host map.
+ * not one per visitor, each waiting out the timeout. Only a key with a kept answer gets a marker.
+ *
+ * The marker outlives its own window by a long way on purpose: a read that finds one already past
+ * tells the difference between a marker that has expired, which it renews before trying the CMS
+ * again, and a path that has never failed at all. Past the marker's own lifetime, a read that failed
+ * once long ago is not worth holding anything back for.
  */
 const FAILED_READ_TTL_MS = 10_000;
-const FAILED_MAX = 1000;
-const failedAt = new Map<string, number>();
+const FAILED_MARKER_TTL_SECONDS = 10 * 60;
 
-function markFailed(key: string) {
-    failedAt.delete(key);
-    failedAt.set(key, Date.now());
-    while (failedAt.size > FAILED_MAX) failedAt.delete(failedAt.keys().next().value as string);
+const failedKey = (key: string) => `failed:${key}`;
+
+async function markFailed(store: PressStore, key: string) {
+    await store.set(failedKey(key), String(Date.now()), FAILED_MARKER_TTL_SECONDS);
 }
 
-/** For tests: forget every kept answer, failed read and host lookup. */
+/*
+ * The retry this container has out, per kept answer.
+ *
+ * The marker above says a read is failing, and renewing it is what holds the other visitors back
+ * while one of them waits on the CMS. Renewing it is a write to the store and therefore an await, so
+ * without this every visitor who arrived in the same tick would already be past the check. In
+ * process on purpose: one request in flight is a fact about this container, and another container
+ * has its own.
+ */
+const retrying = new Set<string>();
+
+/** For tests: forget every kept answer, failed read, host lookup, purge generation and retry. */
 export function forgetCachedReads() {
-    stale.clear();
-    staleChars = 0;
-    failedAt.clear();
-    hosts.clear();
+    forgetInProcessStore();
+    retrying.clear();
 }
 
 /** A failure the last good answer may stand in for. A 404 or a 400 is an answer, not an outage. */
@@ -150,57 +297,81 @@ function worthServingStale(e: unknown): boolean {
 
 interface ReadOptions {
     headers: HeadersInit;
-    tag: string;
-    /** Set for a request-time site. The key the last good answer is kept under. */
+    tags: string[];
+    /** CMS, tenant and path. What the kept answer and the declared class are held under. */
+    readKey: string;
+    /** Set for a request-time site. Without one, no answer is kept and none is served. */
     staleKey?: string;
 }
 
 async function read<T>(config: PressConfig, path: string, opts: ReadOptions): Promise<T> {
+    const store = storeFor(config);
+    let retry = false;
     if (opts.staleKey) {
-        const at = failedAt.get(opts.staleKey);
-        const kept = stale.get(opts.staleKey);
-        if (at !== undefined && kept !== undefined) {
-            if (Date.now() - at < FAILED_READ_TTL_MS) return JSON.parse(kept) as T;
-            // This request asks the CMS again. Renewed before the fetch, so the visitors who arrive while
-            // it waits out a hung CMS keep answering from the copy instead of each waiting too.
-            markFailed(opts.staleKey);
+        const at = Number(await store.get(failedKey(opts.staleKey)));
+        if (Number.isFinite(at) && at > 0) {
+            const kept = await store.get(staleStoreKey(opts.staleKey));
+            if (kept !== null) {
+                if (Date.now() - at < FAILED_READ_TTL_MS || retrying.has(opts.staleKey)) return JSON.parse(kept) as T;
+                // This request asks the CMS again. Renewed before the fetch, so the visitors who arrive while
+                // it waits out a hung CMS keep answering from the copy instead of each waiting too.
+                retry = true;
+                retrying.add(opts.staleKey);
+                await markFailed(store, opts.staleKey);
+            }
         }
     }
+    const uncached = (await store.get(classKey(opts.readKey))) !== null;
+    const asked = uncached ? path : withGeneration(path, await newestGeneration(store, opts.tags));
     try {
-        const res = await fetch(`${cmsUrlFor(config)}${path}`, {
+        const res = await fetch(`${cmsUrlFor(config)}${asked}`, {
             headers: opts.headers,
             signal: AbortSignal.timeout(config.cmsTimeoutMs),
-            next: {
-                tags: [opts.tag],
-                // Zero means no backstop, which Next spells as false.
-                revalidate: config.backstopSeconds > 0 ? config.backstopSeconds : false,
-            },
+            ...(uncached
+                ? { cache: "no-store" as const }
+                : {
+                      next: {
+                          tags: opts.tags,
+                          // Zero means no backstop, which Next spells as false.
+                          revalidate: config.backstopSeconds > 0 ? config.backstopSeconds : false,
+                      },
+                  }),
         });
         if (!res.ok) throw new CmsError(path, res.status);
         const text = await res.text();
         const value = JSON.parse(text) as T;
+        if (declaredNoStore(res)) {
+            // Nothing is kept either: an answer the API refuses to have stored is not one to hand
+            // somebody during an outage.
+            await store.set(classKey(opts.readKey), "no-store", CLASS_TTL_SECONDS);
+            return value;
+        }
         if (opts.staleKey) {
-            remember(opts.staleKey, text);
-            failedAt.delete(opts.staleKey);
+            await remember(store, opts.staleKey, text);
+            await store.delete(failedKey(opts.staleKey));
         }
         return value;
     } catch (e) {
-        const kept = opts.staleKey ? stale.get(opts.staleKey) : undefined;
-        if (kept === undefined || !worthServingStale(e)) throw e;
-        markFailed(opts.staleKey!);
+        const kept = opts.staleKey ? await store.get(staleStoreKey(opts.staleKey)) : null;
+        if (kept === null || !worthServingStale(e)) throw e;
+        await markFailed(store, opts.staleKey!);
         const why = e instanceof Error ? e.message : String(e);
         console.warn(`cms: ${path} for tenant "${pinnedTenant(config) ?? ""}" failed (${why}), serving the last good answer`);
         return JSON.parse(kept) as T;
+    } finally {
+        if (retry) retrying.delete(opts.staleKey!);
     }
 }
 
 /** A cached, tagged read. Everything a visitor sees comes through here. */
-async function get<T>(config: PressConfig, path: string): Promise<T> {
+async function get<T>(config: PressConfig, path: string, target: ReadTarget = {}): Promise<T> {
     const env = readEnv();
+    const readKey = `${cmsUrlFor(config, env)}|t:${pinnedTenant(config, env) ?? ""}|${path}`;
     return read<T>(config, path, {
         headers: headers(config),
-        tag: cacheTagFor(config),
-        staleKey: config.sites ? `${cmsUrlFor(config, env)}|t:${pinnedTenant(config, env)}|${path}` : undefined,
+        tags: cacheTagsFor(config, target),
+        readKey,
+        staleKey: config.sites ? readKey : undefined,
     });
 }
 
@@ -219,26 +390,31 @@ async function getFresh<T>(config: PressConfig, path: string): Promise<T | null>
 /*
  * Which tenant a host belongs to.
  *
- * Answers are held in process for a minute rather than in Next's data cache, because the host is
+ * Answers are held in the store for a minute rather than in Next's data cache, because the host is
  * whatever a caller put in the request: a data cache entry per invented host is disk anyone can
- * fill. This map is bounded instead, and an unknown host is remembered as unknown for the same
- * minute so a flood of one name costs one lookup.
+ * fill. The store is bounded instead, and an unknown host is remembered as unknown for the same
+ * minute so a flood of one name costs one lookup. Shared, when the deployment shares one, so a
+ * container that has just started answers the hosts the others already know (barakoPress #57).
  *
  * A known host keeps its answer past the minute, so when the lookup fails the site still resolves.
- * An unknown one never does: failing closed there is a 404, not someone else's site.
+ * That is the second key: what this host last resolved to, which nothing but a failed lookup reads.
+ * An unknown host keeps nothing: failing closed there is a 404, not someone else's site.
  */
-const HOST_TTL_MS = 60_000;
-const HOSTS_MAX = 1000;
-const hosts = new Map<string, { tenant: string | null; at: number }>();
+const HOST_TTL_SECONDS = 60;
+const HOST_LAST_TTL_SECONDS = 24 * 60 * 60;
 const HANDLE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$/;
+
+const hostKey = (host: string) => `host:${host}`;
+const hostLastKey = (host: string) => `host-last:${host}`;
 
 export function isTenantHandle(value: string | null | undefined): value is string {
     return typeof value === "string" && HANDLE.test(value);
 }
 
 export async function tenantForHost(config: PressConfig, host: string): Promise<string | null> {
-    const known = hosts.get(host);
-    if (known && Date.now() - known.at < HOST_TTL_MS) return known.tenant;
+    const store = storeFor(config);
+    const known = await store.get(hostKey(host));
+    if (known !== null) return known === "" ? null : known;
 
     const path = `/api/tenants/by-host/${encodeURIComponent(host)}`;
     let tenant: string | null;
@@ -251,18 +427,18 @@ export async function tenantForHost(config: PressConfig, host: string): Promise<
             tenant = typeof body.handle === "string" && isTenantHandle(body.handle) ? body.handle : null;
         }
     } catch (e) {
-        if (known?.tenant && worthServingStale(e)) {
-            console.warn(`cms: tenant lookup for ${host} failed, keeping "${known.tenant}"`);
+        const last = await store.get(hostLastKey(host));
+        if (last && worthServingStale(e)) {
+            console.warn(`cms: tenant lookup for ${host} failed, keeping "${last}"`);
             // Kept for another minute, so an outage costs one lookup a minute per host, not one a request.
-            hosts.set(host, { tenant: known.tenant, at: Date.now() });
-            return known.tenant;
+            await store.set(hostKey(host), last, HOST_TTL_SECONDS);
+            return last;
         }
         throw e;
     }
 
-    hosts.delete(host);
-    hosts.set(host, { tenant, at: Date.now() });
-    while (hosts.size > HOSTS_MAX) hosts.delete(hosts.keys().next().value as string);
+    await store.set(hostKey(host), tenant ?? "", HOST_TTL_SECONDS);
+    if (tenant) await store.set(hostLastKey(host), tenant, HOST_LAST_TTL_SECONDS);
     return tenant;
 }
 
@@ -288,7 +464,7 @@ export async function list(
     if (opts.include?.length) q.set("include", opts.include.join(","));
     if (opts.sort) q.set("sort", opts.sort);
     for (const [field, op, value] of opts.filter ?? []) q.set(`filter[${field}][${op}]`, value);
-    return get<Paged<PublicContent>>(config, `/api/public/${encodeURIComponent(type)}?${q}`);
+    return get<Paged<PublicContent>>(config, `/api/public/${encodeURIComponent(type)}?${q}`, { type });
 }
 
 export async function bySlug(
@@ -300,6 +476,7 @@ export async function bySlug(
         return await get<PublicContent>(
             config,
             `/api/public/${encodeURIComponent(type)}/${encodeURIComponent(slug)}`,
+            { type, slug },
         );
     } catch (e) {
         // A missing entry is a not-found page, not a broken site.
@@ -363,7 +540,9 @@ export interface ResolvedPage {
  */
 export async function pageAtPath(config: PressConfig, path: string): Promise<ResolvedPage | null> {
     try {
-        const res = await get<ResolvedPage>(config, `/api/public/pages/resolve?${new URLSearchParams({ path })}`);
+        const res = await get<ResolvedPage>(config, `/api/public/pages/resolve?${new URLSearchParams({ path })}`, {
+            type: config.types.page,
+        });
         if (!res || typeof res !== "object") return null;
         if (!speaksPagesContract(res.contract)) {
             warnContract(config, `the page at ${path}`, res.contract);
@@ -386,7 +565,9 @@ export async function pageAtPath(config: PressConfig, path: string): Promise<Res
  */
 export async function navigationTree(config: PressConfig): Promise<{ contract: number; items: unknown } | null> {
     try {
-        const res = await get<{ contract: number; items: unknown }>(config, "/api/public/pages/navigation");
+        const res = await get<{ contract: number; items: unknown }>(config, "/api/public/pages/navigation", {
+            type: config.types.page,
+        });
         if (!res || typeof res !== "object") return null;
         if (!speaksPagesContract(res.contract)) {
             warnContract(config, "navigation", res.contract);
@@ -521,6 +702,7 @@ export async function semantic(
         const res = await get<SemanticResponse>(
             config,
             `/api/public/${encodeURIComponent(type)}/semantic?${params}`,
+            { type },
         );
         return Array.isArray(res.results) ? res.results : [];
     } catch {

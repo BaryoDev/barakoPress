@@ -89,7 +89,19 @@ const TENANTS: Record<string, Tenant> = {
     // A second holding tenant whose CMS redeems the same key, so a cookie crossing over would show.
     later: {
         host: "later.example",
-        settings: { Name: "Later Club", Url: "https://later.example", Tagline: "Not yet", Mode: "Holding" },
+        settings: {
+            Name: "Later Club",
+            Url: "https://later.example",
+            Tagline: "Not yet",
+            Mode: "Holding",
+            Locale: "fil-PH",
+            Labels: {
+                shareTitle: "Binubuksan ang link",
+                shareNoScript: "Kailangan ng JavaScript ang link na ito.",
+                // With a quote and a tag in it, since a label is a tenant's to type.
+                shareOpening: 'Binubuksan ang <b>"site"</b>.',
+            },
+        },
         post: "later-plans",
         shareLinks: { [KEY]: 30 * DAY },
     },
@@ -789,8 +801,10 @@ describe("one PRESS_SECRET for share sessions", () => {
 });
 
 describe("the /_share page", () => {
+    const asked = (host: string) => new Request(`http://${host}/_share`, { headers: { host } });
+
     it("moves the fragment into a form post, drops it from history, and explains itself without JavaScript", async () => {
-        const res = await createSharePage()();
+        const res = await createSharePage(config)(asked("soon.example"));
         const html = await res.text();
         expect(res.headers.get("cache-control")).toBe("no-store");
         expect(res.headers.get("referrer-policy")).toBe("no-referrer");
@@ -804,8 +818,41 @@ describe("the /_share page", () => {
     });
 
     it("posts to the redeem route where it is mounted, escaped into the script", async () => {
-        const html = await (await createSharePage({ redeemPath: "/x/</script>" })()).text();
+        const html = await (await createSharePage(config, { redeemPath: "/x/</script>" })(asked("soon.example"))).text();
         expect(html).toContain('form.action = "/x/\\u003c/script>"');
         expect(html.match(/<\/script>/g)).toHaveLength(1);
+    });
+
+    /*
+     * The three lines a share link lands on are visitor text like any other, so they are the
+     * tenant's words (#77). A site that set every label it was offered was still showing English
+     * here, to the one visitor most likely to be a client being shown their own site.
+     */
+    it("says the tenant's words, in the tenant's language, and escapes what the tenant typed", async () => {
+        const html = await (await createSharePage(config)(asked("later.example"))).text();
+        expect(html).toContain("<title>Binubuksan ang link</title>");
+        expect(html).toContain("<noscript><p>Kailangan ng JavaScript ang link na ito.</p></noscript>");
+        expect(html).toContain('lang="fil-PH"');
+        expect(html).toContain("Binubuksan ang &lt;b&gt;&quot;site&quot;&lt;/b&gt;.");
+        expect(html).not.toContain("<b>");
+        expect(html).not.toContain("Opening the site.");
+    });
+
+    it("keeps the English for a tenant that set no labels", async () => {
+        const html = await (await createSharePage(config)(asked("soon.example"))).text();
+        expect(html).toContain("<title>Opening a share link</title>");
+        expect(html).toContain("Opening the site.");
+        expect(html).toContain('lang="en-GB"');
+    });
+
+    it("is a 404 for a host with no tenant, and still opens in English with the CMS down", async () => {
+        expect((await createSharePage(config)(asked("unknown.example"))).status).toBe(404);
+
+        vi.stubGlobal("fetch", vi.fn(async () => {
+            throw new Error("ECONNREFUSED");
+        }));
+        const res = await createSharePage(config)(asked("later.example"));
+        expect(res.status).toBe(200);
+        expect(await res.text()).toContain("Opening a share link");
     });
 });

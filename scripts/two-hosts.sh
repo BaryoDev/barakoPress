@@ -291,6 +291,27 @@ node -e '
 ' "$before" "$after" || fail "a purge on one tenant reached the other"
 echo "ok: only baryo's own key purges baryo.dev, not the shared secret or rckoronadal's key, and the purge left rckoronadal's cached reads and renders in place"
 
+# A delivery that says what changed drops that entry and the lists it appears in, and leaves the rest
+# of the tenant cached (#56). Against the real render cache, since that is the claim: an edit to one
+# project must not re-render the whole club.
+deliver() {
+  local body="$1" ts sig
+  ts=$(date +%s)
+  sig=$(printf '%s.%s' "$ts" "$body" | openssl dgst -sha256 -hmac "$(tenant_key rckoronadal)" -hex | sed 's/^.* //')
+  curl -s -X POST -H "Host: rckoronadal.org" -H 'content-type: application/json' \
+    -H "x-barako-timestamp: $ts" -H "x-barako-signature: sha256=$sig" --data "$body" "$APP/api/revalidate"
+}
+settles rckoronadal.org /projects/clean-water || fail "a project page is never served from the render cache"
+settles rckoronadal.org /projects || fail "the projects index is never served from the render cache"
+settles rckoronadal.org / || fail "rckoronadal.org's index is not back in the render cache"
+published='{"contentId":"pw","contentType":"project","status":"Published","data":{"Title":"Clean water","Slug":"clean-water"}}'
+deliver "$published" | grep -q '"tags":\["cms:rckoronadal:type:project","cms:rckoronadal:entry:project:clean-water"\]' ||
+  fail "a delivery naming one project did not drop that project's tags ($(deliver "$published"))"
+[ "$(cached rckoronadal.org /projects/clean-water)" != "HIT" ] || fail "the published project's page survived its own purge"
+[ "$(cached rckoronadal.org /projects)" != "HIT" ] || fail "the projects index survived a purge of one of its entries"
+[ "$(cached rckoronadal.org /)" = "HIT" ] || fail "an unrelated page went with the purge of one project"
+echo "ok: a delivery naming one entry drops that entry and its lists, and leaves an unrelated page cached"
+
 kill $CMS_PID
 wait $CMS_PID 2>/dev/null || true
 purge baryo.dev "$(tenant_key baryo)" > /dev/null
