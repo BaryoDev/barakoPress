@@ -263,6 +263,7 @@ export type {
     BindingProblem,
     BindingScope,
     BindingScopes,
+    BindingWhere,
 } from "./blocks/bindings.js";
 export { bindBlocks, itemScope, pageScope, siteScope, queryScope } from "./blocks/bind.js";
 export type { BindPageOptions } from "./blocks/bind.js";
@@ -287,8 +288,10 @@ export type { BlockSchemaRouteOptions } from "./routes/block-schema.js";
 
 export { createPressProxy } from "./proxy.js";
 
+export { createBindingReportRoute, createBindingReportPreflight } from "./routes/binding-report.js";
+export type { BindingReport, BindingReportOptions } from "./routes/binding-report.js";
 export { createRevalidateRoute } from "./routes/revalidate.js";
-export { revalidateKeyFor } from "./revalidate-key.js";
+export { revalidateKeyFor, bindingsKeyFor } from "./revalidate-key.js";
 export { createSharePage, createShareRedeemRoute, SHARE_INVALID_FRAGMENT } from "./routes/share.js";
 export type { SharePageOptions } from "./routes/share.js";
 export type { RevalidateOptions } from "./routes/revalidate.js";

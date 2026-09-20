@@ -78,9 +78,13 @@ export async function pageBlocks(
             ...(options.searchParams ? { query: async () => queryScope(await options.searchParams!) } : {}),
         },
         // Reported, never thrown, and never shown to a visitor: a renamed field is something the
-        // person editing the page has to see, and nothing a reader can act on.
+        // person editing the page has to see, and nothing a reader can act on. Where they see it is
+        // barakoBrew, over `createBindingReportRoute`; this line is for whoever has the log.
         onProblem: (problem) =>
-            console.warn(`blocks: ${problem.binding} on page "${page.slug || page.id}" is ${problem.reason}`),
+            console.warn(
+                `blocks: ${problem.binding} on page "${page.slug || page.id}" is ${problem.reason}` +
+                    (problem.block ? ` (${problem.block}.${problem.field})` : ""),
+            ),
     });
 }
 

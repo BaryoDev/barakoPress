@@ -95,6 +95,7 @@ decision, not the engine's.
 | `app/doctors/page.tsx` | `default` | `createCollectionIndex(config, "doctors")` |
 | `app/doctors/[slug]/page.tsx` | `default`, `generateMetadata`, `generateStaticParams` | `createCollectionDetail(config, "doctors")`, `createCollectionMetadata(config, "doctors")`, `createCollectionStaticParams(config, "doctors")` |
 | `app/api/blocks/route.ts` | `GET`, `OPTIONS` | `createBlockSchemaRoute(blocks)`, `createBlockSchemaPreflight()` |
+| `app/api/blocks/bindings/route.ts` | `GET`, `OPTIONS` | `createBindingReportRoute(config, blocks)`, `createBindingReportPreflight()` |
 | `app/layout.tsx` | `default`, `generateMetadata` | `createSiteLayout(config, { blocks })`, `createSiteMetadata(config)` |
 | `app/%5Fshare/route.ts` | `GET` | `createSharePage()` |
 | `app/api/share/redeem/route.ts` | `POST` | `createShareRedeemRoute(config)` |
@@ -110,6 +111,14 @@ Mount only what you want. Nothing requires anything else. The paths only have to
 It reads `searchParams`, which forces the route dynamic, so a site using `output: "export"` takes
 `createBlogPost` and gives up preview. `createPostStaticParams` and `createArchiveStaticParams` exist
 for that static case.
+
+The binding report says why a binding on a page did not resolve, so an editor fixes it in barakoBrew
+instead of asking whoever can read the server log. Ask for one page at a time, by `?slug=` or
+`?path=`, and each problem names the binding as typed, the reason (`unknown scope`, `unbound scope`
+or `no value`), and the block and field it came from. It reports the page as rendered, not as
+stored, so a `{{item.X}}` outside a repeat is reported as an unbound scope. It is never anonymous:
+the caller presents the tenant's key as `Authorization: Bearer`, derived from `PRESS_SECRET` and
+printed by `barakopress bindings-key <tenant>`. Answers are never cached.
 
 `Card` and `PostView` are exported too, for a site that wants its own page but the engine's markup.
 

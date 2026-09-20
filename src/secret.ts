@@ -19,10 +19,15 @@ import { ENV_NAMES, readEnv, type Env } from "./env.js";
 /** Below this a secret is a guess away. The same rule for every purpose. */
 export const MIN_SECRET_LENGTH = 32;
 
-/** The `PressEnv` key each purpose falls back to while `PRESS_SECRET` is unset. */
+/**
+ * The `PressEnv` key each purpose falls back to while `PRESS_SECRET` is unset. A purpose with no
+ * older name shipped after PRESS_SECRET did, so there is nothing for it to fall back to and it
+ * needs PRESS_SECRET set.
+ */
 const OLDER = {
     revalidate: "revalidateSecret",
     "press-share": "previewSecret",
+    bindings: undefined,
 } as const;
 
 export type SecretPurpose = keyof typeof OLDER;
@@ -39,6 +44,7 @@ export interface PressSecret {
 export function readSecret(purpose: SecretPurpose, env?: Env): PressSecret | null {
     const values = readEnv(env);
     const key = values.secret ? "secret" : OLDER[purpose];
+    if (!key) return null;
     const value = values[key];
     return value ? { value, name: ENV_NAMES[key], short: value.length < MIN_SECRET_LENGTH } : null;
 }

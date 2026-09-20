@@ -67,6 +67,16 @@
   and the second read that fills in the date and the blurb, so the cards are the tenant's own entries
   under the names the tenant gave them. A site that did not replace `post` sends exactly the requests
   it sent before. (#78)
+- An editor can see why a binding did not resolve. The three reasons were already worked out where
+  a page binds, and they went to the server log, so the person who could read them was never the
+  person who typed the binding: the page rendered with the placeholder left as typed, or the block
+  quietly dropped, and nothing said why. `createBindingReportRoute(config, blocks)` answers for one
+  page and one tenant, and each problem names the binding as typed, the reason, and the block and
+  the field it came from, so barakoBrew marks the field rather than printing a list. It reports the
+  page as rendered rather than as stored, which is what catches an `{{item.X}}` outside a repeat as
+  well as a typo. A report names field paths, so it is never anonymous: the caller presents the
+  tenant's own key, derived from `PRESS_SECRET` under its own purpose label and printed by
+  `barakopress bindings-key <tenant>`, and the answer is never cached. (#63)
 
 ## 0.4.0 (2026-09-20)
 
