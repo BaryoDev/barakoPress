@@ -41,6 +41,7 @@ export {
     CATEGORY_COLLECTION,
     SETTINGS_TYPE,
     EMBED_HOSTS,
+    TREE_LIMIT,
     hasFeed,
 } from "./config.js";
 export {
@@ -110,6 +111,8 @@ export type {
     OptionStyle,
     Labels,
     Home,
+    CollectionTree,
+    TreeProduct,
 } from "./config.js";
 
 export {
@@ -117,6 +120,7 @@ export {
     bySlug,
     bySlugPreview,
     redeemShareLink,
+    search,
     semantic,
     tenantForHost,
     cacheTagFor,
@@ -129,6 +133,7 @@ export type {
     Seo,
     ListOptions,
     Paged,
+    SearchResponse,
     SemanticHit,
     SemanticResponse,
     ShareRedeemAnswer,
@@ -179,7 +184,24 @@ export {
 export { createArchive, createArchiveStaticParams } from "./screens/archive.js";
 export { PostView } from "./screens/post-view.js";
 
-export { listAllCollection, listCollection, getItem, getItemPreview, toItem, collectionOf, referencedBy } from "./collections.js";
+export {
+    listAllCollection,
+    listCollection,
+    getItem,
+    getItemPreview,
+    searchCollection,
+    toItem,
+    collectionOf,
+    referencedBy,
+} from "./collections.js";
+export { collectionTree, editHref, flattenTree, treeNeighbours, treeProducts, TREE_MAX_DEPTH } from "./tree.js";
+export type {
+    CollectionTreeOptions,
+    CollectionTreeResult,
+    TreeNeighbours,
+    TreeNode,
+    TreeSection,
+} from "./tree.js";
 export type { Item, ListCollectionOptions, CollectionPage, CollectionRun } from "./collections.js";
 export {
     createCollectionIndex,
@@ -196,6 +218,10 @@ export type {
     CollectionDetailOptions,
 } from "./screens/collection.js";
 export type { PostViewProps } from "./screens/post-view.js";
+export { ArticleView } from "./screens/article-view.js";
+export type { ArticleRelated, ArticleViewProps } from "./screens/article-view.js";
+export { EditLink, SearchBox, TreePager, TreeShell, TreeSidebar, TreeSwitcher } from "./screens/tree.js";
+export type { SearchBoxProps, TreePagerProps, TreeSidebarProps, TreeSwitcherProps } from "./screens/tree.js";
 
 export {
     defineBlock,

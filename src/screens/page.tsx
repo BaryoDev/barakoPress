@@ -152,6 +152,20 @@ export async function PageView({
 
 const bySlugRoute = (p: PageRouteParams) => p.slug !== undefined && p.path === undefined;
 
+/*
+ * `?q=` for a collection index the catch-all serves, and only where the route may be dynamic.
+ *
+ * Awaiting the query is what makes a route dynamic, and a route Next has been told to keep fails
+ * outright rather than bailing out (#55). So a kept catch-all, which is what a request-time site
+ * rewrites to, never asks, and its index lists rather than searches. A site that wants search there
+ * mounts `createCollectionIndex(config, key, { search: true })` in its own route file.
+ */
+async function queryFor(allowed: boolean, searchParams: SearchParams | undefined): Promise<string | undefined> {
+    if (!allowed || !searchParams) return undefined;
+    const q = (await searchParams).q;
+    return typeof q === "string" ? q : undefined;
+}
+
 /** The path the catch-all segments name, relative to the mount. */
 function pathOf(segments: string[] | undefined): string {
     const parts = (segments ?? []).map((segment) => {
@@ -262,7 +276,7 @@ export function createPage(base: PressConfig, registry?: BlockRegistry, options:
         const hit = collectionHit(config, p);
         if (hit) {
             return hit.slug === undefined
-                ? CollectionIndexView({ config, collection: hit.key })
+                ? CollectionIndexView({ config, collection: hit.key, query: await queryFor(query, searchParams) })
                 : renderCollectionDetail(config, hit.key, hit.slug);
         }
         const found = await findPage(config, p);
@@ -287,7 +301,7 @@ export function createViewerPage(base: PressConfig, registry?: BlockRegistry) {
         const hit = collectionHit(config, p);
         if (hit) {
             return hit.slug === undefined
-                ? CollectionIndexView({ config, collection: hit.key })
+                ? CollectionIndexView({ config, collection: hit.key, query: await queryFor(true, searchParams) })
                 : renderCollectionDetail(config, hit.key, hit.slug);
         }
         const found = await findPage(config, p);

@@ -170,12 +170,14 @@ merged over the configured collections by key. A build-time site passes `collect
 | `colorBy` | A choice field whose option colours the item. See below |
 | `related` | What an item page lists under the item: `"semantic"` for the items of this collection closest to it by meaning, `false` for none. Unset, the first collection that references this one |
 | `readingTime` | Whether an item page shows a read time worked out from its body. Off unless `true` |
+| `layout` | How an item page is drawn: `"list"`, the shell markup every collection has had, or `"article"`, the reading column the blog's posts are drawn in. See below |
+| `tree` | Set when the collection is a manual rather than a flat list: sections, an order, nesting, products. See below |
 
 A settings entry that does not read as a collection is left out whole: a type or field that is not a
-plain identifier, a route that is not a plain site path, or no title field. The keys `post`, `author`
-and `category` are refused from settings, because the blog factories map posts through `types` and
-`fields`. A build-time collection mounted at `/` throws in `defineConfig`. When two routes match, the
-longer one wins.
+plain identifier, a route that is not a plain site path, or no title field. `post`, `author` and
+`category` are replaceable by key like any other collection, since every read goes through the
+collection's own field map. A build-time collection mounted at `/` throws in `defineConfig`. When two
+routes match, the longer one wins.
 
 A request-time site cannot add a route file per tenant, so the root catch-all from the pages section
 also serves every collection with a route: its index at the route, and an item one segment below. A
@@ -224,6 +226,75 @@ and a style for the same option wins field by field. A build-time site passes `o
 `Card` and `ItemView` are exported for a site that wants its own page, and `Card` still takes a `post`.
 `getItem`, `listCollection` and `getGlobals(config)`, the tenant's settings entry as stored, are
 exported too.
+
+**A long-form layout.** `layout: "article"` draws an item as a reading column: a back link, the title
+and standfirst, a byline from the collection's first reference, the date, a read time worked out from
+the body, the other references, the tags, the cover image, the prose and a band of neighbours under
+it. That is the page the blog's posts have always had, and it is a collection setting rather than a
+blog screen, so a law firm's briefings or a newsroom's features get it by asking. Styled inline from
+the theme, so it looks right whether or not the consumer imports `barakopress/styles.css`.
+`PostView` is a wrapper over the same layout and is `@deprecated` for 1.0.0.
+
+**Docs: a collection as a tree.** A manual is a collection plus four fields saying where each page
+sits. `tree` names them, and the settings beside them say what the sidebar and the switcher show:
+
+```json
+{
+  "docs": {
+    "type": "doc", "route": "/docs", "label": "Documentation", "layout": "article",
+    "fields": { "title": "Title", "slug": "Slug", "body": "Body" },
+    "tree": {
+      "section": "Section", "order": "Order", "parent": "Parent", "product": "Product",
+      "sections": ["Getting started", "Guides", "Reference"],
+      "searchPath": "/docs",
+      "editPath": "Source",
+      "editBase": "https://github.com/owner/repo/edit/master/",
+      "products": [
+        { "key": "cms", "label": "barakoCMS", "href": "/docs" },
+        { "key": "press", "label": "barakoPress", "href": "/docs/press" }
+      ]
+    }
+  }
+}
+```
+
+| Key | What |
+| --- | --- |
+| `section` | The field holding the heading a page is grouped under |
+| `order` | The field holding its position in that section. A page with none comes after those with one |
+| `parent` | The field holding the slug of the page it hangs under, or a reference to it. A parent nobody has leaves the page at the top of its section rather than dropping it |
+| `product` | The field naming the product it documents, matched against a product's `key`. One field name and not a list, since this one goes into an API filter |
+| `sections` | The sections in the order the sidebar shows them. One not named here follows those that are. Named rather than worked out, because no ordering of the pages says which section comes first |
+| `products` | What the switcher offers: a key, the word a reader sees, and where it goes. A destination that is not a site path or an http URL is dropped |
+| `searchPath` | Where the search box submits, and whether one is drawn at all. Unset, no box, because only the site knows which of its routes reads the query |
+| `editPath` | The field holding the page's path in whatever repository it is written in. Its slug when unset |
+| `editBase` | Where "edit this page" points, with that path appended. Unset, no such link is drawn |
+| `limit` | The most pages read to build the tree. 500 unless set, and 500 is the ceiling as well as the default |
+
+An item page in such a collection draws the sidebar with the page being read marked, the switcher,
+a search box, previous and next from the tree's reading order, and the edit link. The sidebar is a
+`details` element, so it collapses on a phone with no script. `collectionTree(config, key, { product })`
+and `treeNeighbours(order, slug)` return the same tree and the same neighbours for a site's own page.
+
+**Search.** `searchCollection(config, key, query)` goes through barakoCMS's `/api/public/{type}/search`,
+which matches only over the fields a type publishes, so a draft or a field held back from public
+delivery can never come back. `createCollectionIndex(config, key, { search: true })` answers `?q=` with
+what matched instead of the index; that reads the query, so the route is dynamic and `output: "export"`
+refuses it, which is why it is off unless asked for. The box is a `form`, the results are links, and
+the keyboard handling on top ("/" to focus, the arrow keys to walk the results, escape to clear) is the
+one client component in the package. The root catch-all answers `?q=` on a collection index too, but
+only where the route may be dynamic: a request-time site rewrites to a kept route, and a kept route
+asking for the query fails rather than bailing out, so there the index lists and a page of blocks
+holding the `search` block is where a reader searches.
+
+Which is why `searchPath` exists rather than the box pointing at the collection's own route. Only the
+site knows which of its routes reads the query, and a box submitting somewhere that ignores `q` sends
+a reader to an unfiltered index that looks like a search which matched everything. Name the route that
+answers, or name nothing and get no box.
+
+**As blocks.** `docsSidebar`, `docsSwitcher` and `search` draw the same three on a page of blocks, each
+taking a collection key. `search` takes a bindable `query`, so a landing page binds `{{query.q}}` and
+the route file passes the query with `createPage(config, blocks, { query: true })`.
 
 ### Pages and navigation from the Pages module
 

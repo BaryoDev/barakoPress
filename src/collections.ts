@@ -1,5 +1,5 @@
 import { REFERENCE_FIELDS, type CollectionConfig, type FieldNames, type OptionStyle, type PressConfig } from "./config.js";
-import { bySlug, bySlugPreview, list, type PublicContent, type Seo } from "./delivery.js";
+import { bySlug, bySlugPreview, list, search, type PublicContent, type Seo } from "./delivery.js";
 import type { Ref } from "./cms.js";
 import { siteHref } from "./site.js";
 
@@ -35,6 +35,16 @@ export interface Item {
     tags: string[];
     /** Resolved references, by field name. Undefined for one that did not come back resolved. */
     refs: Record<string, Ref | undefined>;
+    /** The heading this item is grouped under, from the collection's `tree.section`. */
+    section?: string;
+    /** Where it comes in its section, from `tree.order`. Items with no order sort after those with one. */
+    order?: number;
+    /** The slug of the item it hangs under, from `tree.parent`. */
+    parent?: string;
+    /** The product it documents, from `tree.product`. */
+    product?: string;
+    /** Its path in whatever repository it is written in, from `tree.editPath`. */
+    editPath?: string;
     /** The option the `colorBy` field holds. */
     option?: string;
     /** How the site shows that option: its tone, its icon and the word it goes by (#52). */
@@ -99,6 +109,36 @@ function toRef(config: PressConfig, target: string, v: unknown): Ref | undefined
     return { id: str(d.id), slug, name: name || slug };
 }
 
+/*
+ * Where an item sits in a tree, read only when the collection is one.
+ *
+ * A parent may be stored as a slug or as a reference to the sibling entry, because barakoCMS lets a
+ * type hold either and a manual written by hand usually holds the slug. Both end as a slug, which is
+ * what the tree links and nests by.
+ */
+function treePlace(config: PressConfig, key: string, c: PublicContent, col: CollectionConfig): Partial<Item> {
+    const t = col.tree;
+    if (!t) return {};
+    const parent = value(c, t.parent);
+    const parentSlug =
+        typeof parent === "string" ? parent : toRef(config, key, parent)?.slug || undefined;
+    return {
+        section: text(c, t.section) || undefined,
+        order: order(value(c, t.order)),
+        parent: parentSlug || undefined,
+        product: text(c, t.product) || undefined,
+        editPath: text(c, t.editPath) || undefined,
+    };
+}
+
+/** A position, from a number field or from a string field holding one. Undefined for anything else. */
+function order(v: unknown): number | undefined {
+    if (typeof v === "number") return Number.isFinite(v) ? v : undefined;
+    if (typeof v !== "string" || !v.trim()) return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+}
+
 function optionOf(c: PublicContent, col: CollectionConfig): string | undefined {
     if (!col.colorBy) return undefined;
     const v = read(c, col.colorBy);
@@ -137,6 +177,7 @@ export function toItem(config: PressConfig, key: string, c: PublicContent): Item
         url: siteHref(text(c, f.url)),
         photo: text(c, f.photo) || undefined,
         progress: text(c, f.progress) || undefined,
+        ...treePlace(config, key, c, col),
         featured: value(c, f.featured) === true,
         tags: Array.isArray(tags) ? tags.filter((t): t is string => typeof t === "string") : [],
         refs,
@@ -362,4 +403,18 @@ export function collectionAt(config: PressConfig, path: string): { key: string; 
         return { key, slug: parts[route.length] };
     }
     return null;
+}
+
+/**
+ * The items of a collection matching a query, through the API's own search.
+ *
+ * Matching runs over the fields the type publishes, so a draft or a field held back from public
+ * delivery can never surface. Empty for a collection this site has no configuration for, and empty
+ * rather than thrown for a read that failed, since a search box sits on a page that must still render.
+ */
+export async function searchCollection(config: PressConfig, key: string, query: string, limit = 8): Promise<Item[]> {
+    const col = collectionOf(config, key);
+    if (!col) return [];
+    const found = await search(config, col.type, query, limit);
+    return found.map((c) => toItem(config, key, c));
 }
