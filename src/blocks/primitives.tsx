@@ -222,6 +222,25 @@ type FlowProps = { columns?: string; gap?: string; align?: string; justify?: str
 export const FLOW_COLUMNS = ["auto", "1", "2", "3", "4", "5", "6"];
 
 /*
+ * The track list for a flow of `n` columns, which has to be `n` columns on a desktop and fewer on a
+ * phone.
+ *
+ * It used to be `repeat(n, minmax(min(100%, columnMin), 1fr))`, where `100%` is the grid container
+ * and not the track, so the smallest a track could get was `columnMin`. Four of those plus the gaps
+ * is a thousand pixels, and a fixed track list does not wrap, so a four column stat band at 390px
+ * was a page 1144px wide that the phone scrolled sideways. The look check against baryo.dev is what
+ * found it (#83): the rebuilt page came back 1144px wide beside a 390px reference.
+ *
+ * So the ideal track is one `n`th of the row, the floor is `columnMin`, and `auto-fit` lays out as
+ * many as fit. `n` is still exactly what fits when the row is wide, because a track can never be
+ * narrower than one `n`th of it, and on a phone the floor wins and the cells wrap one per row.
+ */
+function gridColumns(n: number, between: string, columnMin: string): string {
+    const ideal = `calc((100% - ${n - 1} * ${between}) / ${n})`;
+    return `repeat(auto-fit, minmax(min(100%, max(${columnMin}, ${ideal})), 1fr))`;
+}
+
+/*
  * Blocks side by side, from one list rather than one list per cell.
  *
  * `row` and `grid` take a list per cell, which is right when a designer places each cell. It cannot
@@ -254,16 +273,15 @@ const flow = defineBlock<FlowProps, "content">({
     component: ({ props, slots, theme }) => {
         const columns = Number(props.columns);
         const asGrid = Number.isInteger(columns) && columns >= 1;
+        const between = gap(theme, props.gap);
         const style = {
             // Takes the wrapper the list renders out of the box tree, so the blocks in it are the
             // cells here. See render.tsx.
             "--bp-list": "contents",
             display: asGrid ? "grid" : "flex",
             flexWrap: asGrid ? undefined : "wrap",
-            gridTemplateColumns: asGrid
-                ? `repeat(${columns}, minmax(min(100%, ${theme.layout.columnMin}), 1fr))`
-                : undefined,
-            gap: gap(theme, props.gap),
+            gridTemplateColumns: asGrid ? gridColumns(columns, between, theme.layout.columnMin) : undefined,
+            gap: between,
             alignItems: props.align ? alignOf(props.align) : "stretch",
             justifyContent: props.justify === "between" ? "space-between" : alignOf(props.justify),
         } as CSSProperties;

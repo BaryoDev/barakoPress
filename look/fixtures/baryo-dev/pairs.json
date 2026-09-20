@@ -1,0 +1,14 @@
+{
+  "defaults": {
+    "widths": [390, 1280],
+    "rebuiltBase": "${REBUILT_BASE}"
+  },
+  "pairs": [
+    {
+      "id": "home",
+      "reference": "home.html",
+      "rebuilt": "/",
+      "maxDiffRatio": 0.001
+    }
+  ]
+}

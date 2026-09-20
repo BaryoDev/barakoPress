@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -469,5 +471,32 @@ describe("the v3 blocks on their own", () => {
         const details = [...html.matchAll(/<details/g)];
         expect(details.length).toBe(2);
         expect(html).not.toContain("name=");
+    });
+});
+
+/*
+ * The baryo.dev look fixture (#83), against the engine rather than against a picture of it.
+ *
+ * The look check found this by comparing screenshots: the rebuilt page came back two thirds the
+ * height of the design and the band at the bottom was not in it. What had happened is that eight
+ * bands of library presets spend more than the block budget, so the binder stopped partway and the
+ * page rendered as though it ended there. A screenshot is a slow way to find that out, so it is a
+ * test here now.
+ */
+describe("a real page of bands, as long as a site's home page", () => {
+    it("binds every band the fixture stores, rather than stopping partway", async () => {
+        const stored = JSON.parse(
+            readFileSync(resolve(import.meta.dirname, "../../look/fixtures/baryo-dev/home.blocks.json"), "utf8"),
+        ) as { type: string }[];
+
+        expect(stored.length).toBeGreaterThan(5);
+
+        const resolved = resolveBlocks(stored, registry, { perViewer: false });
+        expect(resolved).toHaveLength(stored.length);
+
+        const bound = await bindBlocks(resolved, { config, registry, scopes: {} });
+        // Every band is a section or a block of its own once its preset is expanded, so the count
+        // holding is the whole assertion: one short means the tail of the page is missing.
+        expect(bound).toHaveLength(stored.length);
     });
 });

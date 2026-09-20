@@ -43,7 +43,7 @@ const { siteConfig } = await import("../site.js");
 const { createPage } = await import("../screens/page.js");
 const { blockSchema } = await import("./schema.js");
 const { createBlockRegistry, registryFor } = await import("./registry.js");
-const { forgetPresetWarnings, presetsFrom, MAX_PRESET_BLOCKS } = await import("./presets.js");
+const { forgetPresetWarnings, presetsFrom, MAX_PRESETS, MAX_PRESET_BLOCKS } = await import("./presets.js");
 
 const CMS = "http://cms.test";
 
@@ -465,31 +465,36 @@ describe("presets", () => {
         }
     });
 
+    /*
+     * One preset holding a section around forty text blocks, and enough of them that the shared
+     * budget runs out before the last one. The count is derived from the budget rather than typed,
+     * because the budget is a number that moves: it went from a hundred blocks to four hundred when
+     * a page of library bands turned out not to fit in it (#83), and a typed twenty would then have
+     * been twenty presets that all compiled and a test asserting nothing.
+     */
+    const HEAVY_ROWS = 40;
+    const HEAVY_PRESETS = Math.min(MAX_PRESETS, Math.ceil(MAX_PRESET_BLOCKS / (HEAVY_ROWS + 1)) + 2);
+    const heavyPreset = (prefix: string, n: number) => ({
+        type: `${prefix}${n}`,
+        label: `${prefix} ${n}`,
+        fields: [],
+        blocks: [
+            { type: "section", props: { content: [Array.from({ length: HEAVY_ROWS }, (_, i) => text(`row ${i}`))] } },
+        ],
+    });
+
     it("says how many presets it dropped when they hold more blocks than it will compile", async () => {
-        // Each of these holds one section around forty text blocks, so the budget runs out well
-        // before the last of them and the count in the message is what is left.
-        const heavy = (n: number) => ({
-            type: `heavy${n}`,
-            label: `Heavy ${n}`,
-            fields: [],
-            blocks: [
-                {
-                    type: "section",
-                    props: { content: [Array.from({ length: 40 }, (_, i) => text(`row ${i}`))] },
-                },
-            ],
-        });
         requestHeaders = new Headers({ host: "academy.example" });
-        TENANTS.academy.settings.Presets = Array.from({ length: 20 }, (_, i) => heavy(i));
+        TENANTS.academy.settings.Presets = Array.from({ length: HEAVY_PRESETS }, (_, i) => heavyPreset("heavy", i));
         try {
             const resolved = await siteConfig(config);
             const reg = registryFor(resolved, registry);
 
             const compiled = [...reg.values()].filter((b) => b.type.startsWith("heavy"));
             expect(compiled.length).toBeGreaterThan(0);
-            expect(compiled.length).toBeLessThan(20);
+            expect(compiled.length).toBeLessThan(HEAVY_PRESETS);
 
-            const dropped = 20 - compiled.length;
+            const dropped = HEAVY_PRESETS - compiled.length;
             expect(warnings).toHaveLength(1);
             expect(warnings[0]).toContain(`${dropped} preset`);
             expect(warnings[0]).toContain('for tenant "academy"');
@@ -503,12 +508,7 @@ describe("presets", () => {
         requestHeaders = new Headers({ host: "academy.example" });
         TENANTS.academy.settings.Presets = [
             { ...BAND_PRESET, type: "collection" },
-            ...Array.from({ length: 20 }, (_, i) => ({
-                type: `bulk${i}`,
-                label: `Bulk ${i}`,
-                fields: [],
-                blocks: [{ type: "section", props: { content: [Array.from({ length: 40 }, (_, n) => text(`r${n}`))] } }],
-            })),
+            ...Array.from({ length: HEAVY_PRESETS }, (_, i) => heavyPreset("bulk", i)),
         ];
         try {
             const resolved = await siteConfig(config);

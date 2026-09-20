@@ -43,6 +43,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "look": "playwright test --config look/playwright.look.config.ts",
+    "look:capture": "node look/capture-fixture.ts",
+    "look:site": "scripts/look-site.sh",
     "look:selftest": "scripts/look-check-selftest.sh",
     "prepare": "npm run build:package"
   },

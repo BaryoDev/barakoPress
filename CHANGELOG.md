@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.7.0 (unreleased)
+
+- The blocks barakocms.com adds. `comparisonTable` draws a real table from rows typed as lines with
+  `|` between the cells, headings on both the columns and the rows, so a cell is announced with the
+  option it belongs to. `progressBar` is `role="progressbar"` with the three values that role needs,
+  which is what a roadmap needs to be read and not only seen, and it reads its figure through a new
+  `progress` field role so the tenant says which of its own fields holds the number. `stickyBar` is
+  the announcement band, and `announcement` is the preset over it. `codeTabs` draws the snippet a
+  quickstart is for and puts the other ways of running it in `codeTab` disclosures sharing a group.
+  `progressList` and `changelogList` read a collection, and a changelog is grouped by kind with
+  `filterField` and `filterValue`, one band per kind, because a block that grouped by itself would
+  have to know which field holds the kind and that is the tenant's field name. `faq` and `faqItem`
+  are questions that all open at once, which is the whole difference from `tabs`. A card grid's new
+  `option` prop marks each card with the glyph and the word the site declared for that entry's
+  option, which with a category filter is the module grid; it is off unless a grid asks for it, so
+  every existing card grid draws what it drew. (#24)
+- A site's approved design is a fixture now, and the look check compares against that rather than
+  against whatever the live site deployed this morning. `npm run look:capture` reads a page with the
+  same determinism the check uses and writes one self-contained file: stylesheets inlined, fonts and
+  images as data URIs, every script and fetch hint taken out. `npm run look:site` serves the same
+  page assembled from blocks, through the real renderer against a stand-in CMS holding the site's
+  settings, and runs the pair list over the two. baryo.dev is the first site through it. Its capture
+  matches the live site at 0.000% at both widths, and running the rebuild against it found a four
+  column band that scrolled a phone sideways and a page that lost its last band without a word. Both
+  are fixed below. What is left is a rebuild that differs by 48.9% at 1280px and 59.4% at 390px,
+  which is the real state of it: the block library has no answer yet for the mascot, the package
+  family grid, the feed or the terminal's tab strip. (#83)
+- A flow wraps on a phone instead of scrolling it sideways. Its track list was fixed at the column
+  count with the column floor under each track, and four floors and three gaps do not fit in 390px,
+  so a four column stat band made a page 1144px wide. The tracks are a share of the row now, with
+  the floor still under them, and as many fit as the row can hold: the column count on a desktop,
+  fewer on a phone. (#83)
+- A page may hold four hundred blocks rather than a hundred. A band from the library is a preset
+  that expands into eight or ten, and the binder spends the budget on everything it walks through as
+  well as everything that comes out, so a page of eight bands ran out on the seventh and rendered as
+  though that were the page. The reads a page may make and the length of a binding are bounded
+  separately, so this buys more substitution over short strings and nothing else. Going over is still
+  silent. (#83)
+
 ## 0.6.0 (unreleased)
 
 - A collection with more entries than the API hands back in one page is in the sitemap whole. The

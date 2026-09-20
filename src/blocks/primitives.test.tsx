@@ -11,7 +11,7 @@ vi.mock("next/link", () => ({
 }));
 
 const { defineConfig } = await import("../config.js");
-const { resolveTheme } = await import("../theme.js");
+const { DEFAULT_THEME, resolveTheme } = await import("../theme.js");
 const { createBlockRegistry } = await import("./registry.js");
 const { BlockList } = await import("./render.js");
 const { blockSchema, resolveBlocks } = await import("./schema.js");
@@ -54,6 +54,28 @@ describe("layout primitives", () => {
     it("wraps a row rather than squeezing it, and keeps a grid to the columns asked for", () => {
         expect(render([{ type: "row", props: { items: [[], []] } }])).toContain("flex-wrap:wrap");
         expect(render([{ type: "grid", props: { columns: 4, items: [[]] } }])).toContain("repeat(4,");
+    });
+
+    /*
+     * A four column flow at 390px used to be a page 1144px wide, because the track list was fixed at
+     * four and the smallest a track could be was the column floor. Four floors and three gaps do not
+     * fit on a phone, and a fixed track list does not wrap, so the phone scrolled sideways. The look
+     * check against baryo.dev is what found it (#83), and the migration gate is read at 390px.
+     *
+     * What is asserted is the shape rather than the pixels: no fixed count, a track that is one
+     * quarter of the row, and the floor still under it.
+     */
+    it("wraps a flow on a phone instead of scrolling it sideways", () => {
+        const html = render([{ type: "flow", props: { columns: "4", gap: "lg", content: [[]] } }]);
+
+        expect(html).toContain("display:grid");
+        expect(html).not.toContain("repeat(4,");
+        expect(html).toContain("repeat(auto-fit,");
+        expect(html).toContain(`max(${DEFAULT_THEME.layout.columnMin}, calc((100% - 3 * ${DEFAULT_THEME.space.lg}) / 4))`);
+    });
+
+    it("gives a one column flow the whole row, with no gap taken off it", () => {
+        expect(render([{ type: "flow", props: { columns: "1", content: [[]] } }])).toContain("/ 1)");
     });
 
     it("renders nested blocks inside the layout that holds them, in order", () => {
