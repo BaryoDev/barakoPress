@@ -15,6 +15,7 @@
  */
 
 import { readEnv, type PressEnv } from "./env.js";
+import type { PressStore } from "./store.js";
 import { resolveTheme, type PressTheme, type PressThemeInput } from "./theme.js";
 import type { BlockPreset } from "./blocks/presets.js";
 import type { ToneName } from "./blocks/tokens.js";
@@ -495,6 +496,14 @@ export interface PressConfig {
     optionStyles: Record<string, Record<string, OptionStyle>>;
     /** The words the screens print. A request-time site reads the tenant's `Labels` setting. */
     labels: Labels;
+    /**
+     * Where the state a fleet of containers has to agree on is kept: the kept answers, the host map,
+     * the webhook replay guard and the generation of each cache tag. Unset, it is in process and
+     * bounded, which is what a single container always did. A deployment running more than one
+     * container passes a store over something they share, and a purge one of them receives reaches
+     * the rest (barakoPress #57).
+     */
+    store?: PressStore;
     /** What `createHome` serves at the root. A request-time site reads `HomePath` and `HomeCollection`. */
     home?: Home;
 }
@@ -708,6 +717,7 @@ export function defineConfig(
         optionColors: input.optionColors ?? {},
         optionStyles: withOptionColors(input.optionColors, input.optionStyles),
         labels: { ...DEFAULT_LABELS, ...input.labels },
+        ...(input.store ? { store: input.store } : {}),
         ...(input.home ? { home: input.home } : {}),
         reservedSlugs: reservedSlugs(
             [routes.post, routes.author, routes.category, ...Object.values(collections).map((c) => c.route)],

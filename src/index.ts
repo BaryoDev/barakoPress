@@ -288,6 +288,8 @@ export type { BlockSchemaRouteOptions } from "./routes/block-schema.js";
 
 export { createPressProxy } from "./proxy.js";
 
+export type { PressStore } from "./store.js";
+
 export { createBindingReportRoute, createBindingReportPreflight } from "./routes/binding-report.js";
 export type { BindingReport, BindingReportOptions } from "./routes/binding-report.js";
 export { createRevalidateRoute } from "./routes/revalidate.js";
