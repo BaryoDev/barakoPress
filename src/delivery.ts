@@ -270,9 +270,10 @@ async function markFailed(store: PressStore, key: string) {
  */
 const retrying = new Set<string>();
 
-/** For tests: forget every kept answer, failed read, host lookup and purge generation. */
+/** For tests: forget every kept answer, failed read, host lookup, purge generation and retry. */
 export function forgetCachedReads() {
     forgetInProcessStore();
+    retrying.clear();
 }
 
 /** A failure the last good answer may stand in for. A 404 or a 400 is an answer, not an outage. */
