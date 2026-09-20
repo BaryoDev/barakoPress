@@ -204,13 +204,19 @@ export function stripFetchHints(html: string): string {
     });
 }
 
-/** What a capture produced, for the caller to report before it writes anything. */
-export interface Capture {
+/*
+ * What a capture produced, for the caller to report before it writes anything.
+ *
+ * Named apart from `look/capture.ts`'s `Capture` and `CaptureOptions` on purpose. The two modules
+ * do different jobs, one writes a file and one takes a screenshot, and a file importing both under
+ * one name is how the wrong one gets used.
+ */
+export interface FixtureCapture {
     html: string;
     bytes: number;
 }
 
-export interface CaptureOptions {
+export interface FixtureOptions {
     /** The width the page is laid out at while it is read. Both fixture widths render from one file. */
     width?: number;
     viewportHeight?: number;
@@ -227,7 +233,7 @@ export interface CaptureOptions {
  * The context settings are `look/capture.ts`'s, for the same reasons: a fixture captured with the
  * runner's own dark mode or locale would be compared against a rebuild that had neither.
  */
-export async function captureFixture(url: string, options: CaptureOptions = {}): Promise<Capture> {
+export async function captureFixture(url: string, options: FixtureOptions = {}): Promise<FixtureCapture> {
     const { chromium } = await import("@playwright/test");
     const timeout = options.timeout ?? 60_000;
     const browser = await chromium.launch();

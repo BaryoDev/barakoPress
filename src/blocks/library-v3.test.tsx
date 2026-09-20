@@ -29,6 +29,7 @@ const { BlockList } = await import("./render.js");
 const { resolveBlocks } = await import("./schema.js");
 const { bindBlocks } = await import("./bind.js");
 const { forgetPresetWarnings } = await import("./presets.js");
+const { applySiteSettings } = await import("../site.js");
 
 const CMS = "http://cms.test";
 
@@ -498,5 +499,108 @@ describe("a real page of bands, as long as a site's home page", () => {
         // Every band is a section or a block of its own once its preset is expanded, so the count
         // holding is the whole assertion: one short means the tail of the page is missing.
         expect(bound).toHaveLength(stored.length);
+    });
+});
+
+/*
+ * The three boundaries this change reaches across, each exercised from the unchanged side.
+ *
+ * A field role is not one file's business: a tenant types it into `Collections` in barakoBrew,
+ * site.ts decides whether that is a role at all, collections.ts reads the field off the entry, and
+ * a block reads it through the item scope. Four files, and a test that stops at any one of them
+ * passes while a page renders nothing.
+ */
+describe("across the files a new field role touches", () => {
+    it("carries a tenant's own progress field from its settings through to the block that draws it", async () => {
+        const tenant = applySiteSettings(
+            defineConfig({ site: { name: "Roadmap", url: "https://roadmap.example" }, cmsUrl: CMS }),
+            {
+                Name: "Roadmap",
+                Collections: {
+                    milestones: {
+                        type: "milestone",
+                        // The tenant's own name for it, which is the whole point of a role.
+                        fields: { title: "Name", slug: "Slug", summary: "Blurb", progress: "Percent" },
+                    },
+                },
+            },
+            "roadmap.example",
+        );
+
+        expect(tenant.collections.milestones?.fields.progress).toBe("Percent");
+
+        const reg = createBlockRegistry(tenant);
+        const resolved = resolveBlocks(
+            [{ type: "progressList", props: { heading: "On the way", collection: "milestones" } }],
+            reg,
+            { perViewer: false },
+        );
+        const bound = await bindBlocks(resolved, { config: tenant, registry: reg, scopes: {} });
+        const html = renderToStaticMarkup(<BlockList blocks={bound} theme={tenant.theme} />);
+
+        expect(html).toContain("On the way");
+        expect(html).toContain('aria-valuenow="80"');
+        expect(html).toContain('aria-label="Install in one line"');
+    });
+
+    /*
+     * The binding report (#63) reads the same bindings a page does, so a preset that reads a value
+     * an entry may not have puts a problem in an editor's report for a placeholder they never typed.
+     * The option row is one of those, and so is the date the card grid has always drawn, which is
+     * what settles it: this is the shape the report already has rather than a new one. The report
+     * names the block and the field, so it reads as the block's business and not the page's.
+     */
+    it("reports an option row's missing glyph the same way it reports a card's missing date", async () => {
+        const problems: { block?: string; field?: string; binding: string }[] = [];
+        const resolved = resolveBlocks(
+            [{ type: "cardGrid", props: { heading: "Modules", collection: "milestones", option: "show" } }],
+            registry,
+            { perViewer: false },
+        );
+        await bindBlocks(resolved, {
+            config,
+            registry,
+            scopes: {},
+            onProblem: (problem) => problems.push(problem),
+        });
+
+        expect(problems.length).toBeGreaterThan(0);
+        // The collection this grid reads declares no option styles and no date, so both are absent,
+        // and both are reported against the block that reads them.
+        const named = problems.filter((p) => p.block === "icon" || p.block === "text");
+        expect(named.length).toBeGreaterThan(0);
+        for (const problem of named) expect(problem.field).toBeTruthy();
+    });
+});
+
+/*
+ * The look fixture's settings, read by the file that reads a tenant's settings.
+ *
+ * The fixture is a site's configuration, and a value in it that site.ts does not accept is a value
+ * that silently stays at the default. That happened while this was being built: a column floor was
+ * changed in the fixture, the run used the old one, and the difference showed up as a layout nobody
+ * could explain. It is one assertion to stop it happening to whoever converts the next site.
+ */
+describe("the baryo.dev fixture's settings", () => {
+    it("are settings this engine reads, not values that quietly stay at the default", () => {
+        const raw = JSON.parse(
+            readFileSync(resolve(import.meta.dirname, "../../look/fixtures/baryo-dev/site.json"), "utf8"),
+        ) as Record<string, unknown>;
+        const base = defineConfig({ site: { name: "x", url: "https://x.example" }, cmsUrl: CMS });
+        const applied = applySiteSettings(base, raw, "baryo.dev");
+
+        const colors = raw.Colors as Record<string, string>;
+        const layout = raw.Layout as Record<string, string>;
+        expect(Object.keys(colors).length).toBeGreaterThan(0);
+        expect(Object.keys(layout).length).toBeGreaterThan(0);
+
+        for (const [role, value] of Object.entries(colors)) {
+            expect(applied.theme.colors[role as keyof typeof applied.theme.colors], role).toBe(value);
+        }
+        for (const [role, value] of Object.entries(layout)) {
+            expect(applied.theme.layout[role as keyof typeof applied.theme.layout], role).toBe(value);
+        }
+        expect(applied.site.name).toBe(raw.Name);
+        expect(applied.home?.path).toBe(raw.HomePath);
     });
 });

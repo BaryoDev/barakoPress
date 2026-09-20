@@ -388,8 +388,10 @@ Field kinds are `text`, `markdown`, `url`, `number`, `boolean`, `select` (with `
 (lists of nested blocks, handed to the component already rendered). The list is editor input, so a
 block renders only when its type is registered and every prop passes its field. A present but wrong
 value fails the whole block, a `url` must pass the same check markdown links do, and a component
-never receives a prop its fields did not declare. A page reads at most 100 blocks in total, nested
-ones included, and four levels deep.
+never receives a prop its fields did not declare. A page reads at most 400 blocks in total, nested
+ones included, and ten levels deep. The count is spent on every block the binder walks through as
+well as every one that comes out, so a band from the library costs eight or ten of it, and a page
+that goes over loses its tail with nothing said.
 
 `defineBlock<Props, SlotNames>` checks the fields against the props at compile time: every field
 names a prop, its kind suits the prop's type, and a prop that is not optional must be `required`.
