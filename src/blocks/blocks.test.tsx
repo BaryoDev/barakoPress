@@ -158,6 +158,23 @@ describe("resolveBlocks", () => {
             expect(types(raw)).toHaveLength(MAX_BLOCKS);
             expect(warn).not.toHaveBeenCalled();
         });
+
+        /*
+         * `sayOnce` dedups on the message text, and resolveBlocks is never given a page id, so a
+         * warning that read the same for every page would only ever fire for the first one: the
+         * silence #90 is about, moved to the second offending page rather than fixed. The top-level
+         * stored count is what tells two pages apart here.
+         */
+        it("still warns about a second, differently sized page over budget in the same process", () => {
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+            const first = Array.from({ length: MAX_BLOCKS + 5 }, (_, i) => text(`a${i}`));
+            const second = Array.from({ length: MAX_BLOCKS + 12 }, (_, i) => text(`b${i}`));
+
+            resolveBlocks(first, registry, { perViewer: false });
+            resolveBlocks(second, registry, { perViewer: false });
+
+            expect(warn).toHaveBeenCalledTimes(2);
+        });
     });
 
     it("spends one budget across nested lists, not one per list", () => {

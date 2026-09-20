@@ -300,11 +300,19 @@ export function resolveBlocks(raw: unknown, registry: BlockRegistry, options: Re
     const budget = { remaining: MAX_BLOCKS, truncated: false };
     const resolved = resolveList(raw, registry, options, 0, budget);
     if (budget.truncated) {
+        // The top-level count, not a page id resolveBlocks is never given, but it is enough to tell
+        // two different oversized pages apart: `sayOnce` dedups on the message text, and a warning
+        // that reads the same for every page would say it for the first one only, which is the
+        // silence #90 is about, moved rather than fixed. A site with two pages that both go over
+        // budget and happen to store the same number of top-level blocks still only hears about the
+        // first, which is the one gap this heuristic leaves.
+        const stored = Array.isArray(raw) ? raw.length : 0;
         sayOnce(
-            `blocks: a page held more than ${MAX_BLOCKS} blocks once its bands were expanded into what they draw, ` +
-                "so the rest were dropped and do not render. The budget counts every block a band expands into, " +
-                "not only the bands a page author placed, because that is what the work costs; split the page " +
-                "into more than one, or raise MAX_BLOCKS, rather than reordering bands to work around it.",
+            `blocks: a page storing ${stored} block${stored === 1 ? "" : "s"} held more than ${MAX_BLOCKS} ` +
+                "once its bands were expanded into what they draw, so the rest were dropped and do not render. " +
+                "The budget counts every block a band expands into, not only the bands a page author placed, " +
+                "because that is what the work costs; split the page into more than one, or raise MAX_BLOCKS, " +
+                "rather than reordering bands to work around it.",
         );
     }
     return resolved;
