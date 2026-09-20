@@ -521,6 +521,24 @@ describe("the v3 blocks on their own", () => {
         expect([...html.matchAll(/name="codeTabs"/g)]).toHaveLength(1);
     });
 
+    it("shares one group by default, with nothing set on either the primary or its tabs", async () => {
+        const html = await render([
+            {
+                type: "codeTabs",
+                props: {
+                    code: "one",
+                    items: [
+                        [
+                            { type: "codeTab", props: { label: "Two", code: "two" } },
+                            { type: "codeTab", props: { label: "Three", code: "three" } },
+                        ],
+                    ],
+                },
+            },
+        ]);
+        expect([...html.matchAll(/name="codeTabs"/g)]).toHaveLength(3);
+    });
+
     it("leaves every question openable at once, which is the whole of the difference from tabs", async () => {
         const html = await render([
             {
