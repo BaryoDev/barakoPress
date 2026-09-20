@@ -1,3 +1,7 @@
+import { readFileSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -218,5 +222,46 @@ describe("the scripts, awkwardly written", () => {
         expect(out).not.toContain("<script");
         expect(out).toContain("<p>before</p>");
         expect(out).toContain("<p>after</p>");
+    });
+});
+
+/*
+ * The captures committed under look/fixtures, checked for the property they are committed for.
+ *
+ * A fixture that still reaches the network is a fixture that renders differently on a runner with
+ * no internet, and a gate that compares against it is comparing against whatever came back. This is
+ * the cheap half of that check: no script, no stylesheet or image fetched from anywhere. The other
+ * half needs a browser, and is what running the check does.
+ */
+describe("the captures committed in look/fixtures", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+
+    function captures(dir: string): string[] {
+        return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+            const full = join(dir, entry.name);
+            if (entry.isDirectory()) return captures(full);
+            return entry.name.endsWith(".html") && !full.includes("/rebuilt/") ? [full] : [];
+        });
+    }
+
+    const files = captures(join(here, "fixtures")).filter((file) =>
+        readFileSync(file, "utf8").includes("data-look-fixture"),
+    );
+
+    it("finds them", () => {
+        expect(files.length).toBeGreaterThan(0);
+    });
+
+    it.each(files)("%s runs no script and fetches nothing", (file) => {
+        const html = readFileSync(file, "utf8");
+
+        expect(html).toContain("<style");
+        expect(html.toLowerCase()).not.toContain("<script");
+        // Every stylesheet is inline, so no link may ask for one, and no image may name a host.
+        expect(html.toLowerCase()).not.toContain('rel="stylesheet"');
+        expect(/<img\b[^>]*\ssrc\s*=\s*["']https?:/i.test(html)).toBe(false);
+        for (const hint of ["preload", "prefetch", "preconnect", "dns-prefetch"]) {
+            expect(new RegExp(`rel=["']?${hint}["']?`, "i").test(html), hint).toBe(false);
+        }
     });
 });
