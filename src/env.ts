@@ -40,6 +40,8 @@ export interface PressEnv {
     revalidateSecret?: string;
     /** `PRESS_PREVIEW_SECRET`. The share key before `PRESS_SECRET`, read only while that is unset. */
     previewSecret?: string;
+    /** `PRESS_FONT_ORIGINS`. The origins a font stylesheet may be loaded from. */
+    fontOrigins?: string;
 }
 
 /** The variable each value comes from. A log line names this, never the value. */
@@ -52,6 +54,7 @@ export const ENV_NAMES = {
     secret: "PRESS_SECRET",
     revalidateSecret: "REVALIDATE_SECRET",
     previewSecret: "PRESS_PREVIEW_SECRET",
+    fontOrigins: "PRESS_FONT_ORIGINS",
 } as const satisfies Record<keyof PressEnv, string>;
 
 /** Reads every value, now. Call it where the value is used, never at module scope. */
