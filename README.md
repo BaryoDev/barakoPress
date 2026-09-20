@@ -543,6 +543,38 @@ image, and what makes a site that site is its tenant's `site` settings entry, ed
 export const config = defineConfig({ sites: {} });
 ```
 
+A request-time site puts its page routes under one tenant segment and adds a `proxy.ts` beside
+`app/`:
+
+```
+proxy.ts                              export default createPressProxy(config)
+app/
+  %5Fpress/[site]/                    the tenant segment. %5F is `_`, which Next reads as a
+    layout.tsx                        private folder when it is written plainly
+    page.tsx
+    [...path]/page.tsx
+    blog/[slug]/page.tsx
+  feed.xml/route.ts                   these resolve their own tenant and stay where they are
+  robots.ts
+  sitemap.ts
+  api/...
+  %5Fshare/route.ts
+```
+
+```ts
+// proxy.ts
+import { createPressProxy } from "barakopress";
+import { config } from "@/press.config";
+
+export default createPressProxy(config);
+```
+
+The proxy resolves the tenant and the share session once and rewrites to
+`/_press/<tenant>~<gate>~<host>/<path>`. The pages read all three out of that segment, so nothing in
+a page reads a header or a cookie, and Next can keep the render. Why the tenant has to be in the
+path, and what is cached and what is not, is [The render cache](#the-render-cache) below. A build-time
+site needs none of this and keeps its routes where they are.
+
 On each request the engine resolves the tenant, reads that tenant's settings, and renders with them:
 
 1. `CMS_TENANT` (or `tenant`) set: every host is that tenant, with no lookup.
@@ -751,11 +783,12 @@ hours** for someone who already opened it, because the session is checked here, 
 end every session now, change `PRESS_SECRET`, which does it for every tenant on that
 deployment, and changes every tenant's webhook key with it.
 
-Whether a request gets the holding page is decided per request from the cookie, and a request-time
-site renders every route dynamically, so a cached render made for a visitor with a session is never
-served to one without, or the reverse. A page you write by hand must call `siteConfig(config)` before
-it reads or renders anything, which is what keeps it behind the holding page. A build-time site has
-no settings entry and no holding mode.
+Whether a request gets the holding page is decided by the proxy, from the cookie, once per request,
+and the answer is a segment of the path the render is kept under. A render made for a visitor with a
+session is never served to one without, or the reverse, because the two are different paths. A page
+you write by hand must call `siteConfig(config, params)` before it reads or renders anything, which
+is what keeps it behind the holding page and what gives it its tenant. A build-time site has no
+settings entry and no holding mode.
 
 `generateStaticParams` factories return nothing on a request-time site, since there is no tenant at
 build. `scripts/two-hosts.sh` runs the built reference app against a stand-in CMS with two tenants
@@ -881,6 +914,53 @@ nothing would say why. With it, a missing webhook degrades publishing from insta
 **The cache invalidation is configuration, not code.** In barakoBrew: a workflow on your post content
 type, trigger `Published`, one Webhook action with the URL and a shared secret. Nothing is deployed
 to change it.
+
+### The render cache
+
+Reads being cached is half of it. The other half is not rendering the page again, and for a
+request-time site that used to be impossible: resolving the tenant meant reading the request host,
+reading a header makes a route dynamic, and Next never keeps a dynamic route. One container serving
+forty domains re-rendered every page for every visitor, with every read under it already cached.
+
+Next keys what it keeps by the path and by nothing else. There is no `Vary` and no second key to
+add. So whatever a render depends on has to be in the path, and three things are:
+
+| In the segment | Why |
+| --- | --- |
+| the tenant | two tenants must never share an entry. This is the whole reason the segment exists |
+| the gate | `public`, or `shared` for a request carrying a valid share session. A holding tenant answers differently for each, so each gets its own entry |
+| the host | the site's origin when the tenant's settings leave `Url` empty. Two hosts on one tenant are two renders, not one |
+
+The proxy writes them, as `/_press/<tenant>~<gate>~<host>/<path>`, and it is the only thing that
+does: a path that arrives under `/_press` from outside is a 404, because otherwise
+`https://one.example/_press/other~public~other.example/` would render another tenant's site on this
+tenant's domain. A host the CMS does not know is a 404 before anything renders, so an invented host
+never makes an entry: only a host a tenant owns can put one there.
+
+**What is cached.** The index, the pages tree, the collection indexes and the archives, per tenant
+and per path. `revalidateTag` drops a tenant's renders along with its reads, so the webhook that was
+already purging one purges both, and a publish on one tenant leaves every other tenant's renders in
+place. The first few views of a path answer `STALE` rather than `HIT` while the reads under them are
+still filling Next's data cache; after that it is `HIT` with no render and no read.
+
+**What is not cached, deliberately.**
+
+| Not cached | Why |
+| --- | --- |
+| a route that reads `?preview=` | a draft must never be in a shared cache, and reading the query is what keeps the route out of it. `createBlogPostPreview` is such a route; `createBlogPost` is not |
+| a page binding `{{query.X}}` | same reason. On a kept route the query is not handed to the blocks at all, so the binding is reported as an unbound scope and renders as nothing. A site that wants it writes `createPage(config, blocks, { query: true })` and leaves `generateStaticParams` out of that file |
+| `createViewerPage` | per viewer by definition. It calls `connection()`, and a route that does cannot be kept |
+| the feed, the sitemap and robots | `sitemap.ts` and `robots.ts` have to sit at the root of the app tree, so neither can carry a tenant segment. They resolve their own tenant and stay dynamic |
+| `/_share` and the redeem route | per visitor |
+
+**Which routes are kept is the consumer's call, in the consumer's file**, the same as `revalidate`.
+A page route that exports `createSiteStaticParams()` is kept; one that does not is rendered per
+request. That is also the switch for the two rows above: a route that reads the query leaves it out.
+
+**Nothing downstream may keep a copy.** Every rewritten answer carries `Cache-Control: private,
+no-store`, which is what a request-time site has always sent. Next's cache is the server's own and is
+not that header, so the render is still kept here. What stays true is that a browser or a proxy
+holding `/` is never holding one visitor's gate for the next visitor.
 
 ### One secret
 

@@ -78,6 +78,17 @@ const tenants = {
             "/about": pageAt("about", "About", "About BaryoDev", [["About", "/about"]]),
             "/about/team": pageAt("team", "Team", "Meet the team", [["About", "/about"], ["Team", "/about/team"]]),
             "/docs": pageAt("docs", "Docs", "The docs"),
+            // A {{query.X}} binding on a route the renderer keeps (#55). It renders as nothing
+            // rather than failing the page: a route that needs the query stays dynamic.
+            "/search": {
+                id: "sq",
+                slug: "search",
+                data: {
+                    Title: "Search",
+                    Slug: "search",
+                    Blocks: [{ type: "text", props: { value: "Looking for {{query.q}}", variant: "heading" } }],
+                },
+            },
             // Under a reserved slug at the root, so it must never render.
             "/blog": pageAt("blog", "Blog page", "A page that must never render"),
         },

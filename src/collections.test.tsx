@@ -47,7 +47,7 @@ const { createCollectionDetail, createCollectionIndex, createCollectionMetadata,
     await import("./screens/collection.js");
 const { createSitemap } = await import("./routes/sitemap.js");
 const { createFeed } = await import("./routes/feed.js");
-const { createBlockRegistry } = await import("./blocks/registry.js");
+const { createBlockRegistry, registryFor } = await import("./blocks/registry.js");
 const { DEFAULT_THEME } = await import("./theme.js");
 type Config = ReturnType<typeof defineConfig>;
 
@@ -417,7 +417,10 @@ describe("collections from a tenant's settings", () => {
 
     it("lists a filtered collection in the collection block, with its colours", async () => {
         visit("rckoronadal.org");
-        const block = createBlockRegistry(config).get("collection");
+        // The registry is built from the site's own config, and the request binds it to the tenant
+        // it resolved. Asking the request again inside the block is what #55 took out.
+        const resolved = await siteConfig(config);
+        const block = registryFor(resolved, createBlockRegistry(config)).get("collection");
         expect(block?.fields.find((f) => f.name === "collection")?.kind).toBe("text");
         const component = block?.component as unknown as (p: {
             props: Record<string, unknown>;

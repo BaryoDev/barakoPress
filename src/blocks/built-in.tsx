@@ -1,6 +1,5 @@
 import Link from "next/link";
 import type { PressConfig } from "../config.js";
-import { showsHoldingPage, siteConfigOrNull } from "../site.js";
 import { formatDate } from "../cms.js";
 import { collectionOf, listCollection } from "../collections.js";
 import { PROSE_CLASS, primitiveBlocks } from "./primitives.js";
@@ -153,18 +152,21 @@ type CollectionBlockProps = {
     filterValue?: string;
 };
 
+/** Definitions this package built, so `boundToSite` rebinds only its own. Held by identity. */
+const readsTheSite = new WeakSet<BlockDefinition>();
+
 /*
  * The collections offered are the ones this site has a route for, so an editor cannot pick one that
  * renders nothing. The names are the config's keys, not content type names. A request-time site takes
  * any name instead: each tenant's collections come from its own settings, a registry is built once for
  * all of them, and a name the tenant does not have renders nothing.
  */
-function collection(config: PressConfig): BlockDefinition {
+function collection(config: PressConfig, holding = false): BlockDefinition {
     const options = Object.entries(config.collections)
         .filter(([, c]) => c.route !== undefined)
         .map(([key]) => key);
 
-    return defineBlock<CollectionBlockProps>({
+    const definition = defineBlock<CollectionBlockProps>({
         type: "collection",
         label: "Collection",
         layer: "block",
@@ -178,14 +180,13 @@ function collection(config: PressConfig): BlockDefinition {
             { name: "filterValue", kind: "text", label: "Holds the value" },
         ],
         component: async ({ props, theme }) => {
-            // The registry is built once at module scope, so the tenant is resolved here, per request.
-            // Not siteConfig: its notFound() while holding would replace a holding page that contains
-            // this block with a 404. A holding page lists nothing from the site behind it.
-            const site = await siteConfigOrNull(config);
-            if (!site || (await showsHoldingPage(site))) return null;
+            // A holding page lists nothing from the site behind it, and the holding document says so
+            // rather than this asking again: a block that resolved the request itself would read a
+            // header, and the page holding it would lose its place in the render cache (#55).
+            if (holding) return null;
             const filter =
                 props.filterField && props.filterValue ? { [props.filterField]: props.filterValue } : undefined;
-            const items = await collectionItems(site, props.collection, props.limit ?? 6, filter);
+            const items = await collectionItems(config, props.collection, props.limit ?? 6, filter);
             if (items.length === 0) return null;
             const c = theme.colors;
             return (
@@ -255,8 +256,38 @@ function collection(config: PressConfig): BlockDefinition {
             );
         },
     });
+
+    readsTheSite.add(definition);
+    return definition;
 }
 
 export function builtInBlocks(config: PressConfig): BlockDefinition[] {
     return [...primitiveBlocks(config), ...dataBlocks(config), columns, callToAction, collection(config)];
+}
+
+/*
+ * Blocks that read the site rather than only their props, rebound to the config a request resolved
+ * (barakoPress #55).
+ *
+ * A registry is built once, at module scope, from the site's own config. On a request-time site
+ * that config names no tenant, so a block that reads the CMS used to resolve the tenant itself,
+ * out of the request headers, once per block per view. That read is what kept every page holding
+ * one off the render cache. The request resolves the site once now, and `registryFor` hands the
+ * resolved config to the blocks that need it.
+ *
+ * Only blocks this package built are rebound. A site that registered its own `collection` keeps
+ * its own: the definitions are held by identity, so nothing is matched by name.
+ */
+export function boundToSite(
+    registry: ReadonlyMap<string, BlockDefinition>,
+    config: PressConfig,
+    holding: boolean,
+): ReadonlyMap<string, BlockDefinition> {
+    let bound: Map<string, BlockDefinition> | undefined;
+    for (const [type, definition] of registry) {
+        if (!readsTheSite.has(definition)) continue;
+        bound ??= new Map(registry);
+        bound.set(type, collection(config, holding));
+    }
+    return bound ?? registry;
 }

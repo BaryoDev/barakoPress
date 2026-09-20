@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Asset } from "../assets.js";
 import type { PressConfig, Region } from "../config.js";
-import { showsHoldingPage, siteConfigOrNull } from "../site.js";
+import { showsHoldingPage, siteConfigOrNull, type SiteParams } from "../site.js";
 import {
     allowedFontOrigins,
     fontLinks,
@@ -31,7 +31,12 @@ import { spaceOf, toneOf, widthOf } from "../blocks/tokens.js";
  * Styled inline from the theme, for the reason the post screen is (see post-view.tsx).
  */
 
-type LayoutProps = { children: ReactNode };
+/*
+ * `params` carries the `[site]` segment the proxy rewrote to, on a site that adopted it. The
+ * layout resolves the tenant from there rather than from the request, which is what lets Next keep
+ * the render (barakoPress #55). A site that has not adopted it passes nothing and reads the host.
+ */
+type LayoutProps = { children: ReactNode; params?: SiteParams };
 
 /*
  * The faces, from the theme and the deployment's allow list (#54).
@@ -213,7 +218,7 @@ async function HoldingDocument({ cfg, registry, loadFonts }: { cfg: PressConfig;
                 </p>
                 {page && registry ? (
                     <div data-press="holding">
-                        {await PageView({ config: cfg, page, registry: registryFor(cfg, registry) })}
+                        {await PageView({ config: cfg, page, registry: registryFor(cfg, registry, { holding: true }) })}
                     </div>
                 ) : (
                     <main
@@ -369,8 +374,8 @@ export function createSiteLayout(config: PressConfig, options: SiteLayoutOptions
     let regionBlocks: BlockRegistry | undefined;
     const blocksForRegions = () => (regionBlocks ??= options.blocks ?? createBlockRegistry(config));
 
-    return async function SiteLayout({ children }: LayoutProps) {
-        const cfg = await siteConfigOrNull(config);
+    return async function SiteLayout({ children, params }: LayoutProps) {
+        const cfg = await siteConfigOrNull(config, params);
         if (!cfg) {
             return (
                 <html lang="en">
@@ -378,7 +383,7 @@ export function createSiteLayout(config: PressConfig, options: SiteLayoutOptions
                 </html>
             );
         }
-        if (await showsHoldingPage(cfg)) {
+        if (await showsHoldingPage(cfg, params)) {
             return await HoldingDocument({ cfg, registry: options.blocks, loadFonts });
         }
 
@@ -415,8 +420,8 @@ export function createSiteLayout(config: PressConfig, options: SiteLayoutOptions
 }
 
 export function createSiteMetadata(config: PressConfig) {
-    return async function generateMetadata(): Promise<Metadata> {
-        const cfg = await siteConfigOrNull(config);
+    return async function generateMetadata({ params }: { params?: SiteParams } = {}): Promise<Metadata> {
+        const cfg = await siteConfigOrNull(config, params);
         if (!cfg) return { title: "Not found" };
 
         const s = cfg.site;

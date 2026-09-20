@@ -5,6 +5,10 @@
 # answers two hosts with two names and palettes, a host with no tenant is a 404, a purge on one
 # tenant leaves the other's cached reads in place, and with the CMS stopped a purged tenant still
 # answers 200 with its own identity.
+#
+# And the claims in #55: a second view of a page is served from the render cache, two hosts never
+# share an entry, a purge drops one tenant's renders and no other tenant's, and the holding gate is
+# never crossed by a cached one.
 set -euo pipefail
 
 CMS_PORT=${CMS_PORT:-5098}
@@ -100,6 +104,48 @@ if grep -q "<loc>https://rckoronadal.org/site/footer</loc>" "$TMP/rotary-sitemap
 if grep -q 'data-press="footer"' "$TMP/baryo.html"; then fail "baryo.dev drew a region it never asked for"; fi
 grep -q "<footer style=\"background:#101223" "$TMP/baryo.html" || fail "baryo.dev lost the built-in footer"
 echo "ok: rckoronadal.org draws its footer from a page of blocks, out of the menu and the sitemap, and baryo.dev keeps the built-in footer"
+
+# The render cache (#55). Next says which of its own entries answered, and that is the claim here:
+# a page rendered once is not rendered again, per tenant and per path.
+#
+# The first few views of a path are STALE rather than HIT while the reads under them are still
+# filling Next's data cache, so this asks until it settles rather than on the second view alone.
+cached() { curl -s -o /dev/null -D - -H "Host: $1" "$APP$2" | tr -d '\r' | sed -n 's/^x-nextjs-cache: //Ip'; }
+settles() {
+  for _ in $(seq 1 40); do
+    [ "$(cached "$1" "$2")" = "HIT" ] && return 0
+  done
+  return 1
+}
+settles baryo.dev / || fail "baryo.dev's index is never served from the render cache ($(cached baryo.dev /))"
+settles baryo.dev /about/team || fail "a page is never served from the render cache"
+settles rckoronadal.org / || fail "rckoronadal.org's index is never served from the render cache"
+[ "$(cached baryo.dev /blog/shipping-notes)" = "" ] || fail "the preview post route was served from the render cache"
+[ "$(status baryo.dev '/blog/shipping-notes?preview=a-token')" = "200" ] || fail "a preview is not served"
+echo "ok: a second view of an index and a page is served from the render cache, and a post with preview is not"
+
+# A {{query.X}} binding on a kept route renders as an unbound scope rather than failing the page.
+# A site that wants the query passes { query: true } and leaves generateStaticParams out.
+[ "$(status baryo.dev '/search?q=wells')" = "200" ] || fail "a page binding the query fails on a kept route"
+page baryo.dev '/search?q=wells' | grep -q "Looking for" || fail "a page binding the query did not render"
+if page baryo.dev '/search?q=wells' | grep -q "Looking for wells"; then fail "a kept route read the query"; fi
+echo "ok: a page binding {{query.X}} renders on a kept route, with the binding unresolved"
+
+# Both are cached now, so a shared entry would show here and nowhere else.
+page baryo.dev / > "$TMP/baryo-cached.html"
+page rckoronadal.org / > "$TMP/rotary-cached.html"
+grep -q "BaryoDev" "$TMP/baryo-cached.html" || fail "the cached baryo.dev index is not baryo.dev's"
+grep -q "Rotary Club of Koronadal" "$TMP/rotary-cached.html" || fail "the cached rckoronadal.org index is not rckoronadal.org's"
+if grep -q "Rotary Club of Koronadal" "$TMP/baryo-cached.html"; then fail "baryo.dev was served rckoronadal.org's cached render"; fi
+if grep -q "BaryoDev" "$TMP/rotary-cached.html"; then fail "rckoronadal.org was served baryo.dev's cached render"; fi
+# The path a render is kept under is the whole of the key, so it has to carry the tenant, and a
+# visitor naming another tenant's path must get nothing.
+# Followed, because Next answers the trailing slash with a 308 before the proxy sees it.
+[ "$(curl -s -o /dev/null -L -w '%{http_code}' -H "Host: baryo.dev" "$APP/_press/rckoronadal~public~rckoronadal.org/")" = "404" ] ||
+  fail "a tenant's rewritten path is reachable from outside"
+[ "$(status baryo.dev '/_press/rckoronadal~public~rckoronadal.org/blog/club-news')" = "404" ] ||
+  fail "another tenant's post is reachable by its rewritten path"
+echo "ok: two hosts never share a cached render, and neither can be asked for by path"
 
 [ "$(status unknown.example /)" = "404" ] || fail "a host with no tenant is not a 404"
 [ "$(status unknown.example /feed.xml)" = "404" ] || fail "the feed for a host with no tenant is not a 404"
@@ -225,6 +271,8 @@ before=$(curl -s "http://127.0.0.1:$CMS_PORT/__reads")
 [ "$(purge baryo.dev "$SECRET" | grep -c '"revalidated":true')" = "0" ] || fail "the shared secret still purges a tenant"
 [ "$(purge baryo.dev "$(tenant_key rckoronadal)" | grep -c '"revalidated":true')" = "0" ] || fail "rckoronadal's key purges baryo.dev"
 purge baryo.dev "$(tenant_key baryo)" | grep -q '"tag":"cms:baryo"' || fail "the purge with baryo's key did not name baryo's tag"
+[ "$(cached baryo.dev /)" != "HIT" ] || fail "baryo.dev's cached render survived its own purge"
+[ "$(cached rckoronadal.org /)" = "HIT" ] || fail "rckoronadal.org's cached render went with baryo.dev's purge"
 page rckoronadal.org / > /dev/null
 page baryo.dev / > /dev/null
 after=$(curl -s "http://127.0.0.1:$CMS_PORT/__reads")
@@ -233,7 +281,7 @@ node -e '
   if (a.rckoronadal !== b.rckoronadal) { console.log("rckoronadal re-read after baryo purge", b, a); process.exit(1); }
   if (a.baryo <= b.baryo) { console.log("baryo was not re-read after its purge", b, a); process.exit(1); }
 ' "$before" "$after" || fail "a purge on one tenant reached the other"
-echo "ok: only baryo's own key purges baryo.dev, not the shared secret or rckoronadal's key, and the purge left rckoronadal's cached reads in place"
+echo "ok: only baryo's own key purges baryo.dev, not the shared secret or rckoronadal's key, and the purge left rckoronadal's cached reads and renders in place"
 
 kill $CMS_PID
 wait $CMS_PID 2>/dev/null || true

@@ -270,12 +270,15 @@ export {
     createViewerPage,
     createPageMetadata,
     createPageStaticParams,
+    createSiteStaticParams,
     pageBlocks,
     PageView,
 } from "./screens/page.js";
-export type { PageViewProps } from "./screens/page.js";
+export type { PageOptions, PageViewProps } from "./screens/page.js";
 export { createBlockSchemaRoute, createBlockSchemaPreflight, parseOrigins } from "./routes/block-schema.js";
 export type { BlockSchemaRouteOptions } from "./routes/block-schema.js";
+
+export { createPressProxy } from "./proxy.js";
 
 export { createRevalidateRoute } from "./routes/revalidate.js";
 export { revalidateKeyFor } from "./revalidate-key.js";
