@@ -867,8 +867,8 @@ While a tenant is holding, for that tenant only:
 - route handlers (revalidate, blocks, `/_share`, `/api/share/redeem`) and `/_next/static` are served
   as usual.
 
-Switching `Mode` is a publish: the webhook purges the tenant's tag and the next request reads the new
-settings. No deploy.
+Switching `Mode` is a publish: the webhook drops the tag the settings read carries and the next
+request reads the new settings. No deploy.
 
 **Site share links.** barakoCMS creates, lists and revokes them; anyone who may update the `site` type
 can. A client is given `{site Url}/_share#{key}`. The key is in the fragment, so no server log, proxy
