@@ -215,6 +215,21 @@ export interface Holding {
 }
 
 /**
+ * What a site serves at `/` (#44).
+ *
+ * Every site was a blog at the root, because the root route mounted the post index and nothing else
+ * could be named. rckoronadal.org's home is a Pages page, and a clinic with no posts at all still
+ * got an empty post index there. `path` is a page, the way `HoldingPath` is; `collection` is a
+ * collection's index. Neither set, the post index renders, which is what every site did before this.
+ */
+export interface Home {
+    /** `HomePath`: the site path of the page served at the root. */
+    path?: string;
+    /** `HomeCollection`: the key of the collection whose index is served at the root. */
+    collection?: string;
+}
+
+/**
  * A block region: a page whose blocks are drawn as the site's header or footer.
  *
  * The same idea as `HoldingPath`. The header and the footer used to be drawn in code, with only
@@ -446,6 +461,8 @@ export interface PressConfig {
     optionColors: Record<string, Record<string, string>>;
     /** The words the screens print. A request-time site reads the tenant's `Labels` setting. */
     labels: Labels;
+    /** What `createHome` serves at the root. A request-time site reads `HomePath` and `HomeCollection`. */
+    home?: Home;
 }
 
 export type PressConfigInput = {
@@ -637,6 +654,7 @@ export function defineConfig(
         collections,
         optionColors: input.optionColors ?? {},
         labels: { ...DEFAULT_LABELS, ...input.labels },
+        ...(input.home ? { home: input.home } : {}),
         reservedSlugs: reservedSlugs(
             [routes.post, routes.author, routes.category, ...Object.values(collections).map((c) => c.route)],
             input.reservedSlugs,
@@ -689,6 +707,16 @@ export function pinnedTenant(config: Pick<PressConfig, "tenant">, env: PressEnv 
  * from the API for any post type without both fields, which is every model that is not the blog
  * blueprint.
  */
+/**
+ * True when some collection this site renders has a feed, so a feed link points somewhere.
+ *
+ * The blog's post collection has one, so a blog answers true as it always did. A tenant whose
+ * collections are all `feed: false` shows no RSS link and no feed alternate (#44).
+ */
+export function hasFeed(config: PressConfig): boolean {
+    return Object.values(config.collections).some((c) => c.feed === true && c.route !== undefined);
+}
+
 export function includesFor(config: PressConfig): string[] {
     const wanted: (string | undefined)[] = [
         config.types.author ? config.fields.author : undefined,

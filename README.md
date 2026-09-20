@@ -83,7 +83,7 @@ decision, not the engine's.
 
 | Create | Export | From |
 | --- | --- | --- |
-| `app/page.tsx` | `default` | `createBlogIndex(config)` |
+| `app/page.tsx` | `default`, `generateMetadata` | `createHome(config, blocks)`, `createHomeMetadata(config)` |
 | `app/blog/[slug]/page.tsx` | `default`, `generateMetadata` | `createBlogPost(config)`, `createPostMetadata(config)` |
 | `app/authors/[slug]/page.tsx` | `default` | `createArchive(config, "author")` |
 | `app/categories/[slug]/page.tsx` | `default` | `createArchive(config, "category")` |
@@ -98,6 +98,10 @@ decision, not the engine's.
 | `app/layout.tsx` | `default`, `generateMetadata` | `createSiteLayout(config, { blocks })`, `createSiteMetadata(config)` |
 | `app/%5Fshare/route.ts` | `GET` | `createSharePage()` |
 | `app/api/share/redeem/route.ts` | `POST` | `createShareRedeemRoute(config)` |
+
+`createHome` serves whatever the tenant picked for `/`: the page at `HomePath`, the index of
+`HomeCollection`, or the post index when it picked neither, which is what `createBlogIndex` did and
+still does for a site that mounts that instead.
 
 Mount only what you want. Nothing requires anything else. The paths only have to agree with the
 `routes` in your config, which is what every generated link is built from.
@@ -498,6 +502,7 @@ for a post type with no such field.
 | `collections` | the blog's `post`, `author` and `category` | `Collections` | Content types rendered as lists and detail pages. See Collections |
 | `optionColors` | none | `OptionColors` | CSS colours by `type.field` and option, for `colorBy` |
 | `labels` | English | `Labels` | The words the screens print for a visitor. See below |
+| `home` | the post index | `HomePath`, `HomeCollection` | What `createHome` serves at `/`. See below |
 | `theme` | the barakoCMS palette | `Colors`, `Fonts`, `Radii`, `Layout`, `Space`, `Text` | Colours, faces, radii and column widths. See below |
 
 The third column is the whole of the split. A key marked operator only is one the image decides for
@@ -594,7 +599,7 @@ The settings are the singleton `site` type from barakoCMS `docs/site-settings.md
 `Colors` (the theme slots), `Fonts` (a family name per role, and the stylesheet that loads it),
 `Radii`, `Layout`, `TopBar`, `HeaderLinks`, `FooterColumns`, `SocialLinks`, `HeaderPath`,
 `HeaderTone`, `FooterPath`, `FooterTone`, `AssetsAsSupplied`, `LogoAsSupplied`, `LogoClearSpace`,
-`PageSizes`, `ReservedSlugs` and `Labels`. `Collections` and `OptionColors` are read as the collections section
+`PageSizes`, `ReservedSlugs`, `Labels`, `HomePath` and `HomeCollection`. `Collections` and `OptionColors` are read as the collections section
 describes. `Variants` are not rendered yet. Every value is checked for shape; one that fails, and any the
 entry leaves out, keeps the configured value, so a half-filled theme renders. A link is a path on the
 site or an absolute http or https URL. Set `Url`: without it the feed and sitemap fall back to the
@@ -602,6 +607,20 @@ host the tenant was found by.
 
 `createSiteLayout` and `createSiteMetadata` render the root layout from all of this: `lang`, the
 faces, the palette, the top bar, header links, footer columns, social links and the copyright line.
+
+**What the site serves at `/`.** Every site used to be a blog at the root, because the root route
+mounted the post index and nothing else could be named:
+
+| Field | Type | What |
+| --- | --- | --- |
+| `HomePath` | string | A site path such as `/home`. The page the Pages module serves there is the home page. Nothing served there falls back to the index, so naming a page before writing it is safe |
+| `HomeCollection` | string | The key of a collection. Its index is the home page. `HomePath` wins when both are set |
+
+Neither set, `/` is the post index, which is what it was. The blog's own `post`, `author` and
+`category` are ordinary `Collections` entries now, so a school whose news lives in `article` with a
+`Headline` replaces `post` in its settings and gets both its list and its item pages from that entry.
+The RSS link in the built-in header, and the feed alternate in the page metadata, appear only when
+some collection has `feed` on, so a clinic with no posts stops advertising an empty feed.
 
 **The words a visitor reads.** `Labels` is the visitor-facing copy, key by key. A school setting
 `Locale` to `fil-PH` used to get Filipino dates beside English "min read" and "Related":

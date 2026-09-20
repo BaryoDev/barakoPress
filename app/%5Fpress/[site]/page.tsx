@@ -1,6 +1,7 @@
-import { createBlogIndex, createSiteStaticParams } from "barakopress";
-import { config } from "@/press.config";
+import { createHome, createHomeMetadata, createSiteStaticParams } from "barakopress";
+import { blocks, config } from "@/press.config";
 
-export default createBlogIndex(config);
+export default createHome(config, blocks);
+export const generateMetadata = createHomeMetadata(config);
 export const generateStaticParams = createSiteStaticParams();
 export const revalidate = 300;

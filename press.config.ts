@@ -13,7 +13,8 @@ import { createBlockRegistry, defineConfig } from "barakopress";
  * barakocms.com does. That is a build-time site, and it behaves exactly as it did before this.
  *
  * `pages: ""` mounts the Pages module's page tree at the site root: app/[...path] renders the page at
- * each path, and the layout draws each tenant's menu in its header. The blog index keeps `/`.
+ * each path, and the layout draws each tenant's menu in its header. `/` is whatever the tenant
+ * picked: a page at `HomePath`, a collection's index at `HomeCollection`, else the post index.
  *
  * A site using the `blog` blueprint unchanged needs nothing else. Everything else defaults to what
  * `POST /api/content-types/blueprints/blog` creates: the types post, author and category, the

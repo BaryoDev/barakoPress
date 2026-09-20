@@ -2,6 +2,18 @@
 
 ## 0.6.0 (unreleased)
 
+- A tenant picks its home page. `HomePath` names a page, the way `HoldingPath` does, and
+  `HomeCollection` names a collection whose index stands at the root; `createHome` serves whichever
+  it is and the post index when it is neither, so a site that says nothing renders what it always
+  did. Nothing served at the named path falls back to the index rather than 404ing the front page.
+  The blog's `post`, `author` and `category` are ordinary `Collections` entries now, so a school
+  whose news lives in `article` with a `Headline` replaces `post` in its settings and gets its list
+  and its item pages from that entry; the post page reads the collection's own field map when a
+  tenant has done that. The RSS link in the built-in header and the feed alternate in the metadata
+  appear only when some collection has `feed` on, so a clinic with no posts stops advertising an
+  empty feed. **A request-time site's root route becomes `createHome(config, blocks)` with
+  `createHomeMetadata(config)`; `createBlogIndex` still mounts the post index for a site that wants
+  exactly that.** (#44)
 - The words a visitor reads are the tenant's. `Labels` on the site settings holds them, key by key:
   "min read", "by", "Related", "Featured", "Back", "Untitled", the RSS link, the preview banner, the
   two notices an index shows and the line the holding page shows after a share link that did not

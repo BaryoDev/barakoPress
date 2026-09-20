@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Asset } from "../assets.js";
-import type { PressConfig, Region } from "../config.js";
+import { hasFeed, type PressConfig, type Region } from "../config.js";
 import { showsHoldingPage, siteConfigOrNull, type SiteParams } from "../site.js";
 import {
     allowedFontOrigins,
@@ -303,7 +303,7 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
                                 {l.label}
                             </a>
                         ))}
-                        {!cfg.holding && (
+                        {!cfg.holding && hasFeed(cfg) && (
                             <a href="/feed.xml" style={{ ...linkStyle, fontFamily: t.fonts.mono, fontSize: "13px", color: c.muted }}>
                                 {cfg.labels.feed}
                             </a>
@@ -439,7 +439,12 @@ export function createSiteMetadata(config: PressConfig) {
             icons: s.favicon ? { icon: s.favicon } : undefined,
             openGraph: { siteName: s.name, images: s.shareImage ? [s.shareImage] : undefined },
             // While holding nothing is indexed, session or not, and there is no feed to point at.
-            alternates: s.url && !cfg.holding ? { types: { "application/rss+xml": `${s.url}/feed.xml` } } : undefined,
+            // No feed link for a site with no feed: a tenant whose collections are all `feed: false`
+            // has nothing at /feed.xml, and pointing a reader at it is a 404 with a promise on it.
+            alternates:
+                s.url && !cfg.holding && hasFeed(cfg)
+                    ? { types: { "application/rss+xml": `${s.url}/feed.xml` } }
+                    : undefined,
             robots: cfg.holding ? { index: false, follow: false } : undefined,
         };
     };

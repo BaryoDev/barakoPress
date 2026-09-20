@@ -205,16 +205,32 @@ describe("visitor text from the tenant's labels", () => {
         expect(files.length).toBeGreaterThan(5);
         expect(LABEL_KEYS.length).toBe(Object.keys(DEFAULT_LABELS).length);
 
-        // Comments are prose about the screen, not copy the visitor reads, so they are not scanned.
-        // A hit preceded by a dot or a brace is the label being read, `config.labels.by`.
-        const withoutComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+        /*
+         * What a visitor could read: the text between two tags, and the strings the file holds.
+         * Comments are prose about the screen rather than copy, and an identifier is not copy
+         * either, which is why this reads those two places and not the whole file.
+         */
+        const copy = (src: string): string[] => {
+            const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+            // Text between a tag or an expression and the next one, which is where `{minutes} min
+            // read` keeps its two words. No bracket, semicolon or equals in it, since a chunk
+            // holding one of those is code between two unrelated brackets rather than a line
+            // somebody reads.
+            const found = [...code.matchAll(/[>}]([^<>{}();=]+)[<{]/g)].map((m) => m[1]);
+            for (const m of code.matchAll(/"([^"\\\n]*)"|'([^'\\\n]*)'|`([^`\\$\n]*)`/g)) {
+                found.push(m[1] ?? m[2] ?? m[3]);
+            }
+            return found;
+        };
+
         const found: string[] = [];
         for (const file of files) {
-            const source = withoutComments(readFileSync(file, "utf8"));
+            const written = copy(readFileSync(file, "utf8"));
+            expect(written.length).toBeGreaterThan(0);
             for (const key of LABEL_KEYS) {
                 const word = DEFAULT_LABELS[key].split(".")[0];
-                const pattern = new RegExp(`(^|[^A-Za-z.{])${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^A-Za-z])`);
-                if (pattern.test(source)) found.push(`${file}: ${key}`);
+                const pattern = new RegExp(`(^|[^A-Za-z])${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^A-Za-z])`);
+                if (written.some((text) => pattern.test(text))) found.push(`${file}: ${key}`);
             }
         }
         expect(found).toEqual([]);

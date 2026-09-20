@@ -341,7 +341,7 @@ describe("collections from a tenant's settings", () => {
         expect(cardFor(index, "Clean water")).not.toContain("border-left");
     });
 
-    it("reads only well-formed collections from the settings, and never replaces the blog's with a broken one", () => {
+    it("reads only well-formed collections from the settings, the blog's own keys included", () => {
         const out = applySiteSettings(
             { ...config, tenant: "t" },
             {
@@ -377,8 +377,9 @@ describe("collections from a tenant's settings", () => {
             pageSize: 12,
         });
         expect(Object.keys(out.collections.good.references ?? {})).toEqual(["Owner"]);
-        expect(out.collections.post).toEqual(config.collections.post);
-        expect(out.collections.author).toEqual(config.collections.author);
+        // A tenant may replace the blog's own collections now (#44), so these are the entries it saved.
+        expect(out.collections.post).toMatchObject({ type: "article", route: "/blog", fields: { title: "Headline" } });
+        expect(out.collections.author).toMatchObject({ type: "person", route: "/people", fields: { title: "Name" } });
         expect(out.collections.badValues).toMatchObject({ sort: undefined, pageSize: undefined, colorBy: undefined });
     });
 

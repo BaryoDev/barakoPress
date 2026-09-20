@@ -2,9 +2,6 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
 import {
-    AUTHOR_COLLECTION,
-    CATEGORY_COLLECTION,
-    POST_COLLECTION,
     SETTINGS_TYPE,
     embedHosts,
     type CollectionConfig,
@@ -12,6 +9,7 @@ import {
     type FieldNames,
     type FooterColumn,
     type Holding,
+    type Home,
     type Labels,
     LABEL_KEYS,
     type PageSizes,
@@ -596,13 +594,16 @@ function withoutHoldingPage(site: SiteIdentity, path: string): SiteIdentity {
 /*
  * `Collections`: the content types this tenant's site renders as lists and detail pages, keyed by name,
  * each in the shape of `CollectionConfig`. An entry that does not read as one is left out whole rather
- * than half applied, and one keyed like a configured collection replaces it. The blog's own three keys
- * are refused: the blog factories map posts through `types` and `fields`, so a replaced `post` entry
- * would render its list one way and its pages another. Every name ends up in an
- * API query or a link, so each is held to a plain identifier or a plain site path.
+ * than half applied, and one keyed like a configured collection replaces it.
+ *
+ * `post`, `author` and `category` are replaceable like any other key (#44). They used to be refused,
+ * because the blog factories map an entry through `types` and `fields` and a replaced `post` would
+ * have rendered its list one way and its pages another. A collection carries its own field map now
+ * and the post page reads it, so a school whose news lives in `article` with a `Headline` says so in
+ * its settings and gets both. Every name ends up in an API query or a link, so each is held to a
+ * plain identifier or a plain site path.
  */
 const COLLECTION_KEY = /^[A-Za-z][A-Za-z0-9_-]{0,40}$/;
-const BLOG_KEYS = new Set([POST_COLLECTION, AUTHOR_COLLECTION, CATEGORY_COLLECTION]);
 const TYPE_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,62}$/;
 const FIELD_NAME = /^@?[A-Za-z][A-Za-z0-9_]{0,62}$/;
 const DATA_FIELD = /^[A-Za-z][A-Za-z0-9_]{0,62}$/;
@@ -677,7 +678,7 @@ function collectionsFrom(base: Record<string, CollectionConfig>, v: unknown): Re
     const read = Object.entries(input)
         .slice(0, 24)
         .flatMap(([key, raw]): [string, CollectionConfig][] => {
-            const collection = COLLECTION_KEY.test(key) && !BLOG_KEYS.has(key) ? collectionFrom(raw) : undefined;
+            const collection = COLLECTION_KEY.test(key) ? collectionFrom(raw) : undefined;
             return collection ? [[key, collection]] : [];
         });
     return { ...base, ...Object.fromEntries(read) };
@@ -801,6 +802,22 @@ function labelsFrom(base: Labels, v: unknown): Labels {
     return out;
 }
 
+/*
+ * `HomePath` and `HomeCollection`: what this tenant serves at `/` (#44).
+ *
+ * A path names a page, the way `HoldingPath` does, and wins when both are set. A collection names a
+ * key; whether the tenant has a collection under that key is settled when the page renders, since
+ * the same settings entry is where the collections come from. Neither set, the root is the post
+ * index, which is what it was for every site before this.
+ */
+function home(base: Home | undefined, d: Record<string, unknown>): Home | undefined {
+    const path = sitePath(d.HomePath) ?? base?.path;
+    const named = str(d.HomeCollection);
+    const collection = (named && COLLECTION_KEY.test(named) ? named : undefined) ?? base?.collection;
+    if (!path && !collection) return undefined;
+    return { ...(path ? { path } : {}), ...(collection ? { collection } : {}) };
+}
+
 export function applySiteSettings(
     config: PressConfig,
     data: Record<string, unknown> | undefined,
@@ -843,6 +860,7 @@ export function applySiteSettings(
     void _ignored;
     const held = holding(d);
     const bands = regions(config.regions, d);
+    const root = home(config.home, d);
     return {
         ...rest,
         site: held?.path ? withoutHoldingPage(site, held.path) : site,
@@ -861,6 +879,7 @@ export function applySiteSettings(
         labels: labelsFrom(config.labels, d.Labels),
         reservedSlugs: reservedSlugsFrom(config.reservedSlugs, d.ReservedSlugs),
         ...(bands ? { regions: bands } : {}),
+        ...(root ? { home: root } : {}),
         ...(held ? { holding: held } : {}),
     };
 }
