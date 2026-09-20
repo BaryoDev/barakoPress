@@ -27,6 +27,8 @@ export interface Item {
     imageAlt?: string;
     /** A checked http or https link, or a site path. */
     url?: string;
+    /** A portrait, from the collection's `photo` field role. */
+    photo?: string;
     featured: boolean;
     tags: string[];
     /** Resolved references, by field name. Undefined for one that did not come back resolved. */
@@ -131,6 +133,7 @@ export function toItem(config: PressConfig, key: string, c: PublicContent): Item
         image: text(c, f.image) || undefined,
         imageAlt: text(c, f.imageAlt) || undefined,
         url: siteHref(text(c, f.url)),
+        photo: text(c, f.photo) || undefined,
         featured: value(c, f.featured) === true,
         tags: Array.isArray(tags) ? tags.filter((t): t is string => typeof t === "string") : [],
         refs,
@@ -166,6 +169,8 @@ export interface ListCollectionOptions {
 export interface CollectionPage {
     items: Item[];
     total: number;
+    /** How many rows a page holds, as the API answered. Never larger than what was asked for. */
+    pageSize: number;
     hasNextPage: boolean;
 }
 
@@ -193,6 +198,7 @@ async function listWith(
     return {
         items: res.items.map((c) => toItem(config, key, c)),
         total: res.totalItems,
+        pageSize: res.pageSize,
         hasNextPage: res.hasNextPage,
     };
 }
@@ -203,7 +209,7 @@ export async function listCollection(
     opts: ListCollectionOptions = {},
 ): Promise<CollectionPage> {
     const col = collectionOf(config, key);
-    if (!col) return { items: [], total: 0, hasNextPage: false };
+    if (!col) return { items: [], total: 0, pageSize: 0, hasNextPage: false };
 
     const wanted = Object.entries(opts.filter ?? {});
     if (wanted.length > MAX_FILTERS) throw new Error(`a list takes at most ${MAX_FILTERS} filters, got ${wanted.length}`);
@@ -218,10 +224,76 @@ export async function listCollection(
         }
         // A reference is filtered by the target's id, and a slug nobody has matches nothing.
         const found = await bySlug(config, target.type, want);
-        if (!found) return { items: [], total: 0, hasNextPage: false };
+        if (!found) return { items: [], total: 0, pageSize: 0, hasNextPage: false };
         filter.push([field, "eq", found.id]);
     }
     return listWith(config, key, col, { page: opts.page, pageSize: opts.pageSize, filter });
+}
+
+/*
+ * A page size is asked for, never assumed.
+ *
+ * barakoCMS clamps a public list with Math.Min, so asking for a thousand rows is answered with its
+ * own hundred and no error at all. Everything a caller does not fetch a second time is then missing
+ * with nothing saying so, which is how the sitemap lost every entry past the hundredth (#72). The
+ * answer carries the size the API allowed, so the next page asks for that number instead of the one
+ * this side guessed, and the run ends on `hasNextPage` rather than on an assumption.
+ *
+ * The mismatch is said once rather than absorbed. A count a tenant set and a count the API permits
+ * disagreeing is a thing somebody fixes once, so the shape here is the one fonts.ts and presets.ts
+ * use: a bounded set, emptied rather than trimmed when it fills, so the messages come back.
+ */
+const SAID_MAX = 200;
+const said = new Set<string>();
+
+function sayOnce(message: string): void {
+    if (said.has(message)) return;
+    if (said.size >= SAID_MAX) said.clear();
+    said.add(message);
+    console.warn(message);
+}
+
+/** For tests: say every message again. */
+export function forgetCollectionWarnings(): void {
+    said.clear();
+}
+
+export interface CollectionRun {
+    items: Item[];
+    /** True when the collection holds more than `limit` items, so the rest were never read. */
+    truncated: boolean;
+}
+
+/**
+ * Every item of a collection, a page at a time, up to `limit`.
+ *
+ * `limit` is the caller's bound on the whole run, because paging with no bound turns one request
+ * into as many requests as the collection is long. `pageSize` is only where the first page starts;
+ * what the API answers with decides the rest.
+ */
+export async function listAllCollection(
+    config: PressConfig,
+    key: string,
+    opts: { limit: number; pageSize?: number; filter?: Record<string, string> },
+): Promise<CollectionRun> {
+    const limit = Math.max(0, Math.trunc(opts.limit));
+    if (limit === 0) return { items: [], truncated: true };
+
+    const items: Item[] = [];
+    let asking = Math.max(1, Math.min(Math.trunc(opts.pageSize ?? limit), limit));
+
+    for (let page = 1; ; page++) {
+        const batch = await listCollection(config, key, { page, pageSize: asking, filter: opts.filter });
+        if (batch.pageSize >= 1 && batch.pageSize < asking) {
+            sayOnce(
+                `collections: "${key}" was asked for ${asking} entries a page and the API allows ${batch.pageSize}, so the rest are read a page at a time`,
+            );
+            asking = batch.pageSize;
+        }
+        items.push(...batch.items);
+        if (items.length >= limit) return { items: items.slice(0, limit), truncated: batch.hasNextPage || items.length > limit };
+        if (!batch.hasNextPage || batch.items.length === 0) return { items, truncated: false };
+    }
 }
 
 export async function getItem(config: PressConfig, key: string, slug: string): Promise<Item | null> {

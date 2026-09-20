@@ -609,7 +609,7 @@ const TYPE_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,62}$/;
 const FIELD_NAME = /^@?[A-Za-z][A-Za-z0-9_]{0,62}$/;
 const DATA_FIELD = /^[A-Za-z][A-Za-z0-9_]{0,62}$/;
 const SORT = /^-?[A-Za-z][A-Za-z0-9_]{0,62}$/;
-const FIELD_ROLES = ["slug", "summary", "body", "date", "image", "imageAlt", "featured", "tags", "url"] as const;
+const FIELD_ROLES = ["slug", "summary", "body", "date", "image", "imageAlt", "featured", "tags", "url", "photo"] as const;
 
 function fieldNames(v: unknown): FieldNames | undefined {
     if (typeof v === "string") return FIELD_NAME.test(v) ? v : undefined;
@@ -655,6 +655,9 @@ function collectionFrom(v: unknown): CollectionConfig | undefined {
 
     const sort = str(c.sort);
     const colorBy = str(c.colorBy);
+    // Only the three values mean anything. Anything else leaves the default, which lists whatever
+    // references this collection, rather than turning the band off on a typo.
+    const related = c.related === "semantic" || c.related === "reference" || c.related === false ? c.related : undefined;
     const pageSize = c.pageSize;
     const noun = Array.isArray(c.noun) && c.noun.length === 2 ? [short(c.noun[0], 40), short(c.noun[1], 40)] : [];
     return {
@@ -670,6 +673,8 @@ function collectionFrom(v: unknown): CollectionConfig | undefined {
         label: short(c.label, 80),
         noun: noun[0] && noun[1] ? [noun[0], noun[1]] : undefined,
         colorBy: colorBy && DATA_FIELD.test(colorBy) ? colorBy : undefined,
+        related,
+        readingTime: c.readingTime === true,
     };
 }
 

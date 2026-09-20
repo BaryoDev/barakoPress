@@ -2,6 +2,28 @@
 
 ## 0.6.0 (unreleased)
 
+- A collection with more entries than the API hands back in one page is in the sitemap whole. The
+  route asked for `pageSizes.sitemap` entries, a thousand by default, and barakoCMS answers a public
+  list with at most a hundred and no error, so everything past the hundredth was missing from a file
+  that was valid XML served with a 200 and nothing anywhere said so. The collection is read a page at
+  a time now, at the size the API answered with rather than one this side guessed, and
+  `pageSizes.sitemap` reads as what it says: the most entries one collection puts in the file. The
+  file itself stops at 50,000 URLs, which is the sitemap standard's limit for one file, because past
+  that the standard's own answer is several files behind an index and building those belongs to the
+  consumer's route file with Next's `generateSitemaps`. Both the clamp and the stop are said once in
+  the log rather than absorbed, since a count a tenant set and a count the API permits disagreeing is
+  a thing somebody fixes once. `listAllCollection` is the paging read, for a consumer that wants the
+  same guarantee somewhere else. (#72)
+- Related items, a read time and a photo are settings a collection carries, not things only posts
+  get. `related: "semantic"` puts an agency's nearest case studies under a case study the way the
+  post page has always had its band, `related: false` lists nothing, and unset still lists whatever
+  references the collection, which is what every collection did before. `readingTime: true` shows a
+  read time worked out from the body, so there is no field for an editor to keep in step with the
+  prose. A `photo` field role draws a portrait on the item page, and `getTerm` reads name, body,
+  website and photo through the collection's field map instead of the four names it had compiled in,
+  so a school whose teachers keep their portrait in `Portrait` gets it. All three are a tenant's to
+  set on `Collections`. A collection that sets none of them renders exactly as it did. (#45)
+
 - An option of a choice field carries a style, not just a colour. `OptionStyles`, keyed by
   `type.field` and then by option, gives each one a tone, an icon and the word a visitor reads in
   place of the option's own value, so a clinic can put an icon on each department and a school a

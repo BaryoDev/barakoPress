@@ -148,14 +148,16 @@ merged over the configured collections by key. A build-time site passes `collect
 | --- | --- |
 | `type` | The content type. Required |
 | `route` | The index is served at the route and an item at `route/slug`. Absent, items are listed and never linked |
-| `fields` | `title` (required), `slug`, `summary`, `body` (markdown), `date`, `image`, `imageAlt`, `featured`, `tags`, `url`. Each is a field name or a list tried in order; `@createdAt` and `@updatedAt` read the entry itself |
+| `fields` | `title` (required), `slug`, `summary`, `body` (markdown), `date`, `image`, `imageAlt`, `featured`, `tags`, `url`, `photo`. Each is a field name or a list tried in order; `@createdAt` and `@updatedAt` read the entry itself. `photo` is a portrait drawn above the title, `image` the wide one |
 | `references` | Reference fields, each naming the collection it points into and the word a card puts before the link. Resolved in the same request |
 | `sort` | Sent to the API, for example `-PublishedAt` |
 | `feed` | Whether `createFeed(config, key)` serves it |
-| `sitemap` | On unless `false` |
+| `sitemap` | On unless `false`. A collection is paged to `pageSizes.sitemap` entries; the file stops at the standard's 50,000 URLs and says so in the log |
 | `index` | Whether the root catch-all serves an index at the route. On unless `false`; the derived `author` and `category` have it off, so `/authors` stays a 404 unless a route file mounts it |
 | `pageSize`, `label`, `noun` | Items on the index, its heading, and how a count reads |
 | `colorBy` | A choice field whose option colours the item. See below |
+| `related` | What an item page lists under the item: `"semantic"` for the items of this collection closest to it by meaning, `false` for none. Unset, the first collection that references this one |
+| `readingTime` | Whether an item page shows a read time worked out from its body. Off unless `true` |
 
 A settings entry that does not read as a collection is left out whole: a type or field that is not a
 plain identifier, a route that is not a plain site path, or no title field. The keys `post`, `author`
@@ -171,6 +173,11 @@ A detail page lists the items of the first collection that references it, so `/d
 lists its doctors, the way an author's archive lists their posts. `listRelated(config, "doctors",
 department, { via: "Department" })` returns the same list; `listRelated(config, post)` still returns
 related posts by semantic search.
+
+With `related: "semantic"` it lists the items of its own collection nearest it by meaning instead, so
+an agency's case study gets the band a post has. That needs the CMS AI module: without it the search
+answers nothing and the page draws no band at all, which is the same way the post page degrades.
+`listRelatedItems(config, key, item)` returns that list on its own.
 
 **Filtering.** `listCollection(config, "doctors", { filter: { Department: "cardiology" } })` takes a
 reference field by the target's slug and any other field by the value it holds, a choice field by its
@@ -503,7 +510,7 @@ for a post type with no such field.
 | `fields` | the blueprint's PascalCase names | operator only | Which field holds what |
 | `pageFields` | the blueprint's PascalCase names | operator only | Which field on the page type holds what |
 | `routes` | `/blog`, `/authors`, `/categories` | operator only | Where you mounted each route |
-| `pageSizes` | 20, 50, 1000, 50 | `PageSizes` | Index, feed, sitemap, archive |
+| `pageSizes` | 20, 50, 1000, 50 | `PageSizes` | Index, feed, sitemap, archive. The sitemap one bounds the entries one collection contributes, and is not a page size: the sitemap pages to that number at whatever size the API allows |
 | `cacheTag` | `cms` | operator only | The tag this site purges. Two sites on one server need two tags |
 | `backstopSeconds` | 300 | operator only | How long a cached read may live with no webhook. 0 disables it |
 | `cmsTimeoutMs` | 5000 | operator only | How long any one call to the CMS may take, a share link redemption included. Past it the call has failed, and a request-time site answers from its last good copy |

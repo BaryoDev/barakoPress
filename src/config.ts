@@ -277,6 +277,8 @@ export interface CollectionFields {
     tags?: FieldNames;
     /** A link shown on the item's page. Only a site path or an http or https URL is shown. */
     url?: FieldNames;
+    /** A portrait of whoever or whatever the item is, drawn above its title. Not the wide `image`. */
+    photo?: FieldNames;
 }
 
 export interface CollectionReference {
@@ -319,6 +321,16 @@ export interface CollectionConfig {
     noun?: [string, string];
     /** A choice field whose option picks the item's colour from `optionColors`. */
     colorBy?: string;
+    /**
+     * What an item page lists under the item. "reference" is the items of another collection pointing
+     * at it, an author's posts being the oldest example; "semantic" is the items of this same
+     * collection closest to it by meaning, which needs the CMS AI module and renders nothing without
+     * it. False lists nothing. "reference" unless set, which is what every collection did before this
+     * existed.
+     */
+    related?: "reference" | "semantic" | false;
+    /** Whether an item page shows a read time worked out from its body. Off unless set. */
+    readingTime?: boolean;
 }
 
 /**
@@ -586,6 +598,7 @@ function blogCollections(types: TypeNames, fields: FieldMap, routes: RouteMap): 
             title: names("Name", "Title", fields.title),
             slug: names(fields.slug, "Slug"),
             body: names("Description", "Bio"),
+            photo: "Photo",
             ...(url ? { url } : {}),
         },
         sitemap: false,
@@ -594,7 +607,7 @@ function blogCollections(types: TypeNames, fields: FieldMap, routes: RouteMap): 
         index: false,
     });
     if (types.author) collections[AUTHOR_COLLECTION] = term(types.author, routes.author, "Website");
-    if (types.category) collections[CATEGORY_COLLECTION] = term(types.category, routes.category);
+    if (types.category) collections[CATEGORY_COLLECTION] = term(types.category, routes.category, "Website");
     return collections;
 }
 
