@@ -200,6 +200,10 @@ describe("createBlockRegistry", () => {
             "link",
             "list",
             "disclosure",
+            "reveal",
+            "rotatingText",
+            "typingTerminal",
+            "codeSample",
         ]);
         expect(layers.data).toEqual(["source", "repeat", "showIf", "slot", "pager"]);
         expect(layers.block).toEqual(["columns", "callToAction", "collection"]);

@@ -1,6 +1,7 @@
 import type { BlockField } from "./schema.js";
 import type { BlockPreset } from "./presets.js";
-import { FLOW_COLUMNS } from "./primitives.js";
+import { FLOW_COLUMNS, TEXT_MOTIONS } from "./primitives.js";
+import { HUE_STEPS } from "./motion.js";
 import { ALIGNMENTS, RADII, SPACES, TONES, WIDTHS } from "./tokens.js";
 
 /*
@@ -144,10 +145,15 @@ const band: BlockPreset = {
 const stat: BlockPreset = {
     type: "stat",
     label: "Stat",
-    fields: [text("value", "Figure", true), text("label", "Label", true), align],
+    fields: [
+        text("value", "Figure", true),
+        text("label", "Label", true),
+        align,
+        choice("motion", "Motion", TEXT_MOTIONS),
+    ],
     blocks: [
         stack({ gap: "xs", align: p("align", "center") }, [
-            t(p("value"), "display", { tone: "accent", align: p("align", "center") }),
+            t(p("value"), "display", { tone: "accent", align: p("align", "center"), motion: p("motion", "none") }),
             t(p("label"), "meta", { align: p("align", "center") }),
         ]),
     ],
@@ -360,6 +366,7 @@ const cardGrid: BlockPreset = {
         tone,
         columns,
         padding,
+        choice("hueRotate", "Rotate card hues", HUE_STEPS),
     ],
     blocks: [
         section({ tone: p("tone"), padding: p("padding", "xl"), width: "wide" }, [
@@ -372,7 +379,7 @@ const cardGrid: BlockPreset = {
                     filterValue: p("filterValue"),
                 },
                 [
-                    flow({ columns: p("columns", "3"), gap: "lg" }, [
+                    flow({ columns: p("columns", "3"), gap: "lg", hueRotate: p("hueRotate", "none") }, [
                         repeat({ empty: p("empty") }, [
                             panel({ padding: "lg" }, [
                                 stack({ gap: "xs" }, [

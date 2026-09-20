@@ -77,6 +77,19 @@
   well as a typo. A report names field paths, so it is never anonymous: the caller presents the
   tenant's own key, derived from `PRESS_SECRET` under its own purpose label and printed by
   `barakopress bindings-key <tenant>`, and the answer is never cached. (#63)
+- Motion in the block library, and none of it in JavaScript. `reveal` lifts its content in as it
+  scrolls into view, `rotatingText` turns a comma separated list of words one at a time,
+  `typingTerminal` types its lines in sequence and holds and loops, `codeSample` shows a snippet with
+  its language and one click to select the whole of it, `text` takes `motion: "countUp"` to count a
+  plain figure up, and `flow` takes `hueRotate` to turn each cell's hue through the theme's own
+  colours in a cycle of three, which is what a card grid of featured work wanted. `section` takes a
+  `gradient` tone, the inverse band with the theme's three dark roles spread across it. Every one of
+  them is drawn in its finished state first and the animation only takes it away and puts it back, so
+  a page with JavaScript off renders the terminal typed out and the figure at its number, and every
+  animation sits inside `prefers-reduced-motion: no-preference`, so a visitor who asked for less
+  motion gets the same finished page. "When it comes into view" is `animation-timeline: view()`, and
+  a browser without that shows the finished state too. A test strips the guards out of every
+  stylesheet these emit and fails if what is left animates or hides anything. (#22)
 
 ## 0.4.0 (2026-09-20)
 
