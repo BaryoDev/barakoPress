@@ -95,6 +95,37 @@
   every word at once or nothing at all. Two tests hold both rules, one stripping the motion guards
   out of every stylesheet these emit and one stripping every `aria-hidden` subtree out of the
   markup. (#22)
+- A publish drops what changed, not the whole tenant. Every read carried one tag per tenant, so
+  correcting one typo on a school with a thousand news posts re-rendered all thousand. A read carries
+  a narrower tag beside the tenant's now: the entry's when it read one entry, the type's when it read
+  a list, a search, the site settings or the page tree. barakoCMS names the content type and sends
+  the entry's public data with every delivery, and the site's own config says which field of that
+  type holds a slug, so a delivery drops that type's tag and that entry's tag and leaves every other
+  entry of the type cached. A delivery that names no type, or one the site renders nothing of, drops
+  the tenant's tag exactly as every delivery did before. A response barakoCMS marks
+  `Cache-Control: no-store` is not cached either: the class is remembered against the path and every
+  later read of it asks uncached, which is what lets a type that has to be fresh to the minute live
+  beside pages cached for hours. A positive `max-age` is deliberately not read as a lifetime, since
+  the API answers every public read with a flat sixty seconds today and taking that as a per-read
+  class would cut every site's window to it. (#56)
+- The state two containers have to agree on can be shared. The kept answers, the marker beside them,
+  the host to tenant map and the webhook replay guard were each a map in one process, so an agency
+  running two replicas served a corrected notice from one and the old one from the other for up to
+  five minutes, and a replayed delivery was honoured once per container instead of once. They go
+  through a `store` on the config now: three methods over whatever the deployment already runs, and
+  in process and bounded when it sets none, which is what a single container always did. A purge one
+  container receives reaches the rest because an honoured delivery writes a generation against each
+  tag it dropped, and a read carries the newest generation of its tags in the URL it asks the CMS
+  for, so a container that was never told is asking for something it has never cached. Next's own
+  data cache stays per container; what crosses is the knowledge that it is out of date. (#57)
+- The share page says the tenant's words. `createSharePage(config)` takes the config and resolves the
+  site per request, so its title, its line for a visitor with no JavaScript and the line it shows
+  while the link opens come from `Labels` like every other visitor-facing string, and the page is
+  tagged with the tenant's own language. A Tagalog site that set every label it was offered was still
+  showing three English lines to the visitor who follows a share link, which is the visitor most
+  likely to be a client being shown their own site. A host that belongs to no tenant is a 404; a CMS
+  that cannot be reached still opens the link, in the words the config file carries. The label scan
+  test reads the share route the way it reads the screens. (#77)
 
 ## 0.4.0 (2026-09-20)
 
