@@ -352,10 +352,20 @@ function resolveList(
             if (field.kind !== "slots") continue;
             const lists = (props[field.name] as unknown[][] | undefined) ?? [];
             slots[field.name] = [];
-            for (const list of lists) {
+            for (let i = 0; i < lists.length; i++) {
+                const list = lists[i];
                 if (budget.remaining <= 0) {
-                    budget.truncated = true;
-                    break;
+                    // An empty list was never going to cost anything: resolving one returns
+                    // immediately with nothing read and nothing spent. Only a list that still
+                    // holds something, asked for after budget ran out, was actually cut off, so
+                    // that is what earns the warning; an empty one is skipped over for free and
+                    // the field's own later lists still get their turn.
+                    if (Array.isArray(list) && list.length > 0) {
+                        budget.truncated = true;
+                        break;
+                    }
+                    slots[field.name].push([]);
+                    continue;
                 }
                 slots[field.name].push(resolveList(list, registry, options, depth + 1, budget));
             }

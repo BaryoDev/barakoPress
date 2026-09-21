@@ -971,32 +971,38 @@ const disclosure = defineBlock<DisclosureProps, "content">({
 });
 
 /*
- * The rules a real tab strip needs and a `disclosure` does not (barakoPress #91): the marker a
- * `details` draws by default hidden, cross-browser, and the open tab picked out in the theme's own
- * accent. `[data-bp-tab][open]` reads the same `open` attribute `<details name>` already toggles
- * with nothing loaded, so this is a stylesheet and not a script, the same trade `hueCss` made for a
- * flow's cell colours. It is emitted once by `tabGroup`, not per tab, since every rule here is fixed
- * rather than derived from what a page happens to hold.
+ * A tab strip with no script needs a radio, not a `details` (barakoPress #91, revised).
+ *
+ * `<details style="display:contents">` was the first attempt, on the strength of the same trick
+ * `stickyBar`'s wrapper uses: promote a block's own markup past the wrapper `BlockList` puts around
+ * it, so a `summary` and a panel land as ordinary flex children instead of nested inside their own
+ * box. It works for one `tabPanel` and breaks past two: measured in Chromium by rendering the
+ * compiled `codeTabs` output from the baryo.dev fixture (four tabs), the third and fourth summaries
+ * landed beside or behind the open panel instead of in the row above it. `display: contents` on a
+ * generic wrapper keeps `order` working past any number of siblings, checked the same way; the
+ * difference is `details`' own native show-and-hide, which does not survive being promoted more
+ * than once in the same flex context. A radio input's `:checked` state does the same job through an
+ * ordinary CSS selector instead, so this keeps the trick and drops the element that broke it.
+ *
+ * Each tab needs an id, because `:checked ~ [data-bp-tabpanel="id"]` is what points one radio at one
+ * panel once every tab in the strip is a flex sibling of every other. `motionClass` already exists
+ * for exactly this, a stable class derived from a block's own content rather than counted, so two
+ * renders of the same tab produce the same id and nothing depends on render order.
+ *
+ * Two tabs in one group with the same label hash to the same id, which is the one input this does
+ * not check: an id an HTML page repeats resolves a `<label for>` to the first element wearing it, so
+ * the second tab's own label activates the first tab's radio and its panel can never be reached.
+ * Reachable only by a page author typing one label twice in one strip, and `disclosure` already
+ * shares this shape (`<details name>` with two of the same label reads no differently to a visitor
+ * either), so this is not a new class of mistake, only the same one on a different element.
  */
 const TAB_STRIP_CSS =
-    "details[data-bp-tab]>summary{list-style:none}" +
-    "details[data-bp-tab]>summary::-webkit-details-marker{display:none}" +
-    "details[data-bp-tab][open]>summary{background:var(--bp-accent);color:var(--bp-on-accent)}";
+    "[data-bp-tabpanel]{display:none;order:1;flex-basis:100%;width:100%}" +
+    "label[data-bp-tabbtn]{order:0;cursor:pointer}";
 
 type TabGroupProps = { gap?: string; tone?: string };
 
-/*
- * A strip of tabs and the panel of whichever one is open, from independent `tabPanel` siblings and
- * no script.
- *
- * Every `tabPanel` is `transparent` (see schema.ts), so its own wrapper never reaches the page and
- * its `summary` and its panel `div` land here as two ordinary flex children instead. `order` sorts
- * every summary before every panel regardless of which tab is open or where its markup sits in the
- * list, and the open panel's `flexBasis: "100%"` is what wraps it, and everything after it, onto the
- * row below a strip of any width. At most one panel exists in the tree at a time: a closed `details`
- * renders nothing past its own `summary`, which is what makes this the one line of layout `flow`'s
- * `hueRotate` needed a whole stylesheet for.
- */
+/** A strip of tabs and the panel of whichever one is checked, from independent `tabPanel` siblings. */
 const tabGroup = defineBlock<TabGroupProps, "content">({
     type: "tabGroup",
     label: "Tab group",
@@ -1028,9 +1034,27 @@ const tabGroup = defineBlock<TabGroupProps, "content">({
     },
 });
 
+/** A visually hidden input: reachable by keyboard and a screen reader, invisible on the page. */
+const VISUALLY_HIDDEN: CSSProperties = {
+    position: "absolute",
+    width: "1px",
+    height: "1px",
+    padding: 0,
+    margin: "-1px",
+    overflow: "hidden",
+    clip: "rect(0, 0, 0, 0)",
+    whiteSpace: "nowrap",
+    border: 0,
+};
+
 type TabPanelProps = { label: string; open?: boolean; group?: string };
 
-/** One tab of a `tabGroup`: the button in the strip and the panel it opens, from one `details`. */
+/*
+ * One tab of a `tabGroup`: a radio button standing in for the tab strip's own selection, its label
+ * as the button in the strip, and the panel it shows. Radios sharing a `name` are already mutually
+ * exclusive with nothing loaded, the same bargain `<details name>` made for `disclosure`, and they
+ * come with arrow keys moving between them for free.
+ */
 const tabPanel = defineBlock<TabPanelProps, "content">({
     type: "tabPanel",
     label: "Tab",
@@ -1042,33 +1066,41 @@ const tabPanel = defineBlock<TabPanelProps, "content">({
         { name: "group", kind: "text", label: "Only one open in this group" },
         { name: "content", kind: "slots", label: "Content", required: true, min: 1, max: 1 },
     ],
-    component: ({ props, slots, theme }) => (
-        <details data-bp-tab="" name={props.group} open={props.open === true} style={{ display: "contents" }}>
-            <summary
-                style={{
-                    order: 0,
-                    cursor: "pointer",
-                    borderRadius: radiusOf(theme, "control"),
-                    padding: `${theme.space.xs} ${theme.space.md}`,
-                    fontFamily: theme.fonts.heading,
-                    fontWeight: 600,
-                    fontSize: theme.text.small,
-                    color: inherited(theme, "ink"),
-                }}
-            >
-                {props.label}
-            </summary>
-            <div
-                style={{
-                    order: 1,
-                    flexBasis: "100%",
-                    width: "100%",
-                }}
-            >
-                {slots.content?.[0]}
+    component: ({ props, slots, theme }) => {
+        const id = motionClass("tab", props.group ?? "", props.label);
+        const css =
+            `#${id}:checked~[data-bp-tabpanel="${id}"]{display:block}` +
+            `#${id}:checked~label[for="${id}"]{background:var(--bp-accent);color:var(--bp-on-accent)}`;
+        return (
+            <div style={{ display: "contents" }}>
+                <style dangerouslySetInnerHTML={{ __html: css }} />
+                <input
+                    type="radio"
+                    id={id}
+                    name={props.group}
+                    defaultChecked={props.open === true}
+                    style={VISUALLY_HIDDEN}
+                />
+                <label
+                    data-bp-tabbtn=""
+                    htmlFor={id}
+                    style={{
+                        borderRadius: radiusOf(theme, "control"),
+                        padding: `${theme.space.xs} ${theme.space.md}`,
+                        fontFamily: theme.fonts.heading,
+                        fontWeight: 600,
+                        fontSize: theme.text.small,
+                        color: inherited(theme, "ink"),
+                    }}
+                >
+                    {props.label}
+                </label>
+                <div data-bp-tabpanel={id} style={{ paddingTop: theme.space.sm }}>
+                    {slots.content?.[0]}
+                </div>
             </div>
-        </details>
-    ),
+        );
+    },
 });
 
 /** The most rows and columns a comparison holds. Past either it is a spreadsheet, not a comparison. */

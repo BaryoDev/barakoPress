@@ -9,11 +9,13 @@
   typed in place, with no `collection`, for a page author's own package list or feed. `section` and
   every block that takes a `tone` gained `wash`, a radial gradient from the theme's own page and
   accent tint colours, declared rather than hand-written. `codeTabs` draws a real strip of tabs
-  now, `tabGroup` and `tabPanel`, in CSS alone: no script, and `disclosure` stays what `tabs` and
-  `faq` use. Measured against the fixture: 48.863% different at 1280px and 59.434% at 390px before,
-  29.950% and 35.536% after. The mascot, the bio panel, the sticky translucent header and the
-  richer "Four products" cards are not blocks yet; the gap that is left is written down in the pull
-  request rather than closed by guessing at a shape nobody asked for.
+  now, `tabGroup` and `tabPanel`, a radio and its label standing in for the tab and a `:checked`
+  selector standing in for the script, since a first version built on `<details>` broke past two
+  tabs (see the pull request for what and why) and this one is measured at four. `disclosure` stays
+  what `tabs` and `faq` use. Measured against the fixture: 48.863% different at 1280px and 59.434%
+  at 390px before, 30.595% and 35.741% after. The mascot, the bio panel, the sticky translucent
+  header and the richer "Four products" cards are not blocks yet; the gap that is left is written
+  down in the pull request rather than closed by guessing at a shape nobody asked for.
 - A page over its block budget says so, once, instead of rendering short with nothing said (#90).
   Raising the limit from a hundred to four hundred (#83) bought room; it did not make going over it
   visible, which is how baryo.dev's eighth band went missing with a 200 and no error. `resolveBlocks`
@@ -25,9 +27,10 @@
   which is what a roadmap needs to be read and not only seen, and it reads its figure through a new
   `progress` field role so the tenant says which of its own fields holds the number. `stickyBar` is
   the announcement band, and `announcement` is the preset over it. `codeTabs` draws the snippet a
-  quickstart is for and puts the other ways of running it in `codeTab` disclosures sharing a group.
-  `progressList` and `changelogList` read a collection, and a changelog is grouped by kind with
-  `filterField` and `filterValue`, one band per kind, because a block that grouped by itself would
+  quickstart is for and puts the other ways of running it in `codeTab`s sharing a group (a tab strip
+  as of #91; disclosures until then). `progressList` and `changelogList` read a collection, and a
+  changelog is grouped by kind with `filterField` and `filterValue`, one band per kind, because a
+  block that grouped by itself would
   have to know which field holds the kind and that is the tenant's field name. `faq` and `faqItem`
   are questions that all open at once, which is the whole difference from `tabs`. A card grid's new
   `option` prop marks each card with the glyph and the word the site declared for that entry's

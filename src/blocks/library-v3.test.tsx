@@ -476,6 +476,7 @@ describe("the v3 blocks on their own", () => {
                 type: "codeTabs",
                 props: {
                     code: "one",
+                    group: "start",
                     items: [
                         [
                             { type: "codeTab", props: { label: "Two", code: "two", group: "start" } },
@@ -485,8 +486,57 @@ describe("the v3 blocks on their own", () => {
                 },
             },
         ]);
+        // Three, not two: the primary sample is one of the strip's tabs now, and it shares the
+        // group its own codeTabs.group names, not the fixed "codeTabs" every unrelated strip on
+        // the same page also defaults to.
         const grouped = [...html.matchAll(/name="start"/g)];
-        expect(grouped.length).toBe(2);
+        expect(grouped.length).toBe(3);
+    });
+
+    /*
+     * barakoPress #91, found rendering the actual baryo.dev fixture in a browser rather than reading
+     * the diff: the primary sample became one of the strip's tabs and kept a group of its own
+     * ("codeTabs") while its codeTab children, left at the preset's default, shared the same one, so
+     * this passed by construction until a page set a group on the children without also setting one
+     * on codeTabs. Two strips on one page need distinct groups exactly the way two `codeTab`s always
+     * have, which is why `codeTabs.group` exists: set once, it reaches the primary the same way a
+     * `codeTab` already reaches its own.
+     */
+    it("keeps the primary sample out of the strip's exclusivity group if nothing named one for it", async () => {
+        const html = await render([
+            {
+                type: "codeTabs",
+                props: {
+                    code: "one",
+                    items: [
+                        [{ type: "codeTab", props: { label: "Two", code: "two", group: "install" } }],
+                    ],
+                },
+            },
+        ]);
+        // The child asked for "install" and got it, on its own radio, but nothing named a group
+        // for the primary, so it keeps the untouched default rather than joining a group it was
+        // never asked to join.
+        expect([...html.matchAll(/name="install"/g)]).toHaveLength(1);
+        expect([...html.matchAll(/name="codeTabs"/g)]).toHaveLength(1);
+    });
+
+    it("shares one group by default, with nothing set on either the primary or its tabs", async () => {
+        const html = await render([
+            {
+                type: "codeTabs",
+                props: {
+                    code: "one",
+                    items: [
+                        [
+                            { type: "codeTab", props: { label: "Two", code: "two" } },
+                            { type: "codeTab", props: { label: "Three", code: "three" } },
+                        ],
+                    ],
+                },
+            },
+        ]);
+        expect([...html.matchAll(/name="codeTabs"/g)]).toHaveLength(3);
     });
 
     it("leaves every question openable at once, which is the whole of the difference from tabs", async () => {

@@ -293,6 +293,11 @@ jobs:
     # the reference, rebuilt and diff images written for the page that moved.
     #
     # A check nobody has watched fail is not yet a gate, and this is where it fails on purpose.
+    #
+    # look:components is a different kind of check on the same browser: not a page against a design,
+    # a block's own compiled markup against what it claims to lay out as. It exists because a real
+    # regression here (barakoPress #91: a CSS-only tab strip that broke past two tabs) shipped
+    # looking exactly right in the diff and the unit tests, and was only found by rendering it.
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -305,3 +310,4 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run look:selftest
+      - run: npm run look:components
