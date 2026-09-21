@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.7.0 (unreleased)
+## 0.7.0 (2026-09-21)
 
 - Four things the block library v4 look check said it could not draw yet, measured against the
   baryo.dev fixture (#83, #91). A `cardGrid` card can carry a colour of its own: `{{item.Color}}`,
@@ -99,8 +99,6 @@
   used to be replaced with a freshly built `collection` block, whatever it was, so a page holding a
   docs sidebar would have rendered a list of documents where the sidebar belonged. (#23)
 
-## 0.6.0 (unreleased)
-
 - A collection with more entries than the API hands back in one page is in the sitemap whole. The
   route asked for `pageSizes.sitemap` entries, a thousand by default, and barakoCMS answers a public
   list with at most a hundred and no error, so everything past the hundredth was missing from a file
@@ -122,7 +120,6 @@
   website and photo through the collection's field map instead of the four names it had compiled in,
   so a school whose teachers keep their portrait in `Portrait` gets it. All three are a tenant's to
   set on `Collections`. A collection that sets none of them renders exactly as it did. (#45)
-
 - An option of a choice field carries a style, not just a colour. `OptionStyles`, keyed by
   `type.field` and then by option, gives each one a tone, an icon and the word a visitor reads in
   place of the option's own value, so a clinic can put an icon on each department and a school a
