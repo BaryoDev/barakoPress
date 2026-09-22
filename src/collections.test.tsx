@@ -204,6 +204,27 @@ const TENANTS: Record<string, Tenant> = {
         settings: { Name: "Soon Club", Url: "https://soon.example", Mode: "Holding", Collections: { projects: PROJECTS_COLLECTION } },
         content: { project: PROJECTS, post: [] },
     },
+    packages: {
+        host: "packages.example",
+        settings: {
+            Name: "Packages Co",
+            Url: "https://packages.example",
+            // barakocms.com's own shape (#103, #104): a collection with no index of its own, drawn
+            // by a hand-composed page, whose items link out through their own field.
+            Collections: {
+                modules: {
+                    type: "module",
+                    route: "/modules",
+                    index: false,
+                    fields: { title: "Title", slug: "Slug", href: "Url" },
+                },
+            },
+        },
+        content: {
+            module: [{ id: "m1", slug: "barako-cli", data: { Title: "barako CLI", Slug: "barako-cli", Url: "https://nuget.org/packages/barako-cli" } }],
+            post: [],
+        },
+    },
 };
 
 /** barakoCMS clamps a public list at this, whatever was asked for. `MaxPageSize` in PaginationModels.cs. */
@@ -644,6 +665,23 @@ describe("collections from a tenant's settings", () => {
         expect(isReservedPath(rotary, "/projects")).toBe(true);
         expect(isReservedPath(hospital, "/projects")).toBe(false);
         expect(isReservedPath(hospital, "/doctors/anyone")).toBe(true);
+    });
+
+    /*
+     * #103: a collection whose index is off reserves no page at its own route, but an item below it
+     * is served either way, so that path stays reserved. An index: true collection is unchanged.
+     */
+    it("frees a collection's route for a page when its index is off, but keeps an item below it reserved", async () => {
+        const packages = await site("packages.example");
+        expect(isReservedPath(packages, "/modules")).toBe(false);
+        expect(isReservedPath(packages, "/modules/barako-cli")).toBe(true);
+
+        // The route is no longer skipped before it is even asked for.
+        await route(packages, ["modules"]);
+        expect(calls.some((c) => c.path.startsWith("/api/public/pages/resolve"))).toBe(true);
+
+        const rotary = await site("rckoronadal.org");
+        expect(isReservedPath(rotary, "/projects")).toBe(true);
     });
 
     it("shows a read time and its nearest items on a collection that is not the post collection", async () => {

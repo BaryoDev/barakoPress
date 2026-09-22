@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.0 (unreleased)
+
+- A collection declaring `index: false` no longer reserves its route from a page, only from an item
+  below it, which item pages are served at either way. barakocms.com's `/modules` and `/changelog`
+  pages needed exactly this: a collection with no index of its own, drawn by a hand-composed page at
+  its route (#103).
+
 ## 0.7.0 (2026-09-21)
 
 - Four things the block library v4 look check said it could not draw yet, measured against the
