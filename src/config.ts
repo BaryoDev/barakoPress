@@ -285,7 +285,9 @@ export interface CollectionFields {
     /**
      * How many of `progressTotal` are done, for a source that gives two counts rather than one
      * figure already worked out, a GitHub milestone's `closed_issues` being the case this is for.
-     * Read as text, not a number, the same as `progress`. Ignored where `progress` is also set.
+     * Read as text, not a number, the same as `progress`. An entry whose `progress` field is set
+     * and parses as a percentage draws that instead; one whose does not, or is blank, falls back
+     * to this pair, entry by entry rather than for the whole collection.
      */
     progressCount?: FieldNames;
     /** What `progressCount` is out of. Meaningless, and ignored, without `progressCount`. */

@@ -1252,7 +1252,9 @@ function fractionPercent(count: string | undefined, total: string | undefined): 
     const c = Number(count.trim());
     const t = Number(total.trim());
     if (!Number.isFinite(c) || !Number.isFinite(t) || c < 0 || t <= 0) return null;
-    return Math.min(100, (c / t) * 100);
+    // Six decimals, the same as `percentOf` allows and for the same reason: a fraction like 1/3 is
+    // 33.333333, not a float with a dozen more digits nobody asked for.
+    return Math.min(100, Math.round((c / t) * 100 * 1e6) / 1e6);
 }
 
 type ProgressProps = { label: string; value?: string; count?: string; total?: string; tone?: string };

@@ -36,9 +36,27 @@ const CMS = "http://cms.test";
 type Entry = { id: string; slug: string; data: Record<string, unknown> };
 
 const MODULES: Entry[] = [
-    // Icon, Word and Progress are this tenant's own field names, deliberately, because the engine
-    // lays its own names over the entry's data and must not take a field away doing it.
-    { id: "m1", slug: "search", data: { Name: "Search", Slug: "search", Blurb: "Postgres full text over your content", Category: "Content", Icon: "compass", Word: "Alpha", Progress: "60" } },
+    // Icon, Word, Progress, Href, ProgressCount and ProgressTotal are this tenant's own field
+    // names, deliberately, because the engine lays its own names over the entry's data and must
+    // not take a field away doing it.
+    {
+        id: "m1",
+        slug: "search",
+        data: {
+            Name: "Search",
+            Slug: "search",
+            Blurb: "Postgres full text over your content",
+            Category: "Content",
+            Icon: "compass",
+            Word: "Alpha",
+            Progress: "60",
+            // Distinct, and none a substring of another, so a shadowed field cannot pass by
+            // accident on a `toContain` that actually matched a sibling field's untouched value.
+            Href: "tenant-owns-href-not-a-computed-link",
+            ProgressCount: "tenant-owns-progresscount-no-role-set",
+            ProgressTotal: "tenant-owns-progresstotal-no-role-set",
+        },
+    },
     { id: "m2", slug: "forms", data: { Name: "Forms", Slug: "forms", Blurb: "Submissions stored as content", Category: "Content" } },
     { id: "m3", slug: "audit", data: { Name: "Audit", Slug: "audit", Blurb: "Who changed what, and when", Category: "Operations" } },
 ];
@@ -440,6 +458,12 @@ describe("the v3 blocks on their own", () => {
         expect(html).toContain("3 of 5");
     });
 
+    it("rounds a count and a total to six decimals, the same as a figure already worked out", async () => {
+        const html = await render([{ type: "progressBar", props: { label: "Docs", count: "1", total: "3" } }]);
+        expect(html).toContain('aria-valuenow="33.333333"');
+        expect(html).toContain("width:33.333333%");
+    });
+
     it("prefers a figure already worked out over a count and a total", async () => {
         const html = await render([{ type: "progressBar", props: { label: "Docs", value: "40", count: "3", total: "5" } }]);
         expect(html).toContain('aria-valuenow="40"');
@@ -788,12 +812,15 @@ describe("what a v3 block does with input nobody types on purpose", () => {
      * A collection whose own field is called Icon, on a site that declared no option styles, used to
      * lose it: the engine's name went over the top holding nothing.
      */
-    it("leaves a tenant's own Icon, Word and Progress fields alone when the site declared none", async () => {
+    it("leaves a tenant's own Icon, Word, Progress, Href, ProgressCount and ProgressTotal fields alone when the site declared none", async () => {
         const plain = defineConfig({
             site: { name: "Plain", url: "https://plain.example" },
             cmsUrl: CMS,
+            // No route: with one, `Href` is always the computed link (unchanged, pre-existing
+            // behaviour), so the case worth guarding is a collection with none at all, where #104
+            // leaves `Href` unset unless the site names an `href` field.
             collections: {
-                modules: { type: "module", route: "/modules", fields: { title: "Name", slug: "Slug", summary: "Blurb" } },
+                modules: { type: "module", fields: { title: "Name", slug: "Slug", summary: "Blurb" } },
             },
         });
         const reg = createBlockRegistry(plain);
@@ -819,6 +846,9 @@ describe("what a v3 block does with input nobody types on purpose", () => {
                                                                 { type: "text", props: { value: "{{item.Icon}}" } },
                                                                 { type: "text", props: { value: "{{item.Word}}" } },
                                                                 { type: "text", props: { value: "{{item.Progress}}" } },
+                                                                { type: "text", props: { value: "{{item.Href}}" } },
+                                                                { type: "text", props: { value: "{{item.ProgressCount}}" } },
+                                                                { type: "text", props: { value: "{{item.ProgressTotal}}" } },
                                                             ],
                                                         ],
                                                     },
@@ -838,10 +868,14 @@ describe("what a v3 block does with input nobody types on purpose", () => {
         const bound = await bindBlocks(resolved, { config: plain, registry: reg, scopes: {} });
         const html = renderToStaticMarkup(<BlockList blocks={bound} theme={plain.theme} />);
 
-        // The entries carry these under their own names, and this site declared no option styles and
-        // no progress role, so nothing of the engine's may be laid over them.
+        // The entries carry these under their own names, and this site declared no option styles,
+        // no progress role, no progressCount or progressTotal role, and no route or href field, so
+        // nothing of the engine's may be laid over them.
         expect(html).toContain("compass");
         expect(html).toContain("Alpha");
         expect(html).toContain("60");
+        expect(html).toContain("tenant-owns-href-not-a-computed-link");
+        expect(html).toContain("tenant-owns-progresscount-no-role-set");
+        expect(html).toContain("tenant-owns-progresstotal-no-role-set");
     });
 });
