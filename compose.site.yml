@@ -1,0 +1,56 @@
+# The site on its own, for a host that already runs barakoCMS and already terminates TLS.
+#
+# compose.yml is the whole thing: a database, the API, the console, the site and Caddy for
+# certificates. That is the right default for somebody with a bare VM and a domain, and the wrong
+# one for a host that already has those. Bringing it up next to an existing reverse proxy fails at
+# the port bind, and on a box where that proxy serves other sites, the failure is somebody else's
+# outage.
+#
+# This file is the other case: one container on a loopback port, reached through the proxy the host
+# already runs, talking to the barakoCMS that is already there.
+#
+#   docker compose -f compose.site.yml up -d --build
+#
+# The host is then responsible for two things compose.yml would have done: a server block that
+# proxies to SITE_PORT, and the certificate.
+
+services:
+  site:
+    # The image the release built, not a build block. BaryoVM builds it after syncing the source,
+    # so compose up starts the image that release produced rather than rebuilding from whatever is
+    # on disk. Building it here too would do the same work twice and let the two disagree.
+    image: ${SITE_IMAGE:-barakopress-site:latest}
+    container_name: barakopress-site
+    restart: unless-stopped
+    # Loopback only. Nothing reaches this except through the host's proxy, which is the same rule
+    # every other service on such a host follows.
+    ports:
+      - "127.0.0.1:${SITE_PORT:?set SITE_PORT in .env, a free loopback port}:3000"
+    environment:
+      # A container name on the shared network, not a loopback address: 127.0.0.1 inside a
+      # container is the container.
+      CMS_URL: ${CMS_URL:?set CMS_URL in .env, e.g. http://barakocms-cms-api-1:8080}
+      CMS_TENANT: ${CMS_TENANT:-}
+      SITE_URL: ${SITE_URL:?set SITE_URL in .env, the public origin}
+      SITE_NAME: ${SITE_NAME:-barakoPress}
+      SITE_TAGLINE: ${SITE_TAGLINE:-A blog on barakoCMS}
+      # One secret for webhook keys and share sessions, at least 32 characters. Without it this
+      # server refuses every delivery, which is safer than accepting unsigned ones.
+      PRESS_SECRET: ${PRESS_SECRET:?set PRESS_SECRET in .env}
+      REVALIDATE_SECRET: ${REVALIDATE_SECRET:-${PRESS_SECRET}}
+    networks:
+      - edge
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+# The network the host's barakoCMS already uses, so the site reaches the API by container name
+# rather than through the host. external: it is not created or removed by this file, because it
+# belongs to the stack that was there first.
+networks:
+  edge:
+    external: true
+    name: ${EDGE_NETWORK:-barako-edge}

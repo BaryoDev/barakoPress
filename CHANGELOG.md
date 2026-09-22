@@ -2,6 +2,14 @@
 
 ## 0.8.0 (unreleased)
 
+- The site can be deployed on a host that already runs barakoCMS and already terminates TLS.
+  `compose.site.yml` brings up the site container alone on a loopback port, joined to the edge
+  network the existing stack created, and `baryovm.site.json` is the BaryoVM manifest that syncs the
+  source, builds it there and composes it up. The bundled `compose.yml` brings its own Caddy, which
+  on such a host fights the proxy for 80 and 443 and takes the other sites down with it. Both files
+  are what press.baryo.dev has been running since 21 September.
+- `baryovm.release.json` synced everything the image needs except `press.config.ts`, so a full stack
+  release built the site from whatever config happened to be on the VM. It is in the sync list now.
 - A `Text` role can be a `clamp()` of three lengths, not only one fixed length, so a tenant's type
   scale can be fluid the way the engine's own default page title and prose `h2` already are.
   Anything else is still refused (#100).
