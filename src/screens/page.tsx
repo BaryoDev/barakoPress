@@ -48,6 +48,10 @@ export interface PageViewProps {
     registry: BlockRegistry;
     /** Render blocks marked `perViewer`. Only true where the output is never cached. */
     perViewer?: boolean;
+    /**
+     * Whether to draw the page's title at all, a consumer's own call. `page.hideTitle` (#102) is
+     * the page's own call, and either one turns it off: both default to drawing it.
+     */
     showTitle?: boolean;
     /** From the Pages module, root first. Drawn above the title when the page has a parent. */
     breadcrumbs?: Breadcrumb[];
@@ -120,7 +124,7 @@ export async function PageView({
                         <Breadcrumbs config={config} items={breadcrumbs} />
                     </div>
                 )}
-                {showTitle && (
+                {showTitle && !page.hideTitle && (
                     <h1
                         style={{
                             margin: "0 0 40px",

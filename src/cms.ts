@@ -246,6 +246,8 @@ export interface Page {
      * its shape; `resolveBlocks` in src/blocks is the one place that reads it.
      */
     blocks?: unknown;
+    /** True when the page's own data says not to draw `title` above its blocks. See PageView. */
+    hideTitle: boolean;
     seo?: Seo;
     /** The entry as the API returned it, so a binding can read a field by the name the tenant gave it. */
     content?: PublicContent;
@@ -261,6 +263,7 @@ export function toPage(config: PressConfig, c: PublicContent): Page {
         summary: str(field(d, f.summary)) || undefined,
         body: str(field(d, f.body)),
         blocks: field(d, f.blocks),
+        hideTitle: field(d, f.hideTitle) === true,
         seo: c.seo ?? undefined,
         content: c,
     };

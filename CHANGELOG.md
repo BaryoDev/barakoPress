@@ -5,6 +5,10 @@
 - A `Text` role can be a `clamp()` of three lengths, not only one fixed length, so a tenant's type
   scale can be fluid the way the engine's own default page title and prose `h2` already are.
   Anything else is still refused (#100).
+- A page composed of blocks can stop `PageView` drawing its `title` a second time above a block
+  that already opens with its own heading. The page's own data decides now, through a `HideTitle`
+  field the blueprint maps by default, rather than only a `showTitle` prop the route file sets
+  (#102).
 
 ## 0.7.0 (2026-09-21)
 
