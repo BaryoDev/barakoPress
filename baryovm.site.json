@@ -1,0 +1,48 @@
+{
+  "localRoot": ".",
+  "remoteRoot": "/opt/barakopress-src",
+  "sync": [
+    "app/",
+    "src/",
+    "public/",
+    "Dockerfile",
+    "package.json",
+    "package-lock.json",
+    "next.config.ts",
+    "press.config.ts",
+    "tsconfig.json",
+    "tsconfig.build.json",
+    "deploy/press.baryo.dev/"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next",
+    ".git",
+    ".env"
+  ],
+  "builds": [
+    {
+      "image": "barakopress-site:latest",
+      "dockerfile": "Dockerfile",
+      "context": ".",
+      "args": {
+        "PRESS_DEPLOY": "press.baryo.dev"
+      }
+    }
+  ],
+  "sudo": true,
+  "preDeploy": [
+    "test -f /opt/barakopress/.env || { echo 'no .env in /opt/barakopress: copy .env.example, fill it in, and keep it out of the sync'; exit 1; }",
+    "grep -Eq '^(PRESS_SECRET|REVALIDATE_SECRET)=.+' /opt/barakopress/.env || { echo 'PRESS_SECRET is empty, the server would refuse every delivery'; exit 1; }",
+    "grep -Eq '^SITE_PORT=[0-9]+[[:space:]]*$' /opt/barakopress/.env || { echo 'SITE_PORT is missing or not a bare number, and compose reads it as the host half of a port binding'; exit 1; }",
+    "n=$(grep -m1 '^EDGE_NETWORK=' /opt/barakopress/.env | cut -d= -f2- | tr -d '\"\\r'); docker network inspect \"${n:-barako-edge}\" >/dev/null || { echo 'the edge network does not exist: it belongs to the stack that was there first, so create it there, not here'; exit 1; }"
+  ],
+  "verify": [
+    "u=$(grep -m1 '^SITE_URL=' /opt/barakopress/.env | cut -d= -f2- | tr -d '\"\\r') && test -n \"$u\" && curl --fail --silent --show-error --max-time 15 \"$u/\" | grep -q 'href=\"/blog/'",
+    "u=$(grep -m1 '^SITE_URL=' /opt/barakopress/.env | cut -d= -f2- | tr -d '\"\\r') && curl --fail --silent --show-error --max-time 15 \"$u/feed.xml\" | grep -q '<item>'",
+    "u=$(grep -m1 '^SITE_URL=' /opt/barakopress/.env | cut -d= -f2- | tr -d '\"\\r') && curl --fail --silent --show-error --max-time 15 \"$u/sitemap.xml\" | grep -q '<url>'",
+    "u=$(grep -m1 '^SITE_URL=' /opt/barakopress/.env | cut -d= -f2- | tr -d '\"\\r') && test \"$(curl --silent --max-time 15 -o /dev/null -w '%{http_code}' -X POST \"$u/api/revalidate\")\" = 401"
+  ],
+  "verifyAttempts": 26,
+  "verifyDelaySeconds": 15
+}

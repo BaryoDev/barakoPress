@@ -2,6 +2,26 @@
 
 ## 0.8.0 (unreleased)
 
+- The site can be deployed on a host that already runs barakoCMS and already terminates TLS.
+  `compose.site.yml` brings up the site container alone on a loopback port, joined to the edge
+  network the existing stack created, and `baryovm.site.json` is the BaryoVM manifest that syncs the
+  source, builds it there and composes it up. The bundled `compose.yml` brings its own Caddy, which
+  on such a host fights the proxy for 80 and 443 and takes the other sites down with it.
+- A deployment whose identity is written at build time keeps its config and its root routes under
+  `deploy/<name>/`, and the build lays them over the reference app when given
+  `--build-arg PRESS_DEPLOY=<name>`. The reference app resolves identity per request: every page
+  lives under `app/%5Fpress/[site]`, which only the proxy's rewrite reaches, and the rewrite only
+  fires when the config sets `sites`. A site with no tenant to resolve to therefore answered 404 on
+  every page while its feed and sitemap still worked. `deploy/press.baryo.dev/` is the first one.
+- A collection that could not be read logged nothing. The visitor got "This page could not be
+  loaded" and the operator got an empty log, so a prerender that failed because the CMS was
+  unreachable looked like a CMS with no posts in it. The reason is logged now.
+- `baryovm.release.json` synced everything the image needs except `press.config.ts`, so a full stack
+  release built the site from whatever config happened to be on the VM. It is in the sync list now.
+- The README documented one `baryovm stack add`, the full stack's. A reader deploying the site alone
+  who followed it got Caddy started on a host that already has a proxy, because `--file` decides
+  which compose file BaryoVM brings up and the snippet had none. The site-only registration is
+  written out now.
 - A `Text` role can be a `clamp()` of three lengths, not only one fixed length, so a tenant's type
   scale can be fluid the way the engine's own default page title and prose `h2` already are.
   Anything else is still refused (#100).

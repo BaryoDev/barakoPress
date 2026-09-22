@@ -1396,6 +1396,43 @@ start without that file, and refuses again if `PRESS_SECRET` and `REVALIDATE_SEC
 comes up with no secret can never be told that content changed. Only ports 80 and 443 are published:
 the API, the console and the site are reachable only through Caddy on the compose network.
 
+### The site alone, on a host that already has a proxy
+
+That stack brings its own Caddy, so on a machine already terminating TLS it fights the existing
+proxy for 80 and 443, and on a machine serving other sites that failure is somebody else's outage.
+`compose.site.yml` is the other case: one container on a loopback port, joined to the edge network
+the existing stack created, reached through the proxy the host already runs. The host supplies the
+server block and the certificate.
+
+It is a different compose file and a different manifest, so it is a different registration. `--path`
+is the compose directory, which is where the `.env` lives, and `--file` is what stops BaryoVM
+reaching for `compose.yml` and starting Caddy:
+
+```bash
+baryovm stack add barakopress --vm oracle --sudo \
+  --path /opt/barakopress \
+  --file compose.site.yml \
+  --release-file ./baryovm.site.json
+baryovm stack release barakopress
+```
+
+The manifest syncs to `/opt/barakopress-src`, not to the compose directory, because it syncs with
+`--delete` and that directory holds the `.env`. Its `.env` needs `SITE_PORT`, `CMS_URL` pointing at
+the API's container name on the shared network, `SITE_URL` and `PRESS_SECRET`; `SITE_DOMAIN`,
+`API_DOMAIN` and `CONSOLE_DOMAIN` belong to the full stack and are not read here.
+
+A site deployed this way writes its identity at build time, so it keeps its config and its root
+routes under `deploy/<name>/` and the manifest passes `PRESS_DEPLOY=<name>` to the build. See
+`deploy/press.baryo.dev/`. The reason it cannot use the reference app as it stands: every page there
+lives under `app/%5Fpress/[site]`, which only the proxy's rewrite reaches, and the rewrite only fires
+when the config sets `sites`. With no tenant to resolve to, every page answers 404 while the feed and
+the sitemap still work.
+
+One thing to expect on a first release: the image prerenders during `docker build`, where the CMS is
+not reachable, so the index, the feed and the sitemap are built empty and correct themselves one
+revalidate window later. That is why the manifest's `verify` greps the page rather than reading the
+status code, and why it waits long enough to see it happen.
+
 ## The look check
 
 Before a site's domain moves to this stack, the look check proves the rebuilt pages look like the

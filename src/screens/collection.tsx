@@ -324,6 +324,11 @@ export async function CollectionIndexView({
         if (e instanceof CmsError && e.status === 404) notFound();
         // An unreachable CMS is the likeliest thing to be wrong, so it gets a readable page rather than
         // a stack trace. This render is not cached, so the next request retries.
+        //
+        // The reason goes to the log. Without this the operator has the visitor's sentence and
+        // nothing else, which is how a deployment that answered 200 with an empty index looked like
+        // a CMS with no posts in it for a day.
+        console.warn(`collection: ${collection} could not be read (${e instanceof Error ? e.message : String(e)})`);
         failure = true;
     }
 
