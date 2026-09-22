@@ -2,6 +2,10 @@
 
 ## 0.8.0 (unreleased)
 
+- The image workflow can publish a tag that already exists. v0.7.0 was tagged before the workflow
+  was written, so nothing ever pushed an image for it, and dispatching against the tag does not work
+  because a dispatch runs the workflow file as it exists at that ref. Dispatching from master with
+  `tag: v0.7.0` checks that tag out and builds it. A backfill does not move `latest`.
 - The site can be deployed on a host that already runs barakoCMS and already terminates TLS.
   `compose.site.yml` brings up the site container alone on a loopback port, joined to the edge
   network the existing stack created, and `baryovm.site.json` is the BaryoVM manifest that syncs the

@@ -18,6 +18,12 @@ on:
   push:
     branches: ["master"]
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "An existing version tag to build and publish, e.g. v0.7.0. Empty publishes this branch as dev."
+        required: false
+        default: ""
 
 concurrency:
   group: publish-${{ github.ref }}
@@ -30,25 +36,44 @@ jobs:
     outputs:
       version: ${{ steps.v.outputs.version }}
       is_release: ${{ steps.v.outputs.is_release }}
+      move_latest: ${{ steps.v.outputs.move_latest }}
+      ref: ${{ steps.v.outputs.ref }}
     steps:
       - id: v
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          case "$GITHUB_REF" in
-            refs/tags/v*)
-              V="${GITHUB_REF#refs/tags/v}"
-              # Anchored, because a `case` glob is not. An unanchored pattern matches `1.2.3$(id)`
-              # and a value carrying a newline, and this one reaches a shell again as a tag list.
-              [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]] || {
-                echo "::error::tag v$V is not a version"; exit 1; }
-              echo "version=$V" >> "$GITHUB_OUTPUT"
-              echo "is_release=true" >> "$GITHUB_OUTPUT"
-              ;;
-            *)
-              echo "version=0.0.0-dev.${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-              echo "is_release=false" >> "$GITHUB_OUTPUT"
-              ;;
-          esac
+          # A dispatched tag names a release that has no image. That happens because this workflow was
+          # written after v0.7.0 was tagged, so the tag push never fired it. Dispatching against the
+          # tag itself does not work either: a dispatch runs the workflow file as it exists at that
+          # ref, and at v0.7.0 this file does not exist. So the dispatch runs from here and the build
+          # checks the tag out, which builds that release's source with today's machinery.
+          if [ -n "${INPUT_TAG:-}" ]; then
+            V="${INPUT_TAG#v}"
+            REF="v$V"
+            RELEASE=true
+            # Backfilling does not move `latest`. The newest release is whatever last pushed a tag,
+            # and an older one publishing its image is not a statement that it is current.
+            LATEST=false
+          else
+            case "$GITHUB_REF" in
+              refs/tags/v*) V="${GITHUB_REF#refs/tags/v}"; REF="$GITHUB_REF"; RELEASE=true; LATEST=true ;;
+              *) V="0.0.0-dev.${GITHUB_SHA::7}"; REF="$GITHUB_SHA"; RELEASE=false; LATEST=false ;;
+            esac
+          fi
+          if [ "$RELEASE" = true ]; then
+            # Anchored, because a `case` glob is not. An unanchored pattern matches `1.2.3$(id)`
+            # and a value carrying a newline, and this one reaches a shell again as a tag list.
+            [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]] || {
+              echo "::error::'$V' is not a version"; exit 1; }
+          fi
+          {
+            echo "version=$V"
+            echo "is_release=$RELEASE"
+            echo "move_latest=$LATEST"
+            echo "ref=$REF"
+          } >> "$GITHUB_OUTPUT"
 
   build:
     name: Build ${{ matrix.arch }}
@@ -69,6 +94,8 @@ jobs:
             platform: linux/arm64
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.version.outputs.ref }}
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
@@ -121,6 +148,7 @@ jobs:
     env:
       VERSION: ${{ needs.version.outputs.version }}
       IS_RELEASE: ${{ needs.version.outputs.is_release }}
+      MOVE_LATEST: ${{ needs.version.outputs.move_latest }}
     steps:
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
@@ -147,7 +175,7 @@ jobs:
             REFS="$REFS $IMG@$(cat "$F")"
           done
           if [ "$IS_RELEASE" = "true" ]; then
-            TAGS="latest $VERSION"
+            if [ "$MOVE_LATEST" = "true" ]; then TAGS="latest $VERSION"; else TAGS="$VERSION"; fi
           else
             TAGS="dev dev-${GITHUB_SHA}"
           fi
