@@ -333,14 +333,21 @@ export function proseCss(theme: PressTheme, scope: string): string {
         `${s} strong{color:${css(c.ink)};font-weight:700}`,
         // No background on inline code. The handoff calls for it, and a tinted chip inside a
         // 17.5px line is the thing that makes body copy look like documentation.
-        `${s} code{font-family:${css(f.mono)};font-size:16px;color:${css(c.ink)}}`,
-        `${s} pre{margin:30px 0 0;padding:18px 16px;border-radius:${css(theme.radii.panel)};background:${css(c.inverse)};color:${css(c.inverseInk)};font-family:${css(f.mono)};font-size:13.5px;line-height:1.85;overflow-x:auto}`,
+        //
+        // overflow-wrap so a long unbroken token (a binding name, a route) breaks rather than
+        // running the page past the viewport (#101). white-space is "pre" inside a pre, which
+        // this has no effect against, so the same rule serves inline code without touching it.
+        `${s} code{font-family:${css(f.mono)};font-size:16px;color:${css(c.ink)};overflow-wrap:anywhere}`,
+        // min-width so its own overflow-x scroller is not defeated by a flex ancestor, which
+        // otherwise stretches to the content's width instead of the width offered to it (#101).
+        `${s} pre{margin:30px 0 0;padding:18px 16px;border-radius:${css(theme.radii.panel)};background:${css(c.inverse)};color:${css(c.inverseInk)};font-family:${css(f.mono)};font-size:13.5px;line-height:1.85;overflow-x:auto;min-width:0}`,
         `${s} pre code{font-size:inherit;color:inherit}`,
         `${s} blockquote{margin:24px 0 0;padding:2px 0 2px 18px;border-left:2px solid ${css(c.accentTintBorder)};color:${css(c.secondaryInk)}}`,
         `${s} img{max-width:100%;height:auto;border-radius:${css(theme.radii.panel)};border:1px solid ${css(c.hairline)}}`,
         `${s} hr{margin:40px 0 0;border:0;border-top:1px solid ${css(c.hairline)}}`,
-        // Its own scroller, so a wide table cannot make the page scroll sideways.
-        `${s} table{display:block;overflow-x:auto;width:100%;margin:24px 0 0;border-collapse:collapse;font-size:14.5px}`,
+        // Its own scroller, so a wide table cannot make the page scroll sideways. min-width for
+        // the same reason pre has one: a flex ancestor otherwise stretches to fit it anyway.
+        `${s} table{display:block;overflow-x:auto;min-width:0;width:100%;margin:24px 0 0;border-collapse:collapse;font-size:14.5px}`,
         `${s} th,${s} td{border:1px solid ${css(c.hairline)};padding:.55rem .75rem;text-align:left;vertical-align:top}`,
         `${s} th{background:${css(c.pageBg)};color:${css(c.ink)};font-weight:700;white-space:nowrap}`,
     ].join("");

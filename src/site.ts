@@ -395,7 +395,20 @@ function topBar(v: unknown): TopBar | undefined {
 }
 
 const COLOR = /^(#[0-9a-f]{3,8}|(rgb|rgba|hsl|hsla|oklch|oklab)\([0-9.,%\s/+-]{1,60}\)|[a-z]{3,30})$/i;
-const LENGTH = /^(0|\d{1,4}(\.\d{1,3})?(px|rem|em|ch|%|vw|vh))$/;
+const LENGTH_VALUE = "(?:0|\\d{1,4}(?:\\.\\d{1,3})?(?:px|rem|em|ch|%|vw|vh))";
+const LENGTH = new RegExp(`^${LENGTH_VALUE}$`);
+/*
+ * A length, or `clamp()` of exactly three of them (#100).
+ *
+ * The engine's own default page title is a clamp, and prose sizes h2 with one, so a tenant's type
+ * scale is held to the same shape it is asked to match rather than one fixed length. This is a
+ * tenant-supplied value reaching a stylesheet, so the pattern is deliberately narrow: three lengths
+ * in parentheses and nothing else, no calc(), no extra arguments, no unmatched characters either
+ * side. Anything that does not fully match is refused, the same as before.
+ */
+const FLUID_LENGTH = new RegExp(
+    `^(?:${LENGTH_VALUE}|clamp\\(\\s*${LENGTH_VALUE}\\s*,\\s*${LENGTH_VALUE}\\s*,\\s*${LENGTH_VALUE}\\s*\\))$`,
+);
 
 /*
  * `Colors`: the theme's slots, as the tenant saved them (#49).
@@ -978,7 +991,7 @@ export function applySiteSettings(
         radii: tokens<ThemeRadii>(config.theme.radii, d.Radii, LENGTH),
         layout: tokens<ThemeLayout>(config.theme.layout, d.Layout, LENGTH),
         space: tokens<ThemeSpace>(config.theme.space, d.Space, LENGTH),
-        text: tokens<ThemeText>(config.theme.text, d.Text, LENGTH),
+        text: tokens<ThemeText>(config.theme.text, d.Text, FLUID_LENGTH),
         asSupplied: assetsAsSupplied(config.theme.asSupplied, d, site),
     };
 

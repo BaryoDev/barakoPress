@@ -113,6 +113,14 @@ export interface PageFieldMap {
     body?: string;
     /** A json field holding an ordered list of `{ type, props }`. See src/blocks. */
     blocks?: string;
+    /**
+     * A boolean. `true` stops `PageView` drawing the page's own title above its blocks (#102).
+     *
+     * `title` still names the page for a tab and for search, which is why this is its own field
+     * rather than a second, alternate heading: a page that opens with its own heading block sets
+     * this rather than losing a distinct tab title to double as the on-page one.
+     */
+    hideTitle?: string;
 }
 
 /** Where the consumer mounted each route, so generated links match the app's real shape. */
@@ -671,6 +679,7 @@ const BLOG_BLUEPRINT: Pick<PressConfig, "types" | "fields" | "pageFields"> = {
         summary: "Summary",
         body: "Body",
         blocks: "Blocks",
+        hideTitle: "HideTitle",
     },
 };
 
