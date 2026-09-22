@@ -18,6 +18,10 @@
   unreachable looked like a CMS with no posts in it. The reason is logged now.
 - `baryovm.release.json` synced everything the image needs except `press.config.ts`, so a full stack
   release built the site from whatever config happened to be on the VM. It is in the sync list now.
+- The README documented one `baryovm stack add`, the full stack's. A reader deploying the site alone
+  who followed it got Caddy started on a host that already has a proxy, because `--file` decides
+  which compose file BaryoVM brings up and the snippet had none. The site-only registration is
+  written out now.
 - A `Text` role can be a `clamp()` of three lengths, not only one fixed length, so a tenant's type
   scale can be fluid the way the engine's own default page title and prose `h2` already are.
   Anything else is still refused (#100).
