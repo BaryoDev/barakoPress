@@ -11,7 +11,8 @@
     "next.config.ts",
     "press.config.ts",
     "tsconfig.json",
-    "tsconfig.build.json"
+    "tsconfig.build.json",
+    "deploy/press.baryo.dev/"
   ],
   "exclude": [
     "node_modules",
@@ -23,7 +24,10 @@
     {
       "image": "barakopress-site:latest",
       "dockerfile": "Dockerfile",
-      "context": "."
+      "context": ".",
+      "args": {
+        "PRESS_DEPLOY": "press.baryo.dev"
+      }
     }
   ],
   "sudo": true,
@@ -34,11 +38,11 @@
     "n=$(grep -m1 '^EDGE_NETWORK=' /opt/barakopress/.env | cut -d= -f2- | tr -d '\"\\r'); docker network inspect \"${n:-barako-edge}\" >/dev/null || { echo 'the edge network does not exist: it belongs to the stack that was there first, so create it there, not here'; exit 1; }"
   ],
   "verify": [
-    "u=$(grep -m1 '^SITE_URL=' /opt/barakopress/.env | cut -d= -f2- | tr -d '\"\\r') && test -n \"$u\" && curl --fail --silent --show-error --max-time 15 -o /dev/null \"$u/\"",
-    "u=$(grep -m1 '^SITE_URL=' /opt/barakopress/.env | cut -d= -f2- | tr -d '\"\\r') && curl --fail --silent --show-error --max-time 15 -o /dev/null \"$u/feed.xml\"",
-    "u=$(grep -m1 '^SITE_URL=' /opt/barakopress/.env | cut -d= -f2- | tr -d '\"\\r') && curl --fail --silent --show-error --max-time 15 -o /dev/null \"$u/sitemap.xml\"",
+    "u=$(grep -m1 '^SITE_URL=' /opt/barakopress/.env | cut -d= -f2- | tr -d '\"\\r') && test -n \"$u\" && curl --fail --silent --show-error --max-time 15 \"$u/\" | grep -q 'href=\"/blog/'",
+    "u=$(grep -m1 '^SITE_URL=' /opt/barakopress/.env | cut -d= -f2- | tr -d '\"\\r') && curl --fail --silent --show-error --max-time 15 \"$u/feed.xml\" | grep -q '<item>'",
+    "u=$(grep -m1 '^SITE_URL=' /opt/barakopress/.env | cut -d= -f2- | tr -d '\"\\r') && curl --fail --silent --show-error --max-time 15 \"$u/sitemap.xml\" | grep -q '<url>'",
     "u=$(grep -m1 '^SITE_URL=' /opt/barakopress/.env | cut -d= -f2- | tr -d '\"\\r') && test \"$(curl --silent --max-time 15 -o /dev/null -w '%{http_code}' -X POST \"$u/api/revalidate\")\" = 401"
   ],
-  "verifyAttempts": 10,
-  "verifyDelaySeconds": 6
+  "verifyAttempts": 26,
+  "verifyDelaySeconds": 15
 }

@@ -14,6 +14,25 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts
 COPY . .
+
+# One deployment's own files, laid over the reference app.
+#
+# The app in this repository resolves identity per request: every page lives under
+# app/%5Fpress/[site], which only the proxy's rewrite reaches, and the rewrite only fires when the
+# config sets `sites`. That is the right default and it is what scripts/two-hosts.sh proves, so it
+# stays as it is. A site whose identity is written at build time cannot use it: there is no tenant
+# to resolve, so nothing ever rewrites and every page answers 404 while the feed and the sitemap
+# still work, which is a confusing way to find out.
+#
+# Such a site keeps its config and its root routes under deploy/<name>/ and names it here. The
+# tenant tree comes out, because its generateStaticParams has no sites to enumerate.
+ARG PRESS_DEPLOY=
+RUN if [ -n "$PRESS_DEPLOY" ]; then \
+      test -d "deploy/$PRESS_DEPLOY" || { echo "deploy/$PRESS_DEPLOY is not in the build context"; exit 1; }; \
+      rm -rf "app/%5Fpress"; \
+      cp -R "deploy/$PRESS_DEPLOY/." .; \
+    fi
+
 # The build renders nothing from the CMS: every page is dynamic or revalidated at runtime, so no
 # CMS_URL is needed here and the image is not tied to one instance.
 ENV NEXT_TELEMETRY_DISABLED=1
