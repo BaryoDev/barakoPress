@@ -15,6 +15,22 @@
   prose stylesheet, and a browser check at 390px now guards every page the look fixtures hold, the
   same shape the tab strip check already uses (#101).
 
+- A collection declaring `index: false` no longer reserves its route from a page, only from an item
+  below it, which item pages are served at either way. barakocms.com's `/modules` and `/changelog`
+  pages needed exactly this: a collection with no index of its own, drawn by a hand-composed page at
+  its route (#103).
+- `cardGrid` can link a card through a named field on the entry, `href`, falling back to the item's
+  own route when the collection has one. A collection filled by a sync usually carries the source's
+  own URL and has no route on this site, which is the shape `cardGrid` could not draw before (#104).
+- `progressList` and `progressBar` can draw from a count and a total (`progressCount`,
+  `progressTotal`) as well as from a figure already worked out, for a source like a GitHub milestone
+  that answers two counts and no percentage. `progress` wins when both are set (#105).
+- Delivery reads now carry `CMS_RENDERER_KEY` alongside `X-Tenant`, from the same place both are
+  built. barakoCMS's global rate limiter reads the key on every request, not only on share link
+  redemption, and partitions a request that carries it into the renderer's own bucket instead of the
+  one bucket a container's IP would otherwise share with every visitor of every site it renders
+  (#106).
+
 ## 0.7.0 (2026-09-21)
 
 - Four things the block library v4 look check said it could not draw yet, measured against the

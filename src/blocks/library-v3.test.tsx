@@ -36,9 +36,27 @@ const CMS = "http://cms.test";
 type Entry = { id: string; slug: string; data: Record<string, unknown> };
 
 const MODULES: Entry[] = [
-    // Icon, Word and Progress are this tenant's own field names, deliberately, because the engine
-    // lays its own names over the entry's data and must not take a field away doing it.
-    { id: "m1", slug: "search", data: { Name: "Search", Slug: "search", Blurb: "Postgres full text over your content", Category: "Content", Icon: "compass", Word: "Alpha", Progress: "60" } },
+    // Icon, Word, Progress, Href, ProgressCount and ProgressTotal are this tenant's own field
+    // names, deliberately, because the engine lays its own names over the entry's data and must
+    // not take a field away doing it.
+    {
+        id: "m1",
+        slug: "search",
+        data: {
+            Name: "Search",
+            Slug: "search",
+            Blurb: "Postgres full text over your content",
+            Category: "Content",
+            Icon: "compass",
+            Word: "Alpha",
+            Progress: "60",
+            // Distinct, and none a substring of another, so a shadowed field cannot pass by
+            // accident on a `toContain` that actually matched a sibling field's untouched value.
+            Href: "tenant-owns-href-not-a-computed-link",
+            ProgressCount: "tenant-owns-progresscount-no-role-set",
+            ProgressTotal: "tenant-owns-progresstotal-no-role-set",
+        },
+    },
     { id: "m2", slug: "forms", data: { Name: "Forms", Slug: "forms", Blurb: "Submissions stored as content", Category: "Content" } },
     { id: "m3", slug: "audit", data: { Name: "Audit", Slug: "audit", Blurb: "Who changed what, and when", Category: "Operations" } },
 ];
@@ -49,8 +67,9 @@ const RELEASES: Entry[] = [
 ];
 
 const MILESTONES: Entry[] = [
-    { id: "s1", slug: "one-line", data: { Name: "Install in one line", Slug: "one-line", Blurb: "Compose, seed and a console", Percent: "80" } },
-    { id: "s2", slug: "click-deploy", data: { Name: "Click to deploy", Slug: "click-deploy", Blurb: "A VM, Azure or AWS from an app", Percent: "25" } },
+    // Closed and Total (#105) sit alongside Percent unused by the tests that only map `progress`.
+    { id: "s1", slug: "one-line", data: { Name: "Install in one line", Slug: "one-line", Blurb: "Compose, seed and a console", Percent: "80", Closed: "3", Total: "4" } },
+    { id: "s2", slug: "click-deploy", data: { Name: "Click to deploy", Slug: "click-deploy", Blurb: "A VM, Azure or AWS from an app", Percent: "25", Closed: "1", Total: "4" } },
 ];
 
 /*
@@ -432,6 +451,37 @@ describe("the v3 blocks on their own", () => {
         expect(html).toContain("width:100%");
     });
 
+    it("draws a bar from a count and a total when no figure was given (#105)", async () => {
+        const html = await render([{ type: "progressBar", props: { label: "Docs", count: "3", total: "5" } }]);
+        expect(html).toContain('aria-valuenow="60"');
+        expect(html).toContain("width:60%");
+        expect(html).toContain("3 of 5");
+    });
+
+    it("rounds a count and a total to six decimals, the same as a figure already worked out", async () => {
+        const html = await render([{ type: "progressBar", props: { label: "Docs", count: "1", total: "3" } }]);
+        expect(html).toContain('aria-valuenow="33.333333"');
+        expect(html).toContain("width:33.333333%");
+    });
+
+    it("prefers a figure already worked out over a count and a total", async () => {
+        const html = await render([{ type: "progressBar", props: { label: "Docs", value: "40", count: "3", total: "5" } }]);
+        expect(html).toContain('aria-valuenow="40"');
+        expect(html).not.toContain("3 of 5");
+    });
+
+    it("draws the label and no bar when a total of zero would divide by it", async () => {
+        const html = await render([{ type: "progressBar", props: { label: "Nothing planned", count: "0", total: "0" } }]);
+        expect(html).toContain("Nothing planned");
+        expect(html).not.toContain("progressbar");
+    });
+
+    it("draws the label and no bar when neither a figure nor a usable count and total arrived", async () => {
+        const html = await render([{ type: "progressBar", props: { label: "Nothing yet" } }]);
+        expect(html).toContain("Nothing yet");
+        expect(html).not.toContain("progressbar");
+    });
+
     it("leaves the option row off a card grid that did not ask for it", async () => {
         const html = await render([{ type: "cardGrid", props: { heading: "Modules", collection: "modules" } }]);
         expect(html).toContain("Search");
@@ -628,6 +678,45 @@ describe("across the files a new field role touches", () => {
     });
 
     /*
+     * #105: a GitHub milestone answers open and closed issues, not a percentage. progressList reads
+     * two field roles instead of one and progressBar does the division, so the roadmap page needs no
+     * computed figure on either side.
+     */
+    it("draws progress from a count and a total when the source gives two counts instead of one figure", async () => {
+        const tenant = applySiteSettings(
+            defineConfig({ site: { name: "Roadmap", url: "https://roadmap.example" }, cmsUrl: CMS }),
+            {
+                Name: "Roadmap",
+                Collections: {
+                    milestones: {
+                        type: "milestone",
+                        fields: { title: "Name", slug: "Slug", summary: "Blurb", progressCount: "Closed", progressTotal: "Total" },
+                    },
+                },
+            },
+            "roadmap.example",
+        );
+
+        expect(tenant.collections.milestones?.fields.progressCount).toBe("Closed");
+        expect(tenant.collections.milestones?.fields.progressTotal).toBe("Total");
+
+        const reg = createBlockRegistry(tenant);
+        const resolved = resolveBlocks(
+            [{ type: "progressList", props: { heading: "On the way", collection: "milestones" } }],
+            reg,
+            { perViewer: false },
+        );
+        const bound = await bindBlocks(resolved, { config: tenant, registry: reg, scopes: {} });
+        const html = renderToStaticMarkup(<BlockList blocks={bound} theme={tenant.theme} />);
+
+        expect(html).toContain("On the way");
+        expect(html).toContain('aria-valuenow="75"');
+        expect(html).toContain("3 of 4");
+        expect(html).toContain('aria-valuenow="25"');
+        expect(html).toContain("1 of 4");
+    });
+
+    /*
      * The binding report (#63) reads the same bindings a page does, so a preset that reads a value
      * an entry may not have puts a problem in an editor's report for a placeholder they never typed.
      * The option row is one of those, and so is the date the card grid has always drawn, which is
@@ -723,12 +812,15 @@ describe("what a v3 block does with input nobody types on purpose", () => {
      * A collection whose own field is called Icon, on a site that declared no option styles, used to
      * lose it: the engine's name went over the top holding nothing.
      */
-    it("leaves a tenant's own Icon, Word and Progress fields alone when the site declared none", async () => {
+    it("leaves a tenant's own Icon, Word, Progress, Href, ProgressCount and ProgressTotal fields alone when the site declared none", async () => {
         const plain = defineConfig({
             site: { name: "Plain", url: "https://plain.example" },
             cmsUrl: CMS,
+            // No route: with one, `Href` is always the computed link (unchanged, pre-existing
+            // behaviour), so the case worth guarding is a collection with none at all, where #104
+            // leaves `Href` unset unless the site names an `href` field.
             collections: {
-                modules: { type: "module", route: "/modules", fields: { title: "Name", slug: "Slug", summary: "Blurb" } },
+                modules: { type: "module", fields: { title: "Name", slug: "Slug", summary: "Blurb" } },
             },
         });
         const reg = createBlockRegistry(plain);
@@ -754,6 +846,9 @@ describe("what a v3 block does with input nobody types on purpose", () => {
                                                                 { type: "text", props: { value: "{{item.Icon}}" } },
                                                                 { type: "text", props: { value: "{{item.Word}}" } },
                                                                 { type: "text", props: { value: "{{item.Progress}}" } },
+                                                                { type: "text", props: { value: "{{item.Href}}" } },
+                                                                { type: "text", props: { value: "{{item.ProgressCount}}" } },
+                                                                { type: "text", props: { value: "{{item.ProgressTotal}}" } },
                                                             ],
                                                         ],
                                                     },
@@ -773,10 +868,14 @@ describe("what a v3 block does with input nobody types on purpose", () => {
         const bound = await bindBlocks(resolved, { config: plain, registry: reg, scopes: {} });
         const html = renderToStaticMarkup(<BlockList blocks={bound} theme={plain.theme} />);
 
-        // The entries carry these under their own names, and this site declared no option styles and
-        // no progress role, so nothing of the engine's may be laid over them.
+        // The entries carry these under their own names, and this site declared no option styles,
+        // no progress role, no progressCount or progressTotal role, and no route or href field, so
+        // nothing of the engine's may be laid over them.
         expect(html).toContain("compass");
         expect(html).toContain("Alpha");
         expect(html).toContain("60");
+        expect(html).toContain("tenant-owns-href-not-a-computed-link");
+        expect(html).toContain("tenant-owns-progresscount-no-role-set");
+        expect(html).toContain("tenant-owns-progresstotal-no-role-set");
     });
 });

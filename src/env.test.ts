@@ -178,6 +178,43 @@ describe("a build-time site with CMS_URL and CMS_TENANT in the environment", () 
         const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
         expect(init.headers).toEqual({});
     });
+
+    /*
+     * #106: barakoCMS's global rate limiter reads this on every request, delivery reads included, and
+     * partitions a request that carries it into the renderer's own bucket instead of the one bucket
+     * its container's IP would otherwise share with every visitor. Before this, only share link
+     * redemption ever sent it, so a delivery read never left the container's shared bucket.
+     */
+    it("sends the renderer key on a delivery read, from the same place as X-Tenant", async () => {
+        // https, not http. This test used to assert the key went out over plain http to a host that
+        // is not loopback, which is the cleartext exposure a review caught. The key is a shared
+        // secret and only rides on a channel that protects it; src/delivery.test.ts pins the
+        // scheme rules themselves.
+        stub({ CMS_URL: "https://cms-from-env.test", CMS_TENANT: "baryo", CMS_RENDERER_KEY: "a-renderer-key-for-tests-0123456789" });
+        const fetchMock = vi.fn(async () => new Response(JSON.stringify(empty), { status: 200 }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        const config = defineConfig({ site: { name: "T", url: "https://t.example" } });
+        await list(config, "post");
+
+        const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+        expect(init.headers).toEqual({
+            "X-Tenant": "baryo",
+            "X-Barako-Renderer-Key": "a-renderer-key-for-tests-0123456789",
+        });
+    });
+
+    it("sends no renderer key when CMS_RENDERER_KEY is unset, as before", async () => {
+        stub({ CMS_URL: "http://cms-from-env.test", CMS_RENDERER_KEY: undefined });
+        const fetchMock = vi.fn(async () => new Response(JSON.stringify(empty), { status: 200 }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        const config = defineConfig({ site: { name: "T", url: "https://t.example" } });
+        await list(config, "post");
+
+        const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+        expect(init.headers).toEqual({});
+    });
 });
 
 /*

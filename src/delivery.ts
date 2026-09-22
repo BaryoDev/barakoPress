@@ -1,6 +1,6 @@
 import { isIP } from "node:net";
 import { cmsUrlFor, pinnedTenant, type PressConfig } from "./config.js";
-import { readEnv } from "./env.js";
+import { readEnv, type PressEnv } from "./env.js";
 import { forgetInProcessStore, storeFor, type PressStore } from "./store.js";
 
 /*
@@ -63,9 +63,49 @@ export class CmsError extends Error {
     }
 }
 
-function headers(config: PressConfig): HeadersInit {
-    const tenant = pinnedTenant(config);
-    return tenant ? { "X-Tenant": tenant } : {};
+/*
+ * `X-Tenant` and the renderer key, from the same place, so a new read cannot carry one and forget
+ * the other (#106). barakoCMS's global rate limiter reads the key on every request, including a
+ * delivery read, and counts a request that carries it against the renderer's own, larger bucket
+ * instead of the bucket its container's one IP shares with every visitor of every site it serves.
+ * Without this, only share link redemption ever sent it.
+ */
+/**
+ * Whether a CMS URL is safe to put a shared secret on: https anywhere, or http on loopback only.
+ *
+ * An unparseable URL is treated as unsafe. A read against it fails on its own terms a moment later,
+ * and a value nobody can parse is not one to make an exception for.
+ */
+function carriesSecretsSafely(cmsUrl: string): boolean {
+    let url: URL;
+    try {
+        url = new URL(cmsUrl);
+    } catch {
+        return false;
+    }
+    if (url.protocol === "https:") return true;
+    if (url.protocol !== "http:") return false;
+    const host = url.hostname.toLowerCase();
+    return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
+}
+
+function headers(config: PressConfig, env: PressEnv = readEnv()): HeadersInit {
+    const out: Record<string, string> = {};
+    const tenant = pinnedTenant(config, env);
+    if (tenant) out["X-Tenant"] = tenant;
+    // The key is a shared secret, so it only goes over a channel that protects it. A plain http
+    // CMS URL on anything but loopback would put it on the wire in the clear, and refusing
+    // redirects does not help: that is about where a later hop goes, not how the first one
+    // travels. Loopback is allowed because a container talking to a sibling over the host's own
+    // network never leaves the machine, and requiring TLS there would mean no local stack could
+    // send it at all.
+    const rendererKey = env.rendererKey?.trim();
+    // cmsUrlFor, not config.cmsUrl: the environment can override the URL a read actually goes to,
+    // and the channel that matters is the one the request travels on, not the one the config names.
+    if (rendererKey && carriesSecretsSafely(cmsUrlFor(config, env))) {
+        out["X-Barako-Renderer-Key"] = rendererKey;
+    }
+    return out;
 }
 
 /**
@@ -327,6 +367,9 @@ async function read<T>(config: PressConfig, path: string, opts: ReadOptions): Pr
         const res = await fetch(`${cmsUrlFor(config)}${asked}`, {
             headers: opts.headers,
             signal: AbortSignal.timeout(config.cmsTimeoutMs),
+            // A redirect is refused rather than followed (#106): opts.headers now carries the renderer
+            // key on every read, and a 307 or 308 would send it on to wherever the CMS pointed.
+            redirect: "error",
             ...(uncached
                 ? { cache: "no-store" as const }
                 : {
@@ -368,7 +411,7 @@ async function get<T>(config: PressConfig, path: string, target: ReadTarget = {}
     const env = readEnv();
     const readKey = `${cmsUrlFor(config, env)}|t:${pinnedTenant(config, env) ?? ""}|${path}`;
     return read<T>(config, path, {
-        headers: headers(config),
+        headers: headers(config, env),
         tags: cacheTagsFor(config, target),
         readKey,
         staleKey: config.sites ? readKey : undefined,
@@ -381,6 +424,9 @@ async function getFresh<T>(config: PressConfig, path: string): Promise<T | null>
         headers: headers(config),
         cache: "no-store",
         signal: AbortSignal.timeout(config.cmsTimeoutMs),
+        // Same reason as `read`: this now carries the renderer key too, so a redirect is refused
+        // rather than followed.
+        redirect: "error",
     });
     if (res.status === 404) return null;
     if (!res.ok) throw new CmsError(path, res.status);
@@ -633,6 +679,8 @@ export async function redeemShareLink(
     caller: ShareRedeemCaller = {},
 ): Promise<ShareRedeemAnswer> {
     const sent: Record<string, string> = { ...(headers(config) as Record<string, string>), "content-type": "application/json" };
+    // Usually the same value `headers` already put there from the environment: this lets a caller
+    // pass a different one (share.ts does not, today), and is otherwise a harmless overwrite.
     if (caller.rendererKey) sent["X-Barako-Renderer-Key"] = caller.rendererKey;
     const visitorIp = singleIp(caller.visitorIp);
     if (visitorIp) sent["X-Barako-Visitor-IP"] = visitorIp;

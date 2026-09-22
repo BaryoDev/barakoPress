@@ -403,10 +403,21 @@ export function pageHref(config: PressConfig, path: string): string {
  */
 export function isReservedPath(config: PressConfig, path: string): boolean {
     if (config.pages !== "") return false;
-    const first = path.split("/").find(Boolean)?.toLowerCase();
+    const parts = path.split("/").filter(Boolean);
+    const first = parts[0]?.toLowerCase();
     if (first === undefined) return false;
     if (config.reservedSlugs.includes(first)) return true;
-    return Object.values(config.collections).some((c) => c.route?.split("/").find(Boolean)?.toLowerCase() === first);
+    return Object.values(config.collections).some((c) => {
+        const route = c.route?.split("/").filter(Boolean);
+        if (!route?.length) return false;
+        // Every segment, not only the first. A collection at /docs/modules would otherwise reserve
+        // /docs/guides/start, which is not below it and which the catch-all then never resolves.
+        if (route.some((seg, i) => seg.toLowerCase() !== parts[i]?.toLowerCase())) return false;
+        // index: false means the collection renders no index at its route, so that exact path is
+        // free for a page. An item is served below the route either way, so anything deeper stays
+        // reserved.
+        return c.index !== false || parts.length > route.length;
+    });
 }
 
 /**

@@ -30,7 +30,7 @@ export interface PressEnv {
     tenant?: string;
     /** `CMS_DEFAULT_TENANT`. The tenant for a host the CMS does not know. */
     defaultTenant?: string;
-    /** `CMS_RENDERER_KEY`. Sent when a share link is redeemed, so the CMS rate limits the visitor. */
+    /** `CMS_RENDERER_KEY`. Sent on every delivery read and on share link redemption, so the CMS rate limits by renderer rather than by every visitor sharing this container's one IP. */
     rendererKey?: string;
     /** `PRESS_CONSOLE_ORIGINS`. Comma separated browser origins allowed to read the block schema. */
     consoleOrigins?: string;

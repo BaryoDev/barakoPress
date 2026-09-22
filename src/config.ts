@@ -290,6 +290,22 @@ export interface CollectionFields {
     photo?: FieldNames;
     /** How far along the entry is, 0 to 100, for a roadmap or a target. Read as text, not a number. */
     progress?: FieldNames;
+    /**
+     * How many of `progressTotal` are done, for a source that gives two counts rather than one
+     * figure already worked out, a GitHub milestone's `closed_issues` being the case this is for.
+     * Read as text, not a number, the same as `progress`. An entry whose `progress` field is set
+     * and parses as a percentage draws that instead; one whose does not, or is blank, falls back
+     * to this pair, entry by entry rather than for the whole collection.
+     */
+    progressCount?: FieldNames;
+    /** What `progressCount` is out of. Meaningless, and ignored, without `progressCount`. */
+    progressTotal?: FieldNames;
+    /**
+     * Where a card for this item links, when that is not the item's own route: an entry filled by a
+     * sync usually carries the source's own URL. Only a site path or an http or https URL is used.
+     * Falls back to `${route}/${slug}` when the collection has a route and this is unset.
+     */
+    href?: FieldNames;
 }
 
 export interface CollectionReference {
@@ -790,7 +806,12 @@ function withOptionColors(
 }
 
 function reservedSlugs(routes: (string | undefined)[], extra: string[] | undefined): string[] {
-    const named = [...RESERVED_AT_ROOT, ...routes.map(firstSegment), ...(extra ?? []).map((s) => s.trim().toLowerCase())];
+    // Only a route that is one segment reserves that segment. A collection at /docs/modules used to
+    // reserve "docs" outright, so a page at /docs/guides/start was treated as taken and nothing
+    // resolved it. A deeper route is matched segment by segment in isReservedPath instead, which is
+    // the only place that can tell /docs/modules from its neighbours.
+    const rootRoutes = routes.filter((r) => (r ?? "").split("/").filter(Boolean).length === 1);
+    const named = [...RESERVED_AT_ROOT, ...rootRoutes.map(firstSegment), ...(extra ?? []).map((s) => s.trim().toLowerCase())];
     return [...new Set(named.filter((s): s is string => Boolean(s)))];
 }
 
