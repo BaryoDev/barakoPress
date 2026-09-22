@@ -1,6 +1,6 @@
 import { isIP } from "node:net";
 import { cmsUrlFor, pinnedTenant, type PressConfig } from "./config.js";
-import { readEnv } from "./env.js";
+import { readEnv, type PressEnv } from "./env.js";
 import { forgetInProcessStore, storeFor, type PressStore } from "./store.js";
 
 /*
@@ -63,9 +63,20 @@ export class CmsError extends Error {
     }
 }
 
-function headers(config: PressConfig): HeadersInit {
-    const tenant = pinnedTenant(config);
-    return tenant ? { "X-Tenant": tenant } : {};
+/*
+ * `X-Tenant` and the renderer key, from the same place, so a new read cannot carry one and forget
+ * the other (#106). barakoCMS's global rate limiter reads the key on every request, including a
+ * delivery read, and counts a request that carries it against the renderer's own, larger bucket
+ * instead of the bucket its container's one IP shares with every visitor of every site it serves.
+ * Without this, only share link redemption ever sent it.
+ */
+function headers(config: PressConfig, env: PressEnv = readEnv()): HeadersInit {
+    const out: Record<string, string> = {};
+    const tenant = pinnedTenant(config, env);
+    if (tenant) out["X-Tenant"] = tenant;
+    const rendererKey = env.rendererKey?.trim();
+    if (rendererKey) out["X-Barako-Renderer-Key"] = rendererKey;
+    return out;
 }
 
 /**
@@ -368,7 +379,7 @@ async function get<T>(config: PressConfig, path: string, target: ReadTarget = {}
     const env = readEnv();
     const readKey = `${cmsUrlFor(config, env)}|t:${pinnedTenant(config, env) ?? ""}|${path}`;
     return read<T>(config, path, {
-        headers: headers(config),
+        headers: headers(config, env),
         tags: cacheTagsFor(config, target),
         readKey,
         staleKey: config.sites ? readKey : undefined,

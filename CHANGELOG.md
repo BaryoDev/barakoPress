@@ -12,6 +12,11 @@
 - `progressList` and `progressBar` can draw from a count and a total (`progressCount`,
   `progressTotal`) as well as from a figure already worked out, for a source like a GitHub milestone
   that answers two counts and no percentage. `progress` wins when both are set (#105).
+- Delivery reads now carry `CMS_RENDERER_KEY` alongside `X-Tenant`, from the same place both are
+  built. barakoCMS's global rate limiter reads the key on every request, not only on share link
+  redemption, and partitions a request that carries it into the renderer's own bucket instead of the
+  one bucket a container's IP would otherwise share with every visitor of every site it renders
+  (#106).
 
 ## 0.7.0 (2026-09-21)
 
