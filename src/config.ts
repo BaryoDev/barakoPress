@@ -806,7 +806,12 @@ function withOptionColors(
 }
 
 function reservedSlugs(routes: (string | undefined)[], extra: string[] | undefined): string[] {
-    const named = [...RESERVED_AT_ROOT, ...routes.map(firstSegment), ...(extra ?? []).map((s) => s.trim().toLowerCase())];
+    // Only a route that is one segment reserves that segment. A collection at /docs/modules used to
+    // reserve "docs" outright, so a page at /docs/guides/start was treated as taken and nothing
+    // resolved it. A deeper route is matched segment by segment in isReservedPath instead, which is
+    // the only place that can tell /docs/modules from its neighbours.
+    const rootRoutes = routes.filter((r) => (r ?? "").split("/").filter(Boolean).length === 1);
+    const named = [...RESERVED_AT_ROOT, ...rootRoutes.map(firstSegment), ...(extra ?? []).map((s) => s.trim().toLowerCase())];
     return [...new Set(named.filter((s): s is string => Boolean(s)))];
 }
 

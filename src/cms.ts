@@ -409,7 +409,10 @@ export function isReservedPath(config: PressConfig, path: string): boolean {
     if (config.reservedSlugs.includes(first)) return true;
     return Object.values(config.collections).some((c) => {
         const route = c.route?.split("/").filter(Boolean);
-        if (!route?.length || route[0].toLowerCase() !== first) return false;
+        if (!route?.length) return false;
+        // Every segment, not only the first. A collection at /docs/modules would otherwise reserve
+        // /docs/guides/start, which is not below it and which the catch-all then never resolves.
+        if (route.some((seg, i) => seg.toLowerCase() !== parts[i]?.toLowerCase())) return false;
         // index: false means the collection renders no index at its route, so that exact path is
         // free for a page. An item is served below the route either way, so anything deeper stays
         // reserved.

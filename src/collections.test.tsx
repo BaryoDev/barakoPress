@@ -684,6 +684,26 @@ describe("collections from a tenant's settings", () => {
         expect(isReservedPath(rotary, "/projects")).toBe(true);
     });
 
+    it("compares every segment of a collection route, not only the first", () => {
+        // A collection at /docs/modules must not reserve /docs/guides/start. That path is not
+        // below it, so nothing else resolves it and the page 404s. Comparing the first segment
+        // alone treats every path under /docs as the collection's.
+        const config = defineConfig({
+            site: { name: "Docs", url: "https://docs.example" },
+            // isReservedPath only applies when pages are mounted at the root, which is the case
+            // where a page and a collection route can collide at all.
+            pages: "/",
+            collections: {
+                modules: { type: "module", route: "/docs/modules", index: false, fields: { title: "Title" } },
+            },
+        });
+
+        expect(isReservedPath(config, "/docs/modules")).toBe(false);
+        expect(isReservedPath(config, "/docs/modules/barako-cli")).toBe(true);
+        expect(isReservedPath(config, "/docs/guides/start")).toBe(false);
+        expect(isReservedPath(config, "/docs")).toBe(false);
+    });
+
     it("shows a read time and its nearest items on a collection that is not the post collection", async () => {
         visit("agency.example");
         const study = await route(config, ["cases", "harbour-rebrand"]);

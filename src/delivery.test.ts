@@ -332,3 +332,45 @@ describe("pageAtPath", () => {
         await expect(pageAtPath(config, "/x")).resolves.toBeNull();
     });
 });
+
+/*
+ * The renderer key is a shared secret, so a read only carries it over a channel that protects it.
+ *
+ * Refusing redirects does not cover this: that is about where a later hop goes, not how the first
+ * one travels. A plain http CMS on anything but loopback puts the key on the wire in the clear.
+ * Loopback is allowed because a container talking to a sibling over the host's own network never
+ * leaves the machine, and requiring TLS there would mean no local stack could send it at all.
+ */
+describe("the renderer key only rides on a channel that protects it", () => {
+    const withKey = (cmsUrl: string) =>
+        defineConfig({ site: { name: "Test", url: "https://test.example" }, cmsUrl });
+
+    async function keyOn(cmsUrl: string): Promise<string | null> {
+        const fetcher = answer(200, { items: [], total: 0 });
+        vi.stubGlobal("fetch", fetcher);
+        vi.stubEnv("CMS_RENDERER_KEY", "a-shared-secret");
+        forgetCachedReads();
+        await list(withKey(cmsUrl), "post", {});
+        expect(fetcher.mock.calls.length).toBeGreaterThan(0);
+        const init = fetcher.mock.calls[0][1] as RequestInit;
+        return new Headers(init.headers).get("X-Barako-Renderer-Key");
+    }
+
+    it("sends it to an https CMS", async () => {
+        expect(await keyOn("https://cms.example")).toBe("a-shared-secret");
+    });
+
+    it("sends it to http on loopback, where it never leaves the machine", async () => {
+        expect(await keyOn("http://127.0.0.1:5000")).toBe("a-shared-secret");
+        expect(await keyOn("http://localhost:5000")).toBe("a-shared-secret");
+    });
+
+    it("withholds it from plain http anywhere else", async () => {
+        expect(await keyOn("http://cms.example")).toBeNull();
+        expect(await keyOn("http://10.0.0.5:5000")).toBeNull();
+    });
+
+    it("withholds it when the CMS URL cannot be parsed", async () => {
+        expect(await keyOn("not a url")).toBeNull();
+    });
+});

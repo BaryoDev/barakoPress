@@ -186,7 +186,11 @@ describe("a build-time site with CMS_URL and CMS_TENANT in the environment", () 
      * redemption ever sent it, so a delivery read never left the container's shared bucket.
      */
     it("sends the renderer key on a delivery read, from the same place as X-Tenant", async () => {
-        stub({ CMS_URL: "http://cms-from-env.test", CMS_TENANT: "baryo", CMS_RENDERER_KEY: "a-renderer-key-for-tests-0123456789" });
+        // https, not http. This test used to assert the key went out over plain http to a host that
+        // is not loopback, which is the cleartext exposure a review caught. The key is a shared
+        // secret and only rides on a channel that protects it; src/delivery.test.ts pins the
+        // scheme rules themselves.
+        stub({ CMS_URL: "https://cms-from-env.test", CMS_TENANT: "baryo", CMS_RENDERER_KEY: "a-renderer-key-for-tests-0123456789" });
         const fetchMock = vi.fn(async () => new Response(JSON.stringify(empty), { status: 200 }));
         vi.stubGlobal("fetch", fetchMock);
 
