@@ -33,7 +33,14 @@ jobs:
       name: press-baryo-dev
       url: https://press.baryo.dev
     steps:
+      # No persisted credentials. This job downloads a binary and then runs it against a remote
+      # host, so it should leave no git token in the checkout for that binary to find. The checksum
+      # proves the download is the published asset, which is not the same as proving it is
+      # harmless. The example this was taken from does the same on the job that reads a registry,
+      # and copying the pattern without this line was an omission.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       # Pinned to a version, and the checksum is verified against the release's own checksums.txt.
       # An install step that curls a tarball and runs it is a supply chain step whatever else it is
@@ -123,10 +130,16 @@ jobs:
       - name: Prove it from the public URL
         run: |
           set -euo pipefail
-          for i in $(seq 1 20); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' https://press.baryo.dev/ || true)
+          # Each request is bounded and so is the loop. Without a curl timeout a stalled DNS or TCP
+          # connect has no limit of its own, so twenty attempts can run far past the window this
+          # claims and hold the deploy concurrency group until the job's own timeout. The deadline
+          # is wall clock rather than a count of attempts, so the message cannot lie about it.
+          DEADLINE=$(( $(date +%s) + 200 ))
+          while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' \
+              --connect-timeout 5 --max-time 15 https://press.baryo.dev/ || true)
             [ "$code" = "200" ] && { echo "press.baryo.dev answered 200"; exit 0; }
             sleep 10
           done
-          echo "::error::press.baryo.dev did not answer 200 within 200 seconds"
+          echo "::error::press.baryo.dev did not answer 200 within 200 seconds (last code: ${code:-none})"
           exit 1
