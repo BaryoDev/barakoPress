@@ -2,7 +2,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defineConfig } from "./config.js";
-import { forgetCachedReads, list, pageAtPath, redeemShareLink, semantic, tenantForHost } from "./delivery.js";
+import { bySlugPreview, forgetCachedReads, list, pageAtPath, redeemShareLink, semantic, tenantForHost } from "./delivery.js";
 
 const config = defineConfig({
     site: { name: "Test", url: "https://test.example" },
@@ -176,6 +176,70 @@ describe("redeemShareLink", () => {
         expect(timeout).toHaveBeenCalledTimes(1);
         expect(timeout.mock.calls[0][0]).toBeGreaterThan(0);
         expect(timeout.mock.calls[0][0]).toBeLessThanOrEqual(10_000);
+    });
+});
+
+/*
+ * #106: `headers()` now puts the renderer key on every delivery read, cached and preview alike, so
+ * the redirect refusal `redeemShareLink` already had is needed here too. A mocked `fetch` cannot
+ * prove this: it never follows a redirect on its own, since the mock is the whole answer. A real
+ * server issuing one is the only thing that tests what the `redirect` option actually does.
+ */
+describe("a delivery read does not follow a redirect", () => {
+    const servers: Server[] = [];
+    afterEach(async () => {
+        forgetCachedReads();
+        vi.restoreAllMocks();
+        await Promise.all(servers.splice(0).map((server) => new Promise((done) => server.close(done))));
+    });
+
+    async function listen(handler: Parameters<typeof createServer>[1]): Promise<string> {
+        const server = createServer(handler);
+        servers.push(server);
+        await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+        return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    }
+
+    it("does not send the renderer key on to another server for a cached read", async () => {
+        const received: string[] = [];
+        const elsewhere = await listen((req, res) => {
+            received.push(String(req.headers["x-barako-renderer-key"]));
+            res.writeHead(200, { "content-type": "application/json" });
+            res.end(JSON.stringify({ items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 0, hasNextPage: false }));
+        });
+        const cms = await listen((req, res) => {
+            req.resume();
+            res.writeHead(307, { location: `${elsewhere}/api/public/post` });
+            res.end();
+        });
+
+        vi.stubEnv("CMS_RENDERER_KEY", "a-renderer-key-for-tests-0123456789");
+        const cfg = { ...defineConfig({ sites: {}, cmsUrl: cms }), tenant: "t" };
+        await expect(list(cfg, "post")).rejects.toThrow();
+
+        expect(received).toEqual([]);
+        vi.unstubAllEnvs();
+    });
+
+    it("does not send the renderer key on to another server for a preview read", async () => {
+        const received: string[] = [];
+        const elsewhere = await listen((req, res) => {
+            received.push(String(req.headers["x-barako-renderer-key"]));
+            res.writeHead(200, { "content-type": "application/json" });
+            res.end(JSON.stringify({ id: "p", data: {} }));
+        });
+        const cms = await listen((req, res) => {
+            req.resume();
+            res.writeHead(307, { location: `${elsewhere}/api/public/post/x` });
+            res.end();
+        });
+
+        vi.stubEnv("CMS_RENDERER_KEY", "a-renderer-key-for-tests-0123456789");
+        const cfg = defineConfig({ site: { name: "T", url: "https://t.example" }, cmsUrl: cms });
+        await expect(bySlugPreview(cfg, "post", "x", "preview-token")).rejects.toThrow();
+
+        expect(received).toEqual([]);
+        vi.unstubAllEnvs();
     });
 });
 

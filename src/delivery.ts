@@ -338,6 +338,9 @@ async function read<T>(config: PressConfig, path: string, opts: ReadOptions): Pr
         const res = await fetch(`${cmsUrlFor(config)}${asked}`, {
             headers: opts.headers,
             signal: AbortSignal.timeout(config.cmsTimeoutMs),
+            // A redirect is refused rather than followed (#106): opts.headers now carries the renderer
+            // key on every read, and a 307 or 308 would send it on to wherever the CMS pointed.
+            redirect: "error",
             ...(uncached
                 ? { cache: "no-store" as const }
                 : {
@@ -392,6 +395,9 @@ async function getFresh<T>(config: PressConfig, path: string): Promise<T | null>
         headers: headers(config),
         cache: "no-store",
         signal: AbortSignal.timeout(config.cmsTimeoutMs),
+        // Same reason as `read`: this now carries the renderer key too, so a redirect is refused
+        // rather than followed.
+        redirect: "error",
     });
     if (res.status === 404) return null;
     if (!res.ok) throw new CmsError(path, res.status);
@@ -644,6 +650,8 @@ export async function redeemShareLink(
     caller: ShareRedeemCaller = {},
 ): Promise<ShareRedeemAnswer> {
     const sent: Record<string, string> = { ...(headers(config) as Record<string, string>), "content-type": "application/json" };
+    // Usually the same value `headers` already put there from the environment: this lets a caller
+    // pass a different one (share.ts does not, today), and is otherwise a harmless overwrite.
     if (caller.rendererKey) sent["X-Barako-Renderer-Key"] = caller.rendererKey;
     const visitorIp = singleIp(caller.visitorIp);
     if (visitorIp) sent["X-Barako-Visitor-IP"] = visitorIp;
