@@ -9,6 +9,9 @@
 - `cardGrid` can link a card through a named field on the entry, `href`, falling back to the item's
   own route when the collection has one. A collection filled by a sync usually carries the source's
   own URL and has no route on this site, which is the shape `cardGrid` could not draw before (#104).
+- `progressList` and `progressBar` can draw from a count and a total (`progressCount`,
+  `progressTotal`) as well as from a figure already worked out, for a source like a GitHub milestone
+  that answers two counts and no percentage. `progress` wins when both are set (#105).
 
 ## 0.7.0 (2026-09-21)
 

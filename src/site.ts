@@ -624,6 +624,8 @@ const FIELD_ROLES = [
     "url",
     "photo",
     "progress",
+    "progressCount",
+    "progressTotal",
     "href",
 ] as const;
 

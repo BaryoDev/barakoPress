@@ -1241,14 +1241,33 @@ function percentOf(value: string): number | null {
     return Math.min(100, Number(text));
 }
 
-type ProgressProps = { label: string; value: string; tone?: string };
+/**
+ * A percentage from a count and a total, for a source that gives two numbers rather than one figure
+ * already worked out: a GitHub milestone's open and closed issues, a fundraising total against its
+ * goal. Null for anything that is not two non-negative numbers with a total greater than zero,
+ * which is what keeps a bad pair from drawing a bar that means nothing (barakoPress #105).
+ */
+function fractionPercent(count: string | undefined, total: string | undefined): number | null {
+    if (!count || !total) return null;
+    const c = Number(count.trim());
+    const t = Number(total.trim());
+    if (!Number.isFinite(c) || !Number.isFinite(t) || c < 0 || t <= 0) return null;
+    return Math.min(100, (c / t) * 100);
+}
+
+type ProgressProps = { label: string; value?: string; count?: string; total?: string; tone?: string };
 
 /*
  * How far along one thing is: a roadmap milestone, a fundraising target.
  *
+ * `value` is a figure already worked out. `count` and `total` are the two numbers a source usually
+ * gives instead (#105), so the arithmetic stays in the thing that displays it rather than being
+ * asked of a sync's field mapping or an API that does none. `value` wins when both are given, since
+ * a figure someone typed on purpose should not be second-guessed by two fields that happen to be set.
+ *
  * The bar is `role="progressbar"` with the three values that role needs, so what it shows is in the
  * accessibility tree rather than only in the pixels, and the label is beside it in the markup as
- * well as on the bar. A value that is not a percentage draws the label and no bar: a milestone with
+ * well as on the bar. Nothing usable in either form draws the label and no bar: a milestone with
  * nothing filled in should read as a milestone, not disappear.
  */
 const progressBar = defineBlock<ProgressProps>({
@@ -1257,11 +1276,16 @@ const progressBar = defineBlock<ProgressProps>({
     layer: "primitive",
     fields: [
         { name: "label", kind: "text", label: "What is progressing", required: true },
-        { name: "value", kind: "text", label: "How far along, 0 to 100", required: true },
+        { name: "value", kind: "text", label: "How far along, 0 to 100" },
+        { name: "count", kind: "text", label: "How many are done" },
+        { name: "total", kind: "text", label: "Out of how many" },
         { name: "tone", label: "Tone", ...toneSelect },
     ],
     component: ({ props, theme }) => {
-        const percent = percentOf(props.value);
+        const fromValue = props.value ? percentOf(props.value) : null;
+        const fraction = fromValue === null ? fractionPercent(props.count, props.total) : null;
+        const percent = fromValue ?? fraction;
+        const shown = fromValue !== null ? props.value!.trim() : fraction !== null ? `${props.count!.trim()} of ${props.total!.trim()}` : null;
         const tone = props.tone ? toneOf(theme, props.tone) : null;
         const muted = tone ? tone.muted : inherited(theme, "muted");
         return (
@@ -1278,7 +1302,7 @@ const progressBar = defineBlock<ProgressProps>({
                     }}
                 >
                     <span>{props.label}</span>
-                    {percent !== null && <span>{props.value.trim()}</span>}
+                    {shown && <span>{shown}</span>}
                 </div>
                 {percent !== null && (
                     <div

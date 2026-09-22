@@ -160,7 +160,7 @@ merged over the configured collections by key. A build-time site passes `collect
 | --- | --- |
 | `type` | The content type. Required |
 | `route` | The index is served at the route and an item at `route/slug`. Absent, items are listed and never linked |
-| `fields` | `title` (required), `slug`, `summary`, `body` (markdown), `date`, `image`, `imageAlt`, `featured`, `tags`, `url`, `photo`, `progress`, `href`. Each is a field name or a list tried in order; `@createdAt` and `@updatedAt` read the entry itself. `photo` is a portrait drawn above the title, `image` the wide one, and `progress` is a number from 0 to 100 that `progressList` draws. `href` is where a card links when that is not the item's own route: a collection filled by a sync usually carries the source's own URL and has no route on this site |
+| `fields` | `title` (required), `slug`, `summary`, `body` (markdown), `date`, `image`, `imageAlt`, `featured`, `tags`, `url`, `photo`, `progress`, `progressCount`, `progressTotal`, `href`. Each is a field name or a list tried in order; `@createdAt` and `@updatedAt` read the entry itself. `photo` is a portrait drawn above the title, `image` the wide one, and `progress` is a number from 0 to 100 that `progressList` draws. `progressCount` and `progressTotal` draw the same bar from two counts instead, for a source that gives those rather than a figure already worked out; `progress` wins when both are set. `href` is where a card links when that is not the item's own route: a collection filled by a sync usually carries the source's own URL and has no route on this site |
 | `references` | Reference fields, each naming the collection it points into and the word a card puts before the link. Resolved in the same request |
 | `sort` | Sent to the API, for example `-PublishedAt` |
 | `feed` | Whether `createFeed(config, key)` serves it |
@@ -605,10 +605,12 @@ for that entry's option, read through `{{item.Icon}}` and `{{item.Word}}`. With 
 with its own. It is off by default, so a grid that did not ask for it draws what it always drew.
 
 `progressList` reads its figure through `{{item.Progress}}`, which is the collection's `progress`
-field role: the tenant says which of its own fields holds a number from 0 to 100. `changelogList`
-does not group by itself, because grouping means knowing which field holds the kind and that is the
-tenant's field name. One band per kind with `filterField` and `filterValue` is the grouping, and the
-chip on each entry is the option's own word.
+field role: the tenant says which of its own fields holds a number from 0 to 100. Where a source
+gives two counts instead, `progressCount` and `progressTotal` carry those through and the bar does
+the division, so a GitHub milestone's open and closed issues need no field computing a percentage
+first. `changelogList` does not group by itself, because grouping means knowing which field holds
+the kind and that is the tenant's field name. One band per kind with `filterField` and `filterValue`
+is the grouping, and the chip on each entry is the option's own word.
 
 ## Configuring it
 

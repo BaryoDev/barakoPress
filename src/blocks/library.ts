@@ -560,9 +560,11 @@ const codeTab: BlockPreset = {
  * How far along each of a list of things is: the roadmap, the milestones, the targets.
  *
  * The figure comes from the collection's `progress` field role, so the block reads `{{item.Progress}}`
- * and the tenant says which of its own fields that is. The bar carries the entry's title as its
- * label rather than repeating it in a heading above, because a progress bar has to be named for
- * anything to read it, and naming it twice reads it twice.
+ * and the tenant says which of its own fields that is. Where a source gives two counts instead of a
+ * figure already worked out, `progressCount` and `progressTotal` carry them through the same way
+ * (#105), and `progressBar` does the arithmetic. The bar carries the entry's title as its label
+ * rather than repeating it in a heading above, because a progress bar has to be named for anything
+ * to read it, and naming it twice reads it twice.
  */
 const progressList: BlockPreset = {
     type: "progressList",
@@ -590,7 +592,12 @@ const progressList: BlockPreset = {
                 [
                     repeat({ empty: p("empty") }, [
                         stack({ gap: "xs" }, [
-                            b("progressBar", { label: "{{item.Title}}", value: "{{item.Progress}}" }),
+                            b("progressBar", {
+                                label: "{{item.Title}}",
+                                value: "{{item.Progress}}",
+                                count: "{{item.ProgressCount}}",
+                                total: "{{item.ProgressTotal}}",
+                            }),
                             t("{{item.Summary}}", "small"),
                         ]),
                     ]),

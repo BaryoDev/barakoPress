@@ -354,6 +354,8 @@ export function itemScope(config: PressConfig, item: Item): Record<string, unkno
          * plausible name for a field on exactly the collections this is for.
          */
         ...(item.progress !== undefined ? { Progress: item.progress } : {}),
+        ...(item.progressCount !== undefined ? { ProgressCount: item.progressCount } : {}),
+        ...(item.progressTotal !== undefined ? { ProgressTotal: item.progressTotal } : {}),
         ...(item.style?.icon !== undefined ? { Icon: item.style.icon } : {}),
         ...(item.style?.label ?? item.option) !== undefined
             ? { Word: item.style?.label ?? item.option }

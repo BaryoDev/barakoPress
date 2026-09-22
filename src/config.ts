@@ -283,6 +283,14 @@ export interface CollectionFields {
     /** How far along the entry is, 0 to 100, for a roadmap or a target. Read as text, not a number. */
     progress?: FieldNames;
     /**
+     * How many of `progressTotal` are done, for a source that gives two counts rather than one
+     * figure already worked out, a GitHub milestone's `closed_issues` being the case this is for.
+     * Read as text, not a number, the same as `progress`. Ignored where `progress` is also set.
+     */
+    progressCount?: FieldNames;
+    /** What `progressCount` is out of. Meaningless, and ignored, without `progressCount`. */
+    progressTotal?: FieldNames;
+    /**
      * Where a card for this item links, when that is not the item's own route: an entry filled by a
      * sync usually carries the source's own URL. Only a site path or an http or https URL is used.
      * Falls back to `${route}/${slug}` when the collection has a route and this is unset.

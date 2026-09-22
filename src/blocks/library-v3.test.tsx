@@ -49,8 +49,9 @@ const RELEASES: Entry[] = [
 ];
 
 const MILESTONES: Entry[] = [
-    { id: "s1", slug: "one-line", data: { Name: "Install in one line", Slug: "one-line", Blurb: "Compose, seed and a console", Percent: "80" } },
-    { id: "s2", slug: "click-deploy", data: { Name: "Click to deploy", Slug: "click-deploy", Blurb: "A VM, Azure or AWS from an app", Percent: "25" } },
+    // Closed and Total (#105) sit alongside Percent unused by the tests that only map `progress`.
+    { id: "s1", slug: "one-line", data: { Name: "Install in one line", Slug: "one-line", Blurb: "Compose, seed and a console", Percent: "80", Closed: "3", Total: "4" } },
+    { id: "s2", slug: "click-deploy", data: { Name: "Click to deploy", Slug: "click-deploy", Blurb: "A VM, Azure or AWS from an app", Percent: "25", Closed: "1", Total: "4" } },
 ];
 
 /*
@@ -432,6 +433,31 @@ describe("the v3 blocks on their own", () => {
         expect(html).toContain("width:100%");
     });
 
+    it("draws a bar from a count and a total when no figure was given (#105)", async () => {
+        const html = await render([{ type: "progressBar", props: { label: "Docs", count: "3", total: "5" } }]);
+        expect(html).toContain('aria-valuenow="60"');
+        expect(html).toContain("width:60%");
+        expect(html).toContain("3 of 5");
+    });
+
+    it("prefers a figure already worked out over a count and a total", async () => {
+        const html = await render([{ type: "progressBar", props: { label: "Docs", value: "40", count: "3", total: "5" } }]);
+        expect(html).toContain('aria-valuenow="40"');
+        expect(html).not.toContain("3 of 5");
+    });
+
+    it("draws the label and no bar when a total of zero would divide by it", async () => {
+        const html = await render([{ type: "progressBar", props: { label: "Nothing planned", count: "0", total: "0" } }]);
+        expect(html).toContain("Nothing planned");
+        expect(html).not.toContain("progressbar");
+    });
+
+    it("draws the label and no bar when neither a figure nor a usable count and total arrived", async () => {
+        const html = await render([{ type: "progressBar", props: { label: "Nothing yet" } }]);
+        expect(html).toContain("Nothing yet");
+        expect(html).not.toContain("progressbar");
+    });
+
     it("leaves the option row off a card grid that did not ask for it", async () => {
         const html = await render([{ type: "cardGrid", props: { heading: "Modules", collection: "modules" } }]);
         expect(html).toContain("Search");
@@ -625,6 +651,45 @@ describe("across the files a new field role touches", () => {
         expect(html).toContain("On the way");
         expect(html).toContain('aria-valuenow="80"');
         expect(html).toContain('aria-label="Install in one line"');
+    });
+
+    /*
+     * #105: a GitHub milestone answers open and closed issues, not a percentage. progressList reads
+     * two field roles instead of one and progressBar does the division, so the roadmap page needs no
+     * computed figure on either side.
+     */
+    it("draws progress from a count and a total when the source gives two counts instead of one figure", async () => {
+        const tenant = applySiteSettings(
+            defineConfig({ site: { name: "Roadmap", url: "https://roadmap.example" }, cmsUrl: CMS }),
+            {
+                Name: "Roadmap",
+                Collections: {
+                    milestones: {
+                        type: "milestone",
+                        fields: { title: "Name", slug: "Slug", summary: "Blurb", progressCount: "Closed", progressTotal: "Total" },
+                    },
+                },
+            },
+            "roadmap.example",
+        );
+
+        expect(tenant.collections.milestones?.fields.progressCount).toBe("Closed");
+        expect(tenant.collections.milestones?.fields.progressTotal).toBe("Total");
+
+        const reg = createBlockRegistry(tenant);
+        const resolved = resolveBlocks(
+            [{ type: "progressList", props: { heading: "On the way", collection: "milestones" } }],
+            reg,
+            { perViewer: false },
+        );
+        const bound = await bindBlocks(resolved, { config: tenant, registry: reg, scopes: {} });
+        const html = renderToStaticMarkup(<BlockList blocks={bound} theme={tenant.theme} />);
+
+        expect(html).toContain("On the way");
+        expect(html).toContain('aria-valuenow="75"');
+        expect(html).toContain("3 of 4");
+        expect(html).toContain('aria-valuenow="25"');
+        expect(html).toContain("1 of 4");
     });
 
     /*
