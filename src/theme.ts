@@ -328,7 +328,10 @@ export function proseCss(theme: PressTheme, scope: string): string {
         `${s} ol{list-style:decimal}`,
         `${s} li{margin:.5rem 0}`,
         `${s} li > ul,${s} li > ol{margin:.4rem 0}`,
-        `${s} a{color:${css(c.accent)};font-weight:600;text-decoration:underline;text-underline-offset:2px}`,
+        // overflow-wrap for the same reason `code` has it, and the reason it was missed: a long token
+        // in running text is usually a name, and a name written as a link is a URL, which is longer.
+        // A changelog entry citing a wiki page laid a 390px viewport out 603px wide.
+        `${s} a{color:${css(c.accent)};font-weight:600;text-decoration:underline;text-underline-offset:2px;overflow-wrap:anywhere}`,
         `${s} a:hover{color:${css(c.accentHover)}}`,
         `${s} strong{color:${css(c.ink)};font-weight:700}`,
         // No background on inline code. The handoff calls for it, and a tinted chip inside a
