@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.0 (unreleased)
+
+- A `Text` role can be a `clamp()` of three lengths, not only one fixed length, so a tenant's type
+  scale can be fluid the way the engine's own default page title and prose `h2` already are.
+  Anything else is still refused (#100).
+
 ## 0.7.0 (2026-09-21)
 
 - Four things the block library v4 look check said it could not draw yet, measured against the
