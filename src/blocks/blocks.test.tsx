@@ -368,6 +368,26 @@ describe("toPage", () => {
         expect(page.blocks).toEqual([text("x")]);
         expect(page.body).toBe("");
     });
+
+    /*
+     * barakoPress #102: a stored page with no HideTitle field at all, not merely one saved false,
+     * has to keep drawing its title exactly as it did before the field existed.
+     */
+    it("draws the title when a page's data has no HideTitle field at all", () => {
+        const config = defineConfig({ site: { name: "T", url: "https://t.example" } });
+        const page = toPage(config, { id: "1", data: { Title: "About", Slug: "about" } });
+
+        expect(page.hideTitle).toBe(false);
+    });
+
+    it("hides the title only when HideTitle is saved true", () => {
+        const config = defineConfig({ site: { name: "T", url: "https://t.example" } });
+        const shown = toPage(config, { id: "1", data: { Title: "About", Slug: "about", HideTitle: false } });
+        const hidden = toPage(config, { id: "1", data: { Title: "About", Slug: "about", HideTitle: true } });
+
+        expect(shown.hideTitle).toBe(false);
+        expect(hidden.hideTitle).toBe(true);
+    });
 });
 
 /*
