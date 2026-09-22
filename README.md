@@ -358,6 +358,10 @@ curl -X POST "$CMS_URL/api/content-types/page/fields" -H "authorization: Bearer 
 A page with a non-empty list renders its blocks. A page without one renders its `Body` as before.
 Field names come from `pageFields` in the config, and the type from `types.page`.
 
+`PageView` draws the page's `Title` above its blocks. A page whose blocks open with their own
+heading sets a boolean `HideTitle` field to stop it drawing twice: `Title` still names the page for
+a tab and for search either way.
+
 ```json
 [
   { "type": "richText", "props": { "markdown": "## Hello" } },
