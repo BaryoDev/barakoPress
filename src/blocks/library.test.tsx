@@ -37,6 +37,11 @@ const PEOPLE: Entry[] = [
     { id: "b1", slug: "ana", data: { Name: "Ana Cruz", Slug: "ana", Role: "President", Photo: "https://img.test/ana.png" } },
 ];
 
+/** A collection filled by a sync, carrying the source's own URL rather than a route on this site (#104). */
+const PACKAGES: Entry[] = [
+    { id: "pk1", slug: "barako-cli", data: { Name: "barako CLI", Slug: "barako-cli", Blurb: "Build and configure", Link: "https://www.nuget.org/packages/barako-cli" } },
+];
+
 const config = defineConfig({
     site: { name: "Test club", url: "https://club.example" },
     cmsUrl: CMS,
@@ -50,6 +55,10 @@ const config = defineConfig({
             type: "member",
             route: "/board",
             fields: { title: "Name", slug: "Slug", summary: "Role", image: "Photo" },
+        },
+        packages: {
+            type: "package",
+            fields: { title: "Name", slug: "Slug", summary: "Blurb", href: "Link" },
         },
     },
 });
@@ -68,7 +77,7 @@ beforeEach(() => {
             const url = new URL(String(input));
             calls.push(url.pathname + url.search);
             const type = url.pathname.replace(/^\/api\/public\//, "").split("/")[0];
-            const entries = type === "project" ? PROJECTS : type === "member" ? PEOPLE : null;
+            const entries = type === "project" ? PROJECTS : type === "member" ? PEOPLE : type === "package" ? PACKAGES : null;
             if (entries === null) return new Response("", { status: 404 });
             let items = entries;
             for (const [key, value] of url.searchParams) {
@@ -519,6 +528,19 @@ describe("the bands that read a collection", () => {
 
         expect(html).toContain("the rest of the page");
         expect(calls.some((c) => c.includes("/api/public/ship"))).toBe(false);
+    });
+
+    /*
+     * #104: a collection with no site route (the packages page's shape) links each card through its
+     * own field instead, since `{{item.Href}}` only ever existed for a collection with a route.
+     */
+    it("links a card to a field on the entry when the collection has no site route", async () => {
+        const html = await page([
+            { type: "cardGrid", props: { heading: "Packages", collection: "packages" } },
+        ]);
+
+        expect(html).toContain('href="https://www.nuget.org/packages/barako-cli"');
+        expect(html).toContain("barako CLI");
     });
 
     it("puts people read from a collection and people typed in place in one grid", async () => {

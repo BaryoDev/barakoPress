@@ -27,6 +27,8 @@ export interface Item {
     imageAlt?: string;
     /** A checked http or https link, or a site path. */
     url?: string;
+    /** Where a card for this item links, from the collection's `href` field. Falls back to its route. */
+    href?: string;
     /** A portrait, from the collection's `photo` field role. */
     photo?: string;
     /** How far along, from the collection's `progress` field role. Text, because a binding is text. */
@@ -175,6 +177,7 @@ export function toItem(config: PressConfig, key: string, c: PublicContent): Item
         image: text(c, f.image) || undefined,
         imageAlt: text(c, f.imageAlt) || undefined,
         url: siteHref(text(c, f.url)),
+        href: siteHref(text(c, f.href)),
         photo: text(c, f.photo) || undefined,
         progress: text(c, f.progress) || undefined,
         ...treePlace(config, key, c, col),

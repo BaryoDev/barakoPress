@@ -612,7 +612,20 @@ const TYPE_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,62}$/;
 const FIELD_NAME = /^@?[A-Za-z][A-Za-z0-9_]{0,62}$/;
 const DATA_FIELD = /^[A-Za-z][A-Za-z0-9_]{0,62}$/;
 const SORT = /^-?[A-Za-z][A-Za-z0-9_]{0,62}$/;
-const FIELD_ROLES = ["slug", "summary", "body", "date", "image", "imageAlt", "featured", "tags", "url", "photo", "progress"] as const;
+const FIELD_ROLES = [
+    "slug",
+    "summary",
+    "body",
+    "date",
+    "image",
+    "imageAlt",
+    "featured",
+    "tags",
+    "url",
+    "photo",
+    "progress",
+    "href",
+] as const;
 
 function fieldNames(v: unknown): FieldNames | undefined {
     if (typeof v === "string") return FIELD_NAME.test(v) ? v : undefined;

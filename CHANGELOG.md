@@ -6,6 +6,9 @@
   below it, which item pages are served at either way. barakocms.com's `/modules` and `/changelog`
   pages needed exactly this: a collection with no index of its own, drawn by a hand-composed page at
   its route (#103).
+- `cardGrid` can link a card through a named field on the entry, `href`, falling back to the item's
+  own route when the collection has one. A collection filled by a sync usually carries the source's
+  own URL and has no route on this site, which is the shape `cardGrid` could not draw before (#104).
 
 ## 0.7.0 (2026-09-21)
 

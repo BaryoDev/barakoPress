@@ -282,6 +282,12 @@ export interface CollectionFields {
     photo?: FieldNames;
     /** How far along the entry is, 0 to 100, for a roadmap or a target. Read as text, not a number. */
     progress?: FieldNames;
+    /**
+     * Where a card for this item links, when that is not the item's own route: an entry filled by a
+     * sync usually carries the source's own URL. Only a site path or an http or https URL is used.
+     * Falls back to `${route}/${slug}` when the collection has a route and this is unset.
+     */
+    href?: FieldNames;
 }
 
 export interface CollectionReference {

@@ -160,7 +160,7 @@ merged over the configured collections by key. A build-time site passes `collect
 | --- | --- |
 | `type` | The content type. Required |
 | `route` | The index is served at the route and an item at `route/slug`. Absent, items are listed and never linked |
-| `fields` | `title` (required), `slug`, `summary`, `body` (markdown), `date`, `image`, `imageAlt`, `featured`, `tags`, `url`, `photo`, `progress`. Each is a field name or a list tried in order; `@createdAt` and `@updatedAt` read the entry itself. `photo` is a portrait drawn above the title, `image` the wide one, and `progress` is a number from 0 to 100 that `progressList` draws |
+| `fields` | `title` (required), `slug`, `summary`, `body` (markdown), `date`, `image`, `imageAlt`, `featured`, `tags`, `url`, `photo`, `progress`, `href`. Each is a field name or a list tried in order; `@createdAt` and `@updatedAt` read the entry itself. `photo` is a portrait drawn above the title, `image` the wide one, and `progress` is a number from 0 to 100 that `progressList` draws. `href` is where a card links when that is not the item's own route: a collection filled by a sync usually carries the source's own URL and has no route on this site |
 | `references` | Reference fields, each naming the collection it points into and the word a card puts before the link. Resolved in the same request |
 | `sort` | Sent to the API, for example `-PublishedAt` |
 | `feed` | Whether `createFeed(config, key)` serves it |
@@ -594,7 +594,10 @@ The blocks in the second half go in the first half's slots: stats in a `statBand
 `timeline`, `disclosure` blocks in `tabs`, `codeTab` blocks in `codeTabs`, `faqItem` blocks in
 `faq`. A card grid reads its entries through `{{item.Title}}`, `{{item.Summary}}`,
 `{{item.Date | date}}` and `{{item.Href}}`, so it works against whatever the tenant calls those
-fields, and it takes the collection as a prop rather than knowing any name.
+fields, and it takes the collection as a prop rather than knowing any name. `{{item.Href}}` is the
+collection's `href` field when it has one, and the item's own route otherwise, so a collection with
+no route on this site (one filled by a sync, say) still gets a working card once its entries carry
+their own link.
 
 Set a card grid's `option` to `show` and each card carries the glyph and the word the site declared
 for that entry's option, read through `{{item.Icon}}` and `{{item.Word}}`. With `filterField` and

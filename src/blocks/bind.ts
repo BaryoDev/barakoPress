@@ -358,7 +358,17 @@ export function itemScope(config: PressConfig, item: Item): Record<string, unkno
         ...(item.style?.label ?? item.option) !== undefined
             ? { Word: item.style?.label ?? item.option }
             : {},
-        ...(route !== undefined && item.slug ? { Href: `${route}/${item.slug}` } : {}),
+        /*
+         * A card's link (#104): the collection's own `href` field first, since that is what a synced
+         * entry carries when it points somewhere this site does not host. The item's own route is the
+         * fallback, not the default, because a collection with a route still wants it when no field
+         * says otherwise.
+         */
+        ...(item.href !== undefined
+            ? { Href: item.href }
+            : route !== undefined && item.slug
+              ? { Href: `${route}/${item.slug}` }
+              : {}),
         ...Object.fromEntries(Object.entries(item.refs).map(([field, ref]) => [field, ref ? { ...ref } : undefined])),
     };
 }
