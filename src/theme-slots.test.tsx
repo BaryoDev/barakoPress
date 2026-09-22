@@ -213,10 +213,40 @@ describe("block sizes from the type scale", () => {
 
     it("sizes a page title from the scale", async () => {
         const themed = { ...config, theme: { ...scaled, text: { ...scaled.text, pageTitle: "70px" } } };
-        const page = { id: "p", slug: "about", title: "About us", body: "" };
+        const page = { id: "p", slug: "about", title: "About us", body: "", hideTitle: false };
         const rendered = await render(await PageView({ config: themed, page, registry }));
         expect(rendered).toContain("About us");
         expect(rendered).toContain("font-size:70px");
         expect(rendered).not.toContain("4.4vw");
+    });
+
+    const occurrencesOf = (haystack: string, needle: string): number => haystack.split(needle).length - 1;
+
+    /*
+     * barakoPress #102: a page composed of blocks could not stop PageView drawing its title a
+     * second time above a block that already opens with its own heading. `showTitle` was a prop
+     * the route file set, unreachable from the page's own stored data.
+     */
+    it("prints the title once, not twice, when a block already opens with the page's heading", async () => {
+        const withoutFlag = {
+            id: "p",
+            slug: "about",
+            title: "About us",
+            body: "",
+            hideTitle: false,
+            blocks: [{ type: "text", props: { value: "About us", variant: "display" } }],
+        };
+        const stillDoubled = await render(await PageView({ config, page: withoutFlag, registry }));
+        expect(occurrencesOf(stillDoubled, "About us")).toBe(2);
+
+        const page = { ...withoutFlag, hideTitle: true };
+        const rendered = await render(await PageView({ config, page, registry }));
+        expect(occurrencesOf(rendered, "About us")).toBe(1);
+    });
+
+    it("still draws the title by default, when the page's own data says nothing", async () => {
+        const page = { id: "p", slug: "about", title: "About us", body: "", hideTitle: false };
+        const rendered = await render(await PageView({ config, page, registry }));
+        expect(occurrencesOf(rendered, "About us")).toBe(1);
     });
 });

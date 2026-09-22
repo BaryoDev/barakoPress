@@ -508,6 +508,27 @@ describe("applySiteSettings", () => {
         expect(out.site.socialLinks).toHaveLength(1);
     });
 
+    it("refuses a Text value that is not a length or a three-argument clamp of lengths", () => {
+        for (const wrong of [
+            "calc(1px)",
+            "clamp(32px, 4vw)",
+            "clamp(32px, 4vw, 52px, 10px)",
+            "clamp(32px 4vw 52px)",
+            "clamp(32px, 4vw, 52px);}</style><script>alert(1)</script>",
+            "clamp(calc(1px), 4vw, 52px)",
+            "not-clamp(32px, 4vw, 52px)",
+            "clamp(32px, 4vw, -52px)",
+        ]) {
+            const out = applySiteSettings(base, { Text: { pageTitle: wrong } }, null);
+            expect(out.theme.text.pageTitle).toBe(DEFAULT_THEME.text.pageTitle);
+        }
+    });
+
+    it("accepts a clamp() of three lengths for a Text role, the same shape the engine's own default uses", () => {
+        const out = applySiteSettings(base, { Text: { pageTitle: "clamp(32px, 5.4vw, 72px)" } }, null);
+        expect(out.theme.text.pageTitle).toBe("clamp(32px, 5.4vw, 72px)");
+    });
+
     it("reads the chrome fields the site blueprint defines", () => {
         const out = applySiteSettings(
             base,
