@@ -9,6 +9,11 @@
   that already opens with its own heading. The page's own data decides now, through a `HideTitle`
   field the blueprint maps by default, rather than only a `showTitle` prop the route file sets
   (#102).
+- A long unbroken token in running text, or a `pre` nested in a `stack` cell, laid a page out wider
+  than a 390px phone: inline `code` had no wrapping rule, and `pre` and `table` lost their own
+  `overflow-x` scroller to a flex ancestor that defaults to `min-width: auto`. Both are fixed in the
+  prose stylesheet, and a browser check at 390px now guards every page the look fixtures hold, the
+  same shape the tab strip check already uses (#101).
 
 ## 0.7.0 (2026-09-21)
 

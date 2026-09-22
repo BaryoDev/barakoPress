@@ -56,6 +56,20 @@ describe("proseCss", () => {
         expect(css).not.toContain("<");
         expect(css).toContain("/style");
     });
+
+    /*
+     * barakoPress #101: a long unbroken token (a binding name, a route) had nowhere to break in
+     * running text, and pre and table lost their own overflow-x scroller to a flex ancestor that
+     * defaults to min-width: auto. Both are geometry, so the real proof is look/viewport.pw.ts;
+     * these hold the rules steady at the unit level.
+     */
+    it("lets inline code wrap, and gives pre and table their own min-width", () => {
+        const css = proseCss(DEFAULT_THEME, "s");
+
+        expect(css).toContain("overflow-wrap:anywhere");
+        expect(css).toMatch(/\.s pre\{[^}]*overflow-x:auto[^}]*min-width:0/);
+        expect(css).toMatch(/\.s table\{[^}]*overflow-x:auto[^}]*min-width:0/);
+    });
 });
 
 describe("themeVariablesCss", () => {
