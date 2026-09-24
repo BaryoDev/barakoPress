@@ -704,8 +704,11 @@ const text = defineBlock<TextProps>({
         const variant = TEXT_VARIANTS[props.variant ?? "body"] ?? TEXT_VARIANTS.body;
         const Tag = (TEXT_TAGS as readonly string[]).includes(props.tag ?? "") ? (props.tag as (typeof TEXT_TAGS)[number]) : variant.tag;
         const heading = variant.tag !== "p";
+        // Decoration is hidden from a screen reader, which a link a keyboard can still reach must never
+        // be: inline marks that hold one keep the text in the accessibility tree.
+        const inlineLink = props.format === "inline" && /\]\(|<https?:/i.test(props.value);
         const hidden = {
-            ...(props.decorative ? { "aria-hidden": true as const } : {}),
+            ...(props.decorative && !inlineLink ? { "aria-hidden": true as const } : {}),
             ...(props.title ? { title: props.title } : {}),
         };
         const style: CSSProperties = {

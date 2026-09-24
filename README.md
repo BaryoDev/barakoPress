@@ -541,8 +541,10 @@ bottom), `spacer` and `divider`.
 A `stack` or a `panel` given an `href` is a link, the whole of it: a card whose face goes somewhere.
 A site path is drawn with Next's `Link`, anything with a scheme as a plain anchor, and the address is
 held to the same check as any link field. What is inside is the link's name, so nothing inside should
-be a link of its own. A `section`, `stack` or `panel` given an `anchor` carries it as its `id`, for a
-link to `#start` elsewhere; one that is not a plain name is left off.
+be a link of its own: one that holds a link, a button, a linked container, a control or a text with
+a markdown link in it is drawn without its `href`, and the server log says so once, since a link
+inside a link is markup a browser rewrites. A `section`, `stack` or `panel` given an `anchor` carries
+it as its `id`, for a link to `#start` elsewhere; one that is not a plain name is left off.
 
 `row` and `grid` take one list per cell, which suits a designer placing each one. `flow` takes a
 single list and lays out whatever is in it, which is what a `repeat` and a preset's `slot` produce:
@@ -553,7 +555,7 @@ because only a string field takes a binding, and a preset has to pass its own `c
 and `format: "inline"` for code, emphasis, strong, links and an accent in the line; see
 [Inline marks](#inline-marks-in-a-text-block); `tag` draws it as `p`, `span`, `code`, `strong`,
 `em` or `h1` to `h4` rather than the variant's element, `decorative` hides it from a screen reader,
-for an arrow after a link's words, and `title` is shown on hover),
+for an arrow after a link's words, unless its inline marks hold a link, and `title` is shown on hover),
 `richText` (markdown), `image`, `video`, `embed` (an iframe, only for a host in `embedHosts`),
 `icon`, `button`, `link`, `list`, `disclosure` (a labelled section that opens; give several the
 same `group` and only one is open at a time), `comparisonTable` (rows typed as lines with `|`

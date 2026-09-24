@@ -22,6 +22,7 @@ const { createBlockRegistry } = await import("./registry.js");
 const { BlockList } = await import("./render.js");
 const { resolveBlocks } = await import("./schema.js");
 const { writeFilterState } = await import("./filter.js");
+const { bindBlocks } = await import("./bind.js");
 
 const SITE = { name: "Test", url: "https://test.example" };
 const RECIPES = {
@@ -106,6 +107,39 @@ describe("a stack or a panel that links", () => {
     it("stays a div with no href", () => {
         const html = render([{ type: "panel", props: { recipe: "card", content: [[text({})]] } }]);
         expect(html).toContain('<div style="padding:22px;display:flex;justify-content:space-between" class="lift">');
+    });
+});
+
+describe("a container that links, holding a link of its own", () => {
+    async function bound(raw: unknown): Promise<string> {
+        const cfg = defineConfig({ site: SITE, theme: { recipes: RECIPES as never } });
+        const registry = createBlockRegistry(cfg);
+        const blocks = await bindBlocks(resolveBlocks(raw, registry, { perViewer: false }), { config: cfg, registry, scopes: {} });
+        return renderToStaticMarkup(<BlockList blocks={blocks} theme={cfg.theme} />);
+    }
+    const inside = (block: unknown) => [{ type: "stack", props: { href: "/docs/", recipe: "card", content: [[block]] } }];
+
+    it("is drawn without its href, so no link sits inside a link", async () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        const withLink = await bound(inside({ type: "link", props: { label: "Read", href: "/read/" } }));
+        const withInline = await bound(inside(text({ value: "See [the docs](/docs/x)", format: "inline" })));
+        const withButton = await bound(inside({ type: "stack", props: { href: "/inner/", content: [[text({})]] } }));
+        warn.mockRestore();
+
+        for (const html of [withLink, withInline, withButton]) expect(html.match(/<a /g)).toHaveLength(1);
+        expect(withLink).toContain('<div style="padding:22px;display:flex;justify-content:space-between" class="lift">');
+        expect(withButton).toContain('href="/inner/"');
+    });
+
+    it("keeps its href when what it holds is only words", async () => {
+        const html = await bound(inside(text({ value: "Read the docs", tag: "span" })));
+        expect(html).toContain('<a data-next-link="" href="/docs/"');
+    });
+
+    it("keeps a decoration that holds a link in the accessibility tree", () => {
+        const html = render([text({ value: "[x](/x)", format: "inline", decorative: true })]);
+        expect(html).not.toContain("aria-hidden");
+        expect(render([text({ value: "*x*", format: "inline", decorative: true })])).toContain('aria-hidden="true"');
     });
 });
 

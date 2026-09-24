@@ -133,7 +133,67 @@ export async function bindBlocks(blocks: ResolvedBlock[], options: BindPageOptio
         { ...options.scopes, count: ctx.count },
         { locale: options.config.locale, currency: options.config.currency, onProblem: options.onProblem },
     );
-    return bindList(blocks, { source }, ctx);
+    return unnestLinks(await bindList(blocks, { source }, ctx));
+}
+
+/*
+ * A `stack` or `panel` given an `href` is a link as a whole, and a link inside a link is markup a
+ * browser rewrites: it closes the outer anchor early, and the page it hydrates is not the page the
+ * server drew. So a container whose content holds anything a reader can press keeps its content and
+ * loses its `href`, and the server log says so once. Decided here, on the bound tree, because
+ * whether an inline text holds a link or a container links at all can come from a binding.
+ *
+ * What counts is what the engine draws: a link, a button, a linked container, a text or rich text
+ * holding a markdown link, and the blocks that are controls (a filter bar, a pager, a disclosure, a
+ * tab, a search box, an embed, a video). A plugin's own controls are the plugin's to keep out.
+ */
+const CONTROLS = new Set([
+    "link",
+    "button",
+    "filterBar",
+    "pager",
+    "disclosure",
+    "tabGroup",
+    "tabPanel",
+    "search",
+    "embed",
+    "video",
+    "codeSample",
+    "docsSidebar",
+    "docsSwitcher",
+]);
+const LINKING = new Set(["stack", "panel"]);
+const MARKDOWN_LINK = /\]\(|<https?:|https?:\/\//i;
+const unnestSaid = new Set<string>();
+
+function linksAsAWhole(block: ResolvedBlock): boolean {
+    return LINKING.has(block.definition.type) && typeof block.props.href === "string" && block.props.href.trim() !== "";
+}
+
+function pressable(block: ResolvedBlock): boolean {
+    const type = block.definition.type;
+    if (CONTROLS.has(type) || linksAsAWhole(block)) return true;
+    if (type === "text" && block.props.format === "inline") return MARKDOWN_LINK.test(String(block.props.value ?? ""));
+    if (type === "richText") return MARKDOWN_LINK.test(String(block.props.markdown ?? ""));
+    return Object.values(block.slots).some((lists) => lists.some((list) => list.some(pressable)));
+}
+
+function unnestLinks(blocks: ResolvedBlock[]): ResolvedBlock[] {
+    return blocks.map((block) => {
+        const slots = Object.fromEntries(
+            Object.entries(block.slots).map(([name, lists]) => [name, lists.map((list) => unnestLinks(list))]),
+        );
+        const inner = Object.values(slots).some((lists) => lists.some((list) => list.some(pressable)));
+        if (!linksAsAWhole(block) || !inner) return { ...block, slots };
+        const message = `blocks: a ${block.definition.type} linking to ${String(block.props.href)} holds a link or a control of its own, so it is drawn without its href`;
+        if (!unnestSaid.has(message)) {
+            if (unnestSaid.size >= 200) unnestSaid.clear();
+            unnestSaid.add(message);
+            console.warn(message);
+        }
+        const { href: _dropped, ...props } = block.props;
+        return { ...block, props, slots };
+    });
 }
 
 async function bindList(blocks: ResolvedBlock[], frame: Frame, ctx: BindContext): Promise<ResolvedBlock[]> {
