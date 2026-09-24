@@ -12,3 +12,4 @@ baryovm.release.json
 Dockerfile
 .dockerignore
 dist
+.press-plugins

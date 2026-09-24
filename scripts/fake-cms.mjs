@@ -65,6 +65,20 @@ function pageAt(slug, title, markdown, crumbs = [[title, `/${slug}`]]) {
     };
 }
 
+const TALLY_PAGE = {
+    id: "tally",
+    slug: "tally",
+    data: {
+        Title: "Tally",
+        Slug: "tally",
+        Blocks: [
+            { type: "text", props: { value: "Before the tally" } },
+            { type: "sampleTally", props: { count: 1234, label: "sites served" } },
+            { type: "text", props: { value: "After the tally" } },
+        ],
+    },
+};
+
 const tenants = {
     rckoronadal: {
         host: "rckoronadal.org",
@@ -79,12 +93,17 @@ const tenants = {
             // A footer region (#48): the page below is drawn as the footer, in place of the built-in one.
             FooterPath: "/site/footer",
             FooterTone: "surface",
+            // The sample plugin package, which only an image built through the plugin recipe carries.
+            Plugins: ["sample"],
         },
         post: "club-news",
         // The footer page is in the menu the CMS returns, and must be drawn as the footer and nowhere else.
         navigation: [nav("p", "Projects", "/projects", 1), nav("f", "Footer", "/site/footer", 2)],
         content: { project: PROJECTS },
         pages: {
+            // The same page on two tenants: only this one enabled the sample plugin (#25), so only this
+            // one draws the tally, and both draw the text around it.
+            "/tally": TALLY_PAGE,
             "/site/footer": {
                 id: "sf",
                 slug: "footer",
@@ -119,6 +138,7 @@ const tenants = {
             "/about": pageAt("about", "About", "About BaryoDev", [["About", "/about"]]),
             "/about/team": pageAt("team", "Team", "Meet the team", [["About", "/about"], ["Team", "/about/team"]]),
             "/docs": pageAt("docs", "Docs", "The docs"),
+            "/tally": TALLY_PAGE,
             // Where the manual's search box submits: a search block bound to the request's query.
             "/manual-search": {
                 id: "ms",

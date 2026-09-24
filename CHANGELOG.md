@@ -2,6 +2,21 @@
 
 ## 0.8.0 (unreleased)
 
+- Plugin packages (#25). A plugin is an npm package whose default export is
+  `definePlugin({ name, blocks })`, its blocks written with `defineBlock` and checked at compile time
+  the same as the built-ins. It reaches a deployment through a derived image: `npm pack` tarballs in a
+  directory passed to the Dockerfile as the `plugins` build context, built from the engine's source at
+  a pinned release tag (`examples/derived-image/compose.yml`). One image carries every plugin, and a
+  tenant renders a plugin's blocks only when its `Plugins` site setting names it; a build-time site
+  sets `plugins` in its config. Until then the blocks are not in `/api/blocks`, a page holding one
+  renders without it, and a preset drawing one is left out. `/api/blocks` adds `plugins`, each
+  installed plugin with whether the tenant enabled it, and `plugin` on each block a plugin added.
+  `createBlockRegistry` takes `plugins`, and refuses a plugin block whose name is already taken. A
+  plugin block is passed its props, slots and theme and not the config, but its code runs in the
+  server with full access, so installing a plugin is trusting it with the deployment. Every plugin's
+  code is loaded for every tenant the container serves, so tenants that must not share plugins need
+  separate deployments. A plugin's dependencies must be bundled in its tarball, since the install
+  runs offline, and a plugin named like a package the engine has is refused. An image built with no plugins renders exactly as before.
 - Style recipes, and inline marks in text (#131). `StyleRecipes` in the site settings (or
   `theme.recipes`) holds named looks, each `{ class, style }`: classes put on the element, and CSS
   properties to values, where `{name}` in a value is a token and `{colors.accent}`, `{space.lg}` and

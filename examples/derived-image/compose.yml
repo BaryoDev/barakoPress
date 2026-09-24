@@ -1,0 +1,29 @@
+# A barakoPress image with plugin packages in it (barakoPress #25).
+#
+# Put `npm pack` tarballs of the plugins in ./plugins, then `docker compose build`. A plugin's own
+# dependencies go inside its tarball as bundleDependencies, since the install runs offline.
+#
+# The engine is the source at a release tag, which is what the published image of that tag was built
+# from. The v0.8.0 tag exists from the 0.8.0 release on. A tag can be moved, so record the commit it
+# points at beside it, and build from the commit for the strict form:
+#
+#   git ls-remote https://github.com/BaryoDev/barakoPress.git v0.8.0
+#   context: https://github.com/BaryoDev/barakoPress.git#<that commit>
+#
+# Move it only as an engine upgrade: rebuild and check the plugins against the new one.
+#
+# Each tenant then enables the plugins it uses with the `Plugins` setting in its site settings. Until it
+# does, the plugins' blocks are neither offered nor rendered for it.
+services:
+  press:
+    build:
+      context: https://github.com/BaryoDev/barakoPress.git#v0.8.0
+      additional_contexts:
+        plugins: ./plugins
+    image: barako-press-plugins:0.8.0
+    environment:
+      CMS_URL: ${CMS_URL}
+      PRESS_SECRET: ${PRESS_SECRET}
+      PRESS_CONSOLE_ORIGINS: ${PRESS_CONSOLE_ORIGINS:-}
+    ports:
+      - "127.0.0.1:${SITE_PORT:-3000}:3000"
