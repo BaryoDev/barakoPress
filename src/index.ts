@@ -42,6 +42,9 @@ export {
     SETTINGS_TYPE,
     EMBED_HOSTS,
     TREE_LIMIT,
+    TREE_PAGERS,
+    TREE_SIDEBARS,
+    TREE_SWITCHERS,
     hasFeed,
 } from "./config.js";
 export {
@@ -117,6 +120,7 @@ export type {
     Home,
     CollectionTree,
     TreeProduct,
+    TreeVariant,
 } from "./config.js";
 
 export {
@@ -173,8 +177,8 @@ export type { Post, Ref, Term, Page, NavItem, Breadcrumb, PageAtPath, Redirect }
 export { Navigation, Breadcrumbs } from "./screens/navigation.js";
 export type { NavigationProps, BreadcrumbsProps } from "./screens/navigation.js";
 
-export { renderMarkdown, isSafeHref, anchor } from "./markdown.js";
-export type { RenderMarkdownOptions } from "./markdown.js";
+export { renderMarkdown, isSafeHref, anchor, markdownHeadings } from "./markdown.js";
+export type { RenderMarkdownOptions, MarkdownHeading } from "./markdown.js";
 
 export { Asset, renderProse, suppliedAssetFor, suppliedAssetOn, clearSpaceOf } from "./assets.js";
 export type { AssetProps, SuppliedProps } from "./assets.js";
@@ -199,12 +203,23 @@ export {
     collectionOf,
     referencedBy,
 } from "./collections.js";
-export { collectionTree, editHref, flattenTree, treeNeighbours, treeProducts, TREE_MAX_DEPTH } from "./tree.js";
+export {
+    collectionTree,
+    editHref,
+    flattenTree,
+    itemHeadings,
+    treeNeighbours,
+    treeProducts,
+    treeSearchIndex,
+    TREE_INDEX_LIMIT,
+    TREE_MAX_DEPTH,
+} from "./tree.js";
 export type {
     CollectionTreeOptions,
     CollectionTreeResult,
     TreeNeighbours,
     TreeNode,
+    TreeSearchEntry,
     TreeSection,
 } from "./tree.js";
 export type { Item, ListCollectionOptions, CollectionPage, CollectionRun } from "./collections.js";
@@ -225,8 +240,25 @@ export type {
 export type { PostViewProps } from "./screens/post-view.js";
 export { ArticleView } from "./screens/article-view.js";
 export type { ArticleRelated, ArticleViewProps } from "./screens/article-view.js";
-export { EditLink, SearchBox, TreePager, TreeShell, TreeSidebar, TreeSwitcher } from "./screens/tree.js";
-export type { SearchBoxProps, TreePagerProps, TreeSidebarProps, TreeSwitcherProps } from "./screens/tree.js";
+export {
+    EditLink,
+    SearchBox,
+    TreeAside,
+    TreePager,
+    TreeRail,
+    TreeShell,
+    TreeSidebar,
+    TreeSwitcher,
+    treeVariant,
+} from "./screens/tree.js";
+export type {
+    SearchBoxProps,
+    TreeAsideProps,
+    TreePagerProps,
+    TreeRailProps,
+    TreeSidebarProps,
+    TreeSwitcherProps,
+} from "./screens/tree.js";
 
 export {
     defineBlock,

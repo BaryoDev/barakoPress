@@ -117,3 +117,45 @@ export function renderMarkdown(source: string, options: RenderMarkdownOptions = 
     }
     return renderer.parse(source, { async: false }) as string;
 }
+
+export interface MarkdownHeading {
+    /** The id `renderMarkdown` gives the heading, so `#id` lands on it. */
+    id: string;
+    /** The heading as plain text, with its inline markup dropped. */
+    text: string;
+}
+
+type InlineToken = { type: string; raw?: string; text?: string; tokens?: InlineToken[] };
+
+function plainText(tokens: InlineToken[]): string {
+    return tokens
+        .map((t) => {
+            if (t.type === "html") return t.raw ?? "";
+            if (t.tokens && t.tokens.length > 0) return plainText(t.tokens);
+            return t.text ?? t.raw ?? "";
+        })
+        .join("");
+}
+
+let lexer: Marked | undefined;
+
+/**
+ * The headings of one level in a markdown source, in order, with the ids `renderMarkdown` gives them.
+ *
+ * Read from the lexer rather than from rendered HTML, so listing a page's headings costs a tokenise
+ * and not a render. The id is worked out the way the renderer works it out, from the heading's raw
+ * inline source, and that is what keeps a link to `#id` landing on the heading it names.
+ */
+export function markdownHeadings(source: string, depth = 2): MarkdownHeading[] {
+    if (!source) return [];
+    lexer ??= new Marked({ gfm: true, breaks: false });
+    const out: MarkdownHeading[] = [];
+    for (const token of lexer.lexer(source)) {
+        if (token.type !== "heading" || token.depth !== depth) continue;
+        const inline = (token.tokens ?? []) as InlineToken[];
+        const id = anchor(inline.map((t) => t.raw ?? "").join(""));
+        const text = plainText(inline).trim();
+        if (id && text) out.push({ id, text });
+    }
+    return out;
+}

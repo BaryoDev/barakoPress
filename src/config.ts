@@ -486,6 +486,42 @@ export interface CollectionTree {
     editPath?: FieldNames;
     /** The most items read to build the tree. `TREE_LIMIT` unless set. */
     limit?: number;
+    /** How the tree screens are laid out. Every part is today's layout when unset. */
+    variant?: TreeVariant;
+    /**
+     * Search the tree's own titles and headings in the page, as the reader types, rather than
+     * submitting to `searchPath` and asking the API. The box is drawn whenever this is set; with a
+     * `searchPath` as well, a reader with no script still gets that route's answer.
+     */
+    searchIndex?: boolean;
+}
+
+export const TREE_SWITCHERS = ["tabs", "list"] as const;
+export const TREE_SIDEBARS = ["plain", "boxed"] as const;
+export const TREE_PAGERS = ["wide", "halves"] as const;
+
+/**
+ * The layouts a tree's parts come in (#130). Each part is styled from tokens either way; these are
+ * the choices a token cannot make, because they change which elements are drawn or where they sit.
+ */
+export interface TreeVariant {
+    /**
+     * `tabs`, the default: a row of pills above the search box. `list`: a labelled column of links
+     * inside the sidebar, above the sections, styled as the sidebar's own links are.
+     */
+    switcher?: (typeof TREE_SWITCHERS)[number];
+    /**
+     * `plain`, the default: the sidebar sits in the page's wide column beside the page. `boxed`: the
+     * page is split edge to edge, the sidebar a surface column with a hairline between it and the page.
+     */
+    sidebar?: (typeof TREE_SIDEBARS)[number];
+    /** An "on this page" column of the item's second level headings, at the inline end. Off by default. */
+    rail?: boolean;
+    /**
+     * `wide`, the default: previous and next each take what room there is and wrap on a phone.
+     * `halves`: two equal halves that never wrap, with next on the right even when there is no previous.
+     */
+    pager?: (typeof TREE_PAGERS)[number];
 }
 
 /** The most items read to build a tree when the collection does not say, and the most it may ask for. */
@@ -498,6 +534,8 @@ export interface TreeProduct {
     label: string;
     /** Where the switcher sends a reader. A site path, or an http or https URL. */
     href: string;
+    /** A short note drawn after the label in the list switcher, for example "on GitHub". */
+    note?: string;
 }
 
 /**
@@ -558,6 +596,8 @@ export interface Labels {
     contents: string;
     /** The label on the product switcher. */
     products: string;
+    /** The heading over a tree page's rail of its own headings. */
+    onThisPage: string;
     /** The button that opens the header's phone menu. */
     openMenu: string;
     /** The same button while the menu is open. */
@@ -595,6 +635,7 @@ export const DEFAULT_LABELS: Labels = {
     editPage: "Edit this page",
     contents: "Contents",
     products: "Products",
+    onThisPage: "On this page",
     openMenu: "Open menu",
     closeMenu: "Close menu",
     menu: "Menu",

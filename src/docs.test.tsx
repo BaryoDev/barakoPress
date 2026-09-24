@@ -480,3 +480,46 @@ describe("a manual whose CMS stopped answering", () => {
         expect(entries.map((e) => e.url).some((url) => url.includes("/docs/"))).toBe(false);
     });
 });
+
+describe("a manual laid out by its settings (#130)", () => {
+    function laidOut(tree: Record<string, unknown>) {
+        const settings = { ...SETTINGS, Collections: { docs: { ...DOCS_COLLECTION, tree: { ...DOCS_COLLECTION.tree, ...tree } } } };
+        vi.stubGlobal("fetch", cms(settings));
+        requestHeaders = new Headers({ host: "barakocms.com" });
+    }
+
+    it("takes the variants, the in-page index and a product's note from the tenant's Collections", async () => {
+        laidOut({
+            variant: { switcher: "list", sidebar: "boxed", rail: true, pager: "halves" },
+            searchIndex: true,
+            products: [
+                { key: "cms", label: "barakoCMS", href: "/docs" },
+                { key: "press", label: "barakoPress", href: "https://github.com/BaryoDev/barakoPress", note: "on GitHub" },
+            ],
+        });
+        const config = await site();
+        expect(config.collections.docs.tree?.variant).toEqual({ switcher: "list", sidebar: "boxed", rail: true, pager: "halves" });
+        expect(config.collections.docs.tree?.searchIndex).toBe(true);
+
+        const html = await markup(createPage(base)({ params: Promise.resolve({ path: ["docs", "delivery-paging"] }) }));
+        expect(html).toContain("bp-tree-shell-boxed");
+        expect(html).toContain("bp-tree-switcher-list");
+        expect(html).toContain(">on GitHub</span>");
+        expect(html).toContain("data-bp-search-index");
+        // Every page of the product is in the index, the one being read included.
+        expect(html).toContain('data-bp-search-text="quickstart"');
+        expect(html).toContain('data-bp-search-text="paging"');
+    });
+
+    it("keeps today's layout for a part whose variant it does not know, and ignores a rail that is not true", async () => {
+        laidOut({ variant: { switcher: "carousel", sidebar: "floating", rail: "yes", pager: 2 }, searchIndex: "yes" });
+        const config = await site();
+        expect(config.collections.docs.tree?.variant).toBeUndefined();
+        expect(config.collections.docs.tree?.searchIndex).toBeUndefined();
+
+        const html = await markup(createPage(base)({ params: Promise.resolve({ path: ["docs", "delivery-paging"] }) }));
+        expect(html).toContain("bp-tree-switcher-tabs");
+        expect(html).not.toContain("bp-tree-shell-boxed");
+        expect(html).not.toContain("data-bp-search-index");
+    });
+});

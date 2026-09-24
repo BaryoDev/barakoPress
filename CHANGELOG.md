@@ -2,6 +2,18 @@
 
 ## 0.8.0 (unreleased)
 
+- The tree screens take a site's styling (#130). Every colour, gap, radius and size in the sidebar,
+  the switcher, the search box, the pager and the edit link is read as
+  `var(--t-tree-<name>, <today's value>)`, so a tenant's `Tokens` restyle one part at a time and a
+  site that names none draws the same pixels as before. Each part carries a `bp-tree-*` class. A
+  tree's `variant` picks the layouts a token cannot: `switcher` `tabs` or `list`, `sidebar` `plain`
+  or `boxed`, `rail` for an "on this page" column of the item's headings, `pager` `wide` or `halves`;
+  each component takes the same as a `variant` prop. A product takes a `note`. `searchIndex: true`
+  draws the tree's titles and headings into the page and filters them as the reader types.
+  `treeSearchIndex(tree)` builds that index once per tree read, and `itemHeadings` tokenises a body
+  once however many pages list it. New exports: `TreeRail`, `TreeAside`, `treeVariant`,
+  `treeSearchIndex`, `itemHeadings`, `markdownHeadings`. New label: `onThisPage`.
+
 - The tenant-aware `/api/blocks` handler takes its request as required, not optional. Next's route
   type check refuses a handler whose request may be absent, so a consumer built with webpack failed
   its type check on `app/api/blocks/route.ts`.

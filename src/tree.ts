@@ -1,6 +1,7 @@
 import { TREE_LIMIT, type CollectionTree, type PressConfig, type TreeProduct } from "./config.js";
 import { collectionOf, listAllCollection, type Item } from "./collections.js";
 import { siteHref } from "./site.js";
+import { markdownHeadings, type MarkdownHeading } from "./markdown.js";
 
 /*
  * A collection read as a tree (#23).
@@ -223,7 +224,7 @@ export function treeProducts(
     return products.flatMap((p) => {
         const href = siteHref(p.href);
         if (!p.key || !p.label || !href) return [];
-        return [{ key: p.key, label: p.label, href, current: p.key === current }];
+        return [{ key: p.key, label: p.label, href, ...(p.note ? { note: p.note } : {}), current: p.key === current }];
     });
 }
 
@@ -247,4 +248,75 @@ export function editHref(config: PressConfig, item: Pick<Item, "collection" | "s
     let end = base.length;
     while (end > 0 && base.charCodeAt(end - 1) === 47) end--;
     return siteHref(`${base.slice(0, end)}/${trimSlashes(tail)}`);
+}
+
+/*
+ * The headings of a body, lexed once per distinct body and kept.
+ *
+ * Every page of a manual lists every other page's headings in its search index, so without this a
+ * build of a manual of n pages tokenises n bodies n times. Keyed by the body itself, so an edited page
+ * is a new key and the old one ages out. Bounded, because a request-time site holds every tenant's
+ * manuals in one process.
+ */
+const HEADINGS_KEPT = 2000;
+const headingsKept = new Map<string, readonly MarkdownHeading[]>();
+
+/** An item's second level headings, with the ids its rendered body gives them. */
+export function itemHeadings(item: Pick<Item, "body">): readonly MarkdownHeading[] {
+    const body = item.body;
+    if (!body) return [];
+    const kept = headingsKept.get(body);
+    if (kept) return kept;
+    const found = markdownHeadings(body, 2);
+    if (headingsKept.size >= HEADINGS_KEPT) {
+        const oldest = headingsKept.keys().next().value;
+        if (oldest !== undefined) headingsKept.delete(oldest);
+    }
+    headingsKept.set(body, found);
+    return found;
+}
+
+export interface TreeSearchEntry {
+    /** The page's title. */
+    title: string;
+    /** The heading this entry points into, when it is one and not the page itself. */
+    heading?: string;
+    /** The page, and the heading's anchor when there is one. */
+    href: string;
+}
+
+/** The most entries an index holds, pages and headings together, since every one is markup in the page. */
+export const TREE_INDEX_LIMIT = 2000;
+
+const indexes = new WeakMap<CollectionTreeResult, readonly TreeSearchEntry[]>();
+
+/**
+ * What the search box looks through in the page: every page with a route, then its headings, in
+ * reading order.
+ *
+ * Built once per tree read and handed to everything drawn from that read, so the box on an item page
+ * and a search block over the same tree share one index rather than each building its own. A page's
+ * headings come from `itemHeadings`, so a body is lexed once across reads as well, not once per page
+ * that lists it.
+ */
+export function treeSearchIndex(tree: CollectionTreeResult): readonly TreeSearchEntry[] {
+    const kept = indexes.get(tree);
+    if (kept) return kept;
+    const out: TreeSearchEntry[] = [];
+    const walk = (nodes: TreeNode[]) => {
+        for (const node of nodes) {
+            if (out.length >= TREE_INDEX_LIMIT) return;
+            if (node.href) {
+                out.push({ title: node.item.title, href: node.href });
+                for (const h of itemHeadings(node.item)) {
+                    if (out.length >= TREE_INDEX_LIMIT) break;
+                    out.push({ title: node.item.title, heading: h.text, href: `${node.href}#${h.id}` });
+                }
+            }
+            walk(node.children);
+        }
+    };
+    for (const section of tree.sections) walk(section.nodes);
+    indexes.set(tree, out);
+    return out;
 }
