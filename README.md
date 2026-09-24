@@ -1071,6 +1071,22 @@ stylesheet named in `theme.fontSources` when the face is not loaded from there, 
 They are not a way to compose a post out of arbitrary sections. Anything that has to sit between two
 paragraphs belongs to the block model, which is issue #6, because only the body knows where it goes.
 
+**A theme that draws the page itself.** A deployment that ports an existing design registers its own
+blocks under the built-in type names and ships its own stylesheet. Two things would still be the
+engine's, and neither can be undone from a stylesheet because both are inline: the page frame
+(`main`, its padding, the title and the breadcrumbs) and the gap between blocks. So:
+
+```tsx
+export default createPage(config, blocks, { bare: true });   // only the blocks
+```
+
+```css
+body { --bp-gap: 0; }   /* every block list, at every level */
+```
+
+`bare` is also taken by `createHome` and `createViewerPage`. `--bp-gap` falls back to
+`theme.space.lg`, so a site that sets neither renders as it did.
+
 Read time is derived from the body at 200 words a minute, with fenced code blocks excluded, so there
 is no field to fill in and nothing to keep in sync.
 

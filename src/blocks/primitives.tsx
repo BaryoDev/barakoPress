@@ -493,6 +493,11 @@ const text = defineBlock<TextProps>({
             color: inherited(theme, INK[props.tone ?? ""] ?? (heading ? "ink" : "secondaryInk")),
             textAlign: textAlignOf(props.align),
             textWrap: heading ? "balance" : "pretty",
+            // A token with nowhere to break sizes the cell this sits in, rather than the cell
+            // sizing it, so a package id in a heading lays the page out wider than the phone it is
+            // read on. `anywhere` rather than `break-word` because only `anywhere` counts in the
+            // intrinsic minimum a flex or grid parent measures.
+            overflowWrap: "anywhere",
         };
         /*
          * A figure counts up to what is already written here. The number stays the element's own
