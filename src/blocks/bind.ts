@@ -5,7 +5,9 @@ import {
     BindingSource,
     bindText,
     bindValue,
+    formatValue,
     hasBinding,
+    walk,
     type BindingProblem,
     type BindingScopes,
     type BindingWhere,
@@ -73,6 +75,10 @@ export interface BindContext {
     config: PressConfig;
     registry: BlockRegistry;
     budget: { blocks: number; reads: number };
+    /** What `{{count.<collection>}}` resolves through, wherever on the page it is written. */
+    count: (path: string) => Promise<number | undefined> | number | undefined;
+    /** One read per collection per render, however many placeholders count it. */
+    counts: Map<string, Promise<number | undefined>>;
 }
 
 export interface BindPageOptions {
@@ -83,16 +89,18 @@ export interface BindPageOptions {
 }
 
 export async function bindBlocks(blocks: ResolvedBlock[], options: BindPageOptions): Promise<ResolvedBlock[]> {
-    const source = new BindingSource(options.scopes, {
-        locale: options.config.locale,
-        currency: options.config.currency,
-        onProblem: options.onProblem,
-    });
     const ctx: BindContext = {
         config: options.config,
         registry: options.registry,
         budget: { blocks: MAX_BLOCKS, reads: MAX_SOURCES },
+        count: (path) => collectionCount(ctx, path),
+        counts: new Map(),
     };
+    if (options.scopes.count) ctx.count = options.scopes.count;
+    const source = new BindingSource(
+        { ...options.scopes, count: ctx.count },
+        { locale: options.config.locale, currency: options.config.currency, onProblem: options.onProblem },
+    );
     return bindList(blocks, { source }, ctx);
 }
 
@@ -345,9 +353,10 @@ async function bindSource(block: ResolvedBlock, frame: Frame, ctx: BindContext):
         const item = slug === "" ? null : await read(() => getItem(ctx.config, key, slug));
         if (!item) return [];
         const scope = itemScope(ctx.config, item);
+        const inner = rowScopes(ctx, [item], 1);
         return bindList(
             content,
-            { ...frame, source: frame.source.with({ item: () => scope }), rows: { items: [item] } },
+            { ...frame, source: frame.source.with({ ...inner, item: () => scope }), rows: { items: [item] } },
             ctx,
         );
     }
@@ -369,11 +378,118 @@ async function bindSource(block: ResolvedBlock, frame: Frame, ctx: BindContext):
             filter: field !== "" ? { [field]: want } : undefined,
         }),
     );
+    const items = loaded?.items ?? [];
+    const total = typeof loaded?.total === "number" ? loaded.total : undefined;
+
+    const groupBy = (await boundString(block, frame.source, "groupBy")).trim();
+    if (groupBy !== "") {
+        const order = (await boundString(block, frame.source, "groupOrder")).split(",");
+        return bindGroups(content, frame, ctx, groupRows(ctx.config, items, groupBy, order), total);
+    }
+
     const rows: Rows = {
-        items: loaded?.items ?? [],
+        items,
         ...(param !== "" ? { pager: { param, page, hasNext: loaded?.hasNextPage ?? false } } : {}),
     };
-    return bindList(content, { ...frame, rows }, ctx);
+    return bindList(content, { ...frame, source: frame.source.with(rowScopes(ctx, items, total)), rows }, ctx);
+}
+
+/*
+ * A grouped source renders its content once per group, and inside each the group is the rows: a
+ * `repeat` walks that group's rows and `{{sum.X}}` adds them. `{{count}}` stays what the source
+ * matched, and `{{group.count}}` is how many of the rows it read fell in this group.
+ *
+ * No pager inside a group. The groups are made from one page of rows, so a pager in each would page
+ * every group at once, and the groups on page two are not the groups on page one.
+ */
+async function bindGroups(
+    content: ResolvedBlock[],
+    frame: Frame,
+    ctx: BindContext,
+    groups: { key: string; items: Item[] }[],
+    total: number | undefined,
+): Promise<ResolvedBlock[]> {
+    const out: ResolvedBlock[] = [];
+    for (const group of groups) {
+        if (ctx.budget.blocks <= 0) break;
+        const scope = { key: group.key, count: group.items.length };
+        const source = frame.source.with({ ...rowScopes(ctx, group.items, total), group: () => scope });
+        out.push(...(await bindList(content, { ...frame, source, rows: { items: group.items } }, ctx)));
+    }
+    return out;
+}
+
+/**
+ * Rows by the text of one field, in the order first seen, with the keys `order` names moved to the
+ * front in that order. A row with nothing in the field is kept, under an empty key, so grouping
+ * never hides a row the source read; `{{group.key ?? Other}}` names it.
+ */
+function groupRows(config: PressConfig, items: Item[], field: string, order: string[]) {
+    const groups = new Map<string, Item[]>();
+    for (const item of items) {
+        const value = walk(itemScope(config, item), field);
+        const key = formatValue(value, "text", { locale: config.locale }) ?? "";
+        const rows = groups.get(key);
+        if (rows) rows.push(item);
+        else groups.set(key, [item]);
+    }
+    const first = order.map((key) => key.trim()).filter((key) => key !== "" && groups.has(key));
+    const keys = [...new Set(first), ...[...groups.keys()].filter((key) => !first.includes(key))];
+    return keys.map((key) => ({ key, items: groups.get(key) ?? [] }));
+}
+
+/** `count` and `sum` for the blocks inside a source, over the rows it read. */
+function rowScopes(ctx: BindContext, items: Item[], total: number | undefined): BindingScopes {
+    return {
+        count: (path) => (path === "" ? total : ctx.count(path)),
+        sum: () => sums(ctx.config, items),
+    };
+}
+
+/**
+ * Each field that holds a number in every row that has it, added up. A number stored as text counts,
+ * the way `| number` reads one; a field with a word in any row is not a sum and is left out, so it
+ * renders its fallback rather than a total of the rows that happened to be numbers.
+ *
+ * Over the rows the source read, which is at most fifty. A source that pages sums the page.
+ */
+function sums(config: PressConfig, items: Item[]): Record<string, number> {
+    const totals: Record<string, number> = {};
+    const refused = new Set<string>();
+    for (const item of items) {
+        for (const [field, value] of Object.entries(itemScope(config, item))) {
+            if (value === undefined || value === null || value === "" || refused.has(field)) continue;
+            const n = typeof value === "number" ? value : typeof value === "string" ? Number(value.trim()) : NaN;
+            if (!Number.isFinite(n)) {
+                refused.add(field);
+                delete totals[field];
+                continue;
+            }
+            totals[field] = (totals[field] ?? 0) + n;
+        }
+    }
+    return totals;
+}
+
+/**
+ * How many published entries a collection has: the delivery API's `totalItems` for a page of one.
+ * The public API lists published entries only, so this is the number of rows the page could list.
+ *
+ * Each collection counted is one of the page's reads, spent the first time it is named. Past the
+ * budget, and for a key that is no collection, it is a count that could not be had and renders the
+ * fallback. The empty path is `{{count}}` outside any source, which counts nothing.
+ */
+function collectionCount(ctx: BindContext, path: string): Promise<number | undefined> | undefined {
+    if (path === "" || !collectionOf(ctx.config, path)) return undefined;
+    const known = ctx.counts.get(path);
+    if (known) return known;
+    if (ctx.budget.reads <= 0) return undefined;
+    ctx.budget.reads--;
+    const counted = read(() => listCollection(ctx.config, path, { pageSize: 1 })).then((page) =>
+        typeof page?.total === "number" ? page.total : undefined,
+    );
+    ctx.counts.set(path, counted);
+    return counted;
 }
 
 /** A page's read must not take the page down, which is the rule the feed and the sitemap follow. */

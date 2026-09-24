@@ -574,8 +574,8 @@ Scopes are `site` (the tenant's settings and resolved identity), `page` (the ent
 renders), `item` (the row inside a `source` or a `repeat`) and `query` (URL parameters). An item
 reads its entry's own fields by name, with the collection's roles (`Title`, `Summary`, `Body`,
 `Date` and the rest) laid over them only where the collection's `fields` maps that role, so an
-unmapped `Body` is still the entry's own `Body`. `viewer`
-arrives with #7. Formats are `text`, `date`, `datetime`, `time`, `money`, `number`, `upper` and
+unmapped `Body` is still the entry's own `Body`. `count`, `sum` and `group` are about a set of rows
+rather than one, and are described with `source` below. `viewer` arrives with #7. Formats are `text`, `date`, `datetime`, `time`, `money`, `number`, `upper` and
 `lower`; `money` uses the tenant's `Currency` setting, or a plain amount when it has none.
 
 Paths, formats and fallbacks only. There are no expressions and no JavaScript. Everything resolves
@@ -613,6 +613,61 @@ keeps its content only when a bound value has something, or equals what it names
 A filter narrows what the API already lets the reader see. It is never access control: who may read
 which rows is decided in barakoCMS. A page reads at most eight sources, and a `source` at most fifty
 rows a page.
+
+**Counts, sums and groups.** `{{count.<collection>}}` anywhere on a page is how many published
+entries the collection has, for example `{{count.posts}}`. It is the delivery API's `totalItems` for
+a page of one row, cached like every other read, and the public API lists published entries only, so
+it is the number of rows the page could list. Inside a `source`, `{{count}}` on its own is how many
+rows that source's filter matched, all of them and not just the page it read:
+
+```json
+{ "type": "source", "props": {
+    "collection": "packages", "mode": "list", "pageSize": 1,
+    "filterField": "Category", "filterValue": "Auth",
+    "content": [[ { "type": "text", "props": { "value": "{{count}} auth modules" } } ]]
+} }
+```
+
+A filtered count is a `source` rather than something like `{{count.packages where Category=Auth}}`
+because a placeholder is paths, formats and fallbacks, and a filter value is free text: a value with a
+space or a hyphen cannot be a path segment, and a placeholder that could carry a condition would be
+the start of an expression language. `filterField` and `filterValue` already bind, so the value can
+come from `{{query.c}}` or an item, and the count costs the one read the source makes anyway. Set
+`pageSize` to 1 when the count is all the source is for.
+
+Each collection counted is one of the page's eight reads, spent the first time a placeholder names
+it and shared by every other placeholder that names it. Sources and counts draw on the same eight, in
+the order the page is written. A count past the budget, one for a collection the tenant does not
+have, and one whose read failed all render the fallback and are reported as `no value`.
+
+`{{sum.<Field>}}` inside a `source` adds that field over the rows the source read, for example the
+open issues across a roadmap's milestones. A number stored as text counts. A field with a word in
+any row is not a sum and renders its fallback, and a source with no rows has no sums, so write
+`{{sum.Open ?? 0}}` where zero is the right answer. A sum covers the rows read, at most fifty; a
+source that pages sums the page it is on.
+
+`groupBy` names a field, and the source's content then renders once per distinct value of it among
+the rows read, in the order first seen. `groupOrder` is a comma separated list of values to put
+first, in that order; the rest follow in the order first seen. Inside each group `{{group.key}}` is
+the value and `{{group.count}}` how many rows have it, and `repeat` and `{{sum.X}}` work over that
+group's rows. `{{count}}` stays what the whole source matched. A row with nothing in the field is
+kept, in a group whose key is empty, so `{{group.key ?? Other}}` names it. A pager inside a grouped
+source renders nothing, since a page of rows is not a page of groups. One grouped source is one read,
+where a source per value was one read each:
+
+```json
+{ "type": "source", "props": {
+    "collection": "milestones", "mode": "list", "pageSize": 50,
+    "groupBy": "Repository", "groupOrder": "barakoCMS, barakoPress",
+    "content": [[
+      { "type": "text", "props": { "value": "{{group.key}}: {{sum.Open}} open in {{group.count}} milestones" } },
+      { "type": "repeat", "props": { "content": [[ { "type": "text", "props": { "value": "{{item.Title}}" } } ]] } }
+    ]]
+} }
+```
+
+All of it resolves on the server as the request's tenant, so a count or a sum never makes the
+browser call the API. A page that uses none of it reads and renders exactly what it did before.
 
 ### Presets
 

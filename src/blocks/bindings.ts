@@ -21,8 +21,15 @@
  * page down.
  */
 
-/** The scopes a page may read. `viewer` arrives with barakoPress #7. */
-export const BINDING_SCOPES = ["site", "page", "item", "query", "props"] as const;
+/**
+ * The scopes a page may read. `viewer` arrives with barakoPress #7.
+ *
+ * `count`, `sum` and `group` are about a set of rows rather than one (#128). `{{count.post}}` is how
+ * many published entries a collection has, and `{{count}}` on its own, inside a `source`, is how many
+ * that source's filter matched. `{{sum.Open}}` adds a numeric field over a source's rows, and
+ * `{{group.key}}` and `{{group.count}}` name the group a `groupBy` source is repeating.
+ */
+export const BINDING_SCOPES = ["site", "page", "item", "query", "props", "count", "sum", "group"] as const;
 export type BindingScope = (typeof BINDING_SCOPES)[number];
 
 export const BINDING_FORMATS = ["text", "date", "datetime", "time", "money", "number", "upper", "lower"] as const;
@@ -188,7 +195,18 @@ export interface BindingScopes {
     item?: () => Promise<Record<string, unknown>> | Record<string, unknown>;
     query?: () => Promise<Record<string, unknown>> | Record<string, unknown>;
     props?: () => Promise<Record<string, unknown>> | Record<string, unknown>;
+    sum?: () => Promise<Record<string, unknown>> | Record<string, unknown>;
+    group?: () => Promise<Record<string, unknown>> | Record<string, unknown>;
+    /**
+     * A count by path rather than a record, because the path names what to count and each one is a
+     * read of its own: the empty path is the enclosing source's total, any other a collection key.
+     * Undefined is a count that could not be had.
+     */
+    count?: (path: string) => Promise<number | undefined> | number | undefined;
 }
+
+/** The scopes that are a record read once and walked, which is every scope but `count`. */
+type RecordScope = Exclude<BindingScope, "count">;
 
 export interface BindingOptions {
     locale: string;
@@ -199,7 +217,7 @@ export interface BindingOptions {
 
 /** Reads a scope once per render and remembers it, so ten placeholders are one read. */
 export class BindingSource {
-    private readonly cache = new Map<BindingScope, Record<string, unknown> | null>();
+    private readonly cache = new Map<RecordScope, Record<string, unknown> | null>();
 
     constructor(
         private readonly scopes: BindingScopes,
@@ -211,7 +229,7 @@ export class BindingSource {
         return new BindingSource({ ...this.scopes, ...extra }, this.options);
     }
 
-    async read(scope: BindingScope): Promise<Record<string, unknown> | null> {
+    async read(scope: RecordScope): Promise<Record<string, unknown> | null> {
         if (this.cache.has(scope)) return this.cache.get(scope) ?? null;
         const thunk = this.scopes[scope];
         let value: Record<string, unknown> | null = null;
@@ -229,10 +247,30 @@ export class BindingSource {
         this.cache.set(scope, value);
         return value;
     }
+
+    /**
+     * What a placeholder names: `bound` is false when its scope is not on this page at all. A count
+     * is not remembered here, since `with` makes a new source per row; the thunk behind it is what
+     * keeps a collection to one read a page.
+     */
+    async lookup(binding: Binding & { scope: BindingScope }): Promise<{ bound: boolean; value: unknown }> {
+        if (binding.scope !== "count") {
+            const scope = await this.read(binding.scope);
+            return { bound: scope !== null, value: scope === null ? undefined : walk(scope, binding.path) };
+        }
+        const count = this.scopes.count;
+        if (!count) return { bound: false, value: undefined };
+        try {
+            return { bound: true, value: await count(binding.path) };
+        } catch (e) {
+            if (e && typeof e === "object" && "digest" in e) throw e;
+            return { bound: true, value: undefined };
+        }
+    }
 }
 
 /** Own properties only, so a stored path cannot walk into the prototype chain. */
-function walk(root: Record<string, unknown>, path: string): unknown {
+export function walk(root: Record<string, unknown>, path: string): unknown {
     let current: unknown = root;
     for (const segment of path.split(".")) {
         if (current === null || typeof current !== "object") return undefined;
@@ -353,10 +391,9 @@ export async function bindText(
             report(binding, "unknown scope");
             continue;
         }
-        const scope = await source.read(binding.scope);
-        const value = scope === null ? undefined : walk(scope, binding.path);
+        const { bound, value } = await source.lookup({ ...binding, scope: binding.scope });
         const text = formatValue(value, binding.format, source.options);
-        if (text === null) report(binding, scope === null ? "unbound scope" : "no value");
+        if (text === null) report(binding, bound ? "no value" : "unbound scope");
         resolved.set(binding.raw, text ?? binding.fallback);
     }
 
@@ -383,9 +420,8 @@ export async function bindValue(template: string, source: BindingSource, where?:
         return undefined;
     };
     if (!isScope(binding.scope)) return report("unknown scope");
-    const scope = await source.read(binding.scope);
-    if (scope === null) return report("unbound scope");
-    const value = walk(scope, binding.path);
+    const { bound, value } = await source.lookup({ ...binding, scope: binding.scope });
+    if (!bound) return report("unbound scope");
     if (value === undefined || value === null || value === "") return report("no value");
     return value;
 }
