@@ -45,6 +45,7 @@ const { createHome, createHomeMetadata, createPage } = await import("./screens/p
 const { createBlogPost } = await import("./screens/blog-post.js");
 const { createSiteLayout, createSiteMetadata } = await import("./screens/site-layout.js");
 const { createFeed } = await import("./routes/feed.js");
+const press = await import("./index.js");
 
 const CMS = "http://cms.test";
 
@@ -242,6 +243,19 @@ describe("a tenant that replaces the blog's collections", () => {
         expect(post).toContain("Enrolment is open");
         expect(post).toContain("The office is open from eight.");
         expect(post).not.toContain("Untitled");
+
+        // A site theme draws its own post page over the same item, and maps it with the engine's
+        // own mapping rather than a copy of it.
+        visit("school.example");
+        const themed = await outcome(() =>
+            press.createCollectionDetail(config, press.POST_COLLECTION, {
+                related: false,
+                view: ({ config: cfg, item }) => <section data-theme="post">{press.PostView({ config: cfg, post: press.postFromItem(cfg, item), related: [] })}</section>,
+            })({ params: Promise.resolve({ slug: "enrolment-open" }) }),
+        );
+        expect(themed).toContain('data-theme="post"');
+        expect(themed).toContain("Enrolment is open");
+        expect(themed).toContain("The office is open from eight.");
 
         // Every read went to the type the tenant named, the related band's similarity search
         // included (#78).
