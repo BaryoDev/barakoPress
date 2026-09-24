@@ -1,4 +1,4 @@
-import type { PressTheme, ThemeSpace, ThemeText } from "../theme.js";
+import { themeColor, type PressTheme, type ThemeSpace, type ThemeText } from "../theme.js";
 
 /*
  * The tokens a block primitive is allowed to name.
@@ -24,8 +24,37 @@ export interface Tone {
     onAccent: string;
 }
 
+/** The names of the site's own tones, in the order it gave them. */
+export function toneNames(theme: PressTheme): string[] {
+    return theme.tones ? Object.keys(theme.tones) : [];
+}
+
+/*
+ * A site's own tone is three colours, so the other roles follow them: every kind of ink is the ink,
+ * and a filled accent is drawn in the ink with the background as its text. That keeps a tone as
+ * readable as the pair the site chose, whatever the page tone is.
+ */
+function ownTone(theme: PressTheme, name: string): Tone | undefined {
+    const spec = theme.tones && Object.hasOwn(theme.tones, name) ? theme.tones[name] : undefined;
+    if (!spec) return undefined;
+    const page = toneOf(theme, undefined);
+    const ink = themeColor(theme, spec.ink) ?? page.ink;
+    const bg = themeColor(theme, spec.bg) ?? page.bg;
+    return {
+        bg,
+        ink,
+        secondaryInk: ink,
+        muted: ink,
+        hairline: themeColor(theme, spec.edge) ?? page.hairline,
+        accent: ink,
+        onAccent: bg,
+    };
+}
+
 export function toneOf(theme: PressTheme, name: string | undefined): Tone {
     const c = theme.colors;
+    const own = name !== undefined && !(TONES as readonly string[]).includes(name) ? ownTone(theme, name) : undefined;
+    if (own) return own;
     switch (name) {
         case "surface":
             return {

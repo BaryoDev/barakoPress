@@ -2,6 +2,13 @@
 
 ## 0.8.0 (unreleased)
 
+- A site can name its own palette (#125). `Tokens` in the site settings (or `theme.tokens`) holds
+  named colours, lengths and font stacks, emitted on the root as `--t-<name>`. `Tones` (or
+  `theme.tones`) holds named `{ ink, bg, edge }` tones, each colour a token name, a `Colors` slot or
+  a colour written out. Every block tone field, and `HeaderTone` and `FooterTone`, take the site's
+  tone names beside the built-in six. Values are checked as `Colors` and `Text` are, and one that
+  fails is dropped with the rest kept. A site that sets neither renders as it did. The README said
+  `HeaderTone` and `FooterTone` take four names; they take six, and now the site's own.
 - Block fields can be a `list` (entries of `text`, `url`, `number` or `group`, with `min` and
   `max`) or a `group` (its own `fields`), so a block declares "a list of stages, each a label, a
   name and a body" instead of numbered fields or comma separated text, and an editor adds a fifth

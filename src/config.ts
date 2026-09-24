@@ -257,8 +257,8 @@ export interface Home {
 export interface Region {
     /** The site path of the page, for example "/site/footer". */
     path: string;
-    /** The tone behind the region's blocks. `page` when unset. */
-    tone?: ToneName;
+    /** The tone behind the region's blocks: a built-in one or one in `theme.tones`. `page` when unset. */
+    tone?: ToneName | (string & {});
 }
 
 /** Where the header and the footer come from. A region that is absent is the built-in one. */
