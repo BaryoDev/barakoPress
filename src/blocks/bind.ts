@@ -660,12 +660,38 @@ function groupRows(config: PressConfig, items: Item[], field: string, order: str
     return ordered([...groups.keys()], order).map((key) => ({ key, items: groups.get(key) ?? [] }));
 }
 
-/** `count` and `sum` for the blocks inside a source, over the rows it read. */
+/** `count`, `sum` and `distinct` for the blocks inside a source, over the rows it read. */
 function rowScopes(ctx: BindContext, items: Item[], total: number | undefined): BindingScopes {
     return {
         count: (path) => (path === "" ? total : ctx.count(path)),
         sum: () => sums(ctx.config, items),
+        distinct: () => distincts(ctx.config, items),
     };
+}
+
+/**
+ * How many different values each field holds among the rows read: the repositories a list of issues
+ * spans, which is the number of groups a `groupBy` on that field would draw. Compared as the text a
+ * placeholder would print, and each entry of a list counts on its own, as a filter bar reads one. A row
+ * with nothing in the field adds nothing.
+ *
+ * Over the rows the source read, which is at most fifty, like a sum.
+ */
+function distincts(config: PressConfig, items: Item[]): Record<string, number> {
+    const seen = new Map<string, Set<string>>();
+    for (const item of items) {
+        for (const [field, value] of Object.entries(itemScope(config, item))) {
+            for (const one of Array.isArray(value) ? value : [value]) {
+                if (one === undefined || one === null || typeof one === "object") continue;
+                const text = formatValue(one, "text", { locale: config.locale }) ?? "";
+                if (text === "") continue;
+                const values = seen.get(field) ?? new Set<string>();
+                values.add(text);
+                seen.set(field, values);
+            }
+        }
+    }
+    return Object.fromEntries([...seen].map(([field, values]) => [field, values.size]));
 }
 
 /**

@@ -2,6 +2,9 @@
 
 ## 0.8.0 (unreleased)
 
+- `{{distinct.<Field>}}` inside a `source` is how many different values a field holds among the
+  rows read, each entry of a list counting on its own and an empty field adding nothing: the number
+  of repositories a list of issues spans, beside `{{count}}` of the issues.
 - The element a primitive draws, for a design rebuilt from primitives and recipes
   (arnelirobles/barakocms-site#46). A block wearing a recipe is its own cell: its list wrapper is
   `display: contents`, so the recipe's element is the flex or grid item its parent lays out. `text`
