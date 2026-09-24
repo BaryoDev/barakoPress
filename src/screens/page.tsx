@@ -57,6 +57,12 @@ export interface PageViewProps {
     breadcrumbs?: Breadcrumb[];
     /** The request's URL parameters, for `{{query.X}}`. Awaited only if a block asks for one. */
     searchParams?: SearchParams;
+    /**
+     * Only the blocks: no `main`, no page padding, no title and no breadcrumbs. For a site theme
+     * whose own layout and blocks draw all of that, since an inline style here cannot be undone
+     * from its stylesheet.
+     */
+    bare?: boolean;
 }
 
 /**
@@ -104,14 +110,38 @@ export async function PageView({
     showTitle = true,
     breadcrumbs = [],
     searchParams,
+    bare = false,
 }: PageViewProps) {
     const t = config.theme;
     const hasBlocks = Array.isArray(page.blocks) && page.blocks.length > 0;
     const blocks = await pageBlocks(config, page, registry, { perViewer, searchParams });
+    // Scoped to the prose class, so it styles a built-in text block and nothing a theme drew.
+    const prose = <style dangerouslySetInnerHTML={{ __html: proseCss(t, BLOCK_PROSE_CLASS) }} />;
+    // A page with only a body still renders it when bare, but without the measure: that is the
+    // theme's to set through the prose class, and an inline width is one it could not undo.
+    const content = hasBlocks ? (
+        <BlockList blocks={blocks} theme={t} />
+    ) : (
+        page.body && (
+            <div
+                className={BLOCK_PROSE_CLASS}
+                style={bare ? undefined : { maxWidth: t.layout.prose }}
+                dangerouslySetInnerHTML={{ __html: renderProse(page.body, t) }}
+            />
+        )
+    );
 
+    if (bare) {
+        return (
+            <>
+                {prose}
+                {content}
+            </>
+        );
+    }
     return (
         <div style={{ background: t.colors.pageBg, color: t.colors.ink, fontFamily: t.fonts.body }}>
-            <style dangerouslySetInnerHTML={{ __html: proseCss(t, BLOCK_PROSE_CLASS) }} />
+            {prose}
             <main
                 style={{
                     maxWidth: t.layout.wide,
@@ -138,17 +168,7 @@ export async function PageView({
                         {page.title}
                     </h1>
                 )}
-                {hasBlocks ? (
-                    <BlockList blocks={blocks} theme={t} />
-                ) : (
-                    page.body && (
-                        <div
-                            className={BLOCK_PROSE_CLASS}
-                            style={{ maxWidth: t.layout.prose }}
-                            dangerouslySetInnerHTML={{ __html: renderProse(page.body, t) }}
-                        />
-                    )
-                )}
+                {content}
             </main>
         </div>
     );
@@ -269,6 +289,8 @@ async function missing(config: PressConfig, p: PageRouteParams): Promise<never> 
 export interface PageOptions {
     /** Hand blocks the request's query. The route must then be dynamic: no `generateStaticParams`. */
     query?: boolean;
+    /** Render only the blocks, for a site theme that draws the page itself. See `PageViewProps.bare`. */
+    bare?: boolean;
 }
 
 export function createPage(base: PressConfig, registry?: BlockRegistry, options: PageOptions = {}) {
@@ -292,11 +314,12 @@ export function createPage(base: PressConfig, registry?: BlockRegistry, options:
             breadcrumbs: found.breadcrumbs,
             registry: registryFor(config, blocks),
             searchParams: query ? searchParams : undefined,
+            bare: options.bare,
         });
     };
 }
 
-export function createViewerPage(base: PressConfig, registry?: BlockRegistry) {
+export function createViewerPage(base: PressConfig, registry?: BlockRegistry, options: Pick<PageOptions, "bare"> = {}) {
     let blocks = registry;
     return async function ViewerPage({ params, searchParams }: PageParams) {
         await connection();
@@ -318,6 +341,7 @@ export function createViewerPage(base: PressConfig, registry?: BlockRegistry) {
             registry: registryFor(config, blocks),
             searchParams,
             perViewer: true,
+            bare: options.bare,
         });
     };
 }
@@ -365,6 +389,7 @@ export function createHome(base: PressConfig, registry?: BlockRegistry, options:
                 page,
                 registry: registryFor(config, blocks),
                 searchParams: query ? searchParams : undefined,
+                bare: options.bare,
             });
         }
         return CollectionIndexView({ config, collection: homeCollection(config) });

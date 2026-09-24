@@ -34,6 +34,13 @@ export const LONG_TOKEN = "PublicDelivery:RequireAcknowledgement";
 // `pre` nested in a `stack` cell, the shape a document page composes its blocks in.
 export const LONG_COMMAND =
     "curl -fsSL https://get.baryo.dev/install-barakocms-with-a-token-too-long-to-wrap-or-to-shrink | sh";
+// A URL written as its own link text, which is how a changelog entry cites a wiki page. Measured on
+// barakocms.com's rebuilt /changelog, where it laid a 390px viewport out 603px wide: the prose rule
+// gave `code` somewhere to break and gave `a` nothing.
+export const LONG_LINK = "https://github.com/BaryoDev/barakoCMS/wiki/barakoCMS-configuration-reference";
+// A package id in a heading, the shape that laid the same site's /modules out 403px wide. The text
+// primitive sets no wrapping rule at all, so a token with no break opportunity sizes its grid cell.
+export const LONG_NAME = "BarakoCMS.Analytics.Umami";
 
 // PageView itself is an async server component, which plain react-dom/server (no RSC renderer
 // here, same as build-tab-strip-fixture.mjs) cannot render directly. `pageBlocks` does the async
@@ -75,6 +82,14 @@ async function longToken() {
                 props: {
                     content: [[{ type: "richText", props: { markdown: "```shell\n" + LONG_COMMAND + "\n```" } }]],
                 },
+            },
+            {
+                type: "richText",
+                props: { markdown: `- See [${LONG_LINK}](${LONG_LINK}) for the rest.` },
+            },
+            {
+                type: "text",
+                props: { value: LONG_NAME, variant: "heading" },
             },
         ],
     });

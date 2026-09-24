@@ -15,6 +15,13 @@ const LIST_DISPLAY = "var(--bp-list, flex)";
 const RESET_LIST: CSSProperties = { "--bp-list": "flex" } as CSSProperties;
 
 /*
+ * The gap is the theme's unless a stylesheet above the list sets `--bp-gap`. Unlike `--bp-list` it
+ * is never reset, so a site theme that sets it once on its layout reaches every nesting level. An
+ * inline `gap` cannot be overridden from a stylesheet, which is why this is a property at all.
+ */
+const listGap = (theme: PressTheme) => `var(--bp-gap, ${theme.space.lg})`;
+
+/*
  * A wrapper taken out of the box tree, for a block that has to be the column's own child.
  *
  * `position: sticky` moves inside its containing block, and a wrapper is exactly as tall as
@@ -27,7 +34,7 @@ const TRANSPARENT: CSSProperties = { "--bp-list": "flex", display: "contents" } 
 /** Renders resolved blocks in order. Resolve first with `resolveBlocks`; this trusts its input. */
 export function BlockList({ blocks, theme }: { blocks: ResolvedBlock[]; theme: PressTheme }) {
     return (
-        <div style={{ display: LIST_DISPLAY, flexDirection: "column", gap: theme.space.lg }}>
+        <div style={{ display: LIST_DISPLAY, flexDirection: "column", gap: listGap(theme) }}>
             {blocks.map((block, index) => {
                 const Component = block.definition.component;
                 const slots: Record<string, ReactNode[]> = {};
