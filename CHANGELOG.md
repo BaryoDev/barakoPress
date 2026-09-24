@@ -2,6 +2,10 @@
 
 ## 0.8.0 (unreleased)
 
+- `postFromItem` is exported, so a site's own post view (the `view` option of
+  `createCollectionDetail`) maps an item to a post the way the engine does, draft preview included.
+  Without it a theme had to read the post again with `getPost`, which returns the published
+  version and so broke preview.
 - A site link can carry a `badge` (up to 12 characters, drawn beside the label in the built-in
   header) and `external: true`, read from `HeaderLinks`, `TopBar` and `FooterColumns`. A value of
   the wrong kind is dropped and the link kept. barakocms.com's nav marks barakoBrew with "V1", and

@@ -151,6 +151,7 @@ export {
     getTerm,
     listTerms,
     toPost,
+    postFromItem,
     getPage,
     listPages,
     toPage,
