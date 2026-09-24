@@ -191,6 +191,14 @@ describe("the block schema with plugins installed", () => {
         expect(beta.plugins).toEqual([{ name: "sample", enabled: false }]);
     });
 
+    it("offers no plugin's blocks from the registry-only route, which cannot know what is enabled", async () => {
+        const c = defineConfig({ site });
+        const schema = (await createBlockSchemaRoute(createBlockRegistry(c, [], { plugins: [sample] }))().json()) as BlockSchema;
+        expect(schema.blocks.length).toBeGreaterThan(0);
+        expect(schema.blocks.map((b) => b.type)).not.toContain("sampleTally");
+        expect(schema.plugins).toEqual([{ name: "sample", enabled: false }]);
+    });
+
     it("lists a build-time site's plugin blocks only when its config enables them", async () => {
         const on = defineConfig({ site, plugins: ["sample"] });
         const off = defineConfig({ site });

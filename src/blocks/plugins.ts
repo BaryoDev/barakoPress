@@ -15,9 +15,11 @@ import { checkDefinition, type BlockDefinition, type BlockRegistry, type Resolve
  * in the container for every tenant it serves. Tenants that must not share plugin code belong in
  * separate deployments.
  *
- * A plugin block gets what any block gets, its props, its rendered slots and the theme. It is never
- * handed the config, the CMS address or a token: the blocks that read the site are rebound by identity
- * in `boundToSite`, and a plugin's definitions are never among them.
+ * A plugin block is passed what any block is passed, its props, its rendered slots and the theme, and
+ * not the config: the blocks that read the site are rebound by identity in `boundToSite`, and a
+ * plugin's definitions are never among them. That is what it is handed, not what it can reach. Its
+ * code runs in the server with everything the server has, the environment and every export of this
+ * package included, so installing a plugin is trusting it with the deployment.
  */
 
 export interface PressPlugin {

@@ -88,8 +88,11 @@ export function createBlockSchemaRoute(
     if (isRegistry(first)) {
         const registry = first;
         const options = (second ?? {}) as BlockSchemaRouteOptions;
+        // No config, so nothing says which plugins this site enabled. It offers none, as a config with
+        // no `plugins` would, rather than blocks its pages may not render.
+        const off = installedPlugins(registry).map((name) => ({ name, enabled: false }));
         return function GET(request?: Request): Response {
-            return Response.json(blockSchema(registry), { headers: corsHeaders(allowedOrigin(request, options)) });
+            return Response.json(blockSchema(withEnabledPlugins(registry, []), off), { headers: corsHeaders(allowedOrigin(request, options)) });
         };
     }
 

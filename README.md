@@ -514,8 +514,10 @@ operator named, the host through the CMS, or `CMS_DEFAULT_TENANT`, so barakoBrew
 schema at that tenant's domain. Nothing else a caller sends picks the tenant. A host with no tenant
 gets 404 `{ "error": "no site" }`, and a lookup that fails gets 503. The settings behind it are the
 cached read every page makes, under the tenant's cache tag, so a settings change shows after the
-delivery that purges it. A build-time site gets the same answer as `createBlockSchemaRoute(blocks)`,
-which still works and still ignores the request.
+delivery that purges it. A build-time site with no plugins gets the same answer as
+`createBlockSchemaRoute(blocks)`, which still works and still ignores the request. Given only the
+registry, the route cannot tell which plugins the site enabled, so it offers no plugin's blocks and
+lists every plugin as off; a site with plugins passes the config.
 
 Field kinds are `text`, `markdown`, `url`, `number`, `boolean`, `select` (with `options`), `slots`
 (lists of nested blocks, handed to the component already rendered), `list` and `group` (below). The list is editor input, so a
@@ -809,10 +811,11 @@ name the props do not have, a kind that does not suit the prop's type, or an opt
 the component treats as always there does not compile. `examples/plugin-sample` is a complete one,
 with its `package.json` and `tsconfig.json`; CI packs it, builds an image with it and renders it.
 
-A plugin block gets what every block gets: its props, checked against its fields, its slots,
-rendered, and the theme. It is never handed the config, the CMS address or a token. Data from the CMS
-reaches it through a binding in its props, or a module endpoint the component calls itself, never a
-CMS credential.
+A plugin block is passed what every block is passed: its props, checked against its fields, its
+slots, rendered, and the theme. It is not passed the config, the CMS address or a token, and data from
+the CMS should reach it through a binding in its props or a module endpoint, not a credential. That is
+what it is handed, not what it can reach: its code runs in the server with full access, `process.env`
+and every `barakopress` export included. Installing a plugin means trusting it with the deployment.
 
 Its name may not be one a built-in, a library block, the site or another plugin already registered.
 Replacing one would change that block for every tenant, including the ones that never enabled the
@@ -835,11 +838,18 @@ docker buildx build \
 ```
 
 `examples/derived-image/compose.yml` is the same thing in compose. The `plugins` directory holds
-tarballs and nothing else, so what is built is exactly the bytes that were packed. The build installs
-them beside the engine with no install scripts, and writes `press.plugins.ts`, which the reference
+tarballs and nothing else, so what is built is exactly the bytes that were packed. The install runs
+offline, so a plugin's own dependencies must travel inside its tarball: list each one in
+`bundleDependencies`, and a tarball with a dependency it does not bundle is refused. So is a plugin
+named like a package the engine already has (`react`, `next`, anything in its lockfile), which would
+otherwise be linked over it. The build installs them beside the engine with no install scripts,
+and writes `press.plugins.ts`, which the reference
 `press.config.ts` passes to `createBlockRegistry(config, [], { plugins })`. An overlay with its own
-`press.config.ts` imports `plugins` from `@/press.plugins` and passes it the same way. Pin the tag;
-moving it is an engine upgrade, and a plugin should be rebuilt and checked against it.
+`press.config.ts` imports `plugins` from `@/press.plugins` and passes it the same way. Pin the tag,
+and next to it the commit it points at (`git ls-remote https://github.com/BaryoDev/barakoPress.git
+v0.8.0`), since a tag can be moved; building from `#<commit>` is the strict form. The `v0.8.0` tag
+exists from the 0.8.0 release on. Moving it is an engine upgrade, and a plugin should be rebuilt and
+checked against it.
 
 **Enabling: per tenant.** One derived image carries every plugin the deployment installs. A tenant
 renders a plugin's blocks only when the `Plugins` setting in its `site` settings entry names it:

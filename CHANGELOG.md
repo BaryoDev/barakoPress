@@ -12,9 +12,11 @@
   renders without it, and a preset drawing one is left out. `/api/blocks` adds `plugins`, each
   installed plugin with whether the tenant enabled it, and `plugin` on each block a plugin added.
   `createBlockRegistry` takes `plugins`, and refuses a plugin block whose name is already taken. A
-  plugin block gets its props, slots and theme, and never the config. Every plugin's code is loaded
-  for every tenant the container serves, so tenants that must not share plugins need separate
-  deployments. An image built with no plugins renders exactly as before.
+  plugin block is passed its props, slots and theme and not the config, but its code runs in the
+  server with full access, so installing a plugin is trusting it with the deployment. Every plugin's
+  code is loaded for every tenant the container serves, so tenants that must not share plugins need
+  separate deployments. A plugin's dependencies must be bundled in its tarball, since the install
+  runs offline, and a plugin named like a package the engine has is refused. An image built with no plugins renders exactly as before.
 - Style recipes, and inline marks in text (#131). `StyleRecipes` in the site settings (or
   `theme.recipes`) holds named looks, each `{ class, style }`: classes put on the element, and CSS
   properties to values, where `{name}` in a value is a token and `{colors.accent}`, `{space.lg}` and
