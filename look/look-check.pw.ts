@@ -16,7 +16,7 @@ import { expect, test } from "@playwright/test";
 
 import { capture } from "./capture.js";
 import { asPercent, comparePngs } from "./compare.js";
-import { loadPairs, masksFor } from "./pairs.js";
+import { loadPairs, masksFor, withinAllowance } from "./pairs.js";
 import { pageDir, type LookResult } from "./result.js";
 
 const pairsFile = process.env.LOOK_PAIRS;
@@ -54,7 +54,7 @@ for (const pair of pairs) {
             const { comparison, diff } = comparePngs(reference.png, rebuilt.png, {
                 pixelThreshold: pair.pixelThreshold,
             });
-            const passed = comparison.diffRatio <= pair.maxDiffRatio;
+            const passed = withinAllowance(pair, comparison);
 
             const directory = pageDir(pair.id, width);
             mkdirSync(directory, { recursive: true });
@@ -68,6 +68,7 @@ for (const pair of pairs) {
                 passed,
                 diffRatio: comparison.diffRatio,
                 maxDiffRatio: pair.maxDiffRatio,
+                ...(pair.maxDiffPixels !== undefined ? { maxDiffPixels: pair.maxDiffPixels } : {}),
                 diffPixels: comparison.diffPixels,
                 comparedPixels: comparison.comparedPixels,
                 sizeMismatch: comparison.sizeMismatch,
@@ -99,6 +100,12 @@ for (const pair of pairs) {
                 comparison.diffRatio,
                 `${pair.id} at ${width}px differs by ${asPercent(comparison.diffRatio)} of its pixels (${comparison.diffPixels} of ${comparison.comparedPixels}), over the ${asPercent(pair.maxDiffRatio)} this page allows.${sizes} The images are in ${directory}.`,
             ).toBeLessThanOrEqual(pair.maxDiffRatio);
+            if (pair.maxDiffPixels !== undefined) {
+                expect(
+                    comparison.diffPixels,
+                    `${pair.id} at ${width}px differs in ${comparison.diffPixels} pixels, over the ${pair.maxDiffPixels} this page allows.${sizes} The images are in ${directory}.`,
+                ).toBeLessThanOrEqual(pair.maxDiffPixels);
+            }
         });
     }
 }

@@ -2,6 +2,10 @@
 
 ## 0.8.0 (unreleased)
 
+- The look check takes `maxDiffPixels`, a count of pixels a pair may differ by beside its ratio,
+  for a page tall enough that any ratio lets a whole section through. Unset, a pair is judged as it
+  was. The summary prints the pixel count beside the percentage.
+
 - The docs search box works in a Next app. Its attribute names came from a `"use client"` module,
   which a server component receives as references rather than strings, so the box rendered without
   them and its client code wired nothing. They now live in `src/blocks/search-attrs.ts`.
