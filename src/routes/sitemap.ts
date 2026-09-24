@@ -61,7 +61,8 @@ export function createSitemap(base: PressConfig) {
                 for (const item of listed.items) {
                     if (item.seo?.noIndex) continue;
                     items.push({
-                        url: `${config.site.url}${col.route}/${item.slug}`,
+                        // An item that names its own path is read there, the way its tree links it.
+                        url: `${config.site.url}${item.href?.startsWith("/") ? item.href : `${col.route}/${item.slug}`}`,
                         lastModified: item.date ? new Date(item.date) : undefined,
                         changeFrequency: "monthly" as const,
                         priority: 0.7,

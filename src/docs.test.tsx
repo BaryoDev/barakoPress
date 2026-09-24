@@ -58,10 +58,10 @@ type Entry = { id: string; slug: string; data: Record<string, unknown> };
  * ordering that ignored the field or fell back to the order rows came back in would be visible.
  */
 const DOCS: Entry[] = [
-    { id: "d1", slug: "quickstart", data: { Title: "Quickstart", Slug: "quickstart", Body: "Start here.", Section: "Getting started", Order: 1, Product: "cms", Source: "quickstart/README.md" } },
+    { id: "d1", slug: "quickstart", data: { Title: "Quickstart", Slug: "quickstart", Body: "Start here.", Section: "Getting started", Order: 1, Product: "cms", Source: "quickstart/README.md", Path: "/docs/cms/quickstart" } },
     { id: "d2", slug: "webhooks", data: { Title: "Webhooks and actions", Slug: "webhooks", Body: "Signed.", Section: "Reference", Product: "cms", Source: "docs/webhooks.md", Order: "not a number" } },
-    { id: "d3", slug: "delivery-api", data: { Title: "Public delivery API", Slug: "delivery-api", Body: "Read it.", Section: "Reference", Order: 1, Product: "cms" } },
-    { id: "d4", slug: "delivery-paging", data: { Title: "Paging", Slug: "delivery-paging", Body: "A page at a time.", Section: "Reference", Order: 2, Parent: "delivery-api", Product: "cms" } },
+    { id: "d3", slug: "delivery-api", data: { Title: "Public delivery API", Slug: "delivery-api", Body: "Read it.", Section: "Reference", Order: 1, Product: "cms", Path: "/docs/cms/delivery-api" } },
+    { id: "d4", slug: "delivery-paging", data: { Title: "Paging", Slug: "delivery-paging", Body: "A page at a time.", Section: "Reference", Order: 2, Parent: "delivery-api", Product: "cms", Path: "/docs/cms/delivery-paging" } },
     { id: "d5", slug: "press-quickstart", data: { Title: "Rendering with barakoPress", Slug: "press-quickstart", Body: "Install it.", Section: "Getting started", Order: 1, Product: "press" } },
     // A page whose parent was never published. It belongs on the page, at the top of its section.
     { id: "d6", slug: "orphan", data: { Title: "Orphaned note", Slug: "orphan", Body: "Still here.", Section: "Reference", Order: 9, Parent: "never-written", Product: "cms" } },
@@ -440,6 +440,59 @@ describe("what else reads an item of a tree", () => {
         const urls = entries.map((e) => e.url);
         expect(urls).toContain("https://barakocms.com/docs/webhooks");
         expect(urls).toContain("https://barakocms.com/docs/press-quickstart");
+    });
+});
+
+/*
+ * Slugs are unique across a tenant, so a manual whose products each have a quickstart keeps
+ * "cms-quickstart" as the slug and names the path it is read at in a field, as a card's link does.
+ * The tree, the pager, the in-page index and the sitemap all follow that field, and an item without
+ * it is still read at its route and slug.
+ */
+describe("a manual whose items name their own path", () => {
+    function pathed() {
+        const settings = {
+            ...SETTINGS,
+            Collections: {
+                docs: {
+                    ...DOCS_COLLECTION,
+                    fields: { ...DOCS_COLLECTION.fields, href: "Path" },
+                    tree: { ...DOCS_COLLECTION.tree, searchIndex: true },
+                },
+            },
+        };
+        vi.stubGlobal("fetch", cms(settings));
+        requestHeaders = new Headers({ host: "barakocms.com" });
+    }
+
+    it("links each item where it says it is read, in the sidebar, the pager and the index", async () => {
+        pathed();
+        const config = await site();
+        const tree = await collectionTree(config, "docs", { product: "cms" });
+        const nodes = tree.sections.flatMap((s) => s.nodes);
+        expect(nodes.length).toBeGreaterThan(2);
+        expect(nodes.find((n) => n.item.slug === "quickstart")?.href).toBe("/docs/cms/quickstart");
+        expect(nodes.find((n) => n.item.slug === "webhooks")?.href).toBe("/docs/webhooks");
+
+        const html = await markup(createPage(base)({ params: Promise.resolve({ path: ["docs", "orphan"] }) }));
+        const sidebar = between(html, 'class="bp-tree-sections"', "</nav>");
+        expect(sidebar).toContain('href="/docs/cms/delivery-api"');
+        expect(sidebar).toContain('href="/docs/cms/delivery-paging"');
+        expect(sidebar).not.toContain('href="/docs/delivery-api"');
+        const pager = between(html, 'class="bp-tree-pager"', "</nav>");
+        expect(pager).toContain('href="/docs/cms/delivery-paging"');
+        expect(pager).toContain('href="/docs/webhooks"');
+        expect(html).toContain('<li><a href="/docs/cms/quickstart"><span>Quickstart</span></a></li>');
+    });
+
+    it("lists each item in the sitemap at its own path", async () => {
+        pathed();
+        const entries = await createSitemap(base)();
+        const urls = entries.map((e) => e.url);
+        expect(urls.length).toBeGreaterThan(3);
+        expect(urls).toContain("https://barakocms.com/docs/cms/quickstart");
+        expect(urls).not.toContain("https://barakocms.com/docs/quickstart");
+        expect(urls).toContain("https://barakocms.com/docs/webhooks");
     });
 });
 

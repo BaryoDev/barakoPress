@@ -6,6 +6,7 @@ import { collectionOf } from "../collections.js";
 import type { MarkdownHeading } from "../markdown.js";
 import {
     editHref,
+    treeItemHref,
     treeProducts,
     type CollectionTreeResult,
     type TreeNode,
@@ -198,6 +199,12 @@ export interface TreeSidebarProps {
     disclosure?: TreeVariant["disclosure"];
     /** Put before the section on the closed disclosure's first line: the product being read. */
     group?: string;
+    /**
+     * What the closed disclosure says, for a page the tree does not hold or does not name the way the
+     * page does: an index, or a landing that is its own product. `line` replaces the whole first line
+     * and `title` the page's title under it.
+     */
+    summary?: { line?: string; title?: string };
 }
 
 /**
@@ -207,7 +214,7 @@ export interface TreeSidebarProps {
  * is a disclosure and the browser already has one. It is open by default and the summary is hidden
  * above the phone breakpoint, so a wide screen sees the list and a narrow one sees a control.
  */
-export function TreeSidebar({ config, tree, current, switcher, collection, disclosure, group }: TreeSidebarProps) {
+export function TreeSidebar({ config, tree, current, switcher, collection, disclosure, group, summary }: TreeSidebarProps) {
     const t = config.theme;
     const c = t.colors;
     if (tree.sections.length === 0 && !switcher) return null;
@@ -249,7 +256,7 @@ export function TreeSidebar({ config, tree, current, switcher, collection, discl
 
     if (closed) {
         const here = findCurrent(tree, current);
-        const line = [group, here?.section].filter(Boolean).join(" / ");
+        const line = summary?.line ?? [group, here?.section].filter(Boolean).join(" / ");
         const icons = collection ? collectionOf(config, collection)?.tree?.icons : undefined;
         return (
             <details className={`bp-tree-sidebar ${CLOSED_CLASS}`}>
@@ -280,7 +287,7 @@ export function TreeSidebar({ config, tree, current, switcher, collection, discl
                             className="bp-tree-summary-title"
                             style={{ fontSize: tok("summary-title-size", t.text.small), fontWeight: tok("summary-title-weight", "700") }}
                         >
-                            {here?.title ?? config.labels.contents}
+                            {summary?.title ?? here?.title ?? config.labels.contents}
                         </span>
                     </span>
                     <span
@@ -483,12 +490,14 @@ export interface TreePagerProps {
     variant?: TreeVariant["pager"];
 }
 
-/** Previous and next in reading order. Nothing when the item is alone, or the collection has no route. */
+/** Previous and next in reading order. Nothing when the item is alone, or neither has anywhere to link. */
 export function TreePager({ config, collection, previous, next, variant }: TreePagerProps) {
     const t = config.theme;
     const c = t.colors;
     const route = collectionOf(config, collection)?.route;
-    if (route === undefined || (!previous && !next)) return null;
+    const previousHref = previous && treeItemHref(previous, route);
+    const nextHref = next && treeItemHref(next, route);
+    if (!previousHref && !nextHref) return null;
     const halves = (variant ?? treeVariant(config, collection).pager) === "halves";
 
     const box = {
@@ -525,8 +534,8 @@ export function TreePager({ config, collection, previous, next, variant }: TreeP
                 gap: tok("pager-gap", t.space.sm),
             }}
         >
-            {previous ? (
-                <Link href={`${route}/${previous.slug}`} rel="prev" className="bp-tree-pager-link bp-tree-pager-prev" style={box}>
+            {previous && previousHref ? (
+                <Link href={previousHref} rel="prev" className="bp-tree-pager-link bp-tree-pager-prev" style={box}>
                     <p className="bp-tree-pager-label bp-label" style={label}>
                         {config.labels.previous}
                     </p>
@@ -537,9 +546,9 @@ export function TreePager({ config, collection, previous, next, variant }: TreeP
             ) : (
                 empty
             )}
-            {next ? (
+            {next && nextHref ? (
                 <Link
-                    href={`${route}/${next.slug}`}
+                    href={nextHref}
                     rel="next"
                     className="bp-tree-pager-link bp-tree-pager-next"
                     style={{ ...box, textAlign: "right" }}
@@ -1072,13 +1081,15 @@ export interface TreeAsideProps {
     product?: string;
     /** The search box, when the page draws one. */
     search?: ReactNode;
+    /** What the closed disclosure says in place of the product, section and page. */
+    summary?: TreeSidebarProps["summary"];
 }
 
 /**
  * The sidebar column in the order the switcher variant asks for: the tabs above the search box, or
  * the search box first and the list inside the sidebar, where it folds away with the pages on a phone.
  */
-export function TreeAside({ config, collection, tree, current, product, search }: TreeAsideProps) {
+export function TreeAside({ config, collection, tree, current, product, search, summary }: TreeAsideProps) {
     const switcher = treeVariant(config, collection).switcher;
     const group = product ? treeProducts(config, collection, product).find((p) => p.current)?.label : undefined;
     if (switcher === "list") {
@@ -1094,6 +1105,7 @@ export function TreeAside({ config, collection, tree, current, product, search }
                     current={current}
                     collection={collection}
                     group={group}
+                    summary={summary}
                     switcher={list || undefined}
                 />
             </>
@@ -1103,7 +1115,7 @@ export function TreeAside({ config, collection, tree, current, product, search }
         <>
             <TreeSwitcher config={config} collection={collection} current={product} variant="tabs" />
             {search}
-            <TreeSidebar config={config} tree={tree} current={current} collection={collection} group={group} />
+            <TreeSidebar config={config} tree={tree} current={current} collection={collection} group={group} summary={summary} />
         </>
     );
 }

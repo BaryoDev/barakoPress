@@ -323,6 +323,13 @@ a search box, previous and next from the tree's reading order, and the edit link
 `details` element, so it collapses on a phone with no script. `collectionTree(config, key, { product })`
 and `treeNeighbours(order, slug)` return the same tree and the same neighbours for a site's own page.
 
+An item links where the collection's `href` field says it is read, when the collection maps one, and at
+its route and slug otherwise: the sidebar, previous and next, the in-page index and the sitemap all
+follow it (`treeItemHref`). Slugs are unique across a tenant, so a manual whose products each have a
+quickstart keeps `cms-quickstart` as the slug and names `/docs/cms/quickstart` in the field. The route
+serving that path is the site's own. A site drawing the sidebar on a page the tree does not hold, an
+index, gives `TreeAside` or `TreeSidebar` a `summary` (`{ line, title }`) for the closed control to say.
+
 **Search.** `searchCollection(config, key, query)` goes through barakoCMS's `/api/public/{type}/search`,
 which matches only over the fields a type publishes, so a draft or a field held back from public
 delivery can never come back. `createCollectionIndex(config, key, { search: true })` answers `?q=` with

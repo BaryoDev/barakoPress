@@ -114,12 +114,21 @@ function nest(items: Item[], bySlug: Map<string, Item>): TreeNode[] {
     return [...nodes, ...orphans.map((item) => build(item, 1, drawn))];
 }
 
+/**
+ * Where an item of a tree is read: its own `href` field when the collection maps one, as a card links
+ * it, and otherwise its route and slug. A manual whose products share a slug keeps its slugs unique
+ * and names the path in the field, `/docs/cms/quickstart` beside `/docs/press/quickstart`.
+ */
+export function treeItemHref(item: Pick<Item, "href" | "slug">, route: string | undefined): string | undefined {
+    if (item.href) return item.href;
+    return route !== undefined && item.slug ? `${route}/${item.slug}` : undefined;
+}
+
 function withHrefs(nodes: TreeNode[], route: string | undefined): TreeNode[] {
-    return nodes.map((node) => ({
-        ...node,
-        ...(route !== undefined && node.item.slug ? { href: `${route}/${node.item.slug}` } : {}),
-        children: withHrefs(node.children, route),
-    }));
+    return nodes.map((node) => {
+        const href = treeItemHref(node.item, route);
+        return { ...node, ...(href ? { href } : {}), children: withHrefs(node.children, route) };
+    });
 }
 
 /** Parents before their children, section by section: the order previous and next walk. */
