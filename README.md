@@ -852,7 +852,7 @@ The settings are the singleton `site` type from barakoCMS `docs/site-settings.md
 (`POST /api/content-types/blueprints/site`, then publish its one entry). The engine reads `Name`,
 `Tagline`, `Url`, `Locale`, `Logo`, `LogoAlt`, `FooterLogo`, `Favicon`, `ShareImage`, `Copyright`,
 `Colors` (the theme slots), `Fonts` (a family name per role, and the stylesheet that loads it),
-`Radii`, `Layout`, `Tokens` and `Tones` (see [Tokens and tones](#tokens-and-tones)), `TopBar`, `HeaderLinks`, `FooterColumns`, `SocialLinks`, `HeaderPath`,
+`Radii`, `Layout`, `Tokens` and `Tones` (see [Tokens and tones](#tokens-and-tones)), `TopBar`, `HeaderLinks`, `MenuLinks`, `HeaderActions`, `FooterColumns`, `SocialLinks`, `HeaderPath`,
 `HeaderTone`, `FooterPath`, `FooterTone`, `AssetsAsSupplied`, `LogoAsSupplied`, `LogoClearSpace`,
 `PageSizes`, `ReservedSlugs`, `Labels`, `HomePath` and `HomeCollection`. `Collections`, `OptionStyles` and `OptionColors` are read as the collections section
 describes. `Variants` are not rendered yet. Every value is checked for shape; one that fails, and any the
@@ -861,6 +861,8 @@ site or an absolute http or https URL. Set `Url`: without it the feed and sitema
 host the tenant was found by. A link in `HeaderLinks`, `TopBar` or `FooterColumns` may also carry
 `badge`, a marker of up to 12 characters drawn beside the label, and `external: true`, which the
 built-in header does not need (every header link is already a plain anchor) and a theme can read.
+A link in `HeaderLinks` or `MenuLinks` may also carry `activeOn` and `children`; see
+[The built-in header](#the-built-in-header).
 
 `createSiteLayout` and `createSiteMetadata` render the root layout from all of this: `lang`, the
 faces, the palette, the top bar, header links, footer columns, social links and the copyright line.
@@ -901,6 +903,9 @@ some collection has `feed` on, so a clinic with no posts stops advertising an em
 | `empty`, `emptyNote` | The notice on an index with nothing published |
 | `failed`, `failedNote` | The notice on an index whose read failed |
 | `shareInvalid` | `This link is not valid or has expired.` |
+| `openMenu`, `closeMenu` | `Open menu`, `Close menu`: the header's phone menu button |
+| `menu` | `Menu`: the name of the phone menu's links |
+| `submenu` | `{label} links`: the button beside a header link with children, `{label}` its label |
 
 A key left out, or saved as anything but a word, keeps the English, so a half-filled map reads. A
 build-time site passes `labels` to `defineConfig`. Nothing about a site's own content is here: a
@@ -1004,6 +1009,27 @@ Set neither and nothing changes: `TopBar`, `HeaderLinks`, `FooterColumns`, `Soci
 `Copyright` draw the built-in chrome with the markup they always had, which is what keeps a site
 whose own CSS keys off that markup rendering. A path with nothing served at it does the same, so
 naming a page before writing it is safe, and so is a typo.
+
+### The built-in header
+
+With no `HeaderPath`, the header is the logo, the page menu, `HeaderLinks` and the feed link. Four
+more settings shape it:
+
+| Setting | What |
+| --- | --- |
+| `activeOn` on a link | Space separated site paths the link is current on. `/` is the home page alone; any other path covers itself and everything below it, so `/docs` is current on `/docs/intro`. A trailing slash is ignored. The current link gets `aria-current="page"` and the class `bp-current`. It can name a path the link does not point to: a chat server's link can be current on `/community` |
+| `children` on a link | Links under this one, one level deep, each with its own `label`, `href`, `badge`, `external` and `activeOn`. Drawn as a dropdown that opens on hover and on keyboard focus and closes on Escape and when focus leaves, beside a button with `aria-expanded` that opens it too. A child's `activeOn` marks its parent current as well. The parent keeps its own `href` |
+| `MenuLinks` | The rows of the phone menu, in the shape of `HeaderLinks`. Children are drawn as an indented group. Unset or empty, the phone menu shows `HeaderLinks` |
+| `HeaderActions` | Up to four call to action links after the header links, each `{ label, href, variant }` with `badge` and `external` as on any link. `variant` is `primary` (filled with the accent), `secondary` (outlined) or `plain`; unset or unknown is `primary` |
+
+Below 48rem, a site that uses any of these gets a menu button in place of the header links and the
+actions, opening a sheet with the `MenuLinks` rows, the feed link and the actions. The button is a
+`details` element and every link is in the server's HTML, so the menu and the dropdowns work
+without JavaScript; the script adds Escape and keeps `aria-expanded` true to what is shown. The
+words on the controls are `openMenu`, `closeMenu`, `menu` and `submenu` in `Labels` (`submenu` is
+`{label} links`, with the parent's label in place of `{label}`).
+
+A site that sets none of them gets the header it had before, byte for byte.
 
 A region page is chrome rather than somewhere to go, so it is left out of the menu and the sitemap,
 and it answers 404 at its own route: what it holds is already on every page. A collection's

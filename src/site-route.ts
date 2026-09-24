@@ -1,3 +1,4 @@
+import { PRESS_PREFIX } from "./current-path.js";
 import { isTenantHandle } from "./delivery.js";
 
 /*
@@ -29,8 +30,7 @@ import { isTenantHandle } from "./delivery.js";
  * prefix, so the only way into the tree is a rewrite it made itself.
  */
 
-/** The first segment of a rewritten path. A request that arrives under it is refused. */
-export const PRESS_PREFIX = "_press";
+export { PRESS_PREFIX };
 
 /**
  * What the visitor may see: everyone, or someone carrying a valid share session, for whom a holding

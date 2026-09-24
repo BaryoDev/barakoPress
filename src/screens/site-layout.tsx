@@ -1,8 +1,8 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Asset } from "../assets.js";
-import { hasFeed, type PressConfig, type Region } from "../config.js";
+import { hasFeed, type HeaderActionVariant, type PressConfig, type Region, type SiteIdentity } from "../config.js";
 import { showsHoldingPage, siteConfigOrNull, type SiteParams } from "../site.js";
 import {
     allowedFontOrigins,
@@ -15,6 +15,7 @@ import { themeVariablesCss, type PressTheme } from "../theme.js";
 import type { BlockRegistry } from "../blocks/schema.js";
 import { getNavigation, getPageAtPath, isChromePath, type NavItem, type Page } from "../cms.js";
 import { Navigation } from "./navigation.js";
+import { HeaderLink, PhoneMenu, type HeaderLinkStyles, type PhoneMenuStyles } from "./header-menu.js";
 import { PageView, pageBlocks } from "./page.js";
 import { createBlockRegistry, registryFor } from "../blocks/registry.js";
 import { BlockList } from "../blocks/render.js";
@@ -245,6 +246,144 @@ async function HoldingDocument({ cfg, registry, loadFonts }: { cfg: PressConfig;
 }
 
 /*
+ * The header settings from #127: `activeOn`, children, `MenuLinks` and `HeaderActions`.
+ *
+ * A site that sets none of them gets the header it always had, byte for byte, because sites are
+ * serving CSS that keys off that markup (regions.test.tsx). Setting any of them turns on the rest:
+ * the class hooks, the stylesheet below and the phone menu, which shows `MenuLinks` or, without
+ * them, `HeaderLinks`.
+ */
+function usesHeaderSettings(s: SiteIdentity): boolean {
+    return (
+        (s.menuLinks?.length ?? 0) > 0 ||
+        (s.headerActions?.length ?? 0) > 0 ||
+        (s.headerLinks ?? []).some((l) => l.activeOn || (l.children?.length ?? 0) > 0)
+    );
+}
+
+/** Where the header links give way to the phone menu. The docs sidebar collapses at the same width. */
+const HEADER_PHONE = "47.99rem";
+
+/*
+ * What an inline style cannot say: hover, focus inside, and a media query. The links' own span
+ * carries an inline `display`, so hiding it takes `!important`. No colour here; every colour is
+ * inline, from the theme.
+ */
+const HEADER_CSS =
+    ".bp-header{position:relative}" +
+    ".bp-current{font-weight:700}" +
+    ".bp-dropdown>ul{display:none}" +
+    ".bp-dropdown:not([data-js]):hover>ul,.bp-dropdown:not([data-js]):focus-within>ul,.bp-dropdown[data-open]>ul{display:block}" +
+    ".bp-menu{display:none}" +
+    ".bp-menu>summary{list-style:none;cursor:pointer}" +
+    ".bp-menu>summary::-webkit-details-marker{display:none}" +
+    `@media(max-width:${HEADER_PHONE}){.bp-header-links,.bp-header-actions{display:none!important}.bp-menu{display:block}}`;
+
+function headerLinkStyles(t: PressTheme, link: CSSProperties, badge: CSSProperties): HeaderLinkStyles {
+    const c = t.colors;
+    return {
+        link,
+        badge,
+        dropdown: { position: "relative", display: "inline-flex", alignItems: "center", gap: "2px" },
+        toggle: {
+            display: "inline-flex",
+            alignItems: "center",
+            padding: "4px",
+            margin: 0,
+            border: 0,
+            background: "none",
+            color: "inherit",
+            font: "inherit",
+            cursor: "pointer",
+        },
+        menu: {
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            zIndex: 50,
+            minWidth: "12rem",
+            margin: 0,
+            padding: "6px 0",
+            listStyle: "none",
+            background: c.surface,
+            color: c.ink,
+            border: `1px solid ${c.hairline}`,
+            borderRadius: t.radii.panel,
+        },
+        menuLink: { ...link, display: "block", padding: "8px 14px", whiteSpace: "nowrap" },
+    };
+}
+
+/** The header sits on the surface, so the actions take that tone's colours. */
+function headerActionStyles(t: PressTheme): Record<HeaderActionVariant, CSSProperties> {
+    const tone = toneOf(t, "surface");
+    const base: CSSProperties = {
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "8px 14px",
+        borderRadius: t.radii.control,
+        border: "1px solid transparent",
+        fontSize: "14px",
+        fontWeight: 600,
+        textDecoration: "none",
+        whiteSpace: "nowrap",
+    };
+    return {
+        primary: { ...base, background: tone.accent, color: tone.onAccent },
+        secondary: { ...base, background: "transparent", color: tone.ink, border: `1px solid ${tone.hairline}` },
+        plain: { ...base, background: "transparent", color: "inherit" },
+    };
+}
+
+function phoneMenuStyles(
+    t: PressTheme,
+    badge: CSSProperties,
+    action: Record<HeaderActionVariant, CSSProperties>,
+): PhoneMenuStyles {
+    const c = t.colors;
+    const list: CSSProperties = { listStyle: "none", margin: 0, padding: 0 };
+    return {
+        summary: {
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "44px",
+            height: "44px",
+            boxSizing: "border-box",
+            borderRadius: t.radii.control,
+            border: `1px solid ${c.hairline}`,
+            background: c.surface,
+            color: c.ink,
+        },
+        sheet: {
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            right: 0,
+            zIndex: 60,
+            padding: `8px ${t.layout.gutter} 16px`,
+            background: c.surface,
+            color: c.ink,
+            borderBottom: `1px solid ${c.hairline}`,
+        },
+        list,
+        children: { ...list, paddingLeft: t.space.md },
+        row: {
+            display: "flex",
+            alignItems: "center",
+            minHeight: "48px",
+            color: "inherit",
+            textDecoration: "none",
+            fontSize: "16px",
+            borderBottom: `1px solid ${c.hairline}`,
+        },
+        badge,
+        actions: { display: "flex", flexWrap: "wrap", gap: "8px", margin: "16px 0 0" },
+        action,
+    };
+}
+
+/*
  * The built-in header and footer: what renders when the site names no region.
  *
  * Moved here whole rather than rewritten. barakoPress is serving sites whose own CSS keys off this
@@ -257,6 +396,11 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
     const s = cfg.site;
     const band = { maxWidth: t.layout.wide, margin: "0 auto", padding: `0 ${t.layout.gutter}` } as const;
     const linkStyle = { color: "inherit", textDecoration: "none" } as const;
+    const badgeStyle = { marginLeft: "6px", fontFamily: t.fonts.mono, fontSize: "11px", color: c.muted } as const;
+    const extended = usesHeaderSettings(s);
+    const feed = !cfg.holding && hasFeed(cfg);
+    const actions = s.headerActions ?? [];
+    const actionStyles = extended ? headerActionStyles(t) : undefined;
 
     return (
         <>
@@ -273,7 +417,11 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
                 </div>
             )}
 
-            <header style={{ background: c.surface, borderBottom: `1px solid ${c.hairline}` }}>
+            <header
+                className={extended ? "bp-header" : undefined}
+                style={{ background: c.surface, borderBottom: `1px solid ${c.hairline}` }}
+            >
+                {extended && <style dangerouslySetInnerHTML={{ __html: HEADER_CSS }} />}
                 <nav
                     style={{
                         ...band,
@@ -297,26 +445,58 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
                         )}
                     </Link>
                     <Navigation config={cfg} items={nav} />
-                    <span style={{ display: "flex", flexWrap: "wrap", gap: "8px 22px", fontSize: "15px" }}>
-                        {(s.headerLinks ?? []).map((l) => (
-                            <a key={l.href} href={l.href} style={linkStyle}>
-                                {l.label}
-                                {l.badge && (
-                                    <span
-                                        data-press="badge"
-                                        style={{ marginLeft: "6px", fontFamily: t.fonts.mono, fontSize: "11px", color: c.muted }}
-                                    >
-                                        {l.badge}
-                                    </span>
-                                )}
-                            </a>
-                        ))}
-                        {!cfg.holding && hasFeed(cfg) && (
+                    <span
+                        className={extended ? "bp-header-links" : undefined}
+                        style={{ display: "flex", flexWrap: "wrap", gap: "8px 22px", fontSize: "15px" }}
+                    >
+                        {(s.headerLinks ?? []).map((l) =>
+                            l.activeOn || l.children?.length ? (
+                                <HeaderLink
+                                    key={l.href}
+                                    link={l}
+                                    styles={headerLinkStyles(t, linkStyle, badgeStyle)}
+                                    submenu={cfg.labels.submenu}
+                                />
+                            ) : (
+                                <a key={l.href} href={l.href} style={linkStyle}>
+                                    {l.label}
+                                    {l.badge && (
+                                        <span data-press="badge" style={badgeStyle}>
+                                            {l.badge}
+                                        </span>
+                                    )}
+                                </a>
+                            ),
+                        )}
+                        {feed && (
                             <a href="/feed.xml" style={{ ...linkStyle, fontFamily: t.fonts.mono, fontSize: "13px", color: c.muted }}>
                                 {cfg.labels.feed}
                             </a>
                         )}
                     </span>
+                    {actionStyles && actions.length > 0 && (
+                        <span className="bp-header-actions" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px" }}>
+                            {actions.map((a) => (
+                                <a key={a.href} href={a.href} data-variant={a.variant} style={actionStyles[a.variant]}>
+                                    {a.label}
+                                    {a.badge && (
+                                        <span data-press="badge" style={badgeStyle}>
+                                            {a.badge}
+                                        </span>
+                                    )}
+                                </a>
+                            ))}
+                        </span>
+                    )}
+                    {actionStyles && (
+                        <PhoneMenu
+                            links={s.menuLinks?.length ? s.menuLinks : (s.headerLinks ?? [])}
+                            actions={actions}
+                            feed={feed ? { label: cfg.labels.feed, href: "/feed.xml" } : undefined}
+                            labels={{ openMenu: cfg.labels.openMenu, closeMenu: cfg.labels.closeMenu, menu: cfg.labels.menu }}
+                            styles={phoneMenuStyles(t, badgeStyle, actionStyles)}
+                        />
+                    )}
                 </nav>
             </header>
         </>

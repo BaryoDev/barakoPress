@@ -2,6 +2,17 @@
 
 ## 0.8.0 (unreleased)
 
+- The built-in header takes four more settings (#127). A header link's `activeOn` names the paths it
+  is current on (`/` the home page alone, any other path and everything below it, a trailing slash
+  and the `/_press/<site>` rewrite prefix ignored), marked with `aria-current="page"` and the class
+  `bp-current`. A link's `children` draw a dropdown on desktop, opening on hover and on focus and
+  closing on Escape and when focus leaves, and an indented group in the phone menu. `MenuLinks` are
+  the phone menu's rows, falling back to `HeaderLinks`. `HeaderActions` are call to action links
+  with a `primary`, `secondary` or `plain` variant. Below 48rem the header links and the actions
+  give way to a menu button over a `details` element, so no link needs JavaScript. The controls take
+  new `Labels`: `openMenu`, `closeMenu`, `menu` and `submenu`. A site that sets none of them renders
+  the header it had, byte for byte. The package's second client component draws the parts that
+  follow the path.
 - A collection's index copy, an index page and a default byline are settings (#126).
   `Collections.<key>.index` may be `{ eyebrow, heading, lede, empty, unavailable }`, drawn by the
   collection index and the blog index in place of the label, the tagline and the `labels` notices.

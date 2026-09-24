@@ -146,6 +146,23 @@ export interface SiteLink {
     badge?: string;
     /** Leaves the site. The built-in header draws every link as a plain anchor either way; a theme may not. */
     external?: boolean;
+    /**
+     * Space separated site paths this link is current on, in the header and the phone menu. `/` is
+     * the home page alone; any other path covers itself and everything below it. It is a list rather
+     * than the href because a link can be current on a path it does not point to, such as a chat
+     * server's link on `/community`. Unset, the link is never marked current.
+     */
+    activeOn?: string;
+    /** Links under this one, one level deep. Drawn in `headerLinks` and `menuLinks` only. */
+    children?: SiteLink[];
+}
+
+export const HEADER_ACTION_VARIANTS = ["primary", "secondary", "plain"] as const;
+export type HeaderActionVariant = (typeof HEADER_ACTION_VARIANTS)[number];
+
+/** A call to action at the end of the header, such as "Get started". */
+export interface HeaderAction extends Omit<SiteLink, "activeOn" | "children"> {
+    variant: HeaderActionVariant;
 }
 
 export interface FooterColumn {
@@ -176,6 +193,9 @@ export interface SiteIdentity {
     copyright?: string;
     topBar?: TopBar;
     headerLinks?: SiteLink[];
+    /** The rows of the header's phone menu. Unset, the phone menu shows `headerLinks`. */
+    menuLinks?: SiteLink[];
+    headerActions?: HeaderAction[];
     footerColumns?: FooterColumn[];
     socialLinks?: SocialLink[];
 }
@@ -538,6 +558,14 @@ export interface Labels {
     contents: string;
     /** The label on the product switcher. */
     products: string;
+    /** The button that opens the header's phone menu. */
+    openMenu: string;
+    /** The same button while the menu is open. */
+    closeMenu: string;
+    /** The accessible name of the phone menu's list of links. */
+    menu: string;
+    /** The button beside a header link that shows its children. `{label}` is the link's label. */
+    submenu: string;
 }
 
 export const DEFAULT_LABELS: Labels = {
@@ -567,6 +595,10 @@ export const DEFAULT_LABELS: Labels = {
     editPage: "Edit this page",
     contents: "Contents",
     products: "Products",
+    openMenu: "Open menu",
+    closeMenu: "Close menu",
+    menu: "Menu",
+    submenu: "{label} links",
 };
 
 export const LABEL_KEYS = Object.keys(DEFAULT_LABELS) as (keyof Labels)[];
