@@ -117,3 +117,68 @@ export function renderMarkdown(source: string, options: RenderMarkdownOptions = 
     }
     return renderer.parse(source, { async: false }) as string;
 }
+
+/*
+ * One line of text with a few marks in it, for a text block's inline mode (#131): `code`, *emphasis*,
+ * **strong**, [links](/x) and ==an accent==, which draws as `<span class="bp-accent">`. Nothing
+ * that makes a block of its own: a heading, a list or a paragraph is written as the text it is, so
+ * a lede stays one element and a heading stays a heading.
+ *
+ * The same rules as the body, on a renderer of its own: raw HTML escaped, a link held to the same
+ * schemes, every attribute escaped. An image, a strikethrough and a hard break keep their words and
+ * lose the mark, since none of them is something a line of copy is asked to carry.
+ */
+function buildInlineRenderer() {
+    const marked = new Marked({ gfm: true, breaks: false });
+    marked.use({
+        extensions: [
+            {
+                name: "accent",
+                level: "inline",
+                start(src: string) {
+                    const at = src.indexOf("==");
+                    return at < 0 ? undefined : at;
+                },
+                tokenizer(src: string) {
+                    const match = /^==(?=\S)([\s\S]*?\S)==/.exec(src);
+                    if (!match) return undefined;
+                    return { type: "accent", raw: match[0], text: match[1], tokens: this.lexer.inlineTokens(match[1]) };
+                },
+                renderer(token) {
+                    return `<span class="bp-accent">${this.parser.parseInline(token.tokens ?? [])}</span>`;
+                },
+            },
+        ],
+        renderer: {
+            html({ text }: Tokens.HTML | Tokens.Tag) {
+                return escapeHtml(text);
+            },
+            link({ href, title, tokens }) {
+                const label = this.parser.parseInline(tokens);
+                if (!isSafeHref(href)) return label;
+                const t = title ? ` title="${escapeHtml(title)}"` : "";
+                const rel = /^https?:/.test(href.trim()) ? ` rel="${LINK_REL}"` : "";
+                return `<a href="${escapeHtml(href.trim())}"${t}${rel}>${label}</a>`;
+            },
+            image({ text }) {
+                return escapeHtml(text ?? "");
+            },
+            del({ tokens }) {
+                return this.parser.parseInline(tokens);
+            },
+            br() {
+                return " ";
+            },
+        },
+    });
+    return marked;
+}
+
+let inlineRenderer: ReturnType<typeof buildInlineRenderer> | undefined;
+
+/** A line of text with inline marks, as HTML. Block syntax is left as the text it is. */
+export function renderInlineMarkdown(source: string): string {
+    if (!source) return "";
+    inlineRenderer ??= buildInlineRenderer();
+    return inlineRenderer.parseInline(source, { async: false }) as string;
+}

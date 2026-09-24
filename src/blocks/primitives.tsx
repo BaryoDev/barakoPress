@@ -2,6 +2,8 @@ import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
 import { Asset, renderProse } from "../assets.js";
 import type { PressConfig } from "../config.js";
+import { renderInlineMarkdown } from "../markdown.js";
+import { recipeLook } from "../recipes.js";
 import type { PressTheme } from "../theme.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
 import {
@@ -100,9 +102,44 @@ function colorLike(value: string | undefined): string | undefined {
     return value && COLOR_LIKE.test(value) ? value : undefined;
 }
 
+/*
+ * A style recipe, named by a block (#131). Every primitive takes one, and it is text rather than a
+ * select so a preset can pass its own prop through with `{{props.recipe}}`. A name the site has no
+ * recipe for draws the block's own look, the same as no name at all.
+ */
+const recipeField = { name: "recipe" as const, kind: "text" as const, label: "Style recipe" };
+
+/**
+ * The attributes a block's outer element is drawn with.
+ *
+ * With no recipe this is `defaults`, the same object the block always drew, so a page that names
+ * none renders byte for byte as it did. With one, the recipe's declarations replace the defaults
+ * outright rather than merging over them: half the card's own padding under a recipe that set only
+ * the corner is a look nobody designed. `keep` is what the block needs to be the block at all (a
+ * sticky band's stickiness, a flow's cells), and it wins over the recipe. `className` is a class the
+ * block always carries, beside the recipe's.
+ */
+function look(
+    theme: PressTheme,
+    recipe: string | undefined,
+    defaults: CSSProperties,
+    keep: CSSProperties = {},
+    className?: string,
+): { style: CSSProperties; className?: string } {
+    const found = recipeLook(theme, recipe);
+    if (!found) return className ? { style: defaults, className } : { style: defaults };
+    const classes = [className, found.className].filter(Boolean).join(" ");
+    return { style: { ...found.style, ...keep }, ...(classes ? { className: classes } : {}) };
+}
+
+/** A named tone's variables when the block chose a tone, for the blocks inside a recipe's element. */
+function chosenTone(theme: PressTheme, name: string | undefined): CSSProperties {
+    return name ? toneVars(toneOf(theme, name)) : {};
+}
+
 /* ---------------------------------------------------------------- layout */
 
-type SectionProps = { tone?: string; width?: string; padding?: string; align?: string };
+type SectionProps = { tone?: string; width?: string; padding?: string; align?: string; recipe?: string };
 
 const section = defineBlock<SectionProps, "content">({
     type: "section",
@@ -113,6 +150,7 @@ const section = defineBlock<SectionProps, "content">({
         { name: "width", label: "Width", kind: "select", options: [...WIDTHS] },
         { name: "padding", label: "Padding", ...spaceSelect },
         { name: "align", label: "Align", ...alignSelect },
+        recipeField,
         { name: "content", kind: "slots", label: "Content", min: 1, max: 1 },
     ],
     component: ({ props, slots, theme }) => {
@@ -120,16 +158,21 @@ const section = defineBlock<SectionProps, "content">({
         const inner = widthOf(theme, props.width);
         return (
             <section
-                style={{
-                    ...toneVars(tone),
-                    background: tone.bg,
-                    color: tone.ink,
-                    paddingTop: spaceOf(theme, props.padding, "xl"),
-                    paddingBottom: spaceOf(theme, props.padding, "xl"),
-                    paddingLeft: theme.layout.gutter,
-                    paddingRight: theme.layout.gutter,
-                    textAlign: textAlignOf(props.align),
-                }}
+                {...look(
+                    theme,
+                    props.recipe,
+                    {
+                        ...toneVars(tone),
+                        background: tone.bg,
+                        color: tone.ink,
+                        paddingTop: spaceOf(theme, props.padding, "xl"),
+                        paddingBottom: spaceOf(theme, props.padding, "xl"),
+                        paddingLeft: theme.layout.gutter,
+                        paddingRight: theme.layout.gutter,
+                        textAlign: textAlignOf(props.align),
+                    },
+                    chosenTone(theme, props.tone),
+                )}
             >
                 <div style={{ maxWidth: inner, margin: inner ? "0 auto" : undefined }}>{slots.content?.[0]}</div>
             </section>
@@ -137,7 +180,7 @@ const section = defineBlock<SectionProps, "content">({
     },
 });
 
-type StackProps = { gap?: string; align?: string };
+type StackProps = { gap?: string; align?: string; recipe?: string };
 
 const stack = defineBlock<StackProps, "content">({
     type: "stack",
@@ -146,23 +189,24 @@ const stack = defineBlock<StackProps, "content">({
     fields: [
         { name: "gap", label: "Gap", ...spaceSelect },
         { name: "align", label: "Align", ...alignSelect },
+        recipeField,
         { name: "content", kind: "slots", label: "Content", min: 1, max: 1 },
     ],
     component: ({ props, slots, theme }) => (
         <div
-            style={{
+            {...look(theme, props.recipe, {
                 display: "flex",
                 flexDirection: "column",
                 gap: gap(theme, props.gap),
                 alignItems: props.align ? alignOf(props.align) : "stretch",
-            }}
+            })}
         >
             {slots.content?.[0]}
         </div>
     ),
 });
 
-type RowProps = { gap?: string; align?: string; justify?: string };
+type RowProps = { gap?: string; align?: string; justify?: string; recipe?: string };
 
 /*
  * Side by side, wrapping onto its own line below `layout.columnMin`. `flex-wrap` and a basis rather
@@ -181,17 +225,18 @@ const row = defineBlock<RowProps, "items">({
             kind: "select",
             options: ["start", "center", "end", "between"],
         },
+        recipeField,
         { name: "items", kind: "slots", label: "Items", required: true, min: 1, max: 8 },
     ],
     component: ({ props, slots, theme }) => (
         <div
-            style={{
+            {...look(theme, props.recipe, {
                 display: "flex",
                 flexWrap: "wrap",
                 gap: gap(theme, props.gap),
                 alignItems: props.align ? alignOf(props.align) : "stretch",
                 justifyContent: props.justify === "between" ? "space-between" : alignOf(props.justify),
-            }}
+            })}
         >
             {(slots.items ?? []).map((item, i) => (
                 <div key={i} style={{ flex: `1 1 min(100%, ${theme.layout.columnMin})`, minWidth: 0 }}>
@@ -202,7 +247,7 @@ const row = defineBlock<RowProps, "items">({
     ),
 });
 
-type GridProps = { columns?: number; gap?: string };
+type GridProps = { columns?: number; gap?: string; recipe?: string };
 
 const grid = defineBlock<GridProps, "items">({
     type: "grid",
@@ -211,15 +256,16 @@ const grid = defineBlock<GridProps, "items">({
     fields: [
         { name: "columns", kind: "number", label: "Columns", min: 1, max: 6 },
         { name: "gap", label: "Gap", ...spaceSelect },
+        recipeField,
         { name: "items", kind: "slots", label: "Items", required: true, min: 1, max: 24 },
     ],
     component: ({ props, slots, theme }) => (
         <div
-            style={{
+            {...look(theme, props.recipe, {
                 display: "grid",
                 gridTemplateColumns: `repeat(${props.columns ?? 2}, minmax(min(100%, ${theme.layout.columnMin}), 1fr))`,
                 gap: gap(theme, props.gap),
-            }}
+            })}
         >
             {(slots.items ?? []).map((item, i) => (
                 <div key={i} style={{ minWidth: 0 }}>
@@ -230,7 +276,7 @@ const grid = defineBlock<GridProps, "items">({
     ),
 });
 
-type FlowProps = { columns?: string; gap?: string; align?: string; justify?: string; hueRotate?: string };
+type FlowProps = { columns?: string; gap?: string; align?: string; justify?: string; hueRotate?: string; recipe?: string };
 
 /** How many columns a flow may ask for. A choice and not a number, for the reason below. */
 export const FLOW_COLUMNS = ["auto", "1", "2", "3", "4", "5", "6"];
@@ -286,6 +332,7 @@ const flow = defineBlock<FlowProps, "content">({
             options: ["start", "center", "end", "between"],
         },
         { name: "hueRotate", kind: "select", label: "Rotate cell hues", options: HUE_STEPS },
+        recipeField,
         { name: "content", kind: "slots", label: "Content", required: true, min: 1, max: 1 },
     ],
     component: ({ props, slots, theme }) => {
@@ -307,7 +354,10 @@ const flow = defineBlock<FlowProps, "content">({
         return (
             <>
                 {hue && <style dangerouslySetInnerHTML={{ __html: hue }} />}
-                <div style={style} data-bp-hue={hue ? props.hueRotate : undefined}>
+                <div
+                    {...look(theme, props.recipe, style, { "--bp-list": "contents" } as CSSProperties)}
+                    data-bp-hue={hue ? props.hueRotate : undefined}
+                >
                     {slots.content?.[0]}
                 </div>
             </>
@@ -322,6 +372,7 @@ type PanelProps = {
     border?: boolean;
     align?: string;
     width?: string;
+    recipe?: string;
 };
 
 /*
@@ -342,6 +393,7 @@ const panel = defineBlock<PanelProps, "content">({
         { name: "border", kind: "boolean", label: "Hairline frame" },
         { name: "align", label: "Align", ...alignSelect },
         { name: "width", kind: "select", label: "Width", options: [...WIDTHS] },
+        recipeField,
         { name: "content", kind: "slots", label: "Content", required: true, min: 1, max: 1 },
     ],
     component: ({ props, slots, theme }) => {
@@ -349,19 +401,24 @@ const panel = defineBlock<PanelProps, "content">({
         const inner = widthOf(theme, props.width ?? "full");
         return (
             <div
-                style={{
-                    ...toneVars(tone),
-                    boxSizing: "border-box",
-                    height: "100%",
-                    maxWidth: inner,
-                    margin: inner ? "0 auto" : undefined,
-                    padding: spaceOf(theme, props.padding, "lg"),
-                    background: tone.bg,
-                    color: tone.ink,
-                    borderRadius: radiusOf(theme, props.radius ?? "panel"),
-                    border: props.border === false ? undefined : `1px solid ${tone.hairline}`,
-                    textAlign: textAlignOf(props.align),
-                }}
+                {...look(
+                    theme,
+                    props.recipe,
+                    {
+                        ...toneVars(tone),
+                        boxSizing: "border-box",
+                        height: "100%",
+                        maxWidth: inner,
+                        margin: inner ? "0 auto" : undefined,
+                        padding: spaceOf(theme, props.padding, "lg"),
+                        background: tone.bg,
+                        color: tone.ink,
+                        borderRadius: radiusOf(theme, props.radius ?? "panel"),
+                        border: props.border === false ? undefined : `1px solid ${tone.hairline}`,
+                        textAlign: textAlignOf(props.align),
+                    },
+                    chosenTone(theme, props.tone),
+                )}
             >
                 {slots.content?.[0]}
             </div>
@@ -369,7 +426,7 @@ const panel = defineBlock<PanelProps, "content">({
     },
 });
 
-type StickyBarProps = { tone?: string; padding?: string; edge?: string; align?: string };
+type StickyBarProps = { tone?: string; padding?: string; edge?: string; align?: string; recipe?: string };
 
 /*
  * A band that stays where it is while the page moves under it: the announcement bar at the top of
@@ -392,31 +449,40 @@ const stickyBar = defineBlock<StickyBarProps, "content">({
         { name: "padding", label: "Padding", ...spaceSelect },
         { name: "edge", kind: "select", label: "Sticks to", options: ["top", "bottom"] },
         { name: "align", label: "Align", ...alignSelect },
+        recipeField,
         { name: "content", kind: "slots", label: "Content", required: true, min: 1, max: 1 },
     ],
     component: ({ props, slots, theme }) => {
         const tone = toneOf(theme, props.tone ?? "inverse");
         const bottom = props.edge === "bottom";
         const rule = `1px solid ${tone.hairline}`;
+        const sticks: CSSProperties = {
+            position: "sticky",
+            top: bottom ? undefined : 0,
+            bottom: bottom ? 0 : undefined,
+            zIndex: 20,
+        };
         return (
             <div
-                style={{
-                    ...toneVars(tone),
-                    position: "sticky",
-                    top: bottom ? undefined : 0,
-                    bottom: bottom ? 0 : undefined,
-                    zIndex: 20,
-                    boxSizing: "border-box",
-                    background: tone.bg,
-                    color: tone.ink,
-                    paddingTop: spaceOf(theme, props.padding, "sm"),
-                    paddingBottom: spaceOf(theme, props.padding, "sm"),
-                    paddingLeft: theme.layout.gutter,
-                    paddingRight: theme.layout.gutter,
-                    borderTop: bottom ? rule : undefined,
-                    borderBottom: bottom ? undefined : rule,
-                    textAlign: textAlignOf(props.align),
-                }}
+                {...look(
+                    theme,
+                    props.recipe,
+                    {
+                        ...toneVars(tone),
+                        ...sticks,
+                        boxSizing: "border-box",
+                        background: tone.bg,
+                        color: tone.ink,
+                        paddingTop: spaceOf(theme, props.padding, "sm"),
+                        paddingBottom: spaceOf(theme, props.padding, "sm"),
+                        paddingLeft: theme.layout.gutter,
+                        paddingRight: theme.layout.gutter,
+                        borderTop: bottom ? rule : undefined,
+                        borderBottom: bottom ? undefined : rule,
+                        textAlign: textAlignOf(props.align),
+                    },
+                    { ...chosenTone(theme, props.tone), ...sticks },
+                )}
             >
                 <div style={{ maxWidth: theme.layout.wide, margin: "0 auto" }}>{slots.content?.[0]}</div>
             </div>
@@ -424,38 +490,48 @@ const stickyBar = defineBlock<StickyBarProps, "content">({
     },
 });
 
-const spacer = defineBlock<{ size?: string }>({
+const spacer = defineBlock<{ size?: string; recipe?: string }>({
     type: "spacer",
     label: "Spacer",
     layer: "primitive",
-    fields: [{ name: "size", label: "Size", ...spaceSelect }],
-    component: ({ props, theme }) => <div style={{ height: spaceOf(theme, props.size, "lg") }} />,
+    fields: [{ name: "size", label: "Size", ...spaceSelect }, recipeField],
+    component: ({ props, theme }) => <div {...look(theme, props.recipe, { height: spaceOf(theme, props.size, "lg") })} />,
 });
 
-const divider = defineBlock<{ tone?: string; space?: string }>({
+const divider = defineBlock<{ tone?: string; space?: string; recipe?: string }>({
     type: "divider",
     label: "Divider",
     layer: "primitive",
     fields: [
         { name: "tone", label: "Tone", ...toneSelect },
         { name: "space", label: "Space around", ...spaceSelect },
+        recipeField,
     ],
     component: ({ props, theme }) => (
         <hr
-            style={{
+            {...look(theme, props.recipe, {
                 border: 0,
                 borderTop: `1px solid ${
                     props.tone ? toneOf(theme, props.tone).hairline : inherited(theme, "hairline")
                 }`,
                 margin: `${spaceOf(theme, props.space, "lg")} 0`,
-            }}
+            })}
         />
     ),
 });
 
 /* --------------------------------------------------------------- content */
 
-type TextProps = { value: string; variant?: string; tone?: string; align?: string; weight?: string; motion?: string };
+type TextProps = {
+    value: string;
+    variant?: string;
+    tone?: string;
+    align?: string;
+    weight?: string;
+    motion?: string;
+    format?: string;
+    recipe?: string;
+};
 
 const INK: Record<string, ToneVar> = {
     ink: "ink",
@@ -466,6 +542,32 @@ const INK: Record<string, ToneVar> = {
 
 /** What a text block can do besides sit there. A select, so a preset can pass its own prop through. */
 export const TEXT_MOTIONS = ["none", "countUp"];
+
+/** How a text block reads its value: as it is, or with inline marks (#131). */
+export const TEXT_FORMATS = ["plain", "inline"];
+
+/** The class a text block in inline mode carries, which the marks inside it are styled under. */
+export const INLINE_CLASS = "bp-inline";
+
+/*
+ * The marks inside an inline text block, which are markup from a string and so the one part of it an
+ * inline style cannot reach.
+ *
+ * Under `:where()`, so each rule weighs no more than the element it names and a site's own
+ * `.lede code` wins without a fight. Code reads `--bp-code-*` before its defaults, which is how a
+ * recipe gives the code in one block a tint and a corner: the recipe sets the variables on the
+ * element, and they inherit down to the marks. The accent follows the band's accent the way every
+ * other accent inside a tone does.
+ */
+export function inlineCss(theme: PressTheme): string {
+    const clean = (value: string) => value.replace(/[<>;{}]/g, "");
+    const s = `:where(.${INLINE_CLASS})`;
+    return [
+        `${s} code{font-family:${clean(theme.fonts.mono)};font-size:var(--bp-code-size,.9em);color:var(--bp-code-ink,inherit);background:var(--bp-code-bg,transparent);padding:var(--bp-code-pad,0);border-radius:var(--bp-code-radius,0);overflow-wrap:anywhere}`,
+        `${s} .bp-accent{color:var(--bp-accent,${clean(theme.colors.accent)})}`,
+        `${s} a{color:var(--bp-accent,${clean(theme.colors.accent)});text-decoration:underline;text-underline-offset:2px}`,
+    ].join("");
+}
 
 const text = defineBlock<TextProps>({
     type: "text",
@@ -478,6 +580,8 @@ const text = defineBlock<TextProps>({
         { name: "align", label: "Align", ...alignSelect },
         { name: "weight", kind: "select", label: "Weight", options: ["regular", "medium", "bold"] },
         { name: "motion", kind: "select", label: "Motion", options: TEXT_MOTIONS },
+        { name: "format", kind: "select", label: "Marks", options: TEXT_FORMATS },
+        recipeField,
     ],
     component: ({ props, theme }) => {
         const variant = TEXT_VARIANTS[props.variant ?? "body"] ?? TEXT_VARIANTS.body;
@@ -510,12 +614,23 @@ const text = defineBlock<TextProps>({
          * same whether the count runs or not.
          */
         const to = props.motion === "countUp" ? countTarget(props.value) : null;
-        if (to === null) return <Tag style={style}>{props.value}</Tag>;
+        if (to === null && props.format === "inline") {
+            return (
+                <>
+                    <style dangerouslySetInnerHTML={{ __html: inlineCss(theme) }} />
+                    <Tag
+                        {...look(theme, props.recipe, style, {}, INLINE_CLASS)}
+                        dangerouslySetInnerHTML={{ __html: renderInlineMarkdown(props.value) }}
+                    />
+                </>
+            );
+        }
+        if (to === null) return <Tag {...look(theme, props.recipe, style)}>{props.value}</Tag>;
         const cls = motionClass("cu", to);
         return (
             <>
                 <style dangerouslySetInnerHTML={{ __html: countUpCss(cls, to) }} />
-                <Tag style={style} className={cls}>
+                <Tag {...look(theme, props.recipe, style, {}, cls)}>
                     <span className={HIDDEN_CLASS}>{props.value}</span>
                     <span data-bp-counted aria-hidden="true">{props.value}</span>
                 </Tag>
@@ -533,18 +648,20 @@ const text = defineBlock<TextProps>({
  * Rendered markdown is a string of HTML, the one thing an inline style cannot reach, so a page that
  * holds one emits `proseCss` for this class.
  */
-const richText = defineBlock<{ markdown: string; width?: string }>({
+const richText = defineBlock<{ markdown: string; width?: string; recipe?: string }>({
     type: "richText",
     label: "Rich text",
     layer: "primitive",
     fields: [
         { name: "markdown", kind: "markdown", label: "Text", required: true },
         { name: "width", kind: "select", label: "Width", options: [...WIDTHS] },
+        recipeField,
     ],
     component: ({ props, theme }) => (
         <div
+            // Named first so the class stays ahead of the style in the markup, as it always was.
             className={PROSE_CLASS}
-            style={{ maxWidth: widthOf(theme, props.width ?? "prose") }}
+            {...look(theme, props.recipe, { maxWidth: widthOf(theme, props.width ?? "prose") }, {}, PROSE_CLASS)}
             dangerouslySetInnerHTML={{ __html: renderProse(props.markdown, theme) }}
         />
     ),
@@ -559,6 +676,7 @@ type ImageProps = {
     frame?: boolean;
     asSupplied?: boolean;
     clearSpace?: string;
+    recipe?: string;
 };
 
 /*
@@ -584,9 +702,10 @@ const image = defineBlock<ImageProps>({
         { name: "frame", kind: "boolean", label: "Hairline frame" },
         { name: "asSupplied", kind: "boolean", label: "Use exactly as supplied" },
         { name: "clearSpace", kind: "select", label: "Clear space", options: [...SPACES] },
+        recipeField,
     ],
     component: ({ props, theme }) => (
-        <figure style={{ margin: 0, maxWidth: widthOf(theme, props.width ?? "full") }}>
+        <figure {...look(theme, props.recipe, { margin: 0, maxWidth: widthOf(theme, props.width ?? "full") })}>
             <Asset
                 src={props.src}
                 alt={props.alt}
@@ -617,7 +736,7 @@ const image = defineBlock<ImageProps>({
     ),
 });
 
-type VideoProps = { src: string; poster?: string; caption?: string; radius?: string; autoplay?: boolean };
+type VideoProps = { src: string; poster?: string; caption?: string; radius?: string; autoplay?: boolean; recipe?: string };
 
 const video = defineBlock<VideoProps>({
     type: "video",
@@ -629,9 +748,10 @@ const video = defineBlock<VideoProps>({
         { name: "caption", kind: "text", label: "Caption" },
         { name: "radius", kind: "select", label: "Corners", options: [...RADII] },
         { name: "autoplay", kind: "boolean", label: "Play muted on view" },
+        recipeField,
     ],
     component: ({ props, theme }) => (
-        <figure style={{ margin: 0 }}>
+        <figure {...look(theme, props.recipe, { margin: 0 })}>
             <video
                 src={props.src}
                 poster={props.poster}
@@ -671,7 +791,7 @@ const ASPECTS: Record<string, string> = { "16:9": "16 / 9", "4:3": "4 / 3", "1:1
  */
 function embed(config: PressConfig): BlockDefinition {
     const allowed = new Set(config.embedHosts.map((h) => h.toLowerCase()));
-    return defineBlock<{ src: string; title: string; aspect?: string; radius?: string }>({
+    return defineBlock<{ src: string; title: string; aspect?: string; radius?: string; recipe?: string }>({
         type: "embed",
         label: "Embed",
         layer: "primitive",
@@ -680,6 +800,7 @@ function embed(config: PressConfig): BlockDefinition {
             { name: "title", kind: "text", label: "What it is", required: true },
             { name: "aspect", kind: "select", label: "Shape", options: Object.keys(ASPECTS) },
             { name: "radius", kind: "select", label: "Corners", options: [...RADII] },
+            recipeField,
         ],
         component: ({ props, theme }) => {
             let url: URL;
@@ -697,13 +818,13 @@ function embed(config: PressConfig): BlockDefinition {
                     referrerPolicy="no-referrer"
                     sandbox="allow-scripts allow-same-origin allow-presentation"
                     allowFullScreen
-                    style={{
+                    {...look(theme, props.recipe, {
                         display: "block",
                         width: "100%",
                         aspectRatio: ASPECTS[props.aspect ?? "16:9"] ?? ASPECTS["16:9"],
                         border: 0,
                         borderRadius: radiusOf(theme, props.radius ?? "panel"),
-                    }}
+                    })}
                 />
             );
         },
@@ -761,7 +882,7 @@ export function IconGlyph({ name, size, color }: { name: string; size: string; c
     );
 }
 
-const icon = defineBlock<{ name: string; size?: string; tone?: string; tint?: string; label?: string }>({
+const icon = defineBlock<{ name: string; size?: string; tone?: string; tint?: string; label?: string; recipe?: string }>({
     type: "icon",
     label: "Icon",
     layer: "primitive",
@@ -777,6 +898,7 @@ const icon = defineBlock<{ name: string; size?: string; tone?: string; tint?: st
          */
         { name: "tint", kind: "text", label: "Colour from the entry, over the tone" },
         { name: "label", kind: "text", label: "Read out as" },
+        recipeField,
     ],
     component: ({ props, theme }) => {
         const path = ICONS[props.name];
@@ -796,7 +918,9 @@ const icon = defineBlock<{ name: string; size?: string; tone?: string; tint?: st
                 role={props.label ? "img" : undefined}
                 aria-hidden={props.label ? undefined : true}
                 aria-label={props.label}
-                style={{ display: "inline-block", verticalAlign: "middle" }}
+                {...(tint
+                    ? { style: { display: "inline-block", verticalAlign: "middle" } }
+                    : look(theme, props.recipe, { display: "inline-block", verticalAlign: "middle" }))}
             >
                 <path d={path} />
             </svg>
@@ -804,14 +928,14 @@ const icon = defineBlock<{ name: string; size?: string; tone?: string; tint?: st
         if (!tint) return glyph;
         return (
             <span
-                style={{
+                {...look(theme, props.recipe, {
                     display: "inline-flex",
                     alignItems: "center",
                     justifyContent: "center",
                     padding: theme.space.xs,
                     borderRadius: radiusOf(theme, "control"),
                     background: `color-mix(in srgb, ${tint} 16%, ${theme.colors.surface})`,
-                }}
+                })}
             >
                 {glyph}
             </span>
@@ -819,7 +943,7 @@ const icon = defineBlock<{ name: string; size?: string; tone?: string; tint?: st
     },
 });
 
-type LinkProps = { label: string; href: string; variant?: string; size?: string; newTab?: boolean };
+type LinkProps = { label: string; href: string; variant?: string; size?: string; newTab?: boolean; recipe?: string };
 
 const BUTTON_VARIANTS = ["primary", "secondary", "quiet"];
 
@@ -869,22 +993,23 @@ function anchorBlock(type: string, label: string, defaultVariant: string): Block
             { name: "variant", kind: "select", label: "Style", options: BUTTON_VARIANTS },
             { name: "size", kind: "select", label: "Size", options: ["sm", "lg"] },
             { name: "newTab", kind: "boolean", label: "Open in a new tab" },
+            recipeField,
         ],
         component: ({ props, theme }) => {
             const href = props.href.trim();
             const external = /^[a-z][a-z0-9+.-]*:/i.test(href);
-            const style = linkStyle(theme, props.variant ?? defaultVariant, props.size ?? "lg");
+            const drawn = look(theme, props.recipe, linkStyle(theme, props.variant ?? defaultVariant, props.size ?? "lg"));
             const rel = external || props.newTab ? "noopener noreferrer" : undefined;
             const target = props.newTab ? "_blank" : undefined;
             if (external) {
                 return (
-                    <a href={href} rel={rel} target={target} style={style}>
+                    <a href={href} rel={rel} target={target} {...drawn}>
                         {props.label}
                     </a>
                 );
             }
             return (
-                <Link href={href} rel={rel} target={target} style={style}>
+                <Link href={href} rel={rel} target={target} {...drawn}>
                     {props.label}
                 </Link>
             );
@@ -896,30 +1021,38 @@ function anchorBlock(type: string, label: string, defaultVariant: string): Block
  * A list's entries are slots rather than strings, so an entry can hold a bound text block, an icon
  * beside a line, or anything else assembled from primitives.
  */
-const list = defineBlock<{ style?: string; gap?: string }, "items">({
+const list = defineBlock<{ style?: string; gap?: string; recipe?: string }, "items">({
     type: "list",
     label: "List",
     layer: "primitive",
     fields: [
         { name: "style", kind: "select", label: "Marker", options: ["bullet", "number", "none"] },
         { name: "gap", label: "Gap", ...spaceSelect },
+        recipeField,
         { name: "items", kind: "slots", label: "Entries", required: true, min: 1, max: 30 },
     ],
     component: ({ props, slots, theme }) => {
         const ordered = props.style === "number";
         const Tag = ordered ? "ol" : "ul";
+        const marker = ordered ? "decimal" : props.style === "none" ? "none" : "disc";
         return (
             <Tag
-                style={{
-                    margin: 0,
-                    padding: props.style === "none" ? 0 : undefined,
-                    paddingInlineStart: props.style === "none" ? 0 : "1.3em",
-                    listStyle: ordered ? "decimal" : props.style === "none" ? "none" : "disc",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: gap(theme, props.gap, "xs"),
-                    color: inherited(theme, "secondaryInk"),
-                }}
+                {...look(
+                    theme,
+                    props.recipe,
+                    {
+                        margin: 0,
+                        padding: props.style === "none" ? 0 : undefined,
+                        paddingInlineStart: props.style === "none" ? 0 : "1.3em",
+                        listStyle: marker,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: gap(theme, props.gap, "xs"),
+                        color: inherited(theme, "secondaryInk"),
+                    },
+                    // The marker is the list's own prop, not a look, and a recipe has no property for it.
+                    { listStyle: marker },
+                )}
             >
                 {(slots.items ?? []).map((item, i) => (
                     <li key={i}>{item}</li>
@@ -929,7 +1062,7 @@ const list = defineBlock<{ style?: string; gap?: string }, "items">({
     },
 });
 
-type DisclosureProps = { label: string; open?: boolean; group?: string; tone?: string };
+type DisclosureProps = { label: string; open?: boolean; group?: string; tone?: string; recipe?: string };
 
 /*
  * A labelled section that opens: the accordion shape, right for a `faq` where a reader may want two
@@ -948,6 +1081,7 @@ const disclosure = defineBlock<DisclosureProps, "content">({
         { name: "open", kind: "boolean", label: "Open to begin with" },
         { name: "group", kind: "text", label: "Only one open in this group" },
         { name: "tone", label: "Tone", ...toneSelect },
+        recipeField,
         { name: "content", kind: "slots", label: "Content", required: true, min: 1, max: 1 },
     ],
     component: ({ props, slots, theme }) => {
@@ -956,7 +1090,7 @@ const disclosure = defineBlock<DisclosureProps, "content">({
             <details
                 name={props.group}
                 open={props.open === true}
-                style={{ borderTop: `1px solid ${tone.hairline}`, padding: `${theme.space.sm} 0` }}
+                {...look(theme, props.recipe, { borderTop: `1px solid ${tone.hairline}`, padding: `${theme.space.sm} 0` })}
             >
                 <summary
                     style={{
@@ -1005,7 +1139,7 @@ const TAB_STRIP_CSS =
     "[data-bp-tabpanel]{display:none;order:1;flex-basis:100%;width:100%}" +
     "label[data-bp-tabbtn]{order:0;cursor:pointer}";
 
-type TabGroupProps = { gap?: string; tone?: string };
+type TabGroupProps = { gap?: string; tone?: string; recipe?: string };
 
 /** A strip of tabs and the panel of whichever one is checked, from independent `tabPanel` siblings. */
 const tabGroup = defineBlock<TabGroupProps, "content">({
@@ -1015,22 +1149,31 @@ const tabGroup = defineBlock<TabGroupProps, "content">({
     fields: [
         { name: "gap", label: "Gap", ...spaceSelect },
         { name: "tone", label: "Tone", ...toneSelect },
+        recipeField,
         { name: "content", kind: "slots", label: "Tabs", required: true, min: 1, max: 1 },
     ],
     component: ({ props, slots, theme }) => {
         const tone = toneOf(theme, props.tone);
+        // The strip is a wrapping flex row of every tab and panel, ordered by TAB_STRIP_CSS, and
+        // without that it is not a strip.
+        const strip = { "--bp-list": "contents", display: "flex", flexWrap: "wrap" } as CSSProperties;
         return (
             <>
                 <style dangerouslySetInnerHTML={{ __html: TAB_STRIP_CSS }} />
                 <div
-                    style={{
-                        ...toneVars(tone),
-                        "--bp-list": "contents",
-                        display: "flex",
-                        flexWrap: "wrap",
-                        alignItems: "flex-end",
-                        gap: gap(theme, props.gap, "xs"),
-                    } as CSSProperties}
+                    {...look(
+                        theme,
+                        props.recipe,
+                        {
+                            ...toneVars(tone),
+                            "--bp-list": "contents",
+                            display: "flex",
+                            flexWrap: "wrap",
+                            alignItems: "flex-end",
+                            gap: gap(theme, props.gap, "xs"),
+                        } as CSSProperties,
+                        { ...chosenTone(theme, props.tone), ...strip },
+                    )}
                 >
                     {slots.content?.[0]}
                 </div>
@@ -1052,7 +1195,7 @@ const VISUALLY_HIDDEN: CSSProperties = {
     border: 0,
 };
 
-type TabPanelProps = { label: string; open?: boolean; group?: string };
+type TabPanelProps = { label: string; open?: boolean; group?: string; recipe?: string };
 
 /*
  * One tab of a `tabGroup`: a radio button standing in for the tab strip's own selection, its label
@@ -1069,13 +1212,17 @@ const tabPanel = defineBlock<TabPanelProps, "content">({
         { name: "label", kind: "text", label: "Label", required: true },
         { name: "open", kind: "boolean", label: "Open to begin with" },
         { name: "group", kind: "text", label: "Only one open in this group" },
+        recipeField,
         { name: "content", kind: "slots", label: "Content", required: true, min: 1, max: 1 },
     ],
     component: ({ props, slots, theme }) => {
         const id = motionClass("tab", props.group ?? "", props.label);
+        // A recipe is an inline style, which would outweigh the open tab's colours and hide which
+        // one is open, so under a recipe those two are important.
+        const over = recipeLook(theme, props.recipe) ? "!important" : "";
         const css =
             `#${id}:checked~[data-bp-tabpanel="${id}"]{display:block}` +
-            `#${id}:checked~label[for="${id}"]{background:var(--bp-accent);color:var(--bp-on-accent)}`;
+            `#${id}:checked~label[for="${id}"]{background:var(--bp-accent)${over};color:var(--bp-on-accent)${over}}`;
         return (
             <div style={{ display: "contents" }}>
                 <style dangerouslySetInnerHTML={{ __html: css }} />
@@ -1086,17 +1233,18 @@ const tabPanel = defineBlock<TabPanelProps, "content">({
                     defaultChecked={props.open === true}
                     style={VISUALLY_HIDDEN}
                 />
+                {/* The recipe is the tab's, the part of it that is drawn in the strip. */}
                 <label
                     data-bp-tabbtn=""
                     htmlFor={id}
-                    style={{
+                    {...look(theme, props.recipe, {
                         borderRadius: radiusOf(theme, "control"),
                         padding: `${theme.space.xs} ${theme.space.md}`,
                         fontFamily: theme.fonts.heading,
                         fontWeight: 600,
                         fontSize: theme.text.small,
                         color: inherited(theme, "ink"),
-                    }}
+                    })}
                 >
                     {props.label}
                 </label>
@@ -1119,7 +1267,7 @@ function cellsOf(line: string, width: number): string[] {
     return cells;
 }
 
-type ComparisonProps = { rows: string; caption?: string; tone?: string; radius?: string };
+type ComparisonProps = { rows: string; caption?: string; tone?: string; radius?: string; recipe?: string };
 
 /*
  * A real table, because what it draws is a table: a row heading on the left, a column per option and
@@ -1144,6 +1292,7 @@ const comparisonTable = defineBlock<ComparisonProps>({
         { name: "caption", kind: "text", label: "What it compares" },
         { name: "tone", label: "Tone", ...toneSelect },
         { name: "radius", kind: "select", label: "Corners", options: [...RADII] },
+        recipeField,
     ],
     component: ({ props, theme }) => {
         // Filtered before it is cut, not after. `linesOf` cuts first, so twenty blank lines pasted
@@ -1168,18 +1317,23 @@ const comparisonTable = defineBlock<ComparisonProps>({
         };
         return (
             <div
-                style={{
-                    ...toneVars(tone),
-                    boxSizing: "border-box",
-                    // The table keeps its columns at phone width and the box scrolls, rather than
-                    // the cells wrapping into a shape nobody can read across.
-                    overflowX: "auto",
-                    padding: theme.space.md,
-                    background: tone.bg,
-                    color: tone.ink,
-                    border: `1px solid ${tone.hairline}`,
-                    borderRadius: radiusOf(theme, props.radius ?? "panel"),
-                }}
+                {...look(
+                    theme,
+                    props.recipe,
+                    {
+                        ...toneVars(tone),
+                        boxSizing: "border-box",
+                        // The table keeps its columns at phone width and the box scrolls, rather than
+                        // the cells wrapping into a shape nobody can read across.
+                        overflowX: "auto",
+                        padding: theme.space.md,
+                        background: tone.bg,
+                        color: tone.ink,
+                        border: `1px solid ${tone.hairline}`,
+                        borderRadius: radiusOf(theme, props.radius ?? "panel"),
+                    },
+                    { ...chosenTone(theme, props.tone), overflowX: "auto" },
+                )}
             >
                 <table style={{ borderCollapse: "collapse", width: "100%", fontFamily: theme.fonts.body }}>
                     {props.caption && (
@@ -1275,7 +1429,15 @@ function totalOf(count: string | undefined, remaining: string | undefined): stri
     return String(c + r);
 }
 
-type ProgressProps = { label: string; value?: string; count?: string; total?: string; remaining?: string; tone?: string };
+type ProgressProps = {
+    label: string;
+    value?: string;
+    count?: string;
+    total?: string;
+    remaining?: string;
+    tone?: string;
+    recipe?: string;
+};
 
 /*
  * How far along one thing is: a roadmap milestone, a fundraising target.
@@ -1303,6 +1465,7 @@ const progressBar = defineBlock<ProgressProps>({
         { name: "total", kind: "text", label: "Out of how many" },
         { name: "remaining", kind: "text", label: "Or how many are left" },
         { name: "tone", label: "Tone", ...toneSelect },
+        recipeField,
     ],
     component: ({ props, theme }) => {
         const fromValue = props.value ? percentOf(props.value) : null;
@@ -1313,7 +1476,7 @@ const progressBar = defineBlock<ProgressProps>({
         const tone = props.tone ? toneOf(theme, props.tone) : null;
         const muted = tone ? tone.muted : inherited(theme, "muted");
         return (
-            <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
+            <div {...look(theme, props.recipe, { display: "flex", flexDirection: "column", gap: theme.space.xs })}>
                 <div
                     style={{
                         display: "flex",
@@ -1365,20 +1528,30 @@ const progressBar = defineBlock<ProgressProps>({
  * the rotation standing. See motion.ts for why that shape is the whole design.
  */
 
-const reveal = defineBlock<{ style?: string }, "content">({
+const reveal = defineBlock<{ style?: string; recipe?: string }, "content">({
     type: "reveal",
     label: "Reveal",
     layer: "primitive",
     fields: [
         { name: "style", kind: "select", label: "How", options: ["rise", "fade"] },
+        recipeField,
         { name: "content", kind: "slots", label: "Content", required: true, min: 1, max: 1 },
     ],
-    component: ({ props, slots }) => (
-        <>
-            <style dangerouslySetInnerHTML={{ __html: revealCss() }} />
-            <div data-bp-reveal={props.style === "fade" ? "fade" : "rise"}>{slots.content?.[0]}</div>
-        </>
-    ),
+    component: ({ props, slots, theme }) => {
+        // It has no look of its own to replace, so a recipe is all it draws with.
+        const found = recipeLook(theme, props.recipe);
+        return (
+            <>
+                <style dangerouslySetInnerHTML={{ __html: revealCss() }} />
+                <div
+                    data-bp-reveal={props.style === "fade" ? "fade" : "rise"}
+                    {...(found ? look(theme, props.recipe, {}) : {})}
+                >
+                    {slots.content?.[0]}
+                </div>
+            </>
+        );
+    },
 });
 
 /** The most words one rotation turns through, and the longest a turn may be. */
@@ -1397,6 +1570,7 @@ const rotatingText = defineBlock<{
     variant?: string;
     tone?: string;
     seconds?: number;
+    recipe?: string;
 }>({
     type: "rotatingText",
     label: "Rotating text",
@@ -1407,6 +1581,7 @@ const rotatingText = defineBlock<{
         { name: "variant", kind: "select", label: "Variant", options: TEXT_VARIANT_NAMES },
         { name: "tone", kind: "select", label: "Ink", options: Object.keys(INK) },
         { name: "seconds", kind: "number", label: "Seconds each", min: 1, max: 20 },
+        recipeField,
     ],
     component: ({ props, theme }) => {
         const words = (props.words ?? (props.items ?? "").split(","))
@@ -1422,14 +1597,20 @@ const rotatingText = defineBlock<{
             <>
                 <style dangerouslySetInnerHTML={{ __html: rotatingCss(cls, words.length, seconds) }} />
                 <span
-                    style={{
-                        position: "relative",
-                        fontFamily: heading ? theme.fonts.heading : theme.fonts.body,
-                        fontSize: theme.text[variant.role],
-                        fontWeight: heading ? 600 : 400,
-                        lineHeight: heading ? 1.15 : 1.7,
-                        color: inherited(theme, INK[props.tone ?? ""] ?? "accent"),
-                    }}
+                    {...look(
+                        theme,
+                        props.recipe,
+                        {
+                            position: "relative",
+                            fontFamily: heading ? theme.fonts.heading : theme.fonts.body,
+                            fontSize: theme.text[variant.role],
+                            fontWeight: heading ? 600 : 400,
+                            lineHeight: heading ? 1.15 : 1.7,
+                            color: inherited(theme, INK[props.tone ?? ""] ?? "accent"),
+                        },
+                        // The words are stacked over each other inside it.
+                        { position: "relative" },
+                    )}
                 >
                     {/*
                      * The words are stacked and only one is drawn, but opacity hides nothing from a
@@ -1456,7 +1637,7 @@ const MAX_LINES = 20;
  * width each one types to is its own length in `ch`, which is a measurement of the text rather than
  * a size this block invented.
  */
-const typingTerminal = defineBlock<{ lines: string; prompt?: string; seconds?: number; radius?: string }>({
+const typingTerminal = defineBlock<{ lines: string; prompt?: string; seconds?: number; radius?: string; recipe?: string }>({
     type: "typingTerminal",
     label: "Typing terminal",
     layer: "primitive",
@@ -1465,6 +1646,7 @@ const typingTerminal = defineBlock<{ lines: string; prompt?: string; seconds?: n
         { name: "prompt", kind: "text", label: "Prompt" },
         { name: "seconds", kind: "number", label: "Seconds for the whole loop", min: 2, max: 120 },
         { name: "radius", kind: "select", label: "Corners", options: [...RADII] },
+        recipeField,
     ],
     component: ({ props, theme }) => {
         const prompt = props.prompt ?? "";
@@ -1480,18 +1662,24 @@ const typingTerminal = defineBlock<{ lines: string; prompt?: string; seconds?: n
                 <style dangerouslySetInnerHTML={{ __html: typingCss(cls, lines.map((l) => l.length), seconds) }} />
                 <div
                     className={cls}
-                    style={{
-                        ...toneVars(tone),
-                        boxSizing: "border-box",
-                        padding: theme.space.lg,
-                        background: tone.bg,
-                        color: theme.colors.code,
-                        borderRadius: radiusOf(theme, props.radius ?? "panel"),
-                        fontFamily: theme.fonts.mono,
-                        fontSize: theme.text.small,
-                        lineHeight: 1.8,
-                        overflowX: "auto",
-                    }}
+                    {...look(
+                        theme,
+                        props.recipe,
+                        {
+                            ...toneVars(tone),
+                            boxSizing: "border-box",
+                            padding: theme.space.lg,
+                            background: tone.bg,
+                            color: theme.colors.code,
+                            borderRadius: radiusOf(theme, props.radius ?? "panel"),
+                            fontFamily: theme.fonts.mono,
+                            fontSize: theme.text.small,
+                            lineHeight: 1.8,
+                            overflowX: "auto",
+                        },
+                        {},
+                        cls,
+                    )}
                 >
                     {lines.map((line, i) => (
                         <span key={i} style={{ "--bp-w": `${line.length}ch` } as CSSProperties}>
@@ -1518,6 +1706,7 @@ const codeSample = defineBlock<{
     language?: string;
     selectLabel?: string;
     radius?: string;
+    recipe?: string;
 }>({
     type: "codeSample",
     label: "Code sample",
@@ -1527,6 +1716,7 @@ const codeSample = defineBlock<{
         { name: "language", kind: "text", label: "Language" },
         { name: "selectLabel", kind: "text", label: "Say this above it, for copying" },
         { name: "radius", kind: "select", label: "Corners", options: [...RADII] },
+        recipeField,
     ],
     component: ({ props, theme }) => {
         const lines = linesOf(props.code, MAX_LINES);
@@ -1534,13 +1724,13 @@ const codeSample = defineBlock<{
         const meta = { fontFamily: theme.fonts.mono, fontSize: theme.text.meta, color: tone.muted };
         return (
             <div
-                style={{
+                {...look(theme, props.recipe, {
                     ...toneVars(tone),
                     boxSizing: "border-box",
                     padding: theme.space.lg,
                     background: tone.bg,
                     borderRadius: radiusOf(theme, props.radius ?? "panel"),
-                }}
+                })}
             >
                 {(props.language || props.selectLabel) && (
                     <div

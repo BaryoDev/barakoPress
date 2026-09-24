@@ -87,6 +87,8 @@ export type {
     ThemeText,
     ThemeTone,
 } from "./theme.js";
+export { RECIPE_PROPERTIES, RECIPE_PROPERTY_GROUPS, recipeLook, recipeValueOk } from "./recipes.js";
+export type { RecipeLook, StyleRecipe } from "./recipes.js";
 export { readingMinutes, initials } from "./reading-time.js";
 export type {
     PressConfig,
@@ -173,7 +175,7 @@ export type { Post, Ref, Term, Page, NavItem, Breadcrumb, PageAtPath, Redirect }
 export { Navigation, Breadcrumbs } from "./screens/navigation.js";
 export type { NavigationProps, BreadcrumbsProps } from "./screens/navigation.js";
 
-export { renderMarkdown, isSafeHref, anchor } from "./markdown.js";
+export { renderMarkdown, renderInlineMarkdown, isSafeHref, anchor } from "./markdown.js";
 export type { RenderMarkdownOptions } from "./markdown.js";
 
 export { Asset, renderProse, suppliedAssetFor, suppliedAssetOn, clearSpaceOf } from "./assets.js";
@@ -258,7 +260,7 @@ export type {
 export { createBlockRegistry, registryFor } from "./blocks/registry.js";
 export { builtInBlocks, collectionItems, BLOCK_PROSE_CLASS } from "./blocks/built-in.js";
 export type { CollectionItem } from "./blocks/built-in.js";
-export { primitiveBlocks, PROSE_CLASS, ICONS, FLOW_COLUMNS } from "./blocks/primitives.js";
+export { primitiveBlocks, PROSE_CLASS, ICONS, FLOW_COLUMNS, INLINE_CLASS, TEXT_FORMATS } from "./blocks/primitives.js";
 export {
     dataBlocks,
     SOURCE_BLOCK,
