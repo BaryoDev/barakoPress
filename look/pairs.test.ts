@@ -158,6 +158,21 @@ describe("parsePairs", () => {
         expect(pairs[1].maxDiffRatio).toBe(0.01);
     });
 
+    it("gives a tall page longer to capture, and refuses a timeout that is not a whole number of milliseconds", () => {
+        const pairs = parse({
+            defaults: { rebuiltBase: "https://s.example" },
+            pairs: [
+                { id: "home", reference: "c.html", rebuilt: "/" },
+                { id: "changelog", reference: "c.html", rebuilt: "/changelog", timeout: 180_000 },
+            ],
+        });
+
+        expect(pairs).toHaveLength(2);
+        expect(pairs[0].timeout).toBe(30_000);
+        expect(pairs[1].timeout).toBe(180_000);
+        expect(problems({ ...minimal, pairs: [{ ...minimal.pairs[0], timeout: -5 }] })).toContain("pairs[0].timeout");
+    });
+
     it("refuses an id that would not make a directory name", () => {
         const message = problems({ pairs: [{ id: "../etc", reference: "c.html", rebuilt: "https://y.example" }] });
 

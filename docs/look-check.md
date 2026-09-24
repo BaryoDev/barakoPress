@@ -92,6 +92,7 @@ Every key, and what happens when it is left out:
 | `fixedTime` | both | `2026-01-01T09:00:00.000Z` | The clock both sides render against. |
 | `mask` | both | none | Selectors painted over before the comparison. A list applies to both sides, or `{ both, reference, rebuilt }`. |
 | `block` | both | none | URL globs refused during the capture: analytics, embeds, anything pulling live content. |
+| `timeout` | both | `30000` | Milliseconds one capture may take. A page tall enough to hold a whole changelog needs longer to screenshot; the test gets three times this. |
 | `referenceBase`, `rebuiltBase` | defaults | none | Joined onto a `rebuilt` or `reference` written as a path. |
 
 `${NAME}` in any URL, base or file path is read from the environment. A name that is not set is an

@@ -55,6 +55,11 @@ export interface Pair {
     mask: MaskSpec;
     /** URL globs refused during the capture: analytics, embeds, anything that pulls live content. */
     block: string[];
+    /**
+     * How long one capture may take, in milliseconds. A page tall enough to hold a whole changelog
+     * takes longer than 30 seconds to screenshot, and that is its size, not a fault.
+     */
+    timeout: number;
 }
 
 const DEFAULT_WIDTHS = [390, 1280];
@@ -62,6 +67,7 @@ const DEFAULT_VIEWPORT_HEIGHT = 900;
 const DEFAULT_MAX_DIFF_RATIO = 0.001;
 const DEFAULT_PIXEL_THRESHOLD = 0.1;
 const DEFAULT_FIXED_TIME = "2026-01-01T09:00:00.000Z";
+const DEFAULT_TIMEOUT = 30_000;
 
 const DEFAULTS_KEYS = [
     "widths",
@@ -72,6 +78,7 @@ const DEFAULTS_KEYS = [
     "fixedTime",
     "mask",
     "block",
+    "timeout",
     "referenceBase",
     "rebuiltBase",
 ] as const;
@@ -88,6 +95,7 @@ const PAIR_KEYS = [
     "fixedTime",
     "mask",
     "block",
+    "timeout",
 ] as const;
 
 const TARGET_KEYS = ["url", "file", "hash", "click", "waitFor"] as const;
@@ -304,6 +312,7 @@ export function parsePairs(raw: unknown, options: ParseOptions): Pair[] {
         fixedTime: parseTime(rawDefaults.fixedTime, "defaults.fixedTime", problems, DEFAULT_FIXED_TIME),
         mask: parseMask(rawDefaults.mask, "defaults.mask", problems, emptyMask),
         block: optionalStrings(rawDefaults.block, "defaults.block", problems, []),
+        timeout: optionalNumber(rawDefaults.timeout, "defaults.timeout", problems, DEFAULT_TIMEOUT, positiveInteger),
         referenceBase: parseBase(rawDefaults.referenceBase, "defaults.referenceBase", problems, env),
         rebuiltBase: parseBase(rawDefaults.rebuiltBase, "defaults.rebuiltBase", problems, env),
     };
@@ -357,6 +366,7 @@ export function parsePairs(raw: unknown, options: ParseOptions): Pair[] {
             fixedTime: parseTime(entry.fixedTime, `${where}.fixedTime`, problems, defaults.fixedTime),
             mask: parseMask(entry.mask, `${where}.mask`, problems, defaults.mask),
             block: [...defaults.block, ...optionalStrings(entry.block, `${where}.block`, problems, [])],
+            timeout: optionalNumber(entry.timeout, `${where}.timeout`, problems, defaults.timeout, positiveInteger),
         });
     });
 

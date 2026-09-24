@@ -2,6 +2,9 @@
 
 ## 0.8.0 (unreleased)
 
+- A look check pair can set its own capture `timeout`, or the defaults can. A page as tall as
+  barakocms.com's changelog (over 100,000px at 390px) took longer than the fixed 30 seconds to
+  screenshot and was reported as not captured, so it was never compared at all.
 - A site link can carry a `badge` (up to 12 characters, drawn beside the label in the built-in
   header) and `external: true`, read from `HeaderLinks`, `TopBar` and `FooterColumns`. A value of
   the wrong kind is dropped and the link kept. barakocms.com's nav marks barakoBrew with "V1", and
