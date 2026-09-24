@@ -2,6 +2,11 @@
 
 ## 0.8.0 (unreleased)
 
+- A site theme can draw the page itself. `createPage`, `createHome` and `createViewerPage` take
+  `{ bare: true }` and render only the blocks, with no `main`, page padding, title or breadcrumbs,
+  and the gap between blocks reads `--bp-gap` before the theme's `space.lg`. Both were inline
+  styles, so a deployment porting an existing design had no way to take them off: every page kept a
+  40px strip either side and 24px between sections that the design does not have.
 - The image workflow can publish a tag that already exists. v0.7.0 was tagged before the workflow
   was written, so nothing ever pushed an image for it, and dispatching against the tag does not work
   because a dispatch runs the workflow file as it exists at that ref. Dispatching from master with

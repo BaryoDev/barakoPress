@@ -157,6 +157,18 @@ describe("the layout the library needed", () => {
         expect(html.split("--bp-list:contents").length - 1).toBe(1);
     });
 
+    it("takes the gap between blocks from a stylesheet when one sets it, at every level", async () => {
+        const html = await page([
+            { type: "stack", props: { content: [[{ type: "text", props: { value: "deep" } }]] } },
+        ]);
+
+        // Two lists, the page's and the stack's, and both read the property rather than a length a
+        // stylesheet could never override.
+        const gap = `gap:var(--bp-gap, ${config.theme.space.lg})`;
+        expect(html.split(gap).length - 1).toBe(2);
+        expect(html).not.toContain("--bp-gap:");
+    });
+
     it("draws a panel from the theme, framed unless it is told not to", async () => {
         const framed = await page([{ type: "panel", props: { content: [[]] } }]);
 

@@ -399,6 +399,24 @@ describe("the page route", () => {
         expect(await outcome(mounted, ["blog"])).toContain("A page that must never render");
     });
 
+    it("renders only the blocks when a theme asks for a bare page", async () => {
+        visit("baryo.dev");
+        const drawn = await pageHtml(config, ["about", "team"]);
+        const Bare = createPage(config, registry, { bare: true });
+        const bare = renderToStaticMarkup(await Bare({ params: Promise.resolve({ path: ["about", "team"] }) }));
+
+        expect(drawn).toContain("<main");
+        expect(drawn).toContain("<h1");
+        expect(drawn).toContain('data-press="breadcrumbs"');
+
+        expect(bare).toContain("Meet the team");
+        expect(bare).toContain('data-block="richText"');
+        expect(bare).not.toContain("<main");
+        expect(bare).not.toContain("<h1");
+        expect(bare).not.toContain('data-press="breadcrumbs"');
+        expect(bare).not.toContain(`padding:56px ${config.theme.layout.gutter}`);
+    });
+
     it("reads by slug when mounted on a slug route, as before", async () => {
         visit("baryo.dev");
         const Page = createPage(config, registry);
