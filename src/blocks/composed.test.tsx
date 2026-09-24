@@ -63,6 +63,22 @@ const ENROLMENT_COLLECTION = {
 };
 
 /*
+ * Two collections over entries that carry their own `Body` and `Date`. The first maps neither role,
+ * so the entry's own fields are what `{{item.Body}}` and `{{item.Date}}` read. The second maps both
+ * to other fields, and the mapped values win over the entry's fields of the same name.
+ */
+const CHANGES: Entry[] = [
+    { id: "c1", slug: "v1", data: { Name: "Version one", Body: "Own body text", Date: "2026-05-01T00:00:00Z" } },
+];
+const RELEASES: Entry[] = [
+    {
+        id: "r1",
+        slug: "r1",
+        data: { Name: "Release one", Body: "Own body text", Notes: "Mapped notes", Date: "2026-05-01T00:00:00Z", Shipped: "2026-06-09T00:00:00Z" },
+    },
+];
+
+/*
  * A preset a designer saved in barakoBrew: a band with a heading and a slot, built from primitives,
  * reading its own props through `{{props.X}}`. No barakoPress release created this.
  */
@@ -97,10 +113,14 @@ const TENANTS: Record<string, { host: string; settings: Record<string, unknown>;
             Name: "Mindanao Academy",
             Url: "https://academy.example",
             Currency: "PHP",
-            Collections: { enrolments: ENROLMENT_COLLECTION },
+            Collections: {
+                enrolments: ENROLMENT_COLLECTION,
+                changes: { type: "change", fields: { title: "Name" } },
+                releases: { type: "release", fields: { title: "Name", body: "Notes", date: "Shipped" } },
+            },
             Presets: [BAND_PRESET],
         },
-        content: { enrolment: ENROLMENTS, post: [] },
+        content: { enrolment: ENROLMENTS, change: CHANGES, release: RELEASES, post: [] },
     },
     clinic: {
         host: "clinic.example",
@@ -331,6 +351,23 @@ describe("source, repeat and paging", () => {
         ]);
 
         expect(html).toContain("No one has enrolled yet.");
+    });
+
+    it("reads an entry's own Body and Date through a repeat when the collection maps neither", async () => {
+        const html = await page("academy.example", [
+            list({ collection: "changes" }, [text("[{{item.Body}}] on {{item.Date | date ?? no date}}")]),
+        ]);
+
+        expect(html).toContain("[Own body text] on 1 May 2026");
+    });
+
+    it("reads the mapped field, not the entry's own field of that name, when the collection maps the role", async () => {
+        const html = await page("academy.example", [
+            list({ collection: "releases" }, [text("[{{item.Body}}] on {{item.Date | date ?? no date}}")]),
+        ]);
+
+        expect(html).toContain("[Mapped notes] on 9 June 2026");
+        expect(html).not.toContain("Own body text");
     });
 
     it("puts one entry in scope when the source names a slug", async () => {

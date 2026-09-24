@@ -2,6 +2,10 @@
 
 ## 0.8.0 (unreleased)
 
+- An entry's own field is no longer hidden by a role its collection does not map (#121). Inside a
+  `repeat` or a `source`, `{{item.Body}}`, `{{item.Date}}` and the other role names read the entry's
+  own field of that name unless the collection's `fields` names the role, and a mapped role still
+  wins. barakocms.com's changelog lost every date to this.
 - A site can name its own palette (#125). `Tokens` in the site settings (or `theme.tokens`) holds
   named colours, lengths and font stacks, emitted on the root as `--t-<name>`. `Tones` (or
   `theme.tones`) holds named `{ ink, bg, edge }` tones, each colour a token name, a `Colors` slot or

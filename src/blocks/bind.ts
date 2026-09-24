@@ -1,5 +1,5 @@
 import type { PressConfig } from "../config.js";
-import { collectionOf, getItem, listCollection, type Item } from "../collections.js";
+import { collectionOf, getItem, listCollection, names, type Item } from "../collections.js";
 import type { Page } from "../cms.js";
 import {
     BindingSource,
@@ -420,23 +420,29 @@ async function expandPreset(
  * The entry's own fields come first under the names the tenant gave them, because a client's model
  * is its own and `{{item.Headline}}` has to work. The engine's names are laid over them, so
  * `{{item.Title}}` means the title whatever the field is called.
+ *
+ * A role is laid over only when the collection maps it (#121). An unmapped role has nothing to say,
+ * and laying its empty value over the entry's own `Body` or `Date` took the field away.
  */
 export function itemScope(config: PressConfig, item: Item): Record<string, unknown> {
-    const route = collectionOf(config, item.collection)?.route;
+    const col = collectionOf(config, item.collection);
+    const route = col?.route;
+    const mapped = (role: keyof NonNullable<typeof col>["fields"]) => names(col?.fields[role]).length > 0;
+    const role = <T>(name: string, on: boolean, value: T) => (on ? { [name]: value } : {});
     return {
         ...item.content.data,
         Id: item.id,
         Title: item.title,
         Slug: item.slug,
-        Summary: item.summary,
-        Body: item.body,
-        Date: item.date,
-        Image: item.image,
-        ImageAlt: item.imageAlt,
-        Url: item.url,
-        Tags: item.tags,
-        Option: item.option,
-        Color: item.color,
+        ...role("Summary", mapped("summary"), item.summary),
+        ...role("Body", mapped("body"), item.body),
+        ...role("Date", mapped("date"), item.date),
+        ...role("Image", mapped("image"), item.image),
+        ...role("ImageAlt", mapped("imageAlt"), item.imageAlt),
+        ...role("Url", mapped("url"), item.url),
+        ...role("Tags", mapped("tags"), item.tags),
+        ...role("Option", col?.colorBy !== undefined, item.option),
+        ...role("Color", col?.colorBy !== undefined, item.color),
         /*
          * The progress figure and the option's style, so a bar and a card can draw what the site
          * declared (#52) without a block naming either.
