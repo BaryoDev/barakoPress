@@ -2,6 +2,26 @@
 
 ## 0.8.0 (unreleased)
 
+- Counts, sums and groups over a source (#128). `{{count.<collection>}}` is how many published
+  entries a collection has, read as the delivery API's `totalItems` for a page of one row and cached
+  like any read. Inside a `source`, `{{count}}` is how many rows its filter matched, and
+  `{{sum.<Field>}}` adds a numeric field over the rows it read. A `source` with `groupBy` renders its
+  content once per distinct value of that field, in the order first seen or as `groupOrder` says,
+  with `{{group.key}}` and `{{group.count}}` in scope and `repeat` walking that group's rows. Each
+  collection counted is one of the page's eight reads. A count that cannot be read renders its
+  fallback and is reported. A filtered count is a `source` with `pageSize: 1` rather than a filter
+  written into the placeholder, which stays paths, formats and fallbacks. `count`, `sum` and `group`
+  are now scopes, so a page that had one of those words typed as a placeholder renders its fallback
+  where it used to show the braces. A page that uses none of it renders as it did.
+- `/api/blocks` answers with the requesting tenant's presets and tones (#134). Mount it as
+  `createBlockSchemaRoute(config, blocks)` and a request-time site resolves the tenant as a page
+  does, from the host through the CMS, `CMS_TENANT`, the named tenant header or
+  `CMS_DEFAULT_TENANT`, and publishes that tenant's schema. Before, it was built once from the
+  startup registry, so barakoBrew never offered a tenant its own presets or tones. A host with no
+  tenant answers 404, a failed lookup 503. The settings read is cached under the tenant's tag, so a
+  settings change shows after the next revalidate. A build-time site gets the same answer as before,
+  and `createBlockSchemaRoute(blocks)` still works unchanged. CORS is unchanged; a site that names a
+  tenant header adds it to `Vary`.
 - The built-in header takes four more settings (#127). A header link's `activeOn` names the paths it
   is current on (`/` the home page alone, any other path and everything below it, a trailing slash
   and the `/_press/<site>` rewrite prefix ignored), marked with `aria-current="page"` and the class

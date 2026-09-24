@@ -94,7 +94,7 @@ decision, not the engine's.
 | `app/[...path]/page.tsx` | `default`, `generateMetadata` | `createPage(config, blocks)`, `createPageMetadata(config)` |
 | `app/doctors/page.tsx` | `default` | `createCollectionIndex(config, "doctors")` |
 | `app/doctors/[slug]/page.tsx` | `default`, `generateMetadata`, `generateStaticParams` | `createCollectionDetail(config, "doctors")`, `createCollectionMetadata(config, "doctors")`, `createCollectionStaticParams(config, "doctors")` |
-| `app/api/blocks/route.ts` | `GET`, `OPTIONS` | `createBlockSchemaRoute(blocks)`, `createBlockSchemaPreflight()` |
+| `app/api/blocks/route.ts` | `GET`, `OPTIONS` | `createBlockSchemaRoute(config, blocks)`, `createBlockSchemaPreflight()` |
 | `app/api/blocks/bindings/route.ts` | `GET`, `OPTIONS` | `createBindingReportRoute(config, blocks)`, `createBindingReportPreflight()` |
 | `app/layout.tsx` | `default`, `generateMetadata` | `createSiteLayout(config, { blocks })`, `createSiteMetadata(config)` |
 | `app/%5Fshare/route.ts` | `GET` | `createSharePage(config)` |
@@ -502,6 +502,16 @@ allowed. A listed origin gets `Access-Control-Allow-Origin` echoed back on `GET`
 preflight, never `*` and never credentials, and every answer carries `Vary: Origin`. Pass
 `{ consoleOrigins: [...] }` to both factories to set the list in code instead.
 
+**Which tenant's schema.** Given the config, `createBlockSchemaRoute(config, blocks)` answers a
+request-time site with the schema of the tenant the request belongs to: its own presets, and its own
+tones on every tone field. The tenant is found as a page finds it, from `CMS_TENANT`, the header the
+operator named, the host through the CMS, or `CMS_DEFAULT_TENANT`, so barakoBrew reads a tenant's
+schema at that tenant's domain. Nothing else a caller sends picks the tenant. A host with no tenant
+gets 404 `{ "error": "no site" }`, and a lookup that fails gets 503. The settings behind it are the
+cached read every page makes, under the tenant's cache tag, so a settings change shows after the
+delivery that purges it. A build-time site gets the same answer as `createBlockSchemaRoute(blocks)`,
+which still works and still ignores the request.
+
 Field kinds are `text`, `markdown`, `url`, `number`, `boolean`, `select` (with `options`), `slots`
 (lists of nested blocks, handed to the component already rendered), `list` and `group` (below). The list is editor input, so a
 block renders only when its type is registered and every prop passes its field. A present but wrong
@@ -564,8 +574,8 @@ Scopes are `site` (the tenant's settings and resolved identity), `page` (the ent
 renders), `item` (the row inside a `source` or a `repeat`) and `query` (URL parameters). An item
 reads its entry's own fields by name, with the collection's roles (`Title`, `Summary`, `Body`,
 `Date` and the rest) laid over them only where the collection's `fields` maps that role, so an
-unmapped `Body` is still the entry's own `Body`. `viewer`
-arrives with #7. Formats are `text`, `date`, `datetime`, `time`, `money`, `number`, `upper` and
+unmapped `Body` is still the entry's own `Body`. `count`, `sum` and `group` are about a set of rows
+rather than one, and are described with `source` below. `viewer` arrives with #7. Formats are `text`, `date`, `datetime`, `time`, `money`, `number`, `upper` and
 `lower`; `money` uses the tenant's `Currency` setting, or a plain amount when it has none.
 
 Paths, formats and fallbacks only. There are no expressions and no JavaScript. Everything resolves
@@ -604,6 +614,61 @@ A filter narrows what the API already lets the reader see. It is never access co
 which rows is decided in barakoCMS. A page reads at most eight sources, and a `source` at most fifty
 rows a page.
 
+**Counts, sums and groups.** `{{count.<collection>}}` anywhere on a page is how many published
+entries the collection has, for example `{{count.posts}}`. It is the delivery API's `totalItems` for
+a page of one row, cached like every other read, and the public API lists published entries only, so
+it is the number of rows the page could list. Inside a `source`, `{{count}}` on its own is how many
+rows that source's filter matched, all of them and not just the page it read:
+
+```json
+{ "type": "source", "props": {
+    "collection": "packages", "mode": "list", "pageSize": 1,
+    "filterField": "Category", "filterValue": "Auth",
+    "content": [[ { "type": "text", "props": { "value": "{{count}} auth modules" } } ]]
+} }
+```
+
+A filtered count is a `source` rather than something like `{{count.packages where Category=Auth}}`
+because a placeholder is paths, formats and fallbacks, and a filter value is free text: a value with a
+space or a hyphen cannot be a path segment, and a placeholder that could carry a condition would be
+the start of an expression language. `filterField` and `filterValue` already bind, so the value can
+come from `{{query.c}}` or an item, and the count costs the one read the source makes anyway. Set
+`pageSize` to 1 when the count is all the source is for.
+
+Each collection counted is one of the page's eight reads, spent the first time a placeholder names
+it and shared by every other placeholder that names it. Sources and counts draw on the same eight, in
+the order the page is written. A count past the budget, one for a collection the tenant does not
+have, and one whose read failed all render the fallback and are reported as `no value`.
+
+`{{sum.<Field>}}` inside a `source` adds that field over the rows the source read, for example the
+open issues across a roadmap's milestones. A number stored as text counts. A field with a word in
+any row is not a sum and renders its fallback, and a source with no rows has no sums, so write
+`{{sum.Open ?? 0}}` where zero is the right answer. A sum covers the rows read, at most fifty; a
+source that pages sums the page it is on.
+
+`groupBy` names a field, and the source's content then renders once per distinct value of it among
+the rows read, in the order first seen. `groupOrder` is a comma separated list of values to put
+first, in that order; the rest follow in the order first seen. Inside each group `{{group.key}}` is
+the value and `{{group.count}}` how many rows have it, and `repeat` and `{{sum.X}}` work over that
+group's rows. `{{count}}` stays what the whole source matched. A row with nothing in the field is
+kept, in a group whose key is empty, so `{{group.key ?? Other}}` names it. A pager inside a grouped
+source renders nothing, since a page of rows is not a page of groups. One grouped source is one read,
+where a source per value was one read each:
+
+```json
+{ "type": "source", "props": {
+    "collection": "milestones", "mode": "list", "pageSize": 50,
+    "groupBy": "Repository", "groupOrder": "barakoCMS, barakoPress",
+    "content": [[
+      { "type": "text", "props": { "value": "{{group.key}}: {{sum.Open}} open in {{group.count}} milestones" } },
+      { "type": "repeat", "props": { "content": [[ { "type": "text", "props": { "value": "{{item.Title}}" } } ]] } }
+    ]]
+} }
+```
+
+All of it resolves on the server as the request's tenant, so a count or a sum never makes the
+browser call the API. A page that uses none of it reads and renders exactly what it did before.
+
 ### Presets
 
 A preset is a named block saved as data, not code: a few props and an arrangement of primitives that
@@ -640,7 +705,8 @@ A preset's fields may be lists and groups, in the same shape a block declares th
 ```
 
 A request-time site reads its tenant's presets from the `Presets` site setting. A build-time site
-passes them as `presets` in the config. A preset never replaces a block that is code. It does
+passes them as `presets` in the config. `/api/blocks` lists a tenant's own presets beside the shipped ones when
+it is mounted with the config. A preset never replaces a block that is code. It does
 replace a preset, which is how a tenant adjusts one of the shipped blocks below without waiting for
 a release. A preset body may not use another preset saved in the same pass, so a cycle cannot form;
 it may use one compiled earlier, which is how a tenant's own block builds on a shipped one. `slot` marks where the content an editor dropped into the preset
@@ -1234,8 +1300,8 @@ to nothing is dropped. Up to 40.
 
 Every block field that picks a tone offers the site's tones after the built-in six, and a block
 stores `"tone": "cms"` the way it stores `"tone": "accent"`. `HeaderTone` and `FooterTone` take them
-too. `/api/blocks` lists a build-time site's tones; it is built once, without a request, so a
-request-time tenant's tones are accepted when a page renders but are not in that answer yet.
+too. `/api/blocks` lists them on every tone field: a build-time site's own, and on a request-time
+site the requesting tenant's, when the route is mounted as `createBlockSchemaRoute(config, blocks)`.
 
 A site that sets neither gets no `--t-` property and no new option anywhere, and renders byte for
 byte as it did.

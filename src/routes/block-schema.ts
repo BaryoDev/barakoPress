@@ -1,5 +1,8 @@
+import type { PressConfig } from "../config.js";
 import { readEnv } from "../env.js";
+import { registryFor } from "../blocks/registry.js";
 import { blockSchema, type BlockRegistry } from "../blocks/schema.js";
+import { siteConfigOrNull, tenantVary } from "../site.js";
 
 /*
  * Publishes what this site can render, so an editor can offer exactly these blocks and these
@@ -12,6 +15,14 @@ import { blockSchema, type BlockRegistry } from "../blocks/schema.js";
  * unset. The allowed origin is echoed rather than `*`, credentials are never allowed because the
  * schema is public, and every answer carries `Vary: Origin` so a shared cache cannot hand one
  * origin's answer to another.
+ *
+ * Given the config, a request-time site answers with the requesting tenant's schema (#134): the
+ * tenant is found the way a page finds it, from the host through the CMS, or CMS_TENANT, the header
+ * the operator named, or CMS_DEFAULT_TENANT, and nothing a caller sends picks a tenant any other way.
+ * The proxy does not rewrite /api, so this reads the request's headers, as the binding report and the
+ * revalidate endpoint do. The tenant's presets and tones come from its settings, read through the
+ * same cached read every page makes, so they are cached under the tenant's tag and a settings change
+ * shows after the delivery that purges it. A host with no tenant is a 404, as it is on a page.
  */
 
 export interface BlockSchemaRouteOptions {
@@ -50,9 +61,55 @@ function corsHeaders(origin: string | null): Headers {
     return headers;
 }
 
-export function createBlockSchemaRoute(registry: BlockRegistry, options: BlockSchemaRouteOptions = {}) {
-    return function GET(request?: Request): Response {
-        return Response.json(blockSchema(registry), { headers: corsHeaders(allowedOrigin(request, options)) });
+function isRegistry(value: PressConfig | BlockRegistry): value is BlockRegistry {
+    return typeof (value as BlockRegistry).values === "function" && typeof (value as BlockRegistry).get === "function";
+}
+
+/** The schema of one registry, as every site answered before a config could be passed. */
+export function createBlockSchemaRoute(
+    registry: BlockRegistry,
+    options?: BlockSchemaRouteOptions,
+): (request?: Request) => Response;
+/** The schema of the tenant a request belongs to, or of `registry` itself on a build-time site. */
+export function createBlockSchemaRoute(
+    config: PressConfig,
+    registry: BlockRegistry,
+    options?: BlockSchemaRouteOptions,
+): (request?: Request) => Promise<Response>;
+export function createBlockSchemaRoute(
+    first: PressConfig | BlockRegistry,
+    second?: BlockRegistry | BlockSchemaRouteOptions,
+    third: BlockSchemaRouteOptions = {},
+) {
+    if (isRegistry(first)) {
+        const registry = first;
+        const options = (second ?? {}) as BlockSchemaRouteOptions;
+        return function GET(request?: Request): Response {
+            return Response.json(blockSchema(registry), { headers: corsHeaders(allowedOrigin(request, options)) });
+        };
+    }
+
+    const base = first;
+    const registry = second as BlockRegistry;
+    const options = third;
+    return async function GET(request?: Request): Promise<Response> {
+        const headers = corsHeaders(allowedOrigin(request, options));
+        if (!base.sites) return Response.json(blockSchema(registry), { headers });
+
+        const vary = tenantVary(base);
+        if (vary) headers.set("vary", `Origin, ${vary}`);
+        let config: PressConfig | null;
+        try {
+            config = await siteConfigOrNull(base);
+        } catch (e) {
+            // Next's own signals, a dynamic bailout among them, are not failures and go back to it.
+            if (e && typeof e === "object" && "digest" in e) throw e;
+            const why = e instanceof Error ? e.message : String(e);
+            console.warn(`blocks: the tenant for this request could not be resolved (${why})`);
+            return Response.json({ error: "unavailable" }, { status: 503, headers });
+        }
+        if (!config) return Response.json({ error: "no site" }, { status: 404, headers });
+        return Response.json(blockSchema(registryFor(config, registry)), { headers });
     };
 }
 
