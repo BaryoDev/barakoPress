@@ -2,6 +2,15 @@
 
 ## 0.8.0 (unreleased)
 
+- `/api/blocks` answers with the requesting tenant's presets and tones (#134). Mount it as
+  `createBlockSchemaRoute(config, blocks)` and a request-time site resolves the tenant as a page
+  does, from the host through the CMS, `CMS_TENANT`, the named tenant header or
+  `CMS_DEFAULT_TENANT`, and publishes that tenant's schema. Before, it was built once from the
+  startup registry, so barakoBrew never offered a tenant its own presets or tones. A host with no
+  tenant answers 404, a failed lookup 503. The settings read is cached under the tenant's tag, so a
+  settings change shows after the next revalidate. A build-time site gets the same answer as before,
+  and `createBlockSchemaRoute(blocks)` still works unchanged. CORS is unchanged; a site that names a
+  tenant header adds it to `Vary`.
 - A collection's index copy, an index page and a default byline are settings (#126).
   `Collections.<key>.index` may be `{ eyebrow, heading, lede, empty, unavailable }`, drawn by the
   collection index and the blog index in place of the label, the tagline and the `labels` notices.
