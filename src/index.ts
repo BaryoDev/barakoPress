@@ -256,6 +256,8 @@ export type {
     ResolveOptions,
 } from "./blocks/schema.js";
 export { createBlockRegistry, registryFor } from "./blocks/registry.js";
+export { definePlugin } from "./blocks/plugins.js";
+export type { PressPlugin } from "./blocks/plugins.js";
 export { builtInBlocks, collectionItems, BLOCK_PROSE_CLASS } from "./blocks/built-in.js";
 export type { CollectionItem } from "./blocks/built-in.js";
 export { primitiveBlocks, PROSE_CLASS, ICONS, FLOW_COLUMNS } from "./blocks/primitives.js";

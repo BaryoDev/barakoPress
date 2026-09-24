@@ -1,7 +1,8 @@
 import type { PressConfig } from "../config.js";
 import { readEnv } from "../env.js";
 import { registryFor } from "../blocks/registry.js";
-import { blockSchema, type BlockRegistry } from "../blocks/schema.js";
+import { withEnabledPlugins } from "../blocks/plugins.js";
+import { blockSchema, installedPlugins, type BlockRegistry } from "../blocks/schema.js";
 import { siteConfigOrNull, tenantVary } from "../site.js";
 
 /*
@@ -23,6 +24,9 @@ import { siteConfigOrNull, tenantVary } from "../site.js";
  * revalidate endpoint do. The tenant's presets and tones come from its settings, read through the
  * same cached read every page makes, so they are cached under the tenant's tag and a settings change
  * shows after the delivery that purges it. A host with no tenant is a 404, as it is on a page.
+ *
+ * Given the config, a plugin's blocks are listed only for a site or tenant that enabled the plugin
+ * (#25), and `plugins` names every plugin the image carries with whether it is on.
  */
 
 export interface BlockSchemaRouteOptions {
@@ -95,7 +99,7 @@ export function createBlockSchemaRoute(
     // Required, not optional: Next's route type check refuses a handler whose request may be absent.
     return async function GET(request: Request): Promise<Response> {
         const headers = corsHeaders(allowedOrigin(request, options));
-        if (!base.sites) return Response.json(blockSchema(registry), { headers });
+        if (!base.sites) return Response.json(schemaFor(base, registry, withEnabledPlugins(registry, base.plugins)), { headers });
 
         const vary = tenantVary(base);
         if (vary) headers.set("vary", `Origin, ${vary}`);
@@ -110,8 +114,17 @@ export function createBlockSchemaRoute(
             return Response.json({ error: "unavailable" }, { status: 503, headers });
         }
         if (!config) return Response.json({ error: "no site" }, { status: 404, headers });
-        return Response.json(blockSchema(registryFor(config, registry)), { headers });
+        return Response.json(schemaFor(config, registry, registryFor(config, registry)), { headers });
     };
+}
+
+/*
+ * Installed is read off the whole registry and enabled off the config, so a tenant sees the switch for
+ * a plugin it has not turned on without seeing that plugin's blocks.
+ */
+function schemaFor(config: PressConfig, all: BlockRegistry, rendered: BlockRegistry) {
+    const plugins = installedPlugins(all).map((name) => ({ name, enabled: config.plugins.includes(name) }));
+    return blockSchema(rendered, plugins);
 }
 
 /** The preflight for the schema route. Mount it as `OPTIONS` beside `createBlockSchemaRoute`. */

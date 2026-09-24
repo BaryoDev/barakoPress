@@ -2,6 +2,19 @@
 
 ## 0.8.0 (unreleased)
 
+- Plugin packages (#25). A plugin is an npm package whose default export is
+  `definePlugin({ name, blocks })`, its blocks written with `defineBlock` and checked at compile time
+  the same as the built-ins. It reaches a deployment through a derived image: `npm pack` tarballs in a
+  directory passed to the Dockerfile as the `plugins` build context, built from the engine's source at
+  a pinned release tag (`examples/derived-image/compose.yml`). One image carries every plugin, and a
+  tenant renders a plugin's blocks only when its `Plugins` site setting names it; a build-time site
+  sets `plugins` in its config. Until then the blocks are not in `/api/blocks`, a page holding one
+  renders without it, and a preset drawing one is left out. `/api/blocks` adds `plugins`, each
+  installed plugin with whether the tenant enabled it, and `plugin` on each block a plugin added.
+  `createBlockRegistry` takes `plugins`, and refuses a plugin block whose name is already taken. A
+  plugin block gets its props, slots and theme, and never the config. Every plugin's code is loaded
+  for every tenant the container serves, so tenants that must not share plugins need separate
+  deployments. An image built with no plugins renders exactly as before.
 - The tenant-aware `/api/blocks` handler takes its request as required, not optional. Next's route
   type check refuses a handler whose request may be absent, so a consumer built with webpack failed
   its type check on `app/api/blocks/route.ts`.

@@ -1,6 +1,7 @@
 import { pinnedTenant, type PressConfig } from "../config.js";
 import { boundToSite, builtInBlocks, copiedDefinition } from "./built-in.js";
 import { libraryPresets } from "./library.js";
+import { definePlugin, pluginBlocks, withEnabledPlugins, type PressPlugin } from "./plugins.js";
 import { withPresets, type BlockPreset } from "./presets.js";
 import { checkDefinition, type BlockDefinition, type BlockField, type BlockRegistry, type ResolvedBlock } from "./schema.js";
 import { TONES, toneNames } from "./tokens.js";
@@ -20,11 +21,16 @@ import { TONES, toneNames } from "./tokens.js";
  * the shipped one rather than being refused as a name already taken, and so the two do not share
  * one block budget. It comes with the built-ins because its bodies are built from them: without
  * them every preset in it would compile to an empty arrangement.
+ *
+ * Plugin blocks go in beside the site's own and may take no name already taken, by a built-in, the
+ * library, another plugin or the site. Replacing one would change that block for every tenant on the
+ * image, including the ones that never enabled the plugin, which is the one thing enablement promises
+ * not to do.
  */
 export function createBlockRegistry(
     config: PressConfig,
     blocks: BlockDefinition[] = [],
-    options: { builtIns?: boolean; presets?: readonly BlockPreset[] } = {},
+    options: { builtIns?: boolean; presets?: readonly BlockPreset[]; plugins?: readonly PressPlugin[] } = {},
 ): BlockRegistry {
     let registry = new Map<string, BlockDefinition>();
     if (options.builtIns !== false) {
@@ -38,6 +44,20 @@ export function createBlockRegistry(
         if (own.has(block.type)) throw new Error(`block type "${block.type}" is registered twice`);
         own.add(block.type);
         registry.set(block.type, block);
+    }
+
+    const plugins = new Set<string>();
+    for (const plugin of (options.plugins ?? []).map(definePlugin)) {
+        if (plugins.has(plugin.name)) throw new Error(`plugin "${plugin.name}" is installed twice`);
+        plugins.add(plugin.name);
+        for (const block of pluginBlocks(plugin)) {
+            const taken = registry.get(block.type);
+            if (taken) {
+                const by = taken.plugin ? `plugin "${taken.plugin}"` : own.has(block.type) ? "the site" : "the engine";
+                throw new Error(`plugin "${plugin.name}" block "${block.type}" is already registered by ${by}`);
+            }
+            registry.set(block.type, block);
+        }
     }
     // Lazily, because this runs at module scope in a site's press.config.ts: the name is resolved in
     // the warning that needs it, not here (barakoPress #51).
@@ -56,6 +76,9 @@ export function createBlockRegistry(
  * the tenant's data and two tenants share the container. It is a copy of a small map when there is
  * something to change and the same map when there is not.
  *
+ * Blocks of a plugin the tenant has not enabled are left out here, which is what keeps them off its
+ * pages and out of its editor (#25).
+ *
  * `holding` is passed down rather than asked for: a block that asked the request whether the site
  * is holding would read a cookie, and the page holding that block would stop being cacheable
  * (barakoPress #55). The caller already knows, because it decided which document to render.
@@ -65,7 +88,9 @@ export function registryFor(
     registry: BlockRegistry,
     options: { holding?: boolean } = {},
 ): BlockRegistry {
-    const bound = boundToSite(registry, config, options.holding === true);
+    // First, so a tenant preset is compiled without the blocks this tenant has not enabled.
+    const enabled = withEnabledPlugins(registry, config.plugins);
+    const bound = boundToSite(enabled, config, options.holding === true);
     const names = toneNames(config.theme);
     const all = withPresets(withToneNames(bound, names), config.presets, () => pinnedTenant(config));
     return withToneNames(all, names);
