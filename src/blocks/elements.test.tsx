@@ -151,6 +151,21 @@ describe("an anchor on a section, a stack or a panel", () => {
         }
     });
 
+    it("can come from a binding, and is checked after it resolves", async () => {
+        const cfg = defineConfig({ site: SITE, theme: { recipes: RECIPES as never } });
+        const registry = createBlockRegistry(cfg);
+        const draw = async (anchor: string) => {
+            const blocks = await bindBlocks(resolveBlocks([{ type: "stack", props: { anchor, content: [[text({})]] } }], registry, { perViewer: false }), {
+                config: cfg,
+                registry,
+                scopes: { page: () => ({ Slug: "v4-4-0", Bad: '" onclick="x' }) },
+            });
+            return renderToStaticMarkup(<BlockList blocks={blocks} theme={cfg.theme} />);
+        };
+        expect(await draw("{{page.Slug}}")).toContain('id="v4-4-0"');
+        expect(await draw("{{page.Bad}}")).not.toContain("id=");
+    });
+
     it("is left off when it is not a plain name", () => {
         const html = render([{ type: "stack", props: { anchor: 'x" onclick="y', content: [[text({})]] } }]);
         expect(html).not.toContain("id=");

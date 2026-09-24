@@ -150,7 +150,8 @@ function placed(align: string | undefined, justify: string | undefined): CSSProp
  * attribute, and an id that is not a name is one no link can reach anyway.
  */
 const ANCHOR = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
-const anchorField = { name: "anchor" as const, kind: "text" as const, label: "Anchor, for a link to #name", bindable: false };
+// Bindable, since a release's anchor is its version: what the binding resolves to is checked below.
+const anchorField = { name: "anchor" as const, kind: "text" as const, label: "Anchor, for a link to #name" };
 
 function anchorOf(value: string | undefined): string | undefined {
     return value && ANCHOR.test(value) ? value : undefined;
