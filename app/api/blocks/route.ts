@@ -1,5 +1,5 @@
 import { createBlockSchemaPreflight, createBlockSchemaRoute } from "barakopress";
-import { blocks } from "@/press.config";
+import { blocks, config } from "@/press.config";
 
-export const GET = createBlockSchemaRoute(blocks);
+export const GET = createBlockSchemaRoute(config, blocks);
 export const OPTIONS = createBlockSchemaPreflight();
