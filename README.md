@@ -112,6 +112,16 @@ It reads `searchParams`, which forces the route dynamic, so a site using `output
 `createBlogPost` and gives up preview. `createPostStaticParams` and `createArchiveStaticParams` exist
 for that static case.
 
+A site that draws its own post page keeps preview by giving the detail route its own view, and maps
+the item with the engine's own mapping:
+
+```tsx
+export default createCollectionDetail(config, POST_COLLECTION, {
+  preview: true,
+  view: ({ config, item, preview }) => <MyPost post={postFromItem(config, item)} preview={preview} />,
+});
+```
+
 The binding report says why a binding on a page did not resolve, so an editor fixes it in barakoBrew
 instead of asking whoever can read the server log. Ask for one page at a time, by `?slug=` or
 `?path=`, and each problem names the binding as typed, the reason (`unknown scope`, `unbound scope`
