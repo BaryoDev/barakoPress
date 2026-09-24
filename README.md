@@ -449,7 +449,7 @@ A body gives at most 100 headings (`HEADINGS_PER_BODY`), and what is kept betwee
 headings under a digest of the body, never the body.
 
 The results are put away, with what was typed kept, when focus leaves the box, when something outside
-it is pressed, and on Escape; they come back when the box has focus again. Enter goes to the first
+it is pressed, when one of them is followed, and on Escape; they come back when the box has focus again. Enter goes to the first
 match. With no `searchPath` there is no form at all, so Enter can never reload the page with the
 query: with script the box answers in the page, and a reader with no script gets a field that does
 nothing, not one that reloads the page and empties itself.

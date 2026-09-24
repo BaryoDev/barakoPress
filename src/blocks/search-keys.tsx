@@ -117,6 +117,14 @@ export function wireSearch(input: HTMLInputElement): (() => void) | undefined {
         hide();
     };
 
+    // A result followed is done with, even one that only scrolls this page to a heading.
+    const onPick = (e: Event) => {
+        if (e.target instanceof Element && e.target.closest("a[href]")) {
+            pressing = false;
+            hide();
+        }
+    };
+
     // With an index, the box answers in the page. Enter goes to the first match. With no route behind
     // the box it never submits; with one, it submits there only when nothing matched.
     const onSubmit = (e: Event) => {
@@ -164,6 +172,7 @@ export function wireSearch(input: HTMLInputElement): (() => void) | undefined {
     input.addEventListener("input", onInput);
     input.addEventListener("focus", onInput);
     input.addEventListener("keydown", onEnter);
+    index?.addEventListener("click", onPick);
     form?.addEventListener("submit", onSubmit);
     return () => {
         document.removeEventListener("keydown", onDocumentKey);
@@ -174,6 +183,7 @@ export function wireSearch(input: HTMLInputElement): (() => void) | undefined {
         input.removeEventListener("input", onInput);
         input.removeEventListener("focus", onInput);
         input.removeEventListener("keydown", onEnter);
+        index?.removeEventListener("click", onPick);
         form?.removeEventListener("submit", onSubmit);
     };
 }

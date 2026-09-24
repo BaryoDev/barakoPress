@@ -858,8 +858,9 @@ export function SearchBox({ config, action, param, query, results, index, id, va
                         }}
                     />
                     <ul>
-                        {index.map((entry) => (
-                            <li key={entry.href}>
+                        {index.map((entry, i) => (
+                            // Two headings with the same words on one page share an href.
+                            <li key={`${entry.href}-${i}`}>
                                 <a href={entry.href}>
                                     <span>{entry.heading ?? entry.title}</span>
                                     {entry.heading && <span>{` · ${entry.title}`}</span>}

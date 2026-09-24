@@ -273,3 +273,16 @@ test("with no route behind it, Enter goes to the first match or nowhere, and nev
     await expect(page.locator("body")).toHaveAttribute("data-went", "/docs/quickstart#configure-the-site");
     await context.close();
 });
+
+test("a result followed puts the results away, even one that stays on this page", async ({ browser }) => {
+    const { context, page } = await open(browser, "designed", 1280, true);
+    const input = page.getByRole("searchbox", { name: "Search the docs" });
+    const index = page.locator("[data-bp-search-index]");
+    await page.evaluate(() => document.addEventListener("click", (e) => e.preventDefault()));
+    await input.fill("configure");
+    await expect(index).toBeVisible();
+    await page.locator("[data-bp-search-index] a:visible").first().click();
+    await expect(index).toBeHidden();
+    await expect(input).toHaveValue("configure");
+    await context.close();
+});

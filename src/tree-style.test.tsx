@@ -382,6 +382,29 @@ describe("the search index", () => {
     });
 });
 
+describe("an index with a heading repeated on one page", () => {
+    it("draws both entries under keys of their own", () => {
+        const twice = { sections: [{ name: "One", nodes: [node("dup", "Dup", "## Example\n\nA.\n\n## Example\n\nB.")] }], order: [], truncated: false };
+        const index = treeSearchIndex(twice);
+        const html = renderToStaticMarkup(<SearchBox config={configWith()} param="q" id="k" index={index} />);
+        expect(html.match(/href="\/guide\/dup#example"/g)).toHaveLength(2);
+
+        // The server renderer does not check keys; the client's reconciler does, so read them here.
+        type El = { key?: string | null; type?: unknown; props?: { children?: unknown } };
+        const keys: (string | null | undefined)[] = [];
+        const walk = (node: unknown) => {
+            if (Array.isArray(node)) return node.forEach(walk);
+            if (!node || typeof node !== "object") return;
+            const el = node as El;
+            if (el.type === "li") keys.push(el.key);
+            walk(el.props?.children);
+        };
+        walk(SearchBox({ config: configWith(), param: "q", id: "k", index }));
+        expect(keys).toHaveLength(3);
+        expect(new Set(keys).size).toBe(3);
+    });
+});
+
 describe("a manual bigger than the index", () => {
     /** A manual of `pages` pages, each with `headings` second level headings. */
     function manual(pages: number, headings: number, tag: string): Tree {
