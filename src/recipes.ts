@@ -176,7 +176,7 @@ const ONLY: Readonly<Record<string, ReadonlySet<string>>> = {
 /** A recipe name, stored on a block as `recipe`. Lower case, as a tone name is. */
 export const RECIPE_NAME = /^[a-z][a-z0-9-]{0,39}$/;
 const CLASS_NAME = /^[A-Za-z_][A-Za-z0-9_-]{0,39}$/;
-const MAX_RECIPES = 100;
+const MAX_RECIPES = 400;
 const MAX_DECLARATIONS = 40;
 const MAX_CLASSES = 8;
 const MAX_VALUE = 240;

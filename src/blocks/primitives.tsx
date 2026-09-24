@@ -145,6 +145,58 @@ function placed(align: string | undefined, justify: string | undefined): CSSProp
     };
 }
 
+/*
+ * An element id, so a link elsewhere can say `#start`. A plain name or nothing: it lands in an
+ * attribute, and an id that is not a name is one no link can reach anyway.
+ */
+const ANCHOR = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
+const anchorField = { name: "anchor" as const, kind: "text" as const, label: "Anchor, for a link to #name", bindable: false };
+
+function anchorOf(value: string | undefined): string | undefined {
+    return value && ANCHOR.test(value) ? value : undefined;
+}
+
+/*
+ * A container that is a link: a card whose whole face goes somewhere. The container's content is the
+ * link's content, so a heading and a line of text inside are read as the link's name, and nothing in
+ * it should be a link of its own. A path goes through Next's `Link`; anything with a scheme is a
+ * plain anchor that opens where it points.
+ */
+const hrefField = { name: "href" as const, kind: "url" as const, label: "The whole of it links to" };
+
+function Container({
+    href,
+    id,
+    look: drawn,
+    children,
+}: {
+    href: string | undefined;
+    id: string | undefined;
+    look: { style: CSSProperties; className?: string };
+    children: ReactNode;
+}) {
+    const target = href?.trim();
+    if (!target) {
+        return (
+            <div id={id} {...drawn}>
+                {children}
+            </div>
+        );
+    }
+    if (/^[a-z][a-z0-9+.-]*:/i.test(target)) {
+        return (
+            <a href={target} id={id} {...drawn}>
+                {children}
+            </a>
+        );
+    }
+    return (
+        <Link href={target} id={id} {...drawn}>
+            {children}
+        </Link>
+    );
+}
+
 /** A named tone's variables when the block chose a tone, for the blocks inside a recipe's element. */
 function chosenTone(theme: PressTheme, name: string | undefined): CSSProperties {
     return name ? toneVars(toneOf(theme, name)) : {};
@@ -152,7 +204,7 @@ function chosenTone(theme: PressTheme, name: string | undefined): CSSProperties 
 
 /* ---------------------------------------------------------------- layout */
 
-type SectionProps = { tone?: string; width?: string; padding?: string; align?: string; recipe?: string };
+type SectionProps = { tone?: string; width?: string; padding?: string; align?: string; anchor?: string; recipe?: string };
 
 const section = defineBlock<SectionProps, "content">({
     type: "section",
@@ -163,6 +215,7 @@ const section = defineBlock<SectionProps, "content">({
         { name: "width", label: "Width", kind: "select", options: [...WIDTHS] },
         { name: "padding", label: "Padding", ...spaceSelect },
         { name: "align", label: "Align", ...alignSelect },
+        anchorField,
         recipeField,
         { name: "content", kind: "slots", label: "Content", min: 1, max: 1 },
     ],
@@ -171,6 +224,7 @@ const section = defineBlock<SectionProps, "content">({
         const inner = widthOf(theme, props.width);
         return (
             <section
+                id={anchorOf(props.anchor)}
                 {...look(
                     theme,
                     props.recipe,
@@ -193,7 +247,7 @@ const section = defineBlock<SectionProps, "content">({
     },
 });
 
-type StackProps = { gap?: string; align?: string; recipe?: string };
+type StackProps = { gap?: string; align?: string; href?: string; anchor?: string; recipe?: string };
 
 const stack = defineBlock<StackProps, "content">({
     type: "stack",
@@ -202,12 +256,16 @@ const stack = defineBlock<StackProps, "content">({
     fields: [
         { name: "gap", label: "Gap", ...spaceSelect },
         { name: "align", label: "Align", ...alignSelect },
+        hrefField,
+        anchorField,
         recipeField,
         { name: "content", kind: "slots", label: "Content", min: 1, max: 1 },
     ],
     component: ({ props, slots, theme }) => (
-        <div
-            {...look(
+        <Container
+            href={props.href}
+            id={anchorOf(props.anchor)}
+            look={look(
                 theme,
                 props.recipe,
                 {
@@ -220,7 +278,7 @@ const stack = defineBlock<StackProps, "content">({
             )}
         >
             {slots.content?.[0]}
-        </div>
+        </Container>
     ),
 });
 
@@ -410,6 +468,8 @@ type PanelProps = {
     border?: boolean;
     align?: string;
     width?: string;
+    href?: string;
+    anchor?: string;
     recipe?: string;
 };
 
@@ -431,6 +491,8 @@ const panel = defineBlock<PanelProps, "content">({
         { name: "border", kind: "boolean", label: "Hairline frame" },
         { name: "align", label: "Align", ...alignSelect },
         { name: "width", kind: "select", label: "Width", options: [...WIDTHS] },
+        hrefField,
+        anchorField,
         recipeField,
         { name: "content", kind: "slots", label: "Content", required: true, min: 1, max: 1 },
     ],
@@ -438,8 +500,10 @@ const panel = defineBlock<PanelProps, "content">({
         const tone = toneOf(theme, props.tone ?? "surface");
         const inner = widthOf(theme, props.width ?? "full");
         return (
-            <div
-                {...look(
+            <Container
+                href={props.href}
+                id={anchorOf(props.anchor)}
+                look={look(
                     theme,
                     props.recipe,
                     {
@@ -459,7 +523,7 @@ const panel = defineBlock<PanelProps, "content">({
                 )}
             >
                 {slots.content?.[0]}
-            </div>
+            </Container>
         );
     },
 });
@@ -563,6 +627,9 @@ const divider = defineBlock<{ tone?: string; space?: string; recipe?: string }>(
 type TextProps = {
     value: string;
     variant?: string;
+    tag?: string;
+    decorative?: boolean;
+    title?: string;
     tone?: string;
     align?: string;
     weight?: string;
@@ -580,6 +647,13 @@ const INK: Record<string, ToneVar> = {
 
 /** What a text block can do besides sit there. A select, so a preset can pass its own prop through. */
 export const TEXT_MOTIONS = ["none", "countUp"];
+
+/*
+ * The element a text block is, when the variant's is not the one a design needs: a chip that is a
+ * `code`, a label that is a `span` in a row. The variant still decides the default look, so a `span`
+ * holding a heading variant looks like that heading; with a recipe the look is the recipe's anyway.
+ */
+export const TEXT_TAGS = ["p", "span", "code", "strong", "em", "h1", "h2", "h3", "h4"] as const;
 
 /** How a text block reads its value: as it is, or with inline marks (#131). */
 export const TEXT_FORMATS = ["plain", "inline"];
@@ -619,12 +693,21 @@ const text = defineBlock<TextProps>({
         { name: "weight", kind: "select", label: "Weight", options: ["regular", "medium", "bold"] },
         { name: "motion", kind: "select", label: "Motion", options: TEXT_MOTIONS },
         { name: "format", kind: "select", label: "Marks", options: TEXT_FORMATS },
+        { name: "tag", kind: "select", label: "Element", options: [...TEXT_TAGS] },
+        // A glyph that repeats what is already said, an arrow after a link's words: not read out.
+        { name: "decorative", kind: "boolean", label: "Decoration, hidden from a screen reader" },
+        // Where a figure came from, shown on hover: "nuget.org, package BarakoCMS" on a version.
+        { name: "title", kind: "text", label: "Shown on hover" },
         recipeField,
     ],
     component: ({ props, theme }) => {
         const variant = TEXT_VARIANTS[props.variant ?? "body"] ?? TEXT_VARIANTS.body;
-        const Tag = variant.tag;
-        const heading = Tag !== "p";
+        const Tag = (TEXT_TAGS as readonly string[]).includes(props.tag ?? "") ? (props.tag as (typeof TEXT_TAGS)[number]) : variant.tag;
+        const heading = variant.tag !== "p";
+        const hidden = {
+            ...(props.decorative ? { "aria-hidden": true as const } : {}),
+            ...(props.title ? { title: props.title } : {}),
+        };
         const style: CSSProperties = {
             margin: 0,
             fontFamily: variant.role === "meta" ? theme.fonts.mono : heading ? theme.fonts.heading : theme.fonts.body,
@@ -657,18 +740,25 @@ const text = defineBlock<TextProps>({
                 <>
                     <style dangerouslySetInnerHTML={{ __html: inlineCss(theme) }} />
                     <Tag
+                        {...hidden}
                         {...look(theme, props.recipe, style, {}, INLINE_CLASS)}
                         dangerouslySetInnerHTML={{ __html: renderInlineMarkdown(props.value) }}
                     />
                 </>
             );
         }
-        if (to === null) return <Tag {...look(theme, props.recipe, style)}>{props.value}</Tag>;
+        if (to === null) {
+            return (
+                <Tag {...hidden} {...look(theme, props.recipe, style)}>
+                    {props.value}
+                </Tag>
+            );
+        }
         const cls = motionClass("cu", to);
         return (
             <>
                 <style dangerouslySetInnerHTML={{ __html: countUpCss(cls, to) }} />
-                <Tag {...look(theme, props.recipe, style, {}, cls)}>
+                <Tag {...hidden} {...look(theme, props.recipe, style, {}, cls)}>
                     <span className={HIDDEN_CLASS}>{props.value}</span>
                     <span data-bp-counted aria-hidden="true">{props.value}</span>
                 </Tag>
