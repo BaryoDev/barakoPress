@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Asset, renderProse } from "../assets.js";
 import type { PressConfig } from "../config.js";
 import { formatDate } from "../cms.js";
-import { collectionOf, type Item } from "../collections.js";
+import { collectionOf, defaultByline, type Item } from "../collections.js";
 import { initials, readingMinutes } from "../reading-time.js";
 import { proseCss, relatedCss } from "../theme.js";
 
@@ -122,6 +122,8 @@ export function ArticleView({
         const to = collectionOf(config, ref.collection)?.route;
         return target ? [{ field, name: target.name, href: to ? `${to}/${target.slug}` : undefined }] : [];
     });
+    const unsigned = defaultByline(config, col, item);
+    if (unsigned) shown.unshift({ field: "", name: unsigned.name, href: undefined });
     const [byline, ...filed] = shown;
     const monogram = byline ? initials(byline.name) : "";
 

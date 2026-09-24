@@ -342,8 +342,18 @@ export interface CollectionConfig {
     /**
      * Whether the root catch-all serves an index at the route. On unless false. An item page below the
      * route is served either way, and a route file calling `createCollectionIndex` ignores this.
+     *
+     * The copy the index draws, in place of the engine's own words, reads as the index being on.
      */
-    index?: boolean;
+    index?: boolean | CollectionIndexCopy;
+    /**
+     * A page whose blocks render above the list on the index, so the index is composed like a page and
+     * the route stays the collection's. The page is data: it answers 404 at its own path and is left
+     * out of the menu and the sitemap.
+     */
+    indexPage?: string;
+    /** The byline name on an entry that names no author: the first reference is the byline. */
+    defaultAuthor?: string;
     /** Items on its index. `pageSizes.index` when unset. */
     pageSize?: number;
     /** The heading of its index. The site's name and tagline when unset. */
@@ -374,6 +384,28 @@ export interface CollectionConfig {
      * pages nested under other pages. Unset, nothing about the collection changes.
      */
     tree?: CollectionTree;
+}
+
+/**
+ * What a collection's index says, set by an editor rather than written in a theme. Each line is
+ * optional, and an unset one leaves what the engine drew before.
+ */
+export interface CollectionIndexCopy {
+    /** A short line above the heading. */
+    eyebrow?: string;
+    /** The heading, in place of the collection's `label`. */
+    heading?: string;
+    /** A line under the heading, in place of the site's tagline. */
+    lede?: string;
+    /** What an index with nothing published says, in place of `labels.empty` and `labels.emptyNote`. */
+    empty?: string;
+    /** What an index whose read failed says, in place of `labels.failed` and `labels.failedNote`. */
+    unavailable?: string;
+}
+
+/** The copy a collection's index draws, or an empty one when it set none. */
+export function indexCopy(col: CollectionConfig): CollectionIndexCopy {
+    return typeof col.index === "object" && col.index !== null ? col.index : {};
 }
 
 /**

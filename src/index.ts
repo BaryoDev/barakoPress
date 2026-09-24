@@ -106,6 +106,7 @@ export type {
     SocialLink,
     TopBar,
     CollectionConfig,
+    CollectionIndexCopy,
     CollectionFields,
     CollectionReference,
     FieldNames,

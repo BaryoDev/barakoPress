@@ -2,6 +2,18 @@
 
 ## 0.8.0 (unreleased)
 
+- A collection's index copy, an index page and a default byline are settings (#126).
+  `Collections.<key>.index` may be `{ eyebrow, heading, lede, empty, unavailable }`, drawn by the
+  collection index and the blog index in place of the label, the tagline and the `labels` notices.
+  `indexPage` names a page whose blocks render above the list on the index route. `defaultAuthor` is
+  the byline on a card and an `article` page when the entry names no author. A site that sets none
+  of them renders as it did.
+- A page that only holds data or chrome, a header or footer region page or a collection's
+  `indexPage`, answers 404 at its own path and is left out of the menu and the sitemap. Region pages
+  used to answer at their own path; they were already left out of the menu and the sitemap. The
+  holding page is not affected.
+- `pageBlocks` lives in its own module so the collection index can render an index page. It is still
+  exported from the package, unchanged.
 - An entry's own field is no longer hidden by a role its collection does not map (#121). Inside a
   `repeat` or a `source`, `{{item.Body}}`, `{{item.Date}}` and the other role names read the entry's
   own field of that name unless the collection's `fields` names the role, and a mapped role still
