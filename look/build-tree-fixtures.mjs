@@ -19,14 +19,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { defineConfig } from "../dist/config.js";
 import { ItemView } from "../dist/screens/collection.js";
-import {
-    filterIndex,
-    focusable,
-    wireSearch,
-    SEARCH_EMPTY_ATTR,
-    SEARCH_INDEX_ATTR,
-    SEARCH_ROOT_ATTR,
-} from "../dist/blocks/search-keys.js";
+import { filterIndex, focusable, wireSearch } from "../dist/blocks/search-keys.js";
+import { SEARCH_EMPTY_ATTR, SEARCH_INDEX_ATTR, SEARCH_ROOT_ATTR } from "../dist/blocks/search-attrs.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
