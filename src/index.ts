@@ -85,6 +85,7 @@ export type {
     ThemeLayout,
     ThemeSpace,
     ThemeText,
+    ThemeTone,
 } from "./theme.js";
 export { readingMinutes, initials } from "./reading-time.js";
 export type {
@@ -268,6 +269,7 @@ export {
     RADII,
     WIDTHS,
     toneOf,
+    toneNames,
     spaceOf,
     radiusOf,
     widthOf,

@@ -2,6 +2,13 @@
 
 ## 0.8.0 (unreleased)
 
+- A site can name its own palette (#125). `Tokens` in the site settings (or `theme.tokens`) holds
+  named colours, lengths and font stacks, emitted on the root as `--t-<name>`. `Tones` (or
+  `theme.tones`) holds named `{ ink, bg, edge }` tones, each colour a token name, a `Colors` slot or
+  a colour written out. Every block tone field, and `HeaderTone` and `FooterTone`, take the site's
+  tone names beside the built-in six. Values are checked as `Colors` and `Text` are, and one that
+  fails is dropped with the rest kept. A site that sets neither renders as it did. The README said
+  `HeaderTone` and `FooterTone` take four names; they take six, and now the site's own.
 - A look check pair can set its own capture `timeout`, or the defaults can. A page as tall as
   barakocms.com's changelog (over 100,000px at 390px) took longer than the fixed 30 seconds to
   screenshot and was reported as not captured, so it was never compared at all.

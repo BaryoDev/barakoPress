@@ -16,6 +16,7 @@
  * the house look passes nothing.
  */
 
+import { TONES } from "./blocks/tokens.js";
 import { fontSourcesFrom } from "./fonts.js";
 
 export interface ThemeColors {
@@ -174,6 +175,19 @@ export interface SuppliedAsset {
     clearSpace?: string;
 }
 
+/**
+ * A tone a site names beside the built-in six (#125). Each value is a token name, a colour slot name,
+ * or a colour written out, looked up in that order when the tone is drawn.
+ */
+export interface ThemeTone {
+    /** Text, and anything else drawn on the tone. */
+    ink: string;
+    /** The background. */
+    bg: string;
+    /** Hairlines and borders. */
+    edge: string;
+}
+
 export interface PressTheme {
     colors: ThemeColors;
     fonts: ThemeFonts;
@@ -192,6 +206,13 @@ export interface PressTheme {
      * and a rule a block cannot see is a rule blocks do not keep.
      */
     asSupplied: readonly SuppliedAsset[];
+    /**
+     * Named colours, lengths and font stacks, emitted as `--t-<name>` on the root. Absent when the
+     * site names none, which is what keeps a site that sets nothing rendering as it did.
+     */
+    tokens?: Readonly<Record<string, string>>;
+    /** Tones beside the built-in six, by name. Absent when the site names none. */
+    tones?: Readonly<Record<string, ThemeTone>>;
 }
 
 export type PressThemeInput = {
@@ -203,6 +224,8 @@ export type PressThemeInput = {
     space?: Partial<ThemeSpace>;
     text?: Partial<ThemeText>;
     asSupplied?: readonly SuppliedAsset[];
+    tokens?: Record<string, string>;
+    tones?: Record<string, ThemeTone>;
 };
 
 export const DEFAULT_THEME: PressTheme = {
@@ -281,12 +304,115 @@ function suppliedAssets(input: readonly SuppliedAsset[] | undefined): readonly S
         .slice(0, 24);
 }
 
+/*
+ * The shapes a tenant-supplied theme value may take. It reaches a stylesheet, so each is narrow.
+ */
+export const COLOR = /^(#[0-9a-f]{3,8}|(rgb|rgba|hsl|hsla|oklch|oklab)\([0-9.,%\s/+-]{1,60}\)|[a-z]{3,30})$/i;
+const LENGTH_VALUE = "(?:0|\\d{1,4}(?:\\.\\d{1,3})?(?:px|rem|em|ch|%|vw|vh))";
+export const LENGTH = new RegExp(`^${LENGTH_VALUE}$`);
+/*
+ * A length, or `clamp()` of exactly three of them (#100).
+ *
+ * The engine's own default page title is a clamp, and prose sizes h2 with one, so a tenant's type
+ * scale is held to the same shape it is asked to match rather than one fixed length. This is a
+ * tenant-supplied value reaching a stylesheet, so the pattern is deliberately narrow: three lengths
+ * in parentheses and nothing else, no calc(), no extra arguments, no unmatched characters either
+ * side. Anything that does not fully match is refused, the same as before.
+ */
+export const FLUID_LENGTH = new RegExp(
+    `^(?:${LENGTH_VALUE}|clamp\\(\\s*${LENGTH_VALUE}\\s*,\\s*${LENGTH_VALUE}\\s*,\\s*${LENGTH_VALUE}\\s*\\))$`,
+);
+/** Families separated by commas, each a bare name or one in quotes. No parentheses, no semicolons. */
+const FAMILY = `(?:'[A-Za-z0-9 -]{1,60}'|"[A-Za-z0-9 -]{1,60}"|[A-Za-z][A-Za-z0-9-]{0,40}(?: [A-Za-z0-9-]{1,40}){0,4})`;
+const FONT_STACK = new RegExp(`^${FAMILY}(?:\\s*,\\s*${FAMILY}){0,11}$`);
+
+/** A token name, which becomes `--t-<name>`. */
+export const TOKEN_NAME = /^[A-Za-z][A-Za-z0-9-]{0,39}$/;
+/** A tone name. Lower case, because a block stores it and a setting may be typed in any case. */
+export const TONE_NAME = /^[a-z][a-z0-9-]{0,30}$/;
+const MAX_TOKENS = 200;
+const MAX_TONES = 40;
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+    return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function tokenValue(v: unknown): string | undefined {
+    if (typeof v !== "string") return undefined;
+    const value = v.trim();
+    return value.length <= 300 && (COLOR.test(value) || FLUID_LENGTH.test(value) || FONT_STACK.test(value))
+        ? value
+        : undefined;
+}
+
+/**
+ * Tokens read over a base, one at a time: a name that fails its check, or a value that is not a
+ * colour, a length or a font stack, is dropped and the base keeps that name.
+ */
+export function tokensFrom(
+    base: Readonly<Record<string, string>> | undefined,
+    v: unknown,
+): Readonly<Record<string, string>> | undefined {
+    if (!isRecord(v)) return base;
+    const out: Record<string, string> = { ...base };
+    for (const [name, raw] of Object.entries(v).slice(0, MAX_TOKENS)) {
+        const value = tokenValue(raw);
+        if (value && TOKEN_NAME.test(name)) out[name] = value;
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * The colour a tone value names: a token holding a colour, a colour slot, or a colour written out.
+ * Undefined for anything else.
+ */
+export function themeColor(
+    theme: Pick<PressTheme, "colors" | "tokens">,
+    name: string,
+): string | undefined {
+    const token = theme.tokens && Object.hasOwn(theme.tokens, name) ? theme.tokens[name] : undefined;
+    if (token !== undefined) return COLOR.test(token) ? token : undefined;
+    const slots = theme.colors as unknown as Record<string, string>;
+    if (Object.hasOwn(slots, name)) return slots[name];
+    return COLOR.test(name) ? name : undefined;
+}
+
+/**
+ * Tones read over a base, one at a time. A tone keeps its references as written, so a token changed
+ * later changes the tone too; each one has to resolve now, against these tokens and colours, or the
+ * tone is dropped. A built-in name is refused rather than replaced, since those follow `Colors`.
+ */
+export function tonesFrom(
+    base: Readonly<Record<string, ThemeTone>> | undefined,
+    v: unknown,
+    theme: Pick<PressTheme, "colors" | "tokens">,
+): Readonly<Record<string, ThemeTone>> | undefined {
+    if (!isRecord(v)) return base;
+    const out: Record<string, ThemeTone> = { ...base };
+    for (const [raw, spec] of Object.entries(v).slice(0, MAX_TONES)) {
+        const name = raw.trim().toLowerCase();
+        if (!TONE_NAME.test(name) || (TONES as readonly string[]).includes(name) || !isRecord(spec)) continue;
+        const read = (key: keyof ThemeTone) => {
+            const value = typeof spec[key] === "string" ? (spec[key] as string).trim() : "";
+            return value && themeColor(theme, value) ? value : undefined;
+        };
+        const ink = read("ink");
+        const bg = read("bg");
+        const edge = read("edge");
+        if (ink && bg && edge) out[name] = { ink, bg, edge };
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+}
+
 export function resolveTheme(input: PressThemeInput | undefined): PressTheme {
     // A stylesheet a site configures is checked for shape the same as one a tenant saves, so a typo
     // here is a missing face rather than a link to nowhere in every page.
     const sources = fontSourcesFrom(input?.fontSources);
+    const colors = mergeColors(DEFAULT_THEME.colors, input?.colors ?? {});
+    const tokens = tokensFrom(undefined, input?.tokens);
+    const tones = tonesFrom(undefined, input?.tones, { colors, tokens });
     return {
-        colors: mergeColors(DEFAULT_THEME.colors, input?.colors ?? {}),
+        colors,
         fonts: { ...DEFAULT_THEME.fonts, ...input?.fonts },
         ...(sources ? { fontSources: sources } : {}),
         radii: { ...DEFAULT_THEME.radii, ...input?.radii },
@@ -294,6 +420,8 @@ export function resolveTheme(input: PressThemeInput | undefined): PressTheme {
         space: { ...DEFAULT_THEME.space, ...input?.space },
         text: { ...DEFAULT_THEME.text, ...input?.text },
         asSupplied: suppliedAssets(input?.asSupplied),
+        ...(tokens ? { tokens } : {}),
+        ...(tones ? { tones } : {}),
     };
 }
 
@@ -380,6 +508,9 @@ export function relatedCss(theme: PressTheme, scope: string): string {
  * The theme as the custom properties `barakopress/styles.css` reads, so the screens styled by class
  * (the index and the archives) take a site's palette as well as the ones styled inline. Emitted by
  * the site layout after the stylesheet, so these win over its defaults.
+ *
+ * A site's own tokens follow as `--t-<name>`, so a site's stylesheet and its blocks can read
+ * `var(--t-accent)`. The prefix keeps them out of the way of the engine's names above.
  */
 export function themeVariablesCss(theme: PressTheme): string {
     const c = theme.colors;
@@ -400,6 +531,7 @@ export function themeVariablesCss(theme: PressTheme): string {
         ["--font-sans", f.body],
         ["--font-display", f.heading],
         ["--font-mono", f.mono],
+        ...Object.entries(theme.tokens ?? {}).map(([name, value]): [string, string] => [`--t-${name}`, value]),
     ];
     return `:root{${vars.map(([name, value]) => `${name}:${css(value).replace(/[;{}]/g, "")}`).join(";")}}`;
 }

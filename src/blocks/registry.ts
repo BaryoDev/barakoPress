@@ -1,8 +1,9 @@
 import { pinnedTenant, type PressConfig } from "../config.js";
-import { boundToSite, builtInBlocks } from "./built-in.js";
+import { boundToSite, builtInBlocks, copiedDefinition } from "./built-in.js";
 import { libraryPresets } from "./library.js";
 import { withPresets, type BlockPreset } from "./presets.js";
-import { checkDefinition, type BlockDefinition, type BlockRegistry } from "./schema.js";
+import { checkDefinition, type BlockDefinition, type BlockField, type BlockRegistry, type ResolvedBlock } from "./schema.js";
+import { TONES, toneNames } from "./tokens.js";
 
 /*
  * A site's blocks: the built-ins plus its own, plus any presets.
@@ -40,7 +41,8 @@ export function createBlockRegistry(
     }
     // Lazily, because this runs at module scope in a site's press.config.ts: the name is resolved in
     // the warning that needs it, not here (barakoPress #51).
-    return withPresets(registry, options.presets ?? config.presets, () => pinnedTenant(config));
+    const all = withPresets(registry, options.presets ?? config.presets, () => pinnedTenant(config));
+    return withToneNames(all, toneNames(config.theme));
 }
 
 /**
@@ -61,5 +63,75 @@ export function registryFor(
     options: { holding?: boolean } = {},
 ): BlockRegistry {
     const bound = boundToSite(registry, config, options.holding === true);
-    return withPresets(bound, config.presets, () => pinnedTenant(config));
+    const all = withPresets(bound, config.presets, () => pinnedTenant(config));
+    return withToneNames(all, toneNames(config.theme));
+}
+
+/*
+ * The site's own tones, offered by every tone field (#125).
+ *
+ * A tone field is a select whose options hold all six built-in tones, which is how every primitive
+ * and every shipped preset declares one. A field that only shares its name, like the `Ink` select
+ * on `text`, is left alone. A select checks its value against its own options, so this is what lets
+ * a block store `tone: "cms"` at all, and it is also what the schema publishes.
+ *
+ * A preset's body was resolved once against the definitions it was compiled with, and its props are
+ * checked against those again when it expands, so the body is carried over to the widened copies
+ * too. Nothing is copied when every tone field already offers every name, so a site with no tones
+ * of its own keeps the registry it had.
+ */
+function isToneField(field: BlockField): boolean {
+    return field.kind === "select" && TONES.every((tone) => field.options?.includes(tone) === true);
+}
+
+export function withToneNames(registry: BlockRegistry, names: readonly string[]): BlockRegistry {
+    if (names.length === 0) return registry;
+    const copies = new Map<BlockDefinition, BlockDefinition>();
+
+    const widenField = (field: BlockField): BlockField => {
+        if (!isToneField(field)) return field;
+        const missing = names.filter((name) => !field.options?.includes(name));
+        return missing.length === 0 ? field : { ...field, options: [...(field.options ?? []), ...missing] };
+    };
+
+    const widenBlock = (block: ResolvedBlock): ResolvedBlock => {
+        const definition = widen(block.definition);
+        let changed = definition !== block.definition;
+        const slots: Record<string, ResolvedBlock[][]> = {};
+        for (const [name, lists] of Object.entries(block.slots)) {
+            slots[name] = lists.map((list) =>
+                list.map((inner) => {
+                    const next = widenBlock(inner);
+                    if (next !== inner) changed = true;
+                    return next;
+                }),
+            );
+        }
+        return changed ? { ...block, definition, slots } : block;
+    };
+
+    const widen = (definition: BlockDefinition): BlockDefinition => {
+        const done = copies.get(definition);
+        if (done) return done;
+        const before = definition.fields as BlockField[];
+        const fields = before.map(widenField);
+        const body = definition.preset?.map(widenBlock);
+        const changed =
+            fields.some((field, i) => field !== before[i]) ||
+            (body !== undefined && body.some((block, i) => block !== definition.preset?.[i]));
+        const out = changed
+            ? copiedDefinition(definition, { ...definition, fields, ...(body ? { preset: body } : {}) } as BlockDefinition)
+            : definition;
+        copies.set(definition, out);
+        return out;
+    };
+
+    let out: Map<string, BlockDefinition> | undefined;
+    for (const [type, definition] of registry) {
+        const next = widen(definition);
+        if (next === definition) continue;
+        out ??= new Map(registry);
+        out.set(type, next);
+    }
+    return out ?? registry;
 }

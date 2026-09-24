@@ -31,8 +31,8 @@ import { CmsError, isTenantHandle, list, tenantForHost } from "./delivery.js";
 import { readSecret } from "./secret.js";
 import { parseSiteSegment, type SiteRoute } from "./site-route.js";
 import { presetsFrom } from "./blocks/presets.js";
-import { SPACES, TONES, type ToneName } from "./blocks/tokens.js";
-import { mergeColors } from "./theme.js";
+import { SPACES, TONES } from "./blocks/tokens.js";
+import { COLOR, FLUID_LENGTH, LENGTH, mergeColors, tokensFrom, tonesFrom } from "./theme.js";
 import type {
     PressTheme,
     SuppliedAsset,
@@ -402,22 +402,6 @@ function topBar(v: unknown): TopBar | undefined {
     return text || barLinks.length > 0 ? { text, links: barLinks } : undefined;
 }
 
-const COLOR = /^(#[0-9a-f]{3,8}|(rgb|rgba|hsl|hsla|oklch|oklab)\([0-9.,%\s/+-]{1,60}\)|[a-z]{3,30})$/i;
-const LENGTH_VALUE = "(?:0|\\d{1,4}(?:\\.\\d{1,3})?(?:px|rem|em|ch|%|vw|vh))";
-const LENGTH = new RegExp(`^${LENGTH_VALUE}$`);
-/*
- * A length, or `clamp()` of exactly three of them (#100).
- *
- * The engine's own default page title is a clamp, and prose sizes h2 with one, so a tenant's type
- * scale is held to the same shape it is asked to match rather than one fixed length. This is a
- * tenant-supplied value reaching a stylesheet, so the pattern is deliberately narrow: three lengths
- * in parentheses and nothing else, no calc(), no extra arguments, no unmatched characters either
- * side. Anything that does not fully match is refused, the same as before.
- */
-const FLUID_LENGTH = new RegExp(
-    `^(?:${LENGTH_VALUE}|clamp\\(\\s*${LENGTH_VALUE}\\s*,\\s*${LENGTH_VALUE}\\s*,\\s*${LENGTH_VALUE}\\s*\\))$`,
-);
-
 /*
  * `Colors`: the theme's slots, as the tenant saved them (#49).
  *
@@ -526,14 +510,16 @@ function holding(d: Record<string, unknown>): Holding | undefined {
  * tenant that sets only a tone keeps the configured path and gets its own tone. A path that is not
  * a plain site path leaves the configured one, and no path at all leaves the region unset, so the
  * built-in header or footer renders rather than nothing. A tone that is not one of the theme's
- * tones is dropped and the region falls back to `page`.
+ * tones, built in or the tenant's own, is dropped and the region falls back to `page`.
  */
-function region(base: Region | undefined, path: unknown, tone: unknown): Region | undefined {
+function region(base: Region | undefined, path: unknown, tone: unknown, theme: PressTheme): Region | undefined {
     const at = sitePath(path) ?? base?.path;
     if (!at) return undefined;
     const name = str(tone)?.toLowerCase();
-    const known = name !== undefined && (TONES as readonly string[]).includes(name);
-    const chosen = known ? (name as ToneName) : base?.tone;
+    const known =
+        name !== undefined &&
+        ((TONES as readonly string[]).includes(name) || (theme.tones !== undefined && Object.hasOwn(theme.tones, name)));
+    const chosen = known ? name : base?.tone;
     return { path: at, ...(chosen ? { tone: chosen } : {}) };
 }
 
@@ -576,9 +562,9 @@ function assetsAsSupplied(
 }
 
 /** The tenant's regions, each merged over the configured one. */
-function regions(base: SiteRegions | undefined, d: Record<string, unknown>): SiteRegions | undefined {
-    const header = region(base?.header, d.HeaderPath, d.HeaderTone);
-    const footer = region(base?.footer, d.FooterPath, d.FooterTone);
+function regions(base: SiteRegions | undefined, d: Record<string, unknown>, theme: PressTheme): SiteRegions | undefined {
+    const header = region(base?.header, d.HeaderPath, d.HeaderTone, theme);
+    const footer = region(base?.footer, d.FooterPath, d.FooterTone, theme);
     if (!header && !footer) return undefined;
     return { ...(header ? { header } : {}), ...(footer ? { footer } : {}) };
 }
@@ -1007,8 +993,11 @@ export function applySiteSettings(
     };
 
     const face = fontsFrom(config.theme.fonts, config.theme.fontSources, d.Fonts);
+    const colors = colorsFrom(config.theme.colors, d.Colors);
+    const named = tokensFrom(config.theme.tokens, d.Tokens);
+    const tones = tonesFrom(config.theme.tones, d.Tones, { colors, tokens: named });
     const theme: PressTheme = {
-        colors: colorsFrom(config.theme.colors, d.Colors),
+        colors,
         fonts: face.fonts,
         ...(face.sources ? { fontSources: face.sources } : {}),
         radii: tokens<ThemeRadii>(config.theme.radii, d.Radii, LENGTH),
@@ -1016,12 +1005,14 @@ export function applySiteSettings(
         space: tokens<ThemeSpace>(config.theme.space, d.Space, LENGTH),
         text: tokens<ThemeText>(config.theme.text, d.Text, FLUID_LENGTH),
         asSupplied: assetsAsSupplied(config.theme.asSupplied, d, site),
+        ...(named ? { tokens: named } : {}),
+        ...(tones ? { tones } : {}),
     };
 
     const { holding: _ignored, ...rest } = config;
     void _ignored;
     const held = holding(d);
-    const bands = regions(config.regions, d);
+    const bands = regions(config.regions, d, theme);
     const root = home(config.home, d);
     return {
         ...rest,

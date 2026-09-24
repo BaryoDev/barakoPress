@@ -177,6 +177,13 @@ export function boundToConfig(definition: BlockDefinition, build: SiteBound): Bl
     return definition;
 }
 
+/** A copy of a definition reads the site if the original did. */
+export function copiedDefinition(original: BlockDefinition, copy: BlockDefinition): BlockDefinition {
+    const build = readsTheSite.get(original);
+    if (build) readsTheSite.set(copy, build);
+    return copy;
+}
+
 /*
  * The collections offered are the ones this site has a route for, so an editor cannot pick one that
  * renders nothing. The names are the config's keys, not content type names. A request-time site takes

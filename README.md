@@ -423,8 +423,8 @@ shows the finished state too. `src/blocks/motion.test.tsx` strips the guards out
 these emit and fails if anything left animates or hides anything.
 
 Every primitive takes theme tokens and never a colour or a pixel value. Tones are `page`, `surface`,
-`accent`, `inverse` and `gradient` (the inverse band with the theme's three dark roles spread across
-it); spacing is `none` to `xxl` from `theme.space`; type is a role from
+`accent`, `inverse`, `gradient` (the inverse band with the theme's three dark roles spread across
+it) and `wash`, plus any the site names in `Tones` (see [Tokens and tones](#tokens-and-tones)); spacing is `none` to `xxl` from `theme.space`; type is a role from
 `theme.text`; corners are `none`, `control`, `panel` or `pill`. A tenant that changes the scale
 changes every page built from primitives, and nobody can put one client's blue into a block.
 
@@ -677,7 +677,7 @@ for a post type with no such field.
 | `labels` | English | `Labels` | The words the screens print for a visitor. See below |
 | `store` | in process | operator only | Where the state a fleet has to agree on is kept: kept answers, the host map, the replay guard, the generation of each cache tag. Needed only when more than one container serves the site. See below |
 | `home` | the post index | `HomePath`, `HomeCollection` | What `createHome` serves at `/`. See below |
-| `theme` | the barakoCMS palette | `Colors`, `Fonts`, `Radii`, `Layout`, `Space`, `Text` | Colours, faces, radii and column widths. See below |
+| `theme` | the barakoCMS palette | `Colors`, `Fonts`, `Radii`, `Layout`, `Space`, `Text`, `Tokens`, `Tones` | Colours, faces, radii, column widths, and a site's own named values and tones. See below |
 
 The third column is the whole of the split. A key marked operator only is one the image decides for
 every tenant it serves, and each is that for a reason you can name: `types`, `fields`, `pageFields`
@@ -772,7 +772,7 @@ The settings are the singleton `site` type from barakoCMS `docs/site-settings.md
 (`POST /api/content-types/blueprints/site`, then publish its one entry). The engine reads `Name`,
 `Tagline`, `Url`, `Locale`, `Logo`, `LogoAlt`, `FooterLogo`, `Favicon`, `ShareImage`, `Copyright`,
 `Colors` (the theme slots), `Fonts` (a family name per role, and the stylesheet that loads it),
-`Radii`, `Layout`, `TopBar`, `HeaderLinks`, `FooterColumns`, `SocialLinks`, `HeaderPath`,
+`Radii`, `Layout`, `Tokens` and `Tones` (see [Tokens and tones](#tokens-and-tones)), `TopBar`, `HeaderLinks`, `FooterColumns`, `SocialLinks`, `HeaderPath`,
 `HeaderTone`, `FooterPath`, `FooterTone`, `AssetsAsSupplied`, `LogoAsSupplied`, `LogoClearSpace`,
 `PageSizes`, `ReservedSlugs`, `Labels`, `HomePath` and `HomeCollection`. `Collections`, `OptionStyles` and `OptionColors` are read as the collections section
 describes. `Variants` are not rendered yet. Every value is checked for shape; one that fails, and any the
@@ -916,9 +916,9 @@ blocks are drawn there instead, resolved and bound exactly as the page route res
 | Field | Type | What |
 | --- | --- | --- |
 | `HeaderPath` | string | A site path such as `/site/header`. The page served there is drawn in place of the top bar and the header band |
-| `HeaderTone` | string | `page`, `surface`, `accent` or `inverse`: the tone behind the header region. `page` when unset or not one of the four |
+| `HeaderTone` | string | `page`, `surface`, `accent`, `inverse`, `gradient`, `wash`, or a name from `Tones`: the tone behind the header region. `page` when unset or not one of those |
 | `FooterPath` | string | A site path such as `/site/footer`. The page served there is drawn in place of the footer |
-| `FooterTone` | string | The same four names, behind the footer region |
+| `FooterTone` | string | The same names, behind the footer region |
 
 Set neither and nothing changes: `TopBar`, `HeaderLinks`, `FooterColumns`, `SocialLinks` and
 `Copyright` draw the built-in chrome with the markup they always had, which is what keeps a site
@@ -1098,6 +1098,40 @@ body { --bp-gap: 0; }   /* every block list, at every level */
 
 `bare` is also taken by `createHome` and `createViewerPage`. `--bp-gap` falls back to
 `theme.space.lg`, so a site that sets neither renders as it did.
+
+### Tokens and tones
+
+The theme's slots are the engine's roles. A design has its own palette on top of them: a colour per
+product, a tint for a badge, a length the design repeats. Those are `Tokens` and `Tones` in the site
+settings, or `theme.tokens` and `theme.tones` in `defineConfig`. A tenant's entries merge over the
+configured ones name by name.
+
+```json
+"Tokens": { "accent": "#E4572E", "cms-ink": "#1D3A8A", "cms-bg": "#E8EEFD", "gutter": "24px", "serif": "'Zilla Slab', Georgia, serif" },
+"Tones":  { "cms": { "ink": "cms-ink", "bg": "cms-bg", "edge": "#B9C8F5" } }
+```
+
+A token is a name and one value: a colour (checked as `Colors` is), a length or a `clamp()` of three
+(checked as `Text` is), or a font stack of plain or quoted family names. A name is a letter, then
+letters, digits and hyphens, up to 40. Each token is emitted on the root as `--t-<name>` by
+`createSiteLayout` (through `themeVariablesCss`), so a site's stylesheet and its blocks write
+`var(--t-accent)` instead of a hex value. A name or a value that fails its check is dropped and the
+rest are kept. Up to 200.
+
+A tone is a name and three colours: `ink`, `bg` and `edge` (hairlines and borders). Each is a token
+name, a `Colors` slot name, or a colour written out, looked up in that order when the tone is drawn,
+so changing a token changes every tone that names it. Text of every kind on the tone is the `ink`,
+and a filled accent is the `ink` with the `bg` as its text. A name is lower case letters, digits and
+hyphens; a built-in name is refused, since those follow `Colors`. A tone with a colour that resolves
+to nothing is dropped. Up to 40.
+
+Every block field that picks a tone offers the site's tones after the built-in six, and a block
+stores `"tone": "cms"` the way it stores `"tone": "accent"`. `HeaderTone` and `FooterTone` take them
+too. `/api/blocks` lists a build-time site's tones; it is built once, without a request, so a
+request-time tenant's tones are accepted when a page renders but are not in that answer yet.
+
+A site that sets neither gets no `--t-` property and no new option anywhere, and renders byte for
+byte as it did.
 
 Read time is derived from the body at 200 words a minute, with fenced code blocks excluded, so there
 is no field to fill in and nothing to keep in sync.
