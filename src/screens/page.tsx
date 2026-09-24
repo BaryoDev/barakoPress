@@ -198,6 +198,9 @@ async function collectionMetadata(config: PressConfig, hit: { key: string; slug?
 
 async function findPage(config: PressConfig, p: PageRouteParams): Promise<Found | null> {
     if (bySlugRoute(p)) {
+        // A slug route mounted at the root serves the page at `/slug`. Deeper data paths cannot be
+        // matched from a slug without reading every one of them, so only that one is checked.
+        if (isDataPath(config, `/${p.slug}`)) return null;
         const page = await getPage(config, p.slug as string);
         return page ? { page, breadcrumbs: [] } : null;
     }

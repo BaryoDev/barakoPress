@@ -105,10 +105,25 @@ const TENANTS: Record<string, Tenant> = {
             Collections: {
                 notes: { ...NOTES_COLLECTION, index: INDEX_COPY, indexPage: "/site-notes", defaultAuthor: "The Studio team" },
                 authors: AUTHORS_COLLECTION,
+                letters: {
+                    ...NOTES_COLLECTION,
+                    route: "/letters",
+                    references: { Author: { collection: "authors", label: "from" } },
+                    defaultAuthor: "The Studio team",
+                },
                 post: { type: "post", route: "/blog", fields: { title: "Title" }, index: { heading: "Writing" } },
             },
         },
-        content: { note: NOTES, author: [ANA], post: [] },
+        content: {
+            note: NOTES,
+            author: [ANA],
+            post: [],
+            page: [
+                { id: "p1", slug: "about", data: { Title: "About", Slug: "about", Body: "About us" } },
+                { id: "p2", slug: "site-notes", data: { Title: "Notes index", Slug: "site-notes", Blocks: INDEX_PAGE_BLOCKS } },
+                { id: "p3", slug: "site-footer", data: { Title: "Footer", Slug: "site-footer", Body: "Footer" } },
+            ],
+        },
         pages: {
             "/about": { id: "p1", slug: "about", data: { Title: "About", Blocks: [{ type: "text", props: { value: "About us" } }] } },
             "/site-notes": { id: "p2", slug: "site-notes", data: { Title: "Notes index", Blocks: INDEX_PAGE_BLOCKS } },
@@ -318,6 +333,23 @@ describe("a default byline", () => {
         expect(signed).not.toContain("The Studio team");
     });
 
+    /*
+     * The article draws `labels.by` before every byline, a signed one too, so the default author
+     * takes the same word there. The card puts the reference's own label before a signed author, so
+     * the default author takes that label there.
+     */
+    it("takes the word each view already puts before a byline", async () => {
+        // The word between the monogram and the name in the article's byline.
+        const word = (html: string, name: string) =>
+            html.match(new RegExp(`</span>(\\w+)<!-- --> <(?:a|span)[^>]*>${name}<`))?.[1];
+
+        const index = await at("studio.example", "/letters");
+        expect(index).toContain("from The Studio team");
+
+        expect(word(await at("studio.example", "/letters/signed"), "Ana Cruz")).toBe("by");
+        expect(word(await at("studio.example", "/letters/unsigned"), "The Studio team")).toBe("by");
+    });
+
     it("draws no byline for an entry with no author when none is set", async () => {
         expect(await at("plain.example", "/notes/unsigned")).not.toContain("The Studio team");
     });
@@ -328,6 +360,22 @@ describe("a page that only holds data or chrome", () => {
         expect(await notFoundAt("studio.example", "/site-notes")).toBe(true);
         expect(await notFoundAt("studio.example", "/site-footer")).toBe(true);
         expect(await notFoundAt("studio.example", "/about")).toBe(false);
+    });
+
+    it("answers 404 on a route that reads a page by slug, when that slug is a data path", async () => {
+        const bySlug = async (slug: string) => {
+            requestHeaders = new Headers({ host: "studio.example" });
+            const Page = createPage(config);
+            try {
+                await render(await Page({ params: Promise.resolve({ slug }) }));
+                return "rendered";
+            } catch (e) {
+                return e instanceof Error ? e.message : String(e);
+            }
+        };
+        expect(await bySlug("site-notes")).toBe("NEXT_NOT_FOUND");
+        expect(await bySlug("site-footer")).toBe("NEXT_NOT_FOUND");
+        expect(await bySlug("about")).toBe("rendered");
     });
 
     it("has no page metadata at its own path", async () => {
