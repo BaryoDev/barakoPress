@@ -46,6 +46,8 @@ type SourceProps = {
     filterValue?: string;
     pageSize?: number;
     pageParam?: string;
+    groupBy?: string;
+    groupOrder?: string;
 };
 
 function source(config: PressConfig): BlockDefinition {
@@ -61,6 +63,8 @@ function source(config: PressConfig): BlockDefinition {
             { name: "filterValue", kind: "text", label: "Holds the value" },
             { name: "pageSize", kind: "number", label: "Rows a page", min: 1, max: MAX_SOURCE_ROWS },
             { name: "pageParam", kind: "text", label: "URL parameter holding the page number", bindable: false },
+            { name: "groupBy", kind: "text", label: "Repeat once per value of the field" },
+            { name: "groupOrder", kind: "text", label: "Groups first, in this order, comma separated" },
             { name: "content", kind: "slots", label: "Content", required: true, min: 1, max: 1 },
         ],
         // Nothing to put in scope without the binder, so nothing renders. Rendering the children
