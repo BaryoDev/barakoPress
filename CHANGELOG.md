@@ -2,6 +2,11 @@
 
 ## 0.8.0 (unreleased)
 
+- A site theme can draw the page itself. `createPage`, `createHome` and `createViewerPage` take
+  `{ bare: true }` and render only the blocks, with no `main`, page padding, title or breadcrumbs,
+  and the gap between blocks reads `--bp-gap` before the theme's `space.lg`. Both were inline
+  styles, so a deployment porting an existing design had no way to take them off: every page kept a
+  40px strip either side and 24px between sections that the design does not have.
 - A link and a heading could still lay a page out wider than the phone it was read on. #101 gave
   `code` somewhere to break and gave `a` nothing, so a changelog entry citing a wiki page by its URL
   laid a 390px viewport out 603px wide; and the `text` primitive set no wrapping rule at all, so a
