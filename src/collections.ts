@@ -159,6 +159,22 @@ function styleOf(config: PressConfig, col: CollectionConfig, option: string | un
     return byOption && Object.hasOwn(byOption, option) ? byOption[option] : undefined;
 }
 
+/**
+ * The byline a card or an article draws for an entry that names no author, from the collection's
+ * `defaultAuthor`. The byline is the first reference, so an entry names no author when that one did
+ * not come back, or when the collection has no reference at all.
+ */
+export function defaultByline(
+    config: PressConfig,
+    col: CollectionConfig | undefined,
+    item: Item,
+): { label: string; name: string } | undefined {
+    if (!col?.defaultAuthor) return undefined;
+    const [first] = Object.entries(col.references ?? {});
+    if (first && item.refs[first[0]]) return undefined;
+    return { label: first?.[1].label || config.labels.by, name: col.defaultAuthor };
+}
+
 export function toItem(config: PressConfig, key: string, c: PublicContent): Item {
     const col = collectionOf(config, key);
     if (!col) throw new Error(`no collection "${key}" is configured`);

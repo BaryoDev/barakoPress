@@ -1,7 +1,7 @@
 import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { connection } from "next/server";
 import type { Metadata } from "next";
-import { POST_COLLECTION, type PressConfig } from "../config.js";
+import { POST_COLLECTION, indexCopy, type PressConfig } from "../config.js";
 import {
     flattenNavigation,
     getNavigation,
@@ -9,6 +9,7 @@ import {
     getPageByPath,
     getPageAtPath,
     getRedirect,
+    isDataPath,
     isReservedPath,
     listPages,
     pageHref,
@@ -20,12 +21,14 @@ import { proseCss } from "../theme.js";
 import { BLOCK_PROSE_CLASS } from "../blocks/built-in.js";
 import { BlockList } from "../blocks/render.js";
 import { createBlockRegistry, registryFor } from "../blocks/registry.js";
-import { resolveBlocks, type BlockRegistry, type ResolvedBlock } from "../blocks/schema.js";
-import { bindBlocks, pageScope, queryScope, siteScope } from "../blocks/bind.js";
-import { getGlobals, routeFromParams, siteConfig } from "../site.js";
+import type { BlockRegistry } from "../blocks/schema.js";
+import { routeFromParams, siteConfig } from "../site.js";
 import { collectionAt, collectionOf, getItem } from "../collections.js";
 import { CollectionIndexView, itemMetadata, renderCollectionDetail } from "./collection.js";
 import { Breadcrumbs } from "./navigation.js";
+import { pageBlocks, type SearchParams } from "./page-blocks.js";
+
+export { pageBlocks };
 
 /*
  * Two route shapes reach these factories. `app/[slug]/page.tsx` passes a slug, read from the page type
@@ -34,7 +37,6 @@ import { Breadcrumbs } from "./navigation.js";
  * /about/team.
  */
 type PageRouteParams = { slug?: string; path?: string[]; site?: string };
-type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 /*
  * `searchParams` is taken but never awaited unless a block binds `{{query.X}}`. Awaiting it is what
  * makes a route dynamic, and `output: "export"` refuses a build outright over it, so a static site
@@ -63,39 +65,6 @@ export interface PageViewProps {
      * from its stylesheet.
      */
     bare?: boolean;
-}
-
-/**
- * A page's blocks: resolved against the registry, then bound and expanded.
- *
- * Every scope is a thunk, so a page that binds nothing reads nothing. That matters for `site`,
- * which is a CMS read, and for `query`, which makes the route dynamic.
- */
-export async function pageBlocks(
-    config: PressConfig,
-    page: Page,
-    registry: BlockRegistry,
-    options: { perViewer?: boolean; searchParams?: SearchParams } = {},
-): Promise<ResolvedBlock[]> {
-    if (!Array.isArray(page.blocks) || page.blocks.length === 0) return [];
-    const blocks = resolveBlocks(page.blocks, registry, { perViewer: options.perViewer === true });
-    return bindBlocks(blocks, {
-        config,
-        registry,
-        scopes: {
-            site: async () => siteScope(config, await getGlobals(config)),
-            page: () => pageScope(page),
-            ...(options.searchParams ? { query: async () => queryScope(await options.searchParams!) } : {}),
-        },
-        // Reported, never thrown, and never shown to a visitor: a renamed field is something the
-        // person editing the page has to see, and nothing a reader can act on. Where they see it is
-        // barakoBrew, over `createBindingReportRoute`; this line is for whoever has the log.
-        onProblem: (problem) =>
-            console.warn(
-                `blocks: ${problem.binding} on page "${page.slug || page.id}" is ${problem.reason}` +
-                    (problem.block ? ` (${problem.block}.${problem.field})` : ""),
-            ),
-    });
 }
 
 /*
@@ -219,7 +188,8 @@ function collectionHit(config: PressConfig, p: PageRouteParams): { key: string; 
 
 async function collectionMetadata(config: PressConfig, hit: { key: string; slug?: string }): Promise<Metadata> {
     if (hit.slug === undefined) {
-        const label = collectionOf(config, hit.key)?.label;
+        const col = collectionOf(config, hit.key);
+        const label = col ? (indexCopy(col).heading ?? col.label) : undefined;
         return label ? { title: label } : {};
     }
     const item = await getItem(config, hit.key, hit.slug);
@@ -236,6 +206,7 @@ async function findPage(config: PressConfig, p: PageRouteParams): Promise<Found 
     // A page under a reserved slug renders nowhere, not only where Next happens to leave a gap in the
     // app's routes, so it is not asked for.
     if (isReservedPath(config, path)) return null;
+    if (isDataPath(config, path)) return null;
     const found = await getPageByPath(config, path);
     return found ? { page: found.page, breadcrumbs: found.breadcrumbs } : null;
 }
@@ -301,9 +272,9 @@ export function createPage(base: PressConfig, registry?: BlockRegistry, options:
         const query = options.query ?? (await routeFromParams(params)) === null;
         const hit = collectionHit(config, p);
         if (hit) {
-            return hit.slug === undefined
-                ? CollectionIndexView({ config, collection: hit.key, query: await queryFor(query, searchParams) })
-                : renderCollectionDetail(config, hit.key, hit.slug);
+            if (hit.slug !== undefined) return renderCollectionDetail(config, hit.key, hit.slug);
+            blocks ??= createBlockRegistry(base);
+            return CollectionIndexView({ config, collection: hit.key, query: await queryFor(query, searchParams), blocks });
         }
         const found = await findPage(config, p);
         if (!found) return missing(config, p);
@@ -327,9 +298,9 @@ export function createViewerPage(base: PressConfig, registry?: BlockRegistry, op
         const p = await params;
         const hit = collectionHit(config, p);
         if (hit) {
-            return hit.slug === undefined
-                ? CollectionIndexView({ config, collection: hit.key, query: await queryFor(true, searchParams) })
-                : renderCollectionDetail(config, hit.key, hit.slug);
+            if (hit.slug !== undefined) return renderCollectionDetail(config, hit.key, hit.slug);
+            blocks ??= createBlockRegistry(base);
+            return CollectionIndexView({ config, collection: hit.key, query: await queryFor(true, searchParams), blocks });
         }
         const found = await findPage(config, p);
         if (!found) return missing(config, p);
@@ -392,7 +363,8 @@ export function createHome(base: PressConfig, registry?: BlockRegistry, options:
                 bare: options.bare,
             });
         }
-        return CollectionIndexView({ config, collection: homeCollection(config) });
+        blocks ??= createBlockRegistry(base);
+        return CollectionIndexView({ config, collection: homeCollection(config), blocks });
     };
 }
 
@@ -403,7 +375,8 @@ export function createHomeMetadata(base: PressConfig) {
         const path = config.home?.path;
         const page = path ? await homePage(config, path) : null;
         if (!page) {
-            const label = collectionOf(config, homeCollection(config))?.label;
+            const col = collectionOf(config, homeCollection(config));
+            const label = col ? (indexCopy(col).heading ?? col.label) : undefined;
             return label ? { title: label } : {};
         }
         const seo = page.seo;
@@ -495,6 +468,7 @@ async function pathParams(config: PressConfig): Promise<{ path: string[] }[]> {
             console.warn(`pages: the page at ${path} is under a reserved slug and is never rendered`);
             continue;
         }
+        if (isDataPath(config, path)) continue;
         params.push({ path: path.split("/").filter(Boolean) });
     }
     return params;

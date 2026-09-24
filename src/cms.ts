@@ -422,17 +422,30 @@ export function isReservedPath(config: PressConfig, path: string): boolean {
 
 /**
  * True when the site draws the page at this path as chrome rather than serving it as a place to go:
- * a header or footer region (#48), or the holding page. The path is relative to the pages mount, the
- * same as `isReservedPath` takes it.
+ * the holding page, or a page that only holds data (see `isDataPath`). The path is relative to the
+ * pages mount, the same as `isReservedPath` takes it.
  *
- * Such a page is on every page of the site already, so it has no business in the menu or the
- * sitemap. It still answers on its own route, which is what lets an editor open it to work on it.
+ * Such a page has no business in the menu or the sitemap.
  */
 export function isChromePath(config: PressConfig, path: string): boolean {
-    const drawn = [config.holding?.path, config.regions?.header?.path, config.regions?.footer?.path];
-    if (drawn.every((p) => p === undefined)) return false;
+    const holding = config.holding?.path;
+    return (holding !== undefined && samePath(pageHref(config, path), holding)) || isDataPath(config, path);
+}
+
+/**
+ * True when the page at this path exists only to be drawn somewhere else: a header or footer region
+ * (#48), or a collection's `indexPage` (#126). It answers 404 at its own path, since what it holds is
+ * already on the page that draws it. The holding page is not one: it is served while the site holds.
+ */
+export function isDataPath(config: PressConfig, path: string): boolean {
+    const drawn = [
+        config.regions?.header?.path,
+        config.regions?.footer?.path,
+        ...Object.values(config.collections).map((c) => c.indexPage),
+    ].filter((p): p is string => p !== undefined);
+    if (drawn.length === 0) return false;
     const href = pageHref(config, path);
-    return drawn.some((p) => p !== undefined && samePath(href, p));
+    return drawn.some((p) => samePath(href, p));
 }
 
 export interface Redirect {

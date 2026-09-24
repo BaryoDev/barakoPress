@@ -175,7 +175,9 @@ merged over the configured collections by key. A build-time site passes `collect
 | `sort` | Sent to the API, for example `-PublishedAt` |
 | `feed` | Whether `createFeed(config, key)` serves it |
 | `sitemap` | On unless `false`. A collection is paged to `pageSizes.sitemap` entries; the file stops at the standard's 50,000 URLs and says so in the log |
-| `index` | Whether the root catch-all serves an index at the route. On unless `false`; the derived `author` and `category` have it off, so `/authors` stays a 404 unless a route file mounts it |
+| `index` | Whether the root catch-all serves an index at the route. On unless `false`; the derived `author` and `category` have it off, so `/authors` stays a 404 unless a route file mounts it. An object is the index's copy, and the index is on. See below |
+| `indexPage` | A site path such as `/site/blog`. The blocks of the page served there are drawn above the list on the index. See below |
+| `defaultAuthor` | The byline name on an entry that names no author, on its card and on its `article` page |
 | `pageSize`, `label`, `noun` | Items on the index, its heading, and how a count reads |
 | `colorBy` | A choice field whose option colours the item. See below |
 | `related` | What an item page lists under the item: `"semantic"` for the items of this collection closest to it by meaning, `false` for none. Unset, the first collection that references this one |
@@ -202,6 +204,36 @@ With `related: "semantic"` it lists the items of its own collection nearest it b
 an agency's case study gets the band a post has. That needs the CMS AI module: without it the search
 answers nothing and the page draws no band at all, which is the same way the post page degrades.
 `listRelatedItems(config, key, item)` returns that list on its own.
+
+**The index's own words.** An editor sets what a collection's index says in the collection's
+settings, rather than a theme writing a route file for it:
+
+```json
+{
+  "blog": {
+    "type": "post", "route": "/blog", "fields": { "title": "Title" },
+    "index": {
+      "eyebrow": "Changelog", "heading": "What shipped",
+      "lede": "Every release, newest first.",
+      "empty": "Nothing shipped yet.", "unavailable": "The changelog is resting. Try again shortly."
+    },
+    "indexPage": "/site/blog",
+    "defaultAuthor": "The barakoCMS team"
+  }
+}
+```
+
+`eyebrow` is a short line above the heading, `heading` replaces `label`, `lede` replaces the site's
+tagline under it, `empty` is what an index with nothing published says, and `unavailable` what one
+whose read failed says, each in place of the `labels` lines that say it otherwise. Every line is
+optional, one of the wrong kind or too long is dropped on its own, and a route file's own `heading`
+still wins. `indexPage` draws a page's blocks above the list, so the index is composed like any page
+and the route stays the collection's. With `defaultAuthor`, an entry whose first reference (the
+byline) did not come back, or a collection with no reference at all, is signed with that name after
+`labels.by`. Set none of the three and the index and the byline draw what they always did.
+
+A page named by `indexPage` only holds data, the way a header or footer region page does: it answers
+404 at its own path and is left out of the menu and the sitemap.
 
 **Filtering.** `listCollection(config, "doctors", { filter: { Department: "cardiology" } })` takes a
 reference field by the target's slug and any other field by the value it holds, a choice field by its
@@ -716,7 +748,7 @@ for a post type with no such field.
 | `pages` | off | operator only | Where the Pages module's pages are mounted. `""` is the site root. It has to match a route file on disk, which is why it is not a tenant's to set |
 | `reservedSlugs` | the routes and the engine's files | `ReservedSlugs`, added to them | First path segments a root-mounted page may not take. Adds to the defaults |
 | `regions` | off | `HeaderPath`, `HeaderTone`, `FooterPath`, `FooterTone` | The header and the footer as block regions |
-| `collections` | the blog's `post`, `author` and `category` | `Collections` | Content types rendered as lists and detail pages. See Collections |
+| `collections` | the blog's `post`, `author` and `category` | `Collections` | Content types rendered as lists and detail pages, with each index's copy, index page and default byline. See Collections |
 | `optionStyles` | none | `OptionStyles` | Tone, icon and label by `type.field` and option, for `colorBy` |
 | `optionColors` | none | `OptionColors` | The same, when a tone is all an option has. Read as `optionStyles` |
 | `labels` | English | `Labels` | The words the screens print for a visitor. See below |
@@ -970,8 +1002,9 @@ Set neither and nothing changes: `TopBar`, `HeaderLinks`, `FooterColumns`, `Soci
 whose own CSS keys off that markup rendering. A path with nothing served at it does the same, so
 naming a page before writing it is safe, and so is a typo.
 
-A region page is chrome rather than somewhere to go, so it is left out of the menu and the sitemap.
-It still answers on its own route, which is how an editor opens it to work on it.
+A region page is chrome rather than somewhere to go, so it is left out of the menu and the sitemap,
+and it answers 404 at its own route: what it holds is already on every page. A collection's
+`indexPage` is treated the same way.
 
 A header region replaces the whole band, the site name, the menu and the RSS link along with the top
 bar. There is no navigation or logo block yet, so a header region lists its own links until the block

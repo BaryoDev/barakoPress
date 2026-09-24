@@ -2,8 +2,15 @@ import { Fragment, type ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { AUTHOR_COLLECTION, CATEGORY_COLLECTION, POST_COLLECTION, type CollectionConfig, type PressConfig } from "../config.js";
-import { formatDate, type Post, type Ref } from "../cms.js";
+import {
+    AUTHOR_COLLECTION,
+    CATEGORY_COLLECTION,
+    POST_COLLECTION,
+    indexCopy,
+    type CollectionConfig,
+    type PressConfig,
+} from "../config.js";
+import { formatDate, getPageAtPath, type Post, type Ref } from "../cms.js";
 import {
     collectionOf,
     getItem,
@@ -11,6 +18,7 @@ import {
     listCollection,
     listReferencing,
     referencedBy,
+    defaultByline,
     searchCollection,
     type Item,
 } from "../collections.js";
@@ -23,6 +31,12 @@ import { readingMinutes } from "../reading-time.js";
 import { Asset, renderProse } from "../assets.js";
 import { IconGlyph } from "../blocks/primitives.js";
 import { siteConfig, type SiteParams } from "../site.js";
+import { BLOCK_PROSE_CLASS } from "../blocks/built-in.js";
+import { BlockList } from "../blocks/render.js";
+import { createBlockRegistry, registryFor } from "../blocks/registry.js";
+import type { BlockRegistry } from "../blocks/schema.js";
+import { proseCss } from "../theme.js";
+import { pageBlocks } from "./page-blocks.js";
 
 /*
  * The collection screens: an index, a detail page, their metadata and static params, and the card and
@@ -103,6 +117,7 @@ export function Card(props: CardProps) {
     const { config, featured = false } = props;
     const item = props.item ?? itemFromPost(config, props.post);
     const col = collectionOf(config, item.collection);
+    const byline = defaultByline(config, col, item);
     const links = Object.entries(col?.references ?? {}).flatMap(([field, ref]) => {
         const target = item.refs[field];
         const route = collectionOf(config, ref.collection)?.route;
@@ -118,6 +133,7 @@ export function Card(props: CardProps) {
             <h2>{col?.route !== undefined ? <Link href={`${col.route}/${item.slug}`}>{item.title}</Link> : item.title}</h2>
             <p className="meta">
                 {item.date && <time dateTime={item.date}>{formatDate(config, item.date)}</time>}
+                {byline && ` ${byline.label} ${byline.name}`}
                 {links.map((l) => (
                     <Fragment key={l.field}>
                         {l.label ? ` ${l.label} ` : " "}
@@ -295,6 +311,8 @@ export interface CollectionIndexOptions {
      * refuses a build outright over it. The same trade as preview, made in the consumer's own file.
      */
     search?: boolean;
+    /** The blocks the collection's `indexPage` renders with. The built-in ones when unset. */
+    blocks?: BlockRegistry;
 }
 
 /** The most rows a search on an index lists. The API caps its own side at fifty. */
@@ -307,9 +325,11 @@ export async function CollectionIndexView({
     filter,
     heading,
     query,
+    blocks,
 }: { config: PressConfig; collection: string; query?: string } & CollectionIndexOptions) {
     const col = collectionOf(config, collection);
     if (!col) notFound();
+    const copy = indexCopy(col);
     const typed = (query ?? "").trim();
     let items: Item[] = [];
     let failure = false;
@@ -336,32 +356,46 @@ export async function CollectionIndexView({
     // the top there would put a worse match above a better one.
     const featured = typed ? [] : items.filter((i) => i.featured);
     const rest = typed ? items : items.filter((i) => !i.featured);
-    const title = heading ?? col.label;
+    const title = heading ?? copy.heading ?? col.label;
+    const lede = copy.lede ?? (title === undefined ? config.site.tagline : undefined);
+    const lead = col.indexPage ? await indexLead(config, col.indexPage, blocks) : null;
 
-    const list = (
+    const shell = (
         <div className="shell">
             <header className="masthead">
+                {copy.eyebrow && <p className="eyebrow">{copy.eyebrow}</p>}
                 <h1>{title ?? config.site.name}</h1>
-                {title === undefined && config.site.tagline && <p className="tagline">{config.site.tagline}</p>}
+                {lede && <p className="tagline">{lede}</p>}
             </header>
 
-            {failure && (
-                <div className="notice error">
-                    <p>
-                        <strong>{config.labels.failed}</strong>
-                    </p>
-                    <p>{config.labels.failedNote}</p>
-                </div>
-            )}
+            {failure &&
+                (copy.unavailable ? (
+                    <div className="notice error">
+                        <p>{copy.unavailable}</p>
+                    </div>
+                ) : (
+                    <div className="notice error">
+                        <p>
+                            <strong>{config.labels.failed}</strong>
+                        </p>
+                        <p>{config.labels.failedNote}</p>
+                    </div>
+                ))}
 
-            {!failure && items.length === 0 && (
-                <div className="notice">
-                    <p>
-                        <strong>{typed ? config.labels.searchEmpty : config.labels.empty}</strong>
-                    </p>
-                    {!typed && <p>{config.labels.emptyNote}</p>}
-                </div>
-            )}
+            {!failure &&
+                items.length === 0 &&
+                (!typed && copy.empty ? (
+                    <div className="notice">
+                        <p>{copy.empty}</p>
+                    </div>
+                ) : (
+                    <div className="notice">
+                        <p>
+                            <strong>{typed ? config.labels.searchEmpty : config.labels.empty}</strong>
+                        </p>
+                        {!typed && <p>{config.labels.emptyNote}</p>}
+                    </div>
+                ))}
 
             {featured.map((i) => (
                 <Card key={i.id} config={config} item={i} featured />
@@ -370,6 +404,14 @@ export async function CollectionIndexView({
                 <Card key={i.id} config={config} item={i} />
             ))}
         </div>
+    );
+    const list = lead ? (
+        <>
+            {lead}
+            {shell}
+        </>
+    ) : (
+        shell
     );
 
     if (!col.tree) return list;
@@ -398,6 +440,31 @@ export async function CollectionIndexView({
 }
 
 /*
+ * The blocks of the page a collection names as its `indexPage`, drawn above the list. A page that
+ * is missing or cannot be read leaves the index as it would be without one, the way a region falls
+ * back to the built-in chrome.
+ */
+async function indexLead(config: PressConfig, path: string, blocks: BlockRegistry | undefined): Promise<ReactNode> {
+    let page;
+    try {
+        page = await getPageAtPath(config, path);
+    } catch (e) {
+        if (e && typeof e === "object" && "digest" in e) throw e;
+        console.warn(`collection: the index page at ${path} could not be read (${e instanceof Error ? e.message : String(e)})`);
+        return null;
+    }
+    if (!page) return null;
+    const resolved = await pageBlocks(config, page, registryFor(config, blocks ?? createBlockRegistry(config, [], { presets: [] })));
+    if (resolved.length === 0) return null;
+    return (
+        <>
+            <style dangerouslySetInnerHTML={{ __html: proseCss(config.theme, BLOCK_PROSE_CLASS) }} />
+            <BlockList blocks={resolved} theme={config.theme} />
+        </>
+    );
+}
+
+/*
  * A factory rather than a component, because a Next route is a file and a package cannot write files
  * into someone else's app. The consumer's app/doctors/page.tsx is:
  *
@@ -405,6 +472,7 @@ export async function CollectionIndexView({
  *     export const revalidate = 300;
  */
 export function createCollectionIndex(base: PressConfig, collection: string, options: CollectionIndexOptions = {}) {
+    let blocks = options.blocks;
     return async function CollectionIndex({
         params,
         searchParams,
@@ -419,7 +487,9 @@ export function createCollectionIndex(base: PressConfig, collection: string, opt
         // Repeated `?q=` arrives as an array, which nothing downstream can trim. Search was not asked
         // for in a shape this answers, so the index lists.
         const query = typeof asked === "string" ? asked : options.search ? "" : undefined;
-        return CollectionIndexView({ config, collection, ...options, query });
+        // Built once, on the first index that has a page to draw, and kept.
+        if (collectionOf(config, collection)?.indexPage) blocks ??= createBlockRegistry(base);
+        return CollectionIndexView({ config, collection, ...options, query, blocks });
     };
 }
 

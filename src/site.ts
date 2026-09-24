@@ -5,6 +5,7 @@ import {
     SETTINGS_TYPE,
     embedHosts,
     type CollectionConfig,
+    type CollectionIndexCopy,
     type CollectionReference,
     type CollectionTree,
     type FieldNames,
@@ -686,6 +687,9 @@ function collectionFrom(v: unknown): CollectionConfig | undefined {
     const related = c.related === "semantic" || c.related === "reference" || c.related === false ? c.related : undefined;
     const pageSize = c.pageSize;
     const noun = Array.isArray(c.noun) && c.noun.length === 2 ? [short(c.noun[0], 40), short(c.noun[1], 40)] : [];
+    const indexPath = sitePath(c.indexPage);
+    const indexPage = indexPath ? withoutTrailingSlashes(indexPath) : undefined;
+    const defaultAuthor = short(c.defaultAuthor, 80);
     return {
         type,
         route,
@@ -694,7 +698,7 @@ function collectionFrom(v: unknown): CollectionConfig | undefined {
         sort: sort && SORT.test(sort) ? sort : undefined,
         feed: c.feed === true,
         sitemap: c.sitemap !== false,
-        index: c.index !== false,
+        index: indexFrom(c.index),
         pageSize: typeof pageSize === "number" && Number.isInteger(pageSize) && pageSize >= 1 && pageSize <= 100 ? pageSize : undefined,
         label: short(c.label, 80),
         noun: noun[0] && noun[1] ? [noun[0], noun[1]] : undefined,
@@ -703,7 +707,33 @@ function collectionFrom(v: unknown): CollectionConfig | undefined {
         readingTime: c.readingTime === true,
         ...(layout ? { layout } : {}),
         ...(treeFrom(c.tree) ? { tree: treeFrom(c.tree) } : {}),
+        ...(indexPage ? { indexPage } : {}),
+        ...(defaultAuthor ? { defaultAuthor } : {}),
     };
+}
+
+/*
+ * `index`: false turns the index off, as it always did, and anything else leaves it on. An object is
+ * the index's copy (#126), each line held to a length and dropped on its own when it is not text.
+ */
+const INDEX_COPY_MAX: Record<keyof CollectionIndexCopy, number> = {
+    eyebrow: 60,
+    heading: 120,
+    lede: 400,
+    empty: 300,
+    unavailable: 300,
+};
+
+function indexFrom(v: unknown): boolean | CollectionIndexCopy {
+    if (v === false) return false;
+    const input = record(v);
+    if (!input) return true;
+    const copy: CollectionIndexCopy = {};
+    for (const [key, max] of Object.entries(INDEX_COPY_MAX) as [keyof CollectionIndexCopy, number][]) {
+        const line = short(input[key], max);
+        if (line) copy[key] = line;
+    }
+    return Object.keys(copy).length > 0 ? copy : true;
 }
 
 /*
