@@ -1257,7 +1257,20 @@ function fractionPercent(count: string | undefined, total: string | undefined): 
     return Math.min(100, Math.round((c / t) * 100 * 1e6) / 1e6);
 }
 
-type ProgressProps = { label: string; value?: string; count?: string; total?: string; tone?: string };
+/**
+ * The total implied by a count and what is remaining, for a source that answers closed and open
+ * rather than closed and a total: a GitHub milestone (#114). Undefined for anything that is not two
+ * non-negative numbers, so `fractionPercent` refuses it the same way it refuses a bad total.
+ */
+function totalOf(count: string | undefined, remaining: string | undefined): string | undefined {
+    if (!count || !remaining) return undefined;
+    const c = Number(count.trim());
+    const r = Number(remaining.trim());
+    if (!Number.isFinite(c) || !Number.isFinite(r) || c < 0 || r < 0) return undefined;
+    return String(c + r);
+}
+
+type ProgressProps = { label: string; value?: string; count?: string; total?: string; remaining?: string; tone?: string };
 
 /*
  * How far along one thing is: a roadmap milestone, a fundraising target.
@@ -1266,6 +1279,8 @@ type ProgressProps = { label: string; value?: string; count?: string; total?: st
  * gives instead (#105), so the arithmetic stays in the thing that displays it rather than being
  * asked of a sync's field mapping or an API that does none. `value` wins when both are given, since
  * a figure someone typed on purpose should not be second-guessed by two fields that happen to be set.
+ * `remaining` stands in for `total` when the source counts what is left instead (#114), and `total`
+ * wins when both are set, so a page that already passes one draws exactly what it drew before.
  *
  * The bar is `role="progressbar"` with the three values that role needs, so what it shows is in the
  * accessibility tree rather than only in the pixels, and the label is beside it in the markup as
@@ -1281,13 +1296,15 @@ const progressBar = defineBlock<ProgressProps>({
         { name: "value", kind: "text", label: "How far along, 0 to 100" },
         { name: "count", kind: "text", label: "How many are done" },
         { name: "total", kind: "text", label: "Out of how many" },
+        { name: "remaining", kind: "text", label: "Or how many are left" },
         { name: "tone", label: "Tone", ...toneSelect },
     ],
     component: ({ props, theme }) => {
         const fromValue = props.value ? percentOf(props.value) : null;
-        const fraction = fromValue === null ? fractionPercent(props.count, props.total) : null;
+        const total = props.total || totalOf(props.count, props.remaining);
+        const fraction = fromValue === null ? fractionPercent(props.count, total) : null;
         const percent = fromValue ?? fraction;
-        const shown = fromValue !== null ? props.value!.trim() : fraction !== null ? `${props.count!.trim()} of ${props.total!.trim()}` : null;
+        const shown = fromValue !== null ? props.value!.trim() : fraction !== null ? `${props.count!.trim()} of ${total!.trim()}` : null;
         const tone = props.tone ? toneOf(theme, props.tone) : null;
         const muted = tone ? tone.muted : inherited(theme, "muted");
         return (

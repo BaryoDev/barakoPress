@@ -2,6 +2,9 @@
 
 ## 0.8.0 (unreleased)
 
+- `progressBar` can draw from a count and what is remaining (`remaining`), filled to count over the
+  two added, for a source like a GitHub milestone that answers closed and open issues and no total.
+  `total` wins when both are set, so a page that passes it draws what it drew before (#114).
 - The image workflow can publish a tag that already exists. v0.7.0 was tagged before the workflow
   was written, so nothing ever pushed an image for it, and dispatching against the tag does not work
   because a dispatch runs the workflow file as it exists at that ref. Dispatching from master with

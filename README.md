@@ -390,7 +390,8 @@ because only a string field takes a binding, and a preset has to pass its own `c
 `icon`, `button`, `link`, `list`, `disclosure` (a labelled section that opens; give several the
 same `group` and only one is open at a time), `comparisonTable` (rows typed as lines with `|`
 between the cells, drawn as a real table with a heading on every column and every row) and
-`progressBar` (how far along one thing is, as `role="progressbar"` so it is read and not only seen).
+`progressBar` (how far along one thing is, as `role="progressbar"` so it is read and not only seen,
+from a `value` already worked out, or from a `count` with either a `total` or what is `remaining`).
 
 A comparison's first line is the column headings and the first cell of every line after it is that
 row's heading. What goes in a cell is whatever the tenant types, ticks and dashes included: a mark

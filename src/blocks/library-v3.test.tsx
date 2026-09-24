@@ -482,6 +482,41 @@ describe("the v3 blocks on their own", () => {
         expect(html).not.toContain("progressbar");
     });
 
+    it("draws a bar from a count and what is remaining, filled to count over the two added (#114)", async () => {
+        const html = await render([{ type: "progressBar", props: { label: "Milestone", count: "3", remaining: "1" } }]);
+        expect(html).toContain('aria-valuenow="75"');
+        expect(html).toContain("width:75%");
+        expect(html).toContain("3 of 4");
+    });
+
+    it("prefers a total over what is remaining when both arrived", async () => {
+        const html = await render([
+            { type: "progressBar", props: { label: "Docs", count: "3", total: "5", remaining: "1" } },
+        ]);
+        expect(html).toContain('aria-valuenow="60"');
+        expect(html).toContain("3 of 5");
+    });
+
+    it("draws the label and no bar when nothing is done and nothing is remaining", async () => {
+        const html = await render([{ type: "progressBar", props: { label: "Empty", count: "0", remaining: "0" } }]);
+        expect(html).toContain("Empty");
+        expect(html).not.toContain("progressbar");
+    });
+
+    it("draws the label and no bar when what is remaining is not a number", async () => {
+        const html = await render([{ type: "progressBar", props: { label: "Odd", count: "3", remaining: "some" } }]);
+        expect(html).toContain("Odd");
+        expect(html).not.toContain("progressbar");
+    });
+
+    it("offers what is remaining as a field an editor can fill", () => {
+        const fields = createBlockRegistry(defineConfig({ site: { name: "T", url: "https://t.example" }, cmsUrl: CMS }))
+            .get("progressBar")
+            ?.fields.map((f) => f.name);
+        expect(fields).toContain("total");
+        expect(fields).toContain("remaining");
+    });
+
     it("leaves the option row off a card grid that did not ask for it", async () => {
         const html = await render([{ type: "cardGrid", props: { heading: "Modules", collection: "modules" } }]);
         expect(html).toContain("Search");
