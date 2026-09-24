@@ -117,13 +117,15 @@ export async function PageView({
     const blocks = await pageBlocks(config, page, registry, { perViewer, searchParams });
     // Scoped to the prose class, so it styles a built-in text block and nothing a theme drew.
     const prose = <style dangerouslySetInnerHTML={{ __html: proseCss(t, BLOCK_PROSE_CLASS) }} />;
+    // A page with only a body still renders it when bare, but without the measure: that is the
+    // theme's to set through the prose class, and an inline width is one it could not undo.
     const content = hasBlocks ? (
         <BlockList blocks={blocks} theme={t} />
     ) : (
         page.body && (
             <div
                 className={BLOCK_PROSE_CLASS}
-                style={{ maxWidth: t.layout.prose }}
+                style={bare ? undefined : { maxWidth: t.layout.prose }}
                 dangerouslySetInnerHTML={{ __html: renderProse(page.body, t) }}
             />
         )
