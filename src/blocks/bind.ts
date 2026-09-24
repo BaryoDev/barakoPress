@@ -1,7 +1,15 @@
 import type { PressConfig } from "../config.js";
 import { collectionOf, getItem, listCollection, type Item } from "../collections.js";
 import type { Page } from "../cms.js";
-import { BindingSource, bindText, hasBinding, type BindingProblem, type BindingScopes } from "./bindings.js";
+import {
+    BindingSource,
+    bindText,
+    bindValue,
+    hasBinding,
+    type BindingProblem,
+    type BindingScopes,
+    type BindingWhere,
+} from "./bindings.js";
 import {
     MAX_SOURCES,
     MAX_SOURCE_ROWS,
@@ -13,9 +21,12 @@ import {
     writePagerState,
 } from "./data.js";
 import {
+    INVALID,
     MAX_BLOCKS,
     accepts,
     isBindable,
+    itemField,
+    readValue,
     type BlockField,
     type BlockProps,
     type BlockRegistry,
@@ -148,11 +159,39 @@ async function bindProps(
     options: BindPropsOptions,
 ): Promise<BlockProps | null> {
     const fields = block.definition.fields as BlockField[];
-    const props: BlockProps = { ...block.props };
+    return bindRecord(fields, block.props, source, block.definition.type, "", options);
+}
+
+/*
+ * A record of props through its fields: a block's own, or a group's. `path` is where the record sits
+ * inside the block, so a problem inside a list of stages names `stages.1.name` and not just `name`.
+ */
+async function bindRecord(
+    fields: BlockField[],
+    record: Record<string, unknown>,
+    source: BindingSource,
+    block: string,
+    path: string,
+    options: BindPropsOptions,
+): Promise<BlockProps | null> {
+    const props: BlockProps = { ...record };
     for (const field of fields) {
         const value = props[field.name];
+        const where = { block, field: path + field.name };
+        if (field.kind === "list" || field.kind === "group") {
+            if (value === undefined) continue;
+            const bound = await bindStructured(field, value, source, where);
+            if (bound === INVALID) return null;
+            if (bound === undefined) {
+                if (field.required) return null;
+                delete props[field.name];
+                continue;
+            }
+            props[field.name] = bound;
+            continue;
+        }
         if (typeof value !== "string" || !isBindable(field) || !hasBinding(value)) continue;
-        const { text } = await bindText(value, source, { block: block.definition.type, field: field.name });
+        const { text } = await bindText(value, source, where);
         if (text === "") {
             if (options.allowEmpty) {
                 props[field.name] = "";
@@ -166,6 +205,60 @@ async function bindProps(
         props[field.name] = text;
     }
     return props;
+}
+
+/**
+ * A list or a group with its placeholders resolved: undefined when it came out empty, INVALID when
+ * the block must not render.
+ *
+ * A whole-value binding is read as data and checked by `readValue` in data mode, so nothing it
+ * resolved to is scanned again. A stored list or group binds each string inside it like any string
+ * prop, and an entry of a list whose text binds to nothing is left out rather than kept empty.
+ */
+async function bindStructured(
+    field: BlockField,
+    value: unknown,
+    source: BindingSource,
+    where: BindingWhere,
+): Promise<unknown> {
+    if (typeof value === "string") {
+        const resolved = await bindValue(value, source, where);
+        if (resolved === undefined) return undefined;
+        const read = readValue(field, resolved, "data");
+        return Array.isArray(read) && read.length === 0 ? undefined : read;
+    }
+    if (field.kind === "group") return bindGroup(field, value, source, where);
+
+    const entry = itemField(field);
+    const out: unknown[] = [];
+    const items = value as unknown[];
+    for (let i = 0; i < items.length; i++) {
+        const at = { block: where.block, field: `${where.field}.${i}` };
+        const bound = await bindEntry(entry, items[i], source, at);
+        if (bound === INVALID) return INVALID;
+        if (bound !== undefined) out.push(bound);
+    }
+    if (out.length === 0) return undefined;
+    return field.min === undefined || out.length >= field.min ? out : INVALID;
+}
+
+async function bindGroup(field: BlockField, value: unknown, source: BindingSource, where: BindingWhere) {
+    const record = value as Record<string, unknown>;
+    const bound = await bindRecord(field.fields ?? [], record, source, where.block, `${where.field}.`, {});
+    return bound ?? INVALID;
+}
+
+async function bindEntry(
+    entry: BlockField,
+    value: unknown,
+    source: BindingSource,
+    where: BindingWhere,
+): Promise<unknown> {
+    if (entry.kind === "group") return bindGroup(entry, value, source, where);
+    if (typeof value !== "string" || !isBindable(entry) || !hasBinding(value)) return value;
+    const { text } = await bindText(value, source, where);
+    if (text === "") return undefined;
+    return readValue(entry, text, "data");
 }
 
 /** One prop bound on its own, for a control block that acts on the value rather than rendering it. */

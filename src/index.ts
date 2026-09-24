@@ -233,6 +233,9 @@ export {
     isBindable,
     MAX_BLOCKS,
     MAX_DEPTH,
+    MAX_FIELD_DEPTH,
+    MAX_LIST_ITEMS,
+    LIST_ITEM_KINDS,
 } from "./blocks/schema.js";
 export type {
     BlockDefinition,
@@ -242,6 +245,9 @@ export type {
     BlockRegistry,
     BlockSchema,
     FieldKind,
+    ListItem,
+    ListItemKind,
+    SchemaField,
     ResolvedBlock,
     ResolveOptions,
 } from "./blocks/schema.js";
@@ -278,6 +284,8 @@ export {
     BINDING_FORMATS,
     BindingSource,
     bindText,
+    bindValue,
+    wholeBinding,
     readBindings,
     hasBinding,
     formatValue,

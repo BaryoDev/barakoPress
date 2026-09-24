@@ -1387,23 +1387,29 @@ const MAX_ROTATING = 8;
 /*
  * One line where a word is swapped for the next.
  *
- * The words are a comma separated list rather than a slot per word, because this is a tagline and an
- * editor types one. It is also what makes it read a field: a choice field bound with
- * `{{item.Tags}}` arrives here as "a, b, c", which is exactly this shape.
+ * `words` is a list, one entry per word, so a word may hold a comma and `{{item.Tags}}` fills it
+ * from the array itself. `items` is the comma separated text pages stored before lists existed,
+ * read only when `words` is not set, so those pages render as they did.
  */
-const rotatingText = defineBlock<{ items: string; variant?: string; tone?: string; seconds?: number }>({
+const rotatingText = defineBlock<{
+    words?: string[];
+    items?: string;
+    variant?: string;
+    tone?: string;
+    seconds?: number;
+}>({
     type: "rotatingText",
     label: "Rotating text",
     layer: "primitive",
     fields: [
-        { name: "items", kind: "text", label: "Words, separated by commas", required: true },
+        { name: "words", kind: "list", label: "Words", max: MAX_ROTATING, item: { kind: "text", label: "Word" } },
+        { name: "items", kind: "text", label: "Words, separated by commas" },
         { name: "variant", kind: "select", label: "Variant", options: TEXT_VARIANT_NAMES },
         { name: "tone", kind: "select", label: "Ink", options: Object.keys(INK) },
         { name: "seconds", kind: "number", label: "Seconds each", min: 1, max: 20 },
     ],
     component: ({ props, theme }) => {
-        const words = props.items
-            .split(",")
+        const words = (props.words ?? (props.items ?? "").split(","))
             .map((w) => w.trim())
             .filter((w) => w !== "")
             .slice(0, MAX_ROTATING);

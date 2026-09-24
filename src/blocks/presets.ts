@@ -1,9 +1,12 @@
 import {
+    LIST_ITEM_KINDS,
+    MAX_FIELD_DEPTH,
     checkDefinition,
     resolveBlocks,
     type BlockDefinition,
     type BlockField,
     type BlockRegistry,
+    type ListItem,
     type ResolvedBlock,
 } from "./schema.js";
 
@@ -111,7 +114,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-const FIELD_KINDS = ["text", "markdown", "url", "number", "boolean", "select", "slots"];
+const FIELD_KINDS = ["text", "markdown", "url", "number", "boolean", "select", "slots", "list", "group"];
 
 /**
  * A preset as a tenant stores it, checked.
@@ -184,41 +187,79 @@ interface ReadFields {
 }
 
 /** Null for a field list that is not one, so the preset is dropped rather than exposing no props. */
-function fieldsFrom(value: unknown): ReadFields | null {
+function fieldsFrom(value: unknown, depth = 0): ReadFields | null {
     if (value === undefined) return { fields: [], skipped: 0 };
     if (!Array.isArray(value)) return null;
     const fields: BlockField[] = [];
     let skipped = 0;
     for (const raw of value.slice(0, 30)) {
-        if (!isRecord(raw)) {
-            skipped++;
-            continue;
-        }
-        const name = typeof raw.name === "string" ? raw.name : "";
-        const kind = typeof raw.kind === "string" ? raw.kind : "";
-        if (!NAME.test(name) || !FIELD_KINDS.includes(kind)) {
-            skipped++;
-            continue;
-        }
-        const options = Array.isArray(raw.options)
-            ? raw.options.filter((o): o is string => typeof o === "string").slice(0, 40)
-            : undefined;
-        if (kind === "select" && (!options || options.length === 0)) {
-            skipped++;
-            continue;
-        }
-        fields.push({
-            name,
-            kind: kind as BlockField["kind"],
-            label: typeof raw.label === "string" ? raw.label : undefined,
-            required: raw.required === true,
-            options,
-            min: typeof raw.min === "number" ? raw.min : undefined,
-            max: typeof raw.max === "number" ? raw.max : undefined,
-            bindable: typeof raw.bindable === "boolean" ? raw.bindable : undefined,
-        });
+        const field = isRecord(raw) ? fieldFrom(raw, depth) : null;
+        if (field) fields.push(field);
+        else skipped++;
     }
     return { fields, skipped };
+}
+
+/*
+ * One stored field, or null when it is not one. A list or a group whose own parts are not all fields
+ * is not one either: half a group would render a card missing the part somebody thinks is there, and
+ * `checkDefinition` would refuse the whole preset for it later anyway.
+ */
+function fieldFrom(raw: Record<string, unknown>, depth: number): BlockField | null {
+    const name = typeof raw.name === "string" ? raw.name : "";
+    const kind = typeof raw.kind === "string" ? raw.kind : "";
+    if (!NAME.test(name) || !FIELD_KINDS.includes(kind)) return null;
+    if (depth > 0 && kind === "slots") return null;
+    const options = Array.isArray(raw.options)
+        ? raw.options.filter((o): o is string => typeof o === "string").slice(0, 40)
+        : undefined;
+    if (kind === "select" && (!options || options.length === 0)) return null;
+
+    let item: ListItem | undefined;
+    let fields: BlockField[] | undefined;
+    if (kind === "list" || kind === "group") {
+        if (depth + 1 > MAX_FIELD_DEPTH) return null;
+        if (kind === "group") {
+            fields = nestedFields(raw.fields, depth) ?? undefined;
+            if (!fields) return null;
+        } else {
+            const stored = isRecord(raw.item) ? raw.item : null;
+            const itemKind = stored && typeof stored.kind === "string" ? stored.kind : "";
+            if (!stored || !(LIST_ITEM_KINDS as readonly string[]).includes(itemKind)) return null;
+            item = {
+                kind: itemKind as ListItem["kind"],
+                label: typeof stored.label === "string" ? stored.label : undefined,
+                min: typeof stored.min === "number" ? stored.min : undefined,
+                max: typeof stored.max === "number" ? stored.max : undefined,
+                bindable: typeof stored.bindable === "boolean" ? stored.bindable : undefined,
+            };
+            if (itemKind === "group") {
+                const inner = nestedFields(stored.fields, depth);
+                if (!inner) return null;
+                item.fields = inner;
+            }
+        }
+    }
+
+    return {
+        name,
+        kind: kind as BlockField["kind"],
+        label: typeof raw.label === "string" ? raw.label : undefined,
+        required: raw.required === true,
+        options,
+        min: typeof raw.min === "number" ? raw.min : undefined,
+        max: typeof raw.max === "number" ? raw.max : undefined,
+        bindable: typeof raw.bindable === "boolean" ? raw.bindable : undefined,
+        ...(item ? { item } : {}),
+        ...(fields ? { fields } : {}),
+    };
+}
+
+function nestedFields(value: unknown, depth: number): BlockField[] | null {
+    const read = fieldsFrom(value, depth + 1);
+    if (!read || read.skipped > 0 || read.fields.length === 0) return null;
+    // A name used twice would make `checkDefinition` throw while compiling, for every page.
+    return new Set(read.fields.map((f) => f.name)).size === read.fields.length ? read.fields : null;
 }
 
 /**

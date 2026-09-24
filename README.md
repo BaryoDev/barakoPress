@@ -408,8 +408,8 @@ row's heading. What goes in a cell is whatever the tenant types, ticks and dashe
 chosen inside the engine would be one more piece of English in the markup.
 
 **Motion primitives** are drawn finished and animate only away from that: `reveal` (a wrapper whose
-content lifts and fades in as it scrolls into view), `rotatingText` (a comma separated list of words,
-one shown at a time), `typingTerminal` (lines typed in sequence, held, then started again) and
+content lifts and fades in as it scrolls into view), `rotatingText` (a list of words in
+`words`, one shown at a time; the older comma separated `items` still reads), `typingTerminal` (lines typed in sequence, held, then started again) and
 `codeSample` (a snippet with its language and one click to select the whole of it). `text` takes a
 `motion` of `countUp`, which counts a plain number up to the figure already written in the markup,
 and `flow` takes a `hueRotate` of `subtle` or `wide`, which turns each cell's hue through the
@@ -470,14 +470,38 @@ allowed. A listed origin gets `Access-Control-Allow-Origin` echoed back on `GET`
 preflight, never `*` and never credentials, and every answer carries `Vary: Origin`. Pass
 `{ consoleOrigins: [...] }` to both factories to set the list in code instead.
 
-Field kinds are `text`, `markdown`, `url`, `number`, `boolean`, `select` (with `options`) and `slots`
-(lists of nested blocks, handed to the component already rendered). The list is editor input, so a
+Field kinds are `text`, `markdown`, `url`, `number`, `boolean`, `select` (with `options`), `slots`
+(lists of nested blocks, handed to the component already rendered), `list` and `group` (below). The list is editor input, so a
 block renders only when its type is registered and every prop passes its field. A present but wrong
 value fails the whole block, a `url` must pass the same check markdown links do, and a component
 never receives a prop its fields did not declare. A page reads at most 400 blocks in total, nested
 ones included, and ten levels deep. The count is spent on every block the binder walks through as
 well as every one that comes out, so a band from the library costs eight or ten of it, and a page
 that goes over loses its tail with nothing said.
+
+**Lists and groups.** A block that needs several of one thing declares a `list`, and a thing made
+of parts declares a `group`, rather than numbered fields or text split in the component:
+
+```ts
+fields: [
+  { name: "stages", kind: "list", min: 2, max: 6, item: { kind: "group", label: "Stage", fields: [
+      { name: "label", kind: "text", required: true },
+      { name: "body", kind: "markdown" },
+  ] } },
+  { name: "tags", kind: "list", max: 8, item: { kind: "text" } },
+  { name: "cta", kind: "group", fields: [{ name: "label", kind: "text" }, { name: "href", kind: "url" }] },
+]
+```
+
+A list's `item` is `text`, `url`, `number` (with its own `min` and `max`) or `group`, and the list's
+own `min` and `max` count its entries. A list with no `max` holds at most 100. A group's `fields`
+are any field kind except `slots`, and lists and groups nest three deep. A stored list checks every
+entry, and one wrong entry, a list too short or too long, or a group missing a required part fails
+the block like any wrong value. An empty list reads as absent. A group hands its component only the
+keys its fields declare.
+
+The schema at `app/api/blocks` is version 3 and publishes `item` and `fields` for these, with
+`bindable` resolved at every level.
 
 `defineBlock<Props, SlotNames>` checks the fields against the props at compile time: every field
 names a prop, its kind suits the prop's type, and a prop that is not optional must be `required`.
@@ -513,6 +537,14 @@ browser call the API. A placeholder that finds no value renders its fallback and
 server log, never a crash. What a binding resolves to is checked against the field again, so a link
 whose stored field holds `javascript:` drops the block; and a resolved value is never rescanned, so
 one field cannot reach another through its own contents.
+
+A `list` or a `group` takes its whole value from one placeholder with nothing around it, no format
+and no fallback: `"tags": "{{item.Tags}}"` fills the list with the array itself, and
+`"cta": "{{item.Link}}"` a group with the object. What it resolves to is data. Each entry is checked
+against the field, an entry that fails is left out rather than failing the block, the list is cut at
+its `max` since the data is not the editor's to shorten, and one that comes up short of `min` drops
+the block. Nothing in it is scanned for placeholders. A list or a group typed out in full binds
+each string inside it like any string prop.
 
 `source` loads one entry or a page of them and puts it in scope. `repeat` renders its content once
 per row. `pager` draws prev and next links for the `source` it sits in, paged by the API. `showIf`
@@ -556,6 +588,17 @@ published image can use it, with no barakoPress release.
       { "type": "slot", "props": { "name": "content" } }
     ]] } }
   ]
+}
+```
+
+A preset's fields may be lists and groups, in the same shape a block declares them, and
+`{{props.x}}` of a list passes the list itself into a primitive's list field:
+
+```json
+{
+  "type": "taglines",
+  "fields": [{ "name": "words", "kind": "list", "max": 8, "item": { "kind": "text" } }],
+  "blocks": [{ "type": "rotatingText", "props": { "words": "{{props.words}}" } }]
 }
 ```
 
