@@ -2,6 +2,9 @@
 
 ## 0.8.0 (unreleased)
 
+- `progressBar` can draw from a count and what is remaining (`remaining`), filled to count over the
+  two added, for a source like a GitHub milestone that answers closed and open issues and no total.
+  `total` wins when both are set, so a page that passes it draws what it drew before (#114).
 - A site theme can draw the page itself. `createPage`, `createHome` and `createViewerPage` take
   `{ bare: true }` and render only the blocks, with no `main`, page padding, title or breadcrumbs,
   and the gap between blocks reads `--bp-gap` before the theme's `space.lg`. Both were inline
