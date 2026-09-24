@@ -18,6 +18,7 @@
 
 import { TONES } from "./blocks/tokens.js";
 import { fontSourcesFrom } from "./fonts.js";
+import { recipesFrom, type StyleRecipe } from "./recipes.js";
 
 export interface ThemeColors {
     /** The page behind the bands. */
@@ -213,6 +214,8 @@ export interface PressTheme {
     tokens?: Readonly<Record<string, string>>;
     /** Tones beside the built-in six, by name. Absent when the site names none. */
     tones?: Readonly<Record<string, ThemeTone>>;
+    /** Style recipes a block names with `recipe` (#131). Absent when the site names none. */
+    recipes?: Readonly<Record<string, StyleRecipe>>;
 }
 
 export type PressThemeInput = {
@@ -226,6 +229,7 @@ export type PressThemeInput = {
     asSupplied?: readonly SuppliedAsset[];
     tokens?: Record<string, string>;
     tones?: Record<string, ThemeTone>;
+    recipes?: Record<string, StyleRecipe>;
 };
 
 export const DEFAULT_THEME: PressTheme = {
@@ -411,6 +415,7 @@ export function resolveTheme(input: PressThemeInput | undefined): PressTheme {
     const colors = mergeColors(DEFAULT_THEME.colors, input?.colors ?? {});
     const tokens = tokensFrom(undefined, input?.tokens);
     const tones = tonesFrom(undefined, input?.tones, { colors, tokens });
+    const recipes = recipesFrom(undefined, input?.recipes);
     return {
         colors,
         fonts: { ...DEFAULT_THEME.fonts, ...input?.fonts },
@@ -422,6 +427,7 @@ export function resolveTheme(input: PressThemeInput | undefined): PressTheme {
         asSupplied: suppliedAssets(input?.asSupplied),
         ...(tokens ? { tokens } : {}),
         ...(tones ? { tones } : {}),
+        ...(recipes ? { recipes } : {}),
     };
 }
 

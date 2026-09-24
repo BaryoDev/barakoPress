@@ -9,6 +9,20 @@
   value, escaped as a CSS string and winning over inline `display`. `separator` splits a text field
   holding several values, and `hideEmptyGroups` hides a group of a grouped source once none of its
   rows is left. A site needs no hide rule of its own. A source with no bar renders as it did.
+- Style recipes, and inline marks in text (#131). `StyleRecipes` in the site settings (or
+  `theme.recipes`) holds named looks, each `{ class, style }`: classes put on the element, and CSS
+  properties to values, where `{name}` in a value is a token and `{colors.accent}`, `{space.lg}` and
+  the like are the theme's own. Every primitive takes `recipe`, and a recipe it names replaces its
+  own inline look on its outer element, keeping only what the block needs to work. Properties are
+  held to a list (box, spacing, typography, colour, border, radius, shadow, grid, flex and the
+  engine's own custom properties), and a value to letters, digits, a few symbols, quoted family
+  names and a short list of functions, so `url()`, `expression()`, `;`, braces and `!important` are
+  refused. A bad property or value is dropped and the rest kept. `text` takes `format: "inline"`,
+  which reads code, emphasis, strong, links and `==an accent==` through the safe renderer
+  (`renderInlineMarkdown`), up to 2000 characters, past which the value is plain text. A block that
+  names no recipe, and a text block left `plain`, render as they did.
+- A markdown link or a `url` field starting `//` or `/\` is refused. A browser reads both as another
+  site, and they were let through as paths.
 - The tenant-aware `/api/blocks` handler takes its request as required, not optional. Next's route
   type check refuses a handler whose request may be absent, so a consumer built with webpack failed
   its type check on `app/api/blocks/route.ts`.
