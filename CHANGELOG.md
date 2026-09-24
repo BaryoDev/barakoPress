@@ -2,6 +2,26 @@
 
 ## 0.8.0 (unreleased)
 
+- The tree screens take a site's styling (#130). Every colour, gap, padding, radius and font size in the sidebar,
+  the switcher, the search box, the pager and the edit link is read as
+  `var(--t-tree-<name>, <today's value>)`, so a tenant's `Tokens` restyle one part at a time and a
+  site that names none draws the same pixels as before. Each part carries a `bp-tree-*` class. A
+  tree's `variant` picks the layouts a token cannot: `switcher` `tabs` or `list`, `sidebar` `plain`
+  or `boxed`, `rail` for an "on this page" column of the item's headings, `pager` `wide` or `halves`;
+  each component takes the same as a `variant` prop. A product takes a `note`. `searchIndex: true`
+  draws the tree's titles and headings into the page and filters them as the reader types.
+  `treeSearchIndex(tree)` builds that index once per tree read, and `itemHeadings` tokenises a body
+  once however many pages list it. New exports: `TreeRail`, `TreeAside`, `treeVariant`,
+  `treeSearchIndex`, `itemHeadings`, `markdownHeadings`. New label: `onThisPage`.
+  Two more variants: `search: "compact"`, one well with a magnifier, the input named for a screen
+  reader and a "/" key hint, its results floating; and `disclosure: "closed"`, the sidebar closed on a
+  phone under a control naming the page, with no script. A tree's `icons` may point both glyphs at a
+  site's own sprite. Every label paragraph carries `bp-label`, `searchEmpty` may say `{query}`, and
+  there is a `closeContents` label. The index keeps every page's title past its 2000 entry limit and
+  drops headings instead, saying so once; an entry is a plain link styled from one stylesheet; the
+  results are put away when focus or a press goes elsewhere; and a box with no `searchPath` has no
+  form, so Enter never reloads the page.
+
 - A `filterBar` block inside a `source` (#129) draws one button per distinct value of a field among
   the source's rows, in the order first seen or as `order` says, after an "all" button. The buttons
   are toggles with `aria-pressed`, not a tablist. The rows stay server-rendered: the binder marks

@@ -22,9 +22,9 @@ import {
     searchCollection,
     type Item,
 } from "../collections.js";
-import { collectionTree, treeNeighbours, type CollectionTreeResult } from "../tree.js";
+import { collectionTree, itemHeadings, treeNeighbours, treeSearchIndex, type CollectionTreeResult } from "../tree.js";
 import { ArticleView, type ArticleRelated } from "./article-view.js";
-import { EditLink, SearchBox, TreePager, TreeShell, TreeSidebar, TreeSwitcher } from "./tree.js";
+import { EditLink, SearchBox, TreeAside, TreePager, TreeRail, TreeShell, treeVariant } from "./tree.js";
 import { CmsError } from "../delivery.js";
 import { listRelatedItems } from "../related.js";
 import { readingMinutes } from "../reading-time.js";
@@ -186,25 +186,36 @@ export function ItemView(props: ItemViewProps) {
     if (!col?.tree || !tree) return body;
 
     const { previous, next } = treeNeighbours(tree.order, item.slug);
-    const route = col.route ?? "";
+    const variant = treeVariant(config, item.collection);
     return (
         <TreeShell
             config={config}
+            variant={variant.sidebar}
+            rail={variant.rail ? <TreeRail config={config} headings={itemHeadings(item)} /> : undefined}
             aside={
-                <>
-                    <TreeSwitcher config={config} collection={item.collection} current={item.product} />
-                    {/* Only where the site named a route that reads the query. A box submitting
-                        somewhere that ignores `q` is a control that looks like it works. */}
-                    {col.tree.searchPath && (
-                        <SearchBox
-                            config={config}
-                            action={col.tree.searchPath}
-                            param="q"
-                            id={`bp-search-${item.collection}`}
-                        />
-                    )}
-                    <TreeSidebar config={config} tree={tree} current={item.slug} />
-                </>
+                <TreeAside
+                    config={config}
+                    collection={item.collection}
+                    tree={tree}
+                    current={item.slug}
+                    product={item.product}
+                    /* Only where the site named a route that reads the query, or where the box
+                       answers in the page. A box submitting somewhere that ignores `q` is a control
+                       that looks like it works. */
+                    search={
+                        (col.tree.searchPath || col.tree.searchIndex) && (
+                            <SearchBox
+                                config={config}
+                                action={col.tree.searchPath}
+                                param="q"
+                                index={col.tree.searchIndex ? treeSearchIndex(tree) : undefined}
+                                variant={col.tree.variant?.search}
+                                icon={col.tree.icons?.search}
+                                id={`bp-search-${item.collection}`}
+                            />
+                        )
+                    }
+                />
             }
         >
             {body}
@@ -422,16 +433,30 @@ export async function CollectionIndexView({
     return (
         <TreeShell
             config={config}
+            variant={treeVariant(config, collection).sidebar}
             aside={
-                <>
-                    <TreeSwitcher config={config} collection={collection} />
-                    {/* This index reads the query only when its route file said so, so the box is
-                        drawn only then, or where the tree names somewhere else that does. */}
-                    {searchAt !== undefined && (
-                        <SearchBox config={config} action={searchAt} param="q" query={query} id={`bp-search-${collection}`} />
-                    )}
-                    <TreeSidebar config={config} tree={tree} />
-                </>
+                <TreeAside
+                    config={config}
+                    collection={collection}
+                    tree={tree}
+                    /* This index reads the query only when its route file said so, so the box is
+                       drawn only then, or where the tree names somewhere else that does, or where
+                       the box answers in the page. */
+                    search={
+                        (searchAt !== undefined || col.tree.searchIndex) && (
+                            <SearchBox
+                                config={config}
+                                action={searchAt}
+                                param="q"
+                                query={query}
+                                index={col.tree.searchIndex ? treeSearchIndex(tree) : undefined}
+                                variant={col.tree.variant?.search}
+                                icon={col.tree.icons?.search}
+                                id={`bp-search-${collection}`}
+                            />
+                        )
+                    }
+                />
             }
         >
             {list}

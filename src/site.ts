@@ -26,8 +26,15 @@ import {
     type SocialLink,
     type TopBar,
     type TreeProduct,
+    type TreeIcons,
+    type TreeVariant,
     pinnedTenant,
     TREE_LIMIT,
+    TREE_DISCLOSURES,
+    TREE_PAGERS,
+    TREE_SEARCHES,
+    TREE_SIDEBARS,
+    TREE_SWITCHERS,
 } from "./config.js";
 import { ACTIVE_ON_MAX } from "./current-path.js";
 import { readEnv } from "./env.js";
@@ -832,7 +839,8 @@ function treeFrom(v: unknown): CollectionTree | undefined {
             const key = short(p?.key, 64);
             const label = short(p?.label, 80);
             const href = siteHref(p?.href);
-            return key && label && href ? [{ key, label, href }] : [];
+            const note = short(p?.note, 40);
+            return key && label && href ? [{ key, label, href, ...(note ? { note } : {}) }] : [];
         });
     if (products && products.length > 0) tree.products = products;
 
@@ -842,7 +850,49 @@ function treeFrom(v: unknown): CollectionTree | undefined {
     const limit = t.limit;
     if (typeof limit === "number" && Number.isInteger(limit) && limit >= 1 && limit <= TREE_LIMIT) tree.limit = limit;
 
+    const variant = treeVariantFrom(t.variant);
+    if (variant) tree.variant = variant;
+    if (t.searchIndex === true) tree.searchIndex = true;
+    const icons = treeIconsFrom(t.icons);
+    if (icons) tree.icons = icons;
+
     return Object.keys(tree).length > 0 ? tree : undefined;
+}
+
+/** A reference to a symbol on the page, and nothing that could leave it. */
+const SYMBOL_REF = /^#[A-Za-z][A-Za-z0-9_-]{0,62}$/;
+
+function treeIconsFrom(v: unknown): TreeIcons | undefined {
+    const raw = record(v);
+    if (!raw) return undefined;
+    const icons: TreeIcons = {};
+    for (const key of ["search", "chevron"] as const) {
+        const ref = str(raw[key]);
+        if (ref && SYMBOL_REF.test(ref)) icons[key] = ref;
+    }
+    return Object.keys(icons).length > 0 ? icons : undefined;
+}
+
+/** A layout choice keeps only the names the engine draws. Anything else is today's layout for that part. */
+function treeVariantFrom(v: unknown): TreeVariant | undefined {
+    const raw = record(v);
+    if (!raw) return undefined;
+    const pick = <T extends string>(value: unknown, names: readonly T[]): T | undefined =>
+        typeof value === "string" && (names as readonly string[]).includes(value) ? (value as T) : undefined;
+    const switcher = pick(raw.switcher, TREE_SWITCHERS);
+    const sidebar = pick(raw.sidebar, TREE_SIDEBARS);
+    const pager = pick(raw.pager, TREE_PAGERS);
+    const search = pick(raw.search, TREE_SEARCHES);
+    const disclosure = pick(raw.disclosure, TREE_DISCLOSURES);
+    const variant: TreeVariant = {
+        ...(switcher ? { switcher } : {}),
+        ...(sidebar ? { sidebar } : {}),
+        ...(raw.rail === true ? { rail: true } : {}),
+        ...(pager ? { pager } : {}),
+        ...(search ? { search } : {}),
+        ...(disclosure ? { disclosure } : {}),
+    };
+    return Object.keys(variant).length > 0 ? variant : undefined;
 }
 
 function collectionsFrom(base: Record<string, CollectionConfig>, v: unknown): Record<string, CollectionConfig> {

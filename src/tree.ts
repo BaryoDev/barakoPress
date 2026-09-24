@@ -1,6 +1,8 @@
 import { TREE_LIMIT, type CollectionTree, type PressConfig, type TreeProduct } from "./config.js";
 import { collectionOf, listAllCollection, type Item } from "./collections.js";
+import { createHash } from "node:crypto";
 import { siteHref } from "./site.js";
+import { markdownHeadings, type MarkdownHeading } from "./markdown.js";
 
 /*
  * A collection read as a tree (#23).
@@ -223,7 +225,7 @@ export function treeProducts(
     return products.flatMap((p) => {
         const href = siteHref(p.href);
         if (!p.key || !p.label || !href) return [];
-        return [{ key: p.key, label: p.label, href, current: p.key === current }];
+        return [{ key: p.key, label: p.label, href, ...(p.note ? { note: p.note } : {}), current: p.key === current }];
     });
 }
 
@@ -247,4 +249,119 @@ export function editHref(config: PressConfig, item: Pick<Item, "collection" | "s
     let end = base.length;
     while (end > 0 && base.charCodeAt(end - 1) === 47) end--;
     return siteHref(`${base.slice(0, end)}/${trimSlashes(tail)}`);
+}
+
+/*
+ * The headings of a body, lexed once per distinct body and kept.
+ *
+ * Every page of a manual lists every other page's headings in its search index, so without this a
+ * build of a manual of n pages tokenises n bodies n times. Keyed by a digest of the body rather than
+ * the body, so what is held is the headings and a short key, never the text: a request-time site
+ * holds every tenant's manuals in one process. An edited page is a new key and the old one ages out.
+ * Bounded by count, and each entry by the headings it keeps, so the whole is bounded too.
+ */
+const HEADINGS_KEPT = 2000;
+/** The most headings kept, and indexed, for one body. */
+export const HEADINGS_PER_BODY = 100;
+const headingsKept = new Map<string, readonly MarkdownHeading[]>();
+
+function digest(body: string): string {
+    return createHash("sha256").update(body).digest("base64");
+}
+
+/** An item's second level headings, with the ids its rendered body gives them. */
+export function itemHeadings(item: Pick<Item, "body">): readonly MarkdownHeading[] {
+    const body = item.body;
+    if (!body) return [];
+    const key = digest(body);
+    const kept = headingsKept.get(key);
+    if (kept) return kept;
+    const found = markdownHeadings(body, 2)
+        .slice(0, HEADINGS_PER_BODY)
+        .map((h) => ({ id: h.id.slice(0, 200), text: h.text.slice(0, 200) }));
+    if (headingsKept.size >= HEADINGS_KEPT) {
+        const oldest = headingsKept.keys().next().value;
+        if (oldest !== undefined) headingsKept.delete(oldest);
+    }
+    headingsKept.set(key, found);
+    return found;
+}
+
+/** For tests: how many bodies' headings are kept, and the characters held for them, keys included. */
+export function keptHeadingsSize(): { entries: number; chars: number } {
+    let chars = 0;
+    for (const [key, list] of headingsKept) {
+        chars += key.length;
+        for (const h of list) chars += h.id.length + h.text.length;
+    }
+    return { entries: headingsKept.size, chars };
+}
+
+export interface TreeSearchEntry {
+    /** The page's title. */
+    title: string;
+    /** The heading this entry points into, when it is one and not the page itself. */
+    heading?: string;
+    /** The page, and the heading's anchor when there is one. */
+    href: string;
+}
+
+/** The most entries an index holds, pages and headings together, since every one is markup in the page. */
+export const TREE_INDEX_LIMIT = 2000;
+
+const indexes = new WeakMap<CollectionTreeResult, readonly TreeSearchEntry[]>();
+const warned = new Set<string>();
+
+/**
+ * What the search box looks through in the page: every page with a route, each followed by its
+ * headings, in reading order.
+ *
+ * Built once per tree read and handed to everything drawn from that read, so the box on an item page
+ * and a search block over the same tree share one index rather than each building its own. A page's
+ * headings come from `itemHeadings`, so a body is lexed once across reads as well, not once per page
+ * that lists it.
+ *
+ * Past `TREE_INDEX_LIMIT` it is the headings that go, never a page: every page's title is counted
+ * first, and headings fill what is left in reading order. A manual that loses headings to the limit
+ * says so once in the server log.
+ */
+export function treeSearchIndex(tree: CollectionTreeResult): readonly TreeSearchEntry[] {
+    const kept = indexes.get(tree);
+    if (kept) return kept;
+
+    const pages: TreeNode[] = [];
+    const walk = (nodes: TreeNode[]) => {
+        for (const node of nodes) {
+            if (node.href) pages.push(node);
+            walk(node.children);
+        }
+    };
+    for (const section of tree.sections) walk(section.nodes);
+
+    const listed = pages.slice(0, TREE_INDEX_LIMIT);
+    let room = TREE_INDEX_LIMIT - listed.length;
+    let dropped = pages.length - listed.length;
+    const out: TreeSearchEntry[] = [];
+    for (const node of listed) {
+        out.push({ title: node.item.title, href: node.href as string });
+        for (const h of itemHeadings(node.item)) {
+            if (room <= 0) {
+                dropped++;
+                continue;
+            }
+            room--;
+            out.push({ title: node.item.title, heading: h.text, href: `${node.href}#${h.id}` });
+        }
+    }
+
+    if (dropped > 0) {
+        const collection = pages[0]?.item.collection ?? "";
+        const message = `tree: the search index of "${collection}" holds ${TREE_INDEX_LIMIT} entries, the most it may, so ${dropped} headings or pages past that cannot be found by it`;
+        if (!warned.has(message)) {
+            warned.add(message);
+            console.warn(message);
+        }
+    }
+    indexes.set(tree, out);
+    return out;
 }

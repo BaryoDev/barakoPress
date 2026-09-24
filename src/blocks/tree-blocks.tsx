@@ -1,4 +1,4 @@
-import type { PressConfig } from "../config.js";
+import { TREE_SWITCHERS, type PressConfig } from "../config.js";
 import { collectionOf, searchCollection } from "../collections.js";
 import { collectionTree } from "../tree.js";
 import { SearchBox, TreeSidebar, TreeSwitcher } from "../screens/tree.js";
@@ -38,22 +38,29 @@ function docsSidebar(config: PressConfig, holding: boolean): BlockDefinition {
             if (holding) return null;
             const tree = await collectionTree(config, props.collection, { product: props.product });
             if (tree.sections.length === 0) return null;
-            return <TreeSidebar config={config} tree={tree} current={props.current} />;
+            return <TreeSidebar config={config} tree={tree} current={props.current} collection={props.collection} />;
         },
     });
     return boundToConfig(definition, docsSidebar);
 }
 
-type SwitcherProps = { collection: string; current?: string };
+type SwitcherProps = { collection: string; current?: string; variant?: "tabs" | "list" };
 
 function docsSwitcher(config: PressConfig, holding: boolean): BlockDefinition {
     const definition = defineBlock<SwitcherProps>({
         type: "docsSwitcher",
         label: "Product switcher",
         layer: "block",
-        fields: [collectionField(config), { name: "current", kind: "text", label: "The product being read" }],
+        fields: [
+            collectionField(config),
+            { name: "current", kind: "text", label: "The product being read" },
+            // Unset, the collection's own `variant.switcher`, so a block matches the item pages.
+            { name: "variant", kind: "select", label: "Layout", options: [...TREE_SWITCHERS] },
+        ],
         component: ({ props }) =>
-            holding ? null : <TreeSwitcher config={config} collection={props.collection} current={props.current} />,
+            holding ? null : (
+                <TreeSwitcher config={config} collection={props.collection} current={props.current} variant={props.variant} />
+            ),
     });
     return boundToConfig(definition, docsSwitcher);
 }
