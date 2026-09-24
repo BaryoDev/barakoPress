@@ -69,7 +69,7 @@ export function collectionOf(config: PressConfig, key: string): CollectionConfig
     return Object.hasOwn(config.collections, key) ? config.collections[key] : undefined;
 }
 
-function names(n: FieldNames | undefined): string[] {
+export function names(n: FieldNames | undefined): string[] {
     if (n === undefined) return [];
     return Array.isArray(n) ? n : [n];
 }

@@ -561,7 +561,10 @@ optional format and fallback:
 ```
 
 Scopes are `site` (the tenant's settings and resolved identity), `page` (the entry the page
-renders), `item` (the row inside a `source` or a `repeat`) and `query` (URL parameters). `viewer`
+renders), `item` (the row inside a `source` or a `repeat`) and `query` (URL parameters). An item
+reads its entry's own fields by name, with the collection's roles (`Title`, `Summary`, `Body`,
+`Date` and the rest) laid over them only where the collection's `fields` maps that role, so an
+unmapped `Body` is still the entry's own `Body`. `viewer`
 arrives with #7. Formats are `text`, `date`, `datetime`, `time`, `money`, `number`, `upper` and
 `lower`; `money` uses the tenant's `Currency` setting, or a plain amount when it has none.
 
