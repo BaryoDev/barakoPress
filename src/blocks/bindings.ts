@@ -159,6 +159,21 @@ export function readBindings(value: string): Binding[] {
     return found;
 }
 
+/**
+ * The binding a template is made of, when the whole of it is one plain placeholder: no text around
+ * it, no format and no fallback. That is the form a `list` or a `group` takes a value in, because
+ * what it stands for is an array or an object and not text, so a format or a fallback has nothing to
+ * apply to.
+ */
+export function wholeBinding(value: string): Binding | null {
+    const found = readBindings(value);
+    if (found.length !== 1) return null;
+    const [binding] = found;
+    // Checked on the raw span rather than the parsed format, which reads `| text` as no format.
+    if (value.trim() !== binding.raw || /[|?]/.test(binding.raw)) return null;
+    return binding;
+}
+
 /** A value read out of a scope, before a format sees it. */
 export type BindingValue = unknown;
 
@@ -349,4 +364,28 @@ export async function bindText(
     // span that is not a binding has nothing in the map and stays exactly as it was typed.
     const text = template.replace(PLACEHOLDER, (raw) => resolved.get(raw) ?? raw);
     return { text, bound: true, missing };
+}
+
+/**
+ * A whole-value binding, resolved to what it names rather than to text: the array behind
+ * `{{item.Tags}}`, the object behind `{{item.Author}}`. Undefined when there is nothing there, which
+ * is reported the way a text binding's miss is.
+ *
+ * What comes back is data. The caller checks it against its field and never scans a string inside
+ * it for placeholders.
+ */
+export async function bindValue(template: string, source: BindingSource, where?: BindingWhere): Promise<unknown> {
+    const binding = wholeBinding(template);
+    if (!binding) return undefined;
+    const report = (reason: BindingProblem["reason"]): undefined => {
+        const problem: BindingProblem = { binding: binding.raw, reason, ...where };
+        source.options.onProblem?.(problem);
+        return undefined;
+    };
+    if (!isScope(binding.scope)) return report("unknown scope");
+    const scope = await source.read(binding.scope);
+    if (scope === null) return report("unbound scope");
+    const value = walk(scope, binding.path);
+    if (value === undefined || value === null || value === "") return report("no value");
+    return value;
 }
