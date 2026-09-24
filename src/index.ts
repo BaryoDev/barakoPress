@@ -217,6 +217,7 @@ export {
     treeProducts,
     treeSearchIndex,
     TREE_INDEX_LIMIT,
+    HEADINGS_PER_BODY,
     TREE_MAX_DEPTH,
 } from "./tree.js";
 export type {

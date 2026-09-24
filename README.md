@@ -346,7 +346,8 @@ takes a `variant`, `tabs` or `list`, and follows the collection's own when it is
 
 **Styling the tree.** A site restyles the tree screens without drawing them itself, three ways.
 
-*Tokens.* Every colour, gap, radius and size in them is read as `var(--t-tree-<name>, <today's value>)`.
+*Tokens.* Every colour, gap, padding, margin, radius, font size, weight and line height in them is read as
+`var(--t-tree-<name>, <today's value>)`. Letter spacing, and the flex bases that decide when a row wraps, are fixed.
 A token named in the tenant's `Tokens` setting (or `theme.tokens`) lands on the root as `--t-<name>`,
 so `"Tokens": { "tree-link-current-bg": "#FDEBD3" }` restyles the current page's row and nothing else.
 A token in the settings is held to a colour, a length or a font stack; a weight or a unitless line
@@ -356,6 +357,7 @@ A site that names none draws what it drew before, pixel for pixel.
 | Token | Default | What |
 | --- | --- | --- |
 | `tree-gap` | `space.lg` | Between the sidebar and the page, `plain` |
+| `tree-shell-width`, `tree-shell-pad-y`, `tree-shell-pad-x` | `layout.wide`, `space.lg`, `layout.gutter` | The shell's width and padding, `plain` |
 | `tree-edge` | `hairline` | The rules between the columns and above them, `boxed` |
 | `tree-min-height` | `0px` | The shell's least height, `boxed` |
 | `tree-sidebar-width` | `280px` | The sidebar column (its most, `plain`; its width, `boxed`) |
@@ -364,7 +366,7 @@ A site that names none draws what it drew before, pixel for pixel.
 | `tree-aside-gap` | `space.md` | Between the switcher, the search box and the sidebar |
 | `tree-section-gap` | `space.md` | Between sections, and between the list switcher and the sections |
 | `tree-label-gap`, `tree-label-size`, `tree-label-ink` | `space.xs`, `text.meta`, `muted` | Section labels, the list switcher's label and the rail's heading. The size is also the search box's label and the phone control's |
-| `tree-summary-bg`, `tree-summary-edge`, `tree-summary-ink`, `tree-summary-radius`, `tree-summary-space` | `surface`, `hairline`, `muted`, `radii.control`, `space.sm` | The sidebar's control on a phone, and the space under it while open |
+| `tree-summary-bg`, `tree-summary-edge`, `tree-summary-ink`, `tree-summary-radius`, `tree-summary-space`, `tree-summary-pad-y`, `tree-summary-pad-x` | `surface`, `hairline`, `muted`, `radii.control`, `space.sm`, `10px`, `12px` | The sidebar's control on a phone, and the space under it while open |
 | `tree-summary-pad-y`, `tree-summary-pad-x`, `tree-summary-min-height`, `tree-summary-gap`, `tree-summary-line-gap` | `10px`, `12px`, `0px`, `space.sm`, `3px` | The closed disclosure's control |
 | `tree-summary-title-size`, `tree-summary-title-weight`, `tree-summary-title-ink` | `text.small`, `700`, `ink` | The page it names |
 | `tree-summary-action-size`, `tree-summary-action-weight`, `tree-summary-action-ink`, `tree-summary-action-gap`, `tree-summary-icon-size` | `text.small`, `600`, `accentInk`, `6px`, `13px` | Its "Contents" and "Close", and the chevron |
@@ -377,7 +379,7 @@ A site that names none draws what it drew before, pixel for pixel.
 | `tree-tab-bg`, `tree-tab-edge`, `tree-tab-ink`, `tree-tab-current-bg`, `tree-tab-current-ink` | `surface`, `hairline`, `secondaryInk`, `accent`, `inverseInk` | The tabs, and the current one |
 | `tree-search-bg`, `tree-search-edge`, `tree-search-ink`, `tree-search-radius`, `tree-search-size`, `tree-search-pad-y`, `tree-search-pad-x` | `surface`, `hairline`, `ink`, `radii.control`, `text.small`, `9px`, `12px` | The search box |
 | `tree-search-label-gap`, `tree-search-label-ink` | `space.xs`, `muted` | Its label |
-| `tree-search-results-gap`, `tree-search-hit-gap`, `tree-search-hit-radius`, `tree-search-hit-ink`, `tree-search-hit-weight`, `tree-search-empty-ink` | `space.sm`, `2px`, `radii.control`, `ink`, `600`, `muted` | Its results |
+| `tree-search-results-gap`, `tree-search-hit-gap`, `tree-search-hit-radius`, `tree-search-hit-ink`, `tree-search-hit-weight`, `tree-search-empty-ink`, `tree-search-hit-pad-y`, `tree-search-hit-pad-x` | `space.sm`, `2px`, `radii.control`, `ink`, `600`, `muted`, `7px`, `10px` | Its results |
 | `tree-search-height`, `tree-search-gap`, `tree-search-icon-size` | `36px`, `9px`, `13px` | The compact well. It also reads `tree-search-bg` (`pageBg` here), `tree-search-radius`, `tree-search-pad-x`, `tree-search-size` (`text.meta` here), `tree-search-ink` and, for the well's own ink, `tree-search-label-ink` |
 | `tree-search-key-pad-y`, `tree-search-key-pad-x`, `tree-search-key-radius`, `tree-search-key-bg`, `tree-search-key-edge`, `tree-search-key-size`, `tree-search-key-weight` | `2px`, `6px`, `6px`, `surface`, `hairline`, `text.meta`, `700` | The "/" key hint |
 | `tree-search-panel-gap`, `tree-search-panel-pad`, `tree-search-panel-bg`, `tree-search-panel-edge`, `tree-search-panel-radius`, `tree-search-panel-shadow` | `6px`, `6px`, `surface`, `hairline`, `radii.panel`, `0 10px 24px -12px rgba(16,18,35,.25)` | The compact box's floating results |
@@ -386,7 +388,7 @@ A site that names none draws what it drew before, pixel for pixel.
 | `tree-rail-link-pad-y`, `tree-rail-link-pad-x`, `tree-rail-link-size`, `tree-rail-link-weight`, `tree-rail-link-ink`, `tree-rail-link-edge` | `6px`, `10px`, `text.small`, `inherit`, `secondaryInk`, `hairline` | A heading in the rail |
 | `tree-pager-top`, `tree-pager-gap`, `tree-pager-pad-y`, `tree-pager-pad-x`, `tree-pager-radius`, `tree-pager-bg`, `tree-pager-edge` | `space.lg`, `space.sm`, `16px`, `18px`, `radii.panel`, `surface`, `hairline` | Previous and next |
 | `tree-pager-label-size`, `tree-pager-label-ink`, `tree-pager-title-gap`, `tree-pager-title-size`, `tree-pager-title-weight`, `tree-pager-title-ink` | `text.meta`, `muted`, `space.xs`, `text.small`, `600`, `ink` | Their words |
-| `tree-edit-top`, `tree-edit-ink` | `space.md`, `muted` | "Edit this page" |
+| `tree-edit-top`, `tree-edit-ink`, `tree-edit-size` | `space.md`, `muted`, `text.meta` | "Edit this page" |
 
 *Variants.* What a token cannot say, because it changes which elements are drawn or where they sit, is
 the tree's `variant`, and a `variant` prop on the component:
@@ -413,18 +415,21 @@ covers (a hover, a transition): `bp-tree-shell` (and `bp-tree-shell-boxed`), `bp
 `bp-tree-link`, `bp-tree-link-current`, `bp-tree-switcher` (with `bp-tree-switcher-tabs` or
 `bp-tree-switcher-list`), `bp-tree-switcher-label`, `bp-tree-tab`, `bp-tree-tab-current`,
 `bp-tree-product`, `bp-tree-product-note`, `bp-tree-search`, `bp-tree-search-label`,
-`bp-tree-search-input`, `bp-tree-search-results`, `bp-tree-search-index`, `bp-tree-search-hit`,
-`bp-tree-search-hit-title`, `bp-tree-search-hit-page`, `bp-tree-search-empty`, `bp-tree-rail-nav`,
+`bp-tree-search-input`, `bp-tree-search-results`, `bp-tree-search-index`, `bp-tree-search-hit` (a
+result a route answered with), `bp-tree-search-empty`, `bp-tree-rail-nav`,
 `bp-tree-rail-label`, `bp-tree-rail-link`, `bp-tree-pager`, `bp-tree-pager-link`,
 `bp-tree-pager-prev`, `bp-tree-pager-next`, `bp-tree-pager-label`, `bp-tree-pager-title`,
 `bp-tree-pager-empty`, `bp-tree-edit`, and for the variants `bp-tree-search-compact`,
-`bp-tree-search-box`, `bp-tree-search-icon`, `bp-tree-search-key`, `bp-tree-search-entry` (a result's
-`li`), `bp-tree-nav-closed`, `bp-tree-summary-closed`, `bp-tree-summary-group`,
+`bp-tree-search-box`, `bp-tree-search-icon`, `bp-tree-search-key`, `bp-tree-nav-closed`, `bp-tree-summary-closed`, `bp-tree-summary-group`,
 `bp-tree-summary-title`, `bp-tree-summary-action`, `bp-tree-summary-show`, `bp-tree-summary-hide` and
 `bp-tree-summary-chevron`. Every label paragraph (a section's, the list switcher's, the pager's, the
 rail's) also carries `bp-label`, so a rule aimed at running text can skip them all with
-`:not(.bp-label)`. The styles are inline, so a stylesheet rule that sets a property the part already
-sets needs `!important`; a token does not.
+`:not(.bp-label)`. An index entry carries no class of its own, to stay small: it is
+`.bp-tree-search-index li > a`, holding a `span` with the words that matched and, for a heading, a
+second `span` naming its page. The styles are inline, so a stylesheet rule that sets a property the
+part already sets needs `!important`; a token does not. The index's entries are the exception: they
+are styled from one stylesheet scoped to their box, so an ordinary rule of the same or higher
+specificity reaches them.
 
 **The search index.** `treeSearchIndex(tree)` lists every page with a route and then its second level
 headings, in reading order, each heading linked to its anchor. It is built once per tree read and
@@ -432,8 +437,22 @@ shared by everything drawn from that read, and a body's headings (`itemHeadings(
 `markdownHeadings` in `barakopress/markdown`) are tokenised once per distinct body and kept, so a static
 build of a manual of n pages lexes each body once rather than n times. With `searchIndex`, the box
 draws the index into the page hidden and its client code shows the entries holding every word typed,
-eight at a time; the index is markup rather than props, so no entry is shipped twice. At most 2000
-entries (`TREE_INDEX_LIMIT`) go into a page.
+eight at a time.
+
+What that costs: an entry is a list item, a plain link and its words, styled from one stylesheet, so
+it is its href and its text plus about 50 bytes. The index is part of the server render, so Next
+carries it in the page's payload as well as its HTML, like any other server markup; it is never also
+handed to the client component as props. At most 2000 entries (`TREE_INDEX_LIMIT`) go into a page.
+Past that it is headings that are left out, never a page: every page's title is counted first and
+headings fill the rest in reading order, and the server log says once which manual lost how many.
+A body gives at most 100 headings (`HEADINGS_PER_BODY`), and what is kept between reads is those
+headings under a digest of the body, never the body.
+
+The results are put away, with what was typed kept, when focus leaves the box, when something outside
+it is pressed, and on Escape; they come back when the box has focus again. Enter goes to the first
+match. With no `searchPath` there is no form at all, so Enter can never reload the page with the
+query: with script the box answers in the page, and a reader with no script gets a field that does
+nothing, not one that reloads the page and empties itself.
 
 ### Pages and navigation from the Pages module
 

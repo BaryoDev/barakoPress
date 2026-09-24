@@ -21,7 +21,7 @@ vi.mock("next/link", () => ({
 
 const { defineConfig } = await import("./config.js");
 const { markdownHeadings, renderMarkdown } = await import("./markdown.js");
-const { itemHeadings, treeSearchIndex } = await import("./tree.js");
+const { itemHeadings, keptHeadingsSize, treeSearchIndex, TREE_INDEX_LIMIT } = await import("./tree.js");
 const { EditLink, SearchBox, TreePager, TreeShell, TreeSidebar, TreeSwitcher, TreeAside, TreeRail } = await import(
     "./screens/tree.js"
 );
@@ -129,6 +129,28 @@ describe("the tree's parts, as a site's stylesheet and tokens see them", () => {
         expect(html).toContain(`var(--t-tree-link-radius, ${theme.radii.control})`);
         expect(html).toContain(`var(--t-tree-section-gap, ${theme.space.md})`);
         expect(html).toContain(`var(--t-tree-tab-current-bg, ${theme.colors.accent})`);
+    });
+
+    it("read every padding, margin, font size, weight and line height through a tree token as well", () => {
+        const config = configWith({ variant: { disclosure: "closed" } });
+        const t = tree();
+        const html = [
+            all(),
+            all(configWith(), { sidebar: "boxed", rail: true, pager: "halves" }),
+            renderToStaticMarkup(<TreeAside config={config} collection="guide" tree={t} current="keys" product="first" />),
+            renderToStaticMarkup(
+                <SearchBox config={config} param="q" id="c" index={treeSearchIndex(t)} variant="compact" query="x" results={[{ title: "No link" }]} />,
+            ),
+            renderToStaticMarkup(<SearchBox config={config} param="q" id="b" index={treeSearchIndex(t)} />),
+            renderToStaticMarkup(<SearchBox config={config} action="/guide" param="q" id="d" query="x" results={[{ title: "No link" }]} />),
+        ].join("");
+        // Inline styles, and the one stylesheet an index's entries share.
+        const sheets = [...html.matchAll(/<style>([^<]*)<\/style>/g)].flatMap((m) => [...m[1].matchAll(/\{([^{}]*)\}/g)].map((r) => r[1]));
+        const declarations = [...styles(html), ...sheets].flatMap((st) => untokened(st).split(";"));
+        const sized = declarations.filter((d) => /^(padding|margin|font-size|font-weight|line-height|gap|border-radius)[a-z-]*:/.test(d));
+        expect(sized.length).toBeGreaterThan(60);
+        const fixed = sized.filter((d) => !d.includes("TOKEN") && !/:(0|0 auto)(!important)?$/.test(d));
+        expect(fixed).toEqual([]);
     });
 
     it("carries a class on each part, so a stylesheet can reach what a token does not", () => {
@@ -252,7 +274,7 @@ describe("the compact search box", () => {
         expect(html).toMatch(/<span aria-hidden="true" class="bp-tree-search-key"[^>]*>\/<\/span>/);
         expect(html).toMatch(/<svg viewBox="0 0 24 24" aria-hidden="true" class="bp-tree-search-icon"/);
         // The results float over what follows.
-        expect(html).toMatch(/class="bp-tree-search-results bp-tree-search-index" style="position:absolute;z-index:10;inset-inline:0/);
+        expect(html).toMatch(/class="bp-tree-search-results bp-tree-search-index bp-si-c" style="position:absolute;z-index:10;inset-inline:0/);
     });
 
     it("draws the site's own glyph when it names a symbol on the page", () => {
@@ -300,14 +322,13 @@ describe("the closed phone disclosure", () => {
 });
 
 describe("a label a site's stylesheet may need to skip", () => {
-    it("carries bp-label on every label paragraph, and the lists' items carry their own class", () => {
+    it("carries bp-label on every label paragraph", () => {
         const html = all(configWith(), { rail: true });
         for (const name of ["bp-tree-section-label", "bp-tree-pager-label", "bp-tree-rail-label"]) {
             expect(html, name).toContain(`class="${name} bp-label"`);
         }
         const paragraphs = [...html.matchAll(/<p class="([^"]*)"/g)].map((m) => m[1]);
         expect(paragraphs.filter((c) => /label/.test(c) && !c.includes("bp-label"))).toEqual([]);
-        expect(html).toContain('<li class="bp-tree-search-entry">');
     });
 });
 
@@ -346,10 +367,11 @@ describe("the search index", () => {
         const html = renderToStaticMarkup(<ItemView config={config} item={item("keys", "Keys")} tree={tree()} />);
 
         expect(html).toContain('role="search"');
-        // No route reads the query here, so the form names none rather than one that ignores it.
-        expect(html).not.toMatch(/<form[^>]*action=/);
-        expect(html).toMatch(/<div aria-live="polite" hidden="" class="bp-tree-search-results bp-tree-search-index"[^>]*data-bp-search-index="8"/);
-        expect(html).toMatch(/<li hidden="" class="bp-tree-search-entry" data-bp-search-text="before you start hello"><a href="\/guide\/hello#before-you-start"/);
+        // No route reads the query here, so there is no form to submit and reload the page with it.
+        expect(html).not.toContain("<form");
+        expect(html).toContain('<div role="search">');
+        expect(html).toMatch(/<div aria-live="polite" hidden="" class="bp-tree-search-results bp-tree-search-index bp-si-[^"]*"[^>]*data-bp-search-index="8"/);
+        expect(html).toContain('<li><a href="/guide/hello#before-you-start"><span>Before you start</span><span> · Hello</span></a></li>');
         expect(html).toContain(`data-bp-search-empty="${config.labels.searchEmpty}"`);
     });
 
@@ -360,7 +382,77 @@ describe("the search index", () => {
     });
 });
 
+describe("a manual bigger than the index", () => {
+    /** A manual of `pages` pages, each with `headings` second level headings. */
+    function manual(pages: number, headings: number, tag: string): Tree {
+        const nodes = Array.from({ length: pages }, (_, p) =>
+            node(`${tag}-${p}`, `${tag} page ${p}`, Array.from({ length: headings }, (_, k) => `## ${tag} ${p} part ${k}\n\nText.`).join("\n\n")),
+        );
+        return { sections: [{ name: "All", nodes }], order: [], truncated: false };
+    }
+
+    it("keeps every page and drops headings past the limit, and says so once", () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+        const index = treeSearchIndex(manual(400, 6, "big"));
+
+        expect(index).toHaveLength(TREE_INDEX_LIMIT);
+        const titles = index.filter((e) => e.heading === undefined);
+        expect(titles).toHaveLength(400);
+        expect(titles.at(-1)).toEqual({ title: "big page 399", href: "/guide/big-399" });
+        // Headings fill what is left, in reading order.
+        expect(index.filter((e) => e.heading !== undefined)).toHaveLength(TREE_INDEX_LIMIT - 400);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0][0])).toContain("800 headings or pages");
+
+        treeSearchIndex(manual(400, 6, "big"));
+        expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it("costs a small, fixed number of bytes an entry, its look coming from one stylesheet", () => {
+        const config = configWith();
+        const index = treeSearchIndex(manual(300, 6, "cost"));
+        expect(index).toHaveLength(TREE_INDEX_LIMIT);
+        const size = (n: number) =>
+            Buffer.byteLength(renderToStaticMarkup(<SearchBox config={config} param="q" id="s" index={index.slice(0, n)} variant="compact" />));
+        const perEntry = (size(TREE_INDEX_LIMIT) - size(1)) / (TREE_INDEX_LIMIT - 1);
+        // An entry is its href and its words in a list item and a link, and nothing else.
+        expect(perEntry).toBeLessThan(110);
+        const html = renderToStaticMarkup(<SearchBox config={config} param="q" id="s" index={index.slice(0, 3)} variant="compact" />);
+        expect(html.match(/<style>/g)).toHaveLength(1);
+        expect(html).not.toMatch(/<li[^>]* style=/);
+        expect(html).not.toMatch(/<li[^>]*><a[^>]* style=/);
+    });
+});
+
+describe("the headings kept between reads", () => {
+    it("hold the headings and a digest, never the body, so what is kept is bounded", () => {
+        const filler = "x".repeat(10_000);
+        for (let i = 0; i < 2100; i++) itemHeadings({ body: `## Heading ${i}\n\n${filler}${i}` });
+        const kept = keptHeadingsSize();
+        expect(kept.entries).toBe(2000);
+        // A 10 KB body each: kept whole, that is 20 MB. Kept as headings, well under a megabyte.
+        expect(kept.chars).toBeLessThan(200_000);
+    }, 30_000);
+
+    it("still answers from what is kept", () => {
+        const lexed = vi.spyOn(Marked.prototype, "lexer");
+        const body = "## Kept once\n\nA body only this test writes.";
+        expect(itemHeadings({ body })).toEqual([{ id: "kept-once", text: "Kept once" }]);
+        expect(itemHeadings({ body })).toEqual([{ id: "kept-once", text: "Kept once" }]);
+        expect(lexed.mock.calls.filter(([source]) => source === body)).toHaveLength(1);
+    });
+});
+
 describe("a body's headings", () => {
+    it("read a character reference as the character the body shows", () => {
+        const dash = String.fromCodePoint(8212);
+        const found = markdownHeadings("## Q&mdash;A\n\n## Fish &amp; chips\n\n## &#x41;&#66;C\n\n## Not &madeup; here");
+        expect(found.map((h) => h.text)).toEqual([`Q${dash}A`, "Fish & chips", "ABC", "Not &madeup; here"]);
+        // The id is still the one the rendered body gives the heading.
+        const html = renderMarkdown("## Q&mdash;A");
+        expect(html).toContain(`<h2 id="${found[0].id}">`);
+    });
+
     it("carry the ids the rendered body gives them, with their inline markup dropped", () => {
         const found = markdownHeadings(BODY);
         expect(found).toHaveLength(2);

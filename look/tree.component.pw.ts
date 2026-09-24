@@ -168,7 +168,7 @@ test("the in-page index shows what matches as the reader types, and says so when
 
     await page.locator('input[type="search"]').fill("configure");
     await expect(index).toBeVisible();
-    const hits = page.locator("[data-bp-search-index] .bp-tree-search-hit:visible");
+    const hits = page.locator("[data-bp-search-index] a:visible");
     await expect(hits).toHaveCount(1);
     await expect(hits.first()).toHaveAttribute("href", "/docs/quickstart#configure-the-site");
     await expect(page.locator("[data-bp-search-empty]")).toBeHidden();
@@ -184,5 +184,92 @@ test("the in-page index shows what matches as the reader types, and says so when
 
     await page.locator('input[type="search"]').fill("");
     await expect(index).toBeHidden();
+    await context.close();
+});
+
+test("the compact results are put away when focus or a press goes elsewhere, and come back with the box", async ({ browser }) => {
+    const { context, page } = await open(browser, "designed", 390, true);
+    const input = page.getByRole("searchbox", { name: "Search the docs" });
+    const index = page.locator("[data-bp-search-index]");
+
+    await input.fill("install");
+    await expect(index).toBeVisible();
+    // Tab into the results keeps them; tabbing out of the box puts them away, so they no longer cover
+    // the sidebar's control, and what was typed is kept.
+    await page.keyboard.press("Tab");
+    await expect(index).toBeVisible();
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Shift+Tab");
+    await expect(index).toBeHidden();
+    await expect(input).toHaveValue("install");
+    await page.locator(".bp-tree-summary").click();
+    await expect(page.locator(".bp-tree-sections")).toBeVisible();
+
+    // Back in the box, the results are back.
+    await input.focus();
+    await expect(index).toBeVisible();
+    // A press anywhere outside the box puts them away.
+    await page.mouse.click(380, 880);
+    await expect(index).toBeHidden();
+    await expect(input).toHaveValue("install");
+
+    // A press on a result is not outside: the panel stays for the click to land.
+    await input.focus();
+    await expect(index).toBeVisible();
+    await page.evaluate(() => document.addEventListener("click", (e) => e.preventDefault(), true));
+    await page.locator("[data-bp-search-index] a:visible").first().dispatchEvent("pointerdown", { bubbles: true });
+    await expect(index).toBeVisible();
+    await context.close();
+});
+
+test("Escape pressed with focus outside the box puts the results away", async ({ browser }) => {
+    const { context, page } = await open(browser, "designed", 1280, true);
+    const input = page.getByRole("searchbox", { name: "Search the docs" });
+    const index = page.locator("[data-bp-search-index]");
+    await input.fill("install");
+    await expect(index).toBeVisible();
+    // Held open by a press inside the box while focus moves out, the one way focus leaves with the
+    // panel still showing.
+    await page.locator("[data-bp-search-index] a:visible").first().dispatchEvent("pointerdown", { bubbles: true });
+    await page.locator("a.bp-tree-product").first().focus();
+    await expect(index).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(index).toBeHidden();
+    await expect(input).toHaveValue("install");
+    await context.close();
+});
+
+test("with no route behind it, Enter goes to the first match or nowhere, and never reloads the page", async ({ browser }) => {
+    const { context, page } = await open(browser, "noroute", 1280, true);
+    await expect(page.locator("form")).toHaveCount(0);
+    const input = page.getByRole("searchbox", { name: "Search the docs" });
+    const before = page.url();
+    let navigated = false;
+    page.on("framenavigated", () => {
+        navigated = true;
+    });
+    await page.evaluate(() => {
+        document.addEventListener(
+            "click",
+            (e) => {
+                const link = (e.target as Element).closest("a");
+                if (!link) return;
+                e.preventDefault();
+                document.body.dataset.went = link.getAttribute("href") ?? "";
+            },
+            true,
+        );
+    });
+
+    await input.fill("zzz");
+    await input.press("Enter");
+    await expect(page.locator("[data-bp-search-empty]")).toBeVisible();
+    expect(page.url()).toBe(before);
+    expect(navigated).toBe(false);
+    await expect(input).toHaveValue("zzz");
+
+    await input.fill("configure");
+    await input.press("Enter");
+    await expect(page.locator("body")).toHaveAttribute("data-went", "/docs/quickstart#configure-the-site");
     await context.close();
 });

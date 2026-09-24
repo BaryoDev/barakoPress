@@ -519,8 +519,8 @@ describe("a manual laid out by its settings (#130)", () => {
         expect(html).toContain("bp-tree-nav-closed");
         expect(html).toContain(">Paging</span>");
         // Every page of the product is in the index, the one being read included.
-        expect(html).toContain('data-bp-search-text="quickstart"');
-        expect(html).toContain('data-bp-search-text="paging"');
+        expect(html).toContain('<li><a href="/docs/quickstart"><span>Quickstart</span></a></li>');
+        expect(html).toContain('<li><a href="/docs/delivery-paging"><span>Paging</span></a></li>');
     });
 
     it("keeps today's layout for a part whose variant it does not know, and ignores a rail that is not true", async () => {

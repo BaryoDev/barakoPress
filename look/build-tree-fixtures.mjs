@@ -19,7 +19,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { defineConfig } from "../dist/config.js";
 import { ItemView } from "../dist/screens/collection.js";
-import { filterIndex, SEARCH_EMPTY_ATTR, SEARCH_INDEX_ATTR, SEARCH_TEXT_ATTR } from "../dist/blocks/search-keys.js";
+import {
+    filterIndex,
+    focusable,
+    wireSearch,
+    SEARCH_EMPTY_ATTR,
+    SEARCH_INDEX_ATTR,
+    SEARCH_ROOT_ATTR,
+} from "../dist/blocks/search-keys.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -142,15 +149,16 @@ function page(cfg, current, css = "", script = "") {
 
 const rootVars = (tokens) => `:root{${Object.entries(tokens).map(([k, v]) => `--t-${k}:${v}`).join(";")}}`;
 
-// The filter the search box's client component runs, lifted out of the compiled package so this
-// page, which has no React to hydrate, runs the same code on each keystroke.
+// What the search box's client component runs, lifted out of the compiled package so this page, which
+// has no React to hydrate, runs the same code: the filter, the keys, and putting the results away.
 const filterScript = `<script>
+const SEARCH_ROOT_ATTR = ${JSON.stringify(SEARCH_ROOT_ATTR)};
 const SEARCH_INDEX_ATTR = ${JSON.stringify(SEARCH_INDEX_ATTR)};
-const SEARCH_TEXT_ATTR = ${JSON.stringify(SEARCH_TEXT_ATTR)};
 const SEARCH_EMPTY_ATTR = ${JSON.stringify(SEARCH_EMPTY_ATTR)};
+${focusable.toString()}
 ${filterIndex.toString()}
-const box = document.querySelector('input[type="search"]');
-box.addEventListener("input", () => filterIndex(document.querySelector("[" + SEARCH_INDEX_ATTR + "]"), box.value));
+${wireSearch.toString()}
+wireSearch(document.querySelector('input[type="search"]'));
 </script>`;
 
 const reading = item("delivery", "Public delivery API", "## Paging\n\nA page at a time.");
@@ -161,6 +169,19 @@ writeFileSync(
     page(
         config(
             { variant: { switcher: "list", sidebar: "boxed", rail: true, pager: "halves", search: "compact", disclosure: "closed" }, searchIndex: true },
+            { search: "Search the docs", searchEmpty: 'Nothing matches "{query}".', contents: "All docs" },
+        ),
+        item("quickstart", "Quickstart", BODY),
+        rootVars(DESIGNED),
+        filterScript,
+    ),
+);
+// The same, with no route that reads the query: the box answers in the page or not at all.
+writeFileSync(
+    join(here, "tree-noroute.generated.html"),
+    page(
+        config(
+            { searchPath: undefined, variant: { switcher: "list", sidebar: "boxed", search: "compact", disclosure: "closed" }, searchIndex: true },
             { search: "Search the docs", searchEmpty: 'Nothing matches "{query}".', contents: "All docs" },
         ),
         item("quickstart", "Quickstart", BODY),

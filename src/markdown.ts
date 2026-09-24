@@ -129,12 +129,34 @@ export interface MarkdownHeading {
 
 type InlineToken = { type: string; raw?: string; text?: string; tokens?: InlineToken[] };
 
+/*
+ * The named references a heading is likely to be written with, by code point. Written as numbers so
+ * the characters themselves stay out of the source. Anything not here, named, is left as written.
+ */
+const NAMED: Readonly<Record<string, number>> = {
+    amp: 38, lt: 60, gt: 62, quot: 34, apos: 39, nbsp: 160, copy: 169, reg: 174, trade: 8482,
+    mdash: 8212, ndash: 8211, hellip: 8230, middot: 183, bull: 8226, times: 215, divide: 247,
+    lsquo: 8216, rsquo: 8217, ldquo: 8220, rdquo: 8221, laquo: 171, raquo: 187, deg: 176, plusmn: 177,
+    euro: 8364, pound: 163, yen: 165, cent: 162, sect: 167, para: 182, larr: 8592, rarr: 8594,
+};
+
+/** Character references read as the characters a browser would draw for them. */
+export function decodeEntities(text: string): string {
+    return text.replace(/&(#x[0-9a-f]{1,6}|#[0-9]{1,7}|[a-z]{2,8});/gi, (whole, ref: string) => {
+        let code: number | undefined;
+        if (ref[0] === "#") code = ref[1] === "x" || ref[1] === "X" ? parseInt(ref.slice(2), 16) : parseInt(ref.slice(1), 10);
+        else code = Object.hasOwn(NAMED, ref.toLowerCase()) ? NAMED[ref.toLowerCase()] : undefined;
+        if (code === undefined || !Number.isFinite(code) || code <= 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff)) return whole;
+        return String.fromCodePoint(code);
+    });
+}
+
 function plainText(tokens: InlineToken[]): string {
     return tokens
         .map((t) => {
             if (t.type === "html") return t.raw ?? "";
             if (t.tokens && t.tokens.length > 0) return plainText(t.tokens);
-            return t.text ?? t.raw ?? "";
+            return decodeEntities(t.text ?? t.raw ?? "");
         })
         .join("");
 }

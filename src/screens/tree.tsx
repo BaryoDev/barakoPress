@@ -16,7 +16,6 @@ import {
     SEARCH_EMPTY_ATTR,
     SEARCH_INDEX_ATTR,
     SEARCH_ROOT_ATTR,
-    SEARCH_TEXT_ATTR,
 } from "../blocks/search-keys.js";
 
 /*
@@ -31,7 +30,8 @@ import {
  * opt-in, and a sidebar whose look depends on an import the consumer might not make is a sidebar
  * that renders as a bare list for somebody.
  *
- * Every colour, gap, radius and size is read through `var(--t-tree-<name>, <the theme's value>)`
+ * Every colour, gap, padding, radius, font size and weight is read through
+ * `var(--t-tree-<name>, <the theme's value>)`
  * (#130). A site that sets none of them draws exactly what it drew before; a site that names a
  * token, in its `Tokens` setting or in its own stylesheet, restyles that one thing. Each part also
  * carries a `bp-tree-*` class, so a stylesheet can reach what a token does not, a hover for one.
@@ -316,7 +316,7 @@ export function TreeSidebar({ config, tree, current, switcher, collection, discl
             <summary
                 className="bp-tree-summary"
                 style={{
-                    padding: "10px 12px",
+                    padding: `${tok("summary-pad-y", "10px")} ${tok("summary-pad-x", "12px")}`,
                     marginBottom: tok("summary-space", t.space.sm),
                     borderRadius: tok("summary-radius", t.radii.control),
                     border: `1px solid ${tok("summary-edge", c.hairline)}`,
@@ -564,7 +564,7 @@ export function EditLink({ config, item }: { config: PressConfig; item: Item }) 
     if (!href) return null;
     const t = config.theme;
     return (
-        <p className="bp-tree-edit" style={{ marginTop: tok("edit-top", t.space.md), fontFamily: t.fonts.mono, fontSize: t.text.meta }}>
+        <p className="bp-tree-edit" style={{ marginTop: tok("edit-top", t.space.md), fontFamily: t.fonts.mono, fontSize: tok("edit-size", t.text.meta) }}>
             <a href={href} rel="noopener noreferrer" style={{ color: tok("edit-ink", t.colors.muted) }}>
                 {config.labels.editPage}
             </a>
@@ -601,6 +601,29 @@ export interface SearchBoxProps {
 /** The most index entries shown at once while the reader types. */
 const INDEX_SHOWN = 8;
 
+const KEBAB = /[A-Z]/g;
+
+/** A style object as declarations, for the one stylesheet an index's entries share. */
+function declarations(style: CSSProperties): string {
+    return Object.entries(style)
+        .map(([key, value]) => `${key.replace(KEBAB, (m) => `-${m.toLowerCase()}`)}:${cssValue(String(value))}`)
+        .join(";");
+}
+
+/*
+ * An index entry is a plain link in a list item, styled from one stylesheet rather than inline. It is
+ * drawn once per page and heading of a manual, so every byte on an entry is multiplied by the size of
+ * the manual, and a `Link` would be a client reference in Next's payload for each one as well.
+ */
+function indexCss(scope: string, parts: { list: CSSProperties; hit: CSSProperties; title: CSSProperties; page: CSSProperties }): string {
+    return (
+        `${scope} ul{${declarations(parts.list)}}` +
+        `${scope} li>a{${declarations(parts.hit)}}` +
+        `${scope} li>a>span:first-child{${declarations(parts.title)}}` +
+        `${scope} li>a>span+span{${declarations(parts.page)}}`
+    );
+}
+
 /** The label for nothing found, with what was typed put in where it says `{query}`. */
 function emptyLine(template: string, typed: string): string {
     return template.split("{query}").join(typed);
@@ -615,8 +638,9 @@ function emptyLine(template: string, typed: string): string {
  * index as the reader types. It is handed an id and nothing
  * else, and without it everything but the in-page filter still works.
  *
- * The index is markup, not props: a client component's props are serialised into the page, so handing
- * it the entries would ship each one twice.
+ * The index is markup, not props. It is in Next's payload as all server markup is, but it is not handed
+ * to the client component as well, and each entry is a plain link styled from one stylesheet, so an
+ * entry costs its href and its words and little else.
  *
  * `compact` is the same form and the same results in another shape: the icon, the input and the "/"
  * key hint in one well, the input named by `aria-label` rather than a label on screen, and the results
@@ -627,9 +651,10 @@ export function SearchBox({ config, action, param, query, results, index, id, va
     const c = t.colors;
     const typed = (query ?? "").trim();
     const compact = variant === "compact";
+    const indexClass = `bp-si-${id.replace(/[^A-Za-z0-9_-]/g, "-")}`;
     const hitStyle = {
         display: "block",
-        padding: "7px 10px",
+        padding: `${tok("search-hit-pad-y", "7px")} ${tok("search-hit-pad-x", "10px")}`,
         borderRadius: tok("search-hit-radius", t.radii.control),
         fontSize: compact ? tok("search-hit-size", t.text.small) : tok("search-size", t.text.small),
         color: tok("search-hit-ink", c.ink),
@@ -769,9 +794,16 @@ export function SearchBox({ config, action, param, query, results, index, id, va
             style={compact ? { position: "relative" } : undefined}
             {...{ [SEARCH_ROOT_ATTR]: id }}
         >
-            <form role="search" method="get" action={action}>
-                {field}
-            </form>
+            {/* With no route to submit to there is no form, so Enter cannot reload the page with the
+                query and an empty box: with script the box answers in the page, and with none it is a
+                field that does nothing rather than a control that looks like it searched. */}
+            {action !== undefined ? (
+                <form role="search" method="get" action={action}>
+                    {field}
+                </form>
+            ) : (
+                <div role="search">{field}</div>
+            )}
 
             {results !== undefined && typed !== "" && (
                 <div aria-live="polite" className="bp-tree-search-results" style={panelStyle}>
@@ -782,13 +814,20 @@ export function SearchBox({ config, action, param, query, results, index, id, va
                     ) : (
                         <ul style={listStyle}>
                             {results.map((hit, i) => (
-                                <li key={hit.href ?? `${i}-${hit.title}`} className="bp-tree-search-entry">
+                                <li key={hit.href ?? `${i}-${hit.title}`}>
                                     {hit.href ? (
                                         <Link href={hit.href} className="bp-tree-search-hit" style={hitStyle}>
                                             {hit.title}
                                         </Link>
                                     ) : (
-                                        <span className="bp-tree-search-hit" style={{ display: "block", padding: "7px 10px", fontSize: t.text.small }}>
+                                        <span
+                                            className="bp-tree-search-hit"
+                                            style={{
+                                                display: "block",
+                                                padding: `${tok("search-hit-pad-y", "7px")} ${tok("search-hit-pad-x", "10px")}`,
+                                                fontSize: tok("search-size", t.text.small),
+                                            }}
+                                        >
                                             {hit.title}
                                         </span>
                                     )}
@@ -804,29 +843,27 @@ export function SearchBox({ config, action, param, query, results, index, id, va
                 <div
                     aria-live="polite"
                     hidden
-                    className="bp-tree-search-results bp-tree-search-index"
+                    className={`bp-tree-search-results bp-tree-search-index ${indexClass}`}
                     style={panelStyle}
                     {...{ [SEARCH_INDEX_ATTR]: INDEX_SHOWN }}
                 >
-                    <ul style={listStyle}>
+                    <style
+                        dangerouslySetInnerHTML={{
+                            __html: indexCss(`.${indexClass}`, {
+                                list: listStyle,
+                                hit: hitStyle,
+                                title: { fontWeight: tok("search-hit-weight", "600") },
+                                page: { color: tok("search-empty-ink", c.muted) },
+                            }),
+                        }}
+                    />
+                    <ul>
                         {index.map((entry) => (
-                            <li
-                                key={entry.href}
-                                hidden
-                                className="bp-tree-search-entry"
-                                {...{ [SEARCH_TEXT_ATTR]: `${entry.heading ?? ""} ${entry.title}`.trim().toLowerCase() }}
-                            >
-                                <Link href={entry.href} className="bp-tree-search-hit" style={hitStyle}>
-                                    <span className="bp-tree-search-hit-title" style={{ fontWeight: tok("search-hit-weight", "600") }}>
-                                        {entry.heading ?? entry.title}
-                                    </span>
-                                    {entry.heading && (
-                                        <span className="bp-tree-search-hit-page" style={{ color: tok("search-empty-ink", c.muted) }}>
-                                            {" · "}
-                                            {entry.title}
-                                        </span>
-                                    )}
-                                </Link>
+                            <li key={entry.href}>
+                                <a href={entry.href}>
+                                    <span>{entry.heading ?? entry.title}</span>
+                                    {entry.heading && <span>{` · ${entry.title}`}</span>}
+                                </a>
                             </li>
                         ))}
                     </ul>
@@ -993,9 +1030,9 @@ export function TreeShell({
                 flexWrap: "wrap",
                 alignItems: "flex-start",
                 gap: tok("gap", t.space.lg),
-                maxWidth: t.layout.wide,
+                maxWidth: tok("shell-width", t.layout.wide),
                 margin: "0 auto",
-                padding: `${t.space.lg} ${t.layout.gutter}`,
+                padding: `${tok("shell-pad-y", t.space.lg)} ${tok("shell-pad-x", t.layout.gutter)}`,
             }}
         >
             {style}
