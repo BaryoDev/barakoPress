@@ -38,7 +38,7 @@ function docsSidebar(config: PressConfig, holding: boolean): BlockDefinition {
             if (holding) return null;
             const tree = await collectionTree(config, props.collection, { product: props.product });
             if (tree.sections.length === 0) return null;
-            return <TreeSidebar config={config} tree={tree} current={props.current} />;
+            return <TreeSidebar config={config} tree={tree} current={props.current} collection={props.collection} />;
         },
     });
     return boundToConfig(definition, docsSidebar);

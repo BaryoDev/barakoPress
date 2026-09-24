@@ -26,10 +26,13 @@ import {
     type SocialLink,
     type TopBar,
     type TreeProduct,
+    type TreeIcons,
     type TreeVariant,
     pinnedTenant,
     TREE_LIMIT,
+    TREE_DISCLOSURES,
     TREE_PAGERS,
+    TREE_SEARCHES,
     TREE_SIDEBARS,
     TREE_SWITCHERS,
 } from "./config.js";
@@ -848,8 +851,24 @@ function treeFrom(v: unknown): CollectionTree | undefined {
     const variant = treeVariantFrom(t.variant);
     if (variant) tree.variant = variant;
     if (t.searchIndex === true) tree.searchIndex = true;
+    const icons = treeIconsFrom(t.icons);
+    if (icons) tree.icons = icons;
 
     return Object.keys(tree).length > 0 ? tree : undefined;
+}
+
+/** A reference to a symbol on the page, and nothing that could leave it. */
+const SYMBOL_REF = /^#[A-Za-z][A-Za-z0-9_-]{0,62}$/;
+
+function treeIconsFrom(v: unknown): TreeIcons | undefined {
+    const raw = record(v);
+    if (!raw) return undefined;
+    const icons: TreeIcons = {};
+    for (const key of ["search", "chevron"] as const) {
+        const ref = str(raw[key]);
+        if (ref && SYMBOL_REF.test(ref)) icons[key] = ref;
+    }
+    return Object.keys(icons).length > 0 ? icons : undefined;
 }
 
 /** A layout choice keeps only the names the engine draws. Anything else is today's layout for that part. */
@@ -861,11 +880,15 @@ function treeVariantFrom(v: unknown): TreeVariant | undefined {
     const switcher = pick(raw.switcher, TREE_SWITCHERS);
     const sidebar = pick(raw.sidebar, TREE_SIDEBARS);
     const pager = pick(raw.pager, TREE_PAGERS);
+    const search = pick(raw.search, TREE_SEARCHES);
+    const disclosure = pick(raw.disclosure, TREE_DISCLOSURES);
     const variant: TreeVariant = {
         ...(switcher ? { switcher } : {}),
         ...(sidebar ? { sidebar } : {}),
         ...(raw.rail === true ? { rail: true } : {}),
         ...(pager ? { pager } : {}),
+        ...(search ? { search } : {}),
+        ...(disclosure ? { disclosure } : {}),
     };
     return Object.keys(variant).length > 0 ? variant : undefined;
 }

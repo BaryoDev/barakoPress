@@ -42,7 +42,9 @@ export {
     SETTINGS_TYPE,
     EMBED_HOSTS,
     TREE_LIMIT,
+    TREE_DISCLOSURES,
     TREE_PAGERS,
+    TREE_SEARCHES,
     TREE_SIDEBARS,
     TREE_SWITCHERS,
     hasFeed,
@@ -120,6 +122,7 @@ export type {
     Home,
     CollectionTree,
     TreeProduct,
+    TreeIcons,
     TreeVariant,
 } from "./config.js";
 

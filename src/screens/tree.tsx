@@ -68,6 +68,9 @@ const PHONE = "48rem";
 /** The width the rail gives its room back to the page at. */
 const RAIL_MIN = "64rem";
 
+/** Marks the sidebar that is closed on a phone and open, whatever its state, above one. */
+const CLOSED_CLASS = "bp-tree-nav-closed";
+
 function sidebarCss(): string {
     return (
         `.${SIDEBAR_CLASS}>summary{list-style:none;cursor:pointer}` +
@@ -75,6 +78,73 @@ function sidebarCss(): string {
         `@media(min-width:${PHONE}){.${SIDEBAR_CLASS}>summary{display:none}}`
     );
 }
+
+/*
+ * The closed disclosure, with no script. On a phone it is a `details` the reader opens. Above the
+ * phone breakpoint its content is shown although the element is closed, through `::details-content`,
+ * and the control is hidden. A browser without `::details-content` keeps the control above the
+ * breakpoint too, so a reader there opens the sidebar with one tap rather than never seeing it.
+ */
+function closedSidebarCss(): string {
+    const s = `.${CLOSED_CLASS}`;
+    return (
+        `${s}>summary{list-style:none;cursor:pointer}` +
+        `${s}>summary::-webkit-details-marker{display:none}` +
+        `${s}[open] .bp-tree-summary-show,${s}:not([open]) .bp-tree-summary-hide{display:none}` +
+        `${s}[open] .bp-tree-summary-chevron{transform:rotate(180deg)}` +
+        // The space under the control is space above the sidebar, so a closed one has none.
+        `${s}:not([open])>summary{margin-bottom:0!important}` +
+        `@supports selector(::details-content){@media(min-width:${PHONE}){` +
+        `${s}>summary{display:none!important}${s}::details-content{content-visibility:visible}}}`
+    );
+}
+
+/** The page being read, and the section it sits in, for the closed disclosure to name. */
+function findCurrent(tree: CollectionTreeResult, slug: string | undefined): { title: string; section?: string } | undefined {
+    if (!slug) return undefined;
+    const walk = (nodes: TreeNode[]): TreeNode | undefined => {
+        for (const node of nodes) {
+            if (node.item.slug === slug) return node;
+            const below = walk(node.children);
+            if (below) return below;
+        }
+        return undefined;
+    };
+    for (const section of tree.sections) {
+        const found = walk(section.nodes);
+        if (found) return { title: found.item.title, ...(section.name ? { section: section.name } : {}) };
+    }
+    return undefined;
+}
+
+/** A glyph from the site's own sprite when it names one, and the engine's otherwise. */
+function Glyph({ symbol, path, style, className }: { symbol?: string; path: string; style: CSSProperties; className?: string }) {
+    if (symbol) {
+        return (
+            <svg viewBox="0 0 32 32" aria-hidden="true" className={className} style={{ fill: "currentColor", ...style }}>
+                <use href={symbol} />
+            </svg>
+        );
+    }
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            className={className}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={style}
+        >
+            <path d={path} />
+        </svg>
+    );
+}
+
+const SEARCH_PATH = "M10.5 17.5a7 7 0 100-14 7 7 0 000 14zM20.5 20.5l-5-5";
+const CHEVRON_PATH = "M6 9l6 6 6-6";
 
 /** A section label, the switcher's label in a list and the rail's heading: one look for all three. */
 function labelStyle(config: PressConfig): CSSProperties {
@@ -122,6 +192,12 @@ export interface TreeSidebarProps {
      * switcher goes here, so on a phone the products fold away with the pages.
      */
     switcher?: ReactNode;
+    /** The collection the tree was read from, whose `variant` and `icons` apply when set. */
+    collection?: string;
+    /** `open` unless the collection's tree or this prop says `closed`. */
+    disclosure?: TreeVariant["disclosure"];
+    /** Put before the section on the closed disclosure's first line: the product being read. */
+    group?: string;
 }
 
 /**
@@ -131,10 +207,11 @@ export interface TreeSidebarProps {
  * is a disclosure and the browser already has one. It is open by default and the summary is hidden
  * above the phone breakpoint, so a wide screen sees the list and a narrow one sees a control.
  */
-export function TreeSidebar({ config, tree, current, switcher }: TreeSidebarProps) {
+export function TreeSidebar({ config, tree, current, switcher, collection, disclosure, group }: TreeSidebarProps) {
     const t = config.theme;
     const c = t.colors;
     if (tree.sections.length === 0 && !switcher) return null;
+    const closed = (disclosure ?? (collection ? treeVariant(config, collection).disclosure : "open")) === "closed";
 
     const nav = tree.sections.length > 0 && (
         <nav
@@ -146,7 +223,7 @@ export function TreeSidebar({ config, tree, current, switcher }: TreeSidebarProp
                 <div key={section.name ?? `#${i}`} className="bp-tree-section">
                     {section.name && (
                         <p
-                            className="bp-tree-section-label"
+                            className="bp-tree-section-label bp-label"
                             style={{ margin: `0 0 ${tok("label-gap", t.space.xs)}`, ...labelStyle(config) }}
                         >
                             {section.name}
@@ -158,6 +235,81 @@ export function TreeSidebar({ config, tree, current, switcher }: TreeSidebarProp
         </nav>
     );
 
+    const body = switcher ? (
+        <div
+            className="bp-tree-sidebar-body"
+            style={{ display: "flex", flexDirection: "column", gap: tok("section-gap", t.space.md) }}
+        >
+            {switcher}
+            {nav}
+        </div>
+    ) : (
+        nav
+    );
+
+    if (closed) {
+        const here = findCurrent(tree, current);
+        const line = [group, here?.section].filter(Boolean).join(" / ");
+        const icons = collection ? collectionOf(config, collection)?.tree?.icons : undefined;
+        return (
+            <details className={`bp-tree-sidebar ${CLOSED_CLASS}`}>
+                <style dangerouslySetInnerHTML={{ __html: closedSidebarCss() }} />
+                <summary
+                    className="bp-tree-summary bp-tree-summary-closed"
+                    style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: tok("summary-gap", t.space.sm),
+                        minHeight: tok("summary-min-height", "0px"),
+                        padding: `${tok("summary-pad-y", "10px")} ${tok("summary-pad-x", "12px")}`,
+                        marginBottom: tok("summary-space", t.space.sm),
+                        borderRadius: tok("summary-radius", t.radii.control),
+                        border: `1px solid ${tok("summary-edge", c.hairline)}`,
+                        background: tok("summary-bg", c.surface),
+                        color: tok("summary-title-ink", c.ink),
+                    }}
+                >
+                    <span style={{ display: "flex", flexDirection: "column", gap: tok("summary-line-gap", "3px"), minWidth: 0 }}>
+                        {line && (
+                            <span className="bp-tree-summary-group" style={labelStyle(config)}>
+                                {line}
+                            </span>
+                        )}
+                        <span
+                            className="bp-tree-summary-title"
+                            style={{ fontSize: tok("summary-title-size", t.text.small), fontWeight: tok("summary-title-weight", "700") }}
+                        >
+                            {here?.title ?? config.labels.contents}
+                        </span>
+                    </span>
+                    <span
+                        className="bp-tree-summary-action"
+                        style={{
+                            display: "flex",
+                            alignItems: "center",
+                            flexShrink: 0,
+                            gap: tok("summary-action-gap", "6px"),
+                            fontSize: tok("summary-action-size", t.text.small),
+                            fontWeight: tok("summary-action-weight", "600"),
+                            color: tok("summary-action-ink", c.accentInk),
+                        }}
+                    >
+                        <span className="bp-tree-summary-show">{config.labels.contents}</span>
+                        <span className="bp-tree-summary-hide">{config.labels.closeContents}</span>
+                        <Glyph
+                            symbol={icons?.chevron}
+                            path={CHEVRON_PATH}
+                            className="bp-tree-summary-chevron"
+                            style={{ width: tok("summary-icon-size", "13px"), height: tok("summary-icon-size", "13px") }}
+                        />
+                    </span>
+                </summary>
+                {body}
+            </details>
+        );
+    }
+
     return (
         <details className={`bp-tree-sidebar ${SIDEBAR_CLASS}`} open>
             <style dangerouslySetInnerHTML={{ __html: sidebarCss() }} />
@@ -165,7 +317,7 @@ export function TreeSidebar({ config, tree, current, switcher }: TreeSidebarProp
                 className="bp-tree-summary"
                 style={{
                     padding: "10px 12px",
-                    marginBottom: t.space.sm,
+                    marginBottom: tok("summary-space", t.space.sm),
                     borderRadius: tok("summary-radius", t.radii.control),
                     border: `1px solid ${tok("summary-edge", c.hairline)}`,
                     background: tok("summary-bg", c.surface),
@@ -178,17 +330,7 @@ export function TreeSidebar({ config, tree, current, switcher }: TreeSidebarProp
             >
                 {config.labels.contents}
             </summary>
-            {switcher ? (
-                <div
-                    className="bp-tree-sidebar-body"
-                    style={{ display: "flex", flexDirection: "column", gap: tok("section-gap", t.space.md) }}
-                >
-                    {switcher}
-                    {nav}
-                </div>
-            ) : (
-                nav
-            )}
+            {body}
         </details>
     );
 }
@@ -261,7 +403,7 @@ export function TreeSwitcher({ config, collection, current, variant }: TreeSwitc
     if ((variant ?? treeVariant(config, collection).switcher) === "list") {
         return (
             <nav aria-label={config.labels.products} className="bp-tree-switcher bp-tree-switcher-list">
-                <p className="bp-tree-switcher-label" style={{ margin: `0 0 ${tok("label-gap", t.space.xs)}`, ...labelStyle(config) }}>
+                <p className="bp-tree-switcher-label bp-label" style={{ margin: `0 0 ${tok("label-gap", t.space.xs)}`, ...labelStyle(config) }}>
                     {config.labels.products}
                 </p>
                 <div style={{ display: "flex", flexDirection: "column", gap: tok("link-gap", "0px") }}>
@@ -385,7 +527,7 @@ export function TreePager({ config, collection, previous, next, variant }: TreeP
         >
             {previous ? (
                 <Link href={`${route}/${previous.slug}`} rel="prev" className="bp-tree-pager-link bp-tree-pager-prev" style={box}>
-                    <p className="bp-tree-pager-label" style={label}>
+                    <p className="bp-tree-pager-label bp-label" style={label}>
                         {config.labels.previous}
                     </p>
                     <p className="bp-tree-pager-title" style={title}>
@@ -402,7 +544,7 @@ export function TreePager({ config, collection, previous, next, variant }: TreeP
                     className="bp-tree-pager-link bp-tree-pager-next"
                     style={{ ...box, textAlign: "right" }}
                 >
-                    <p className="bp-tree-pager-label" style={label}>
+                    <p className="bp-tree-pager-label bp-label" style={label}>
                         {config.labels.next}
                     </p>
                     <p className="bp-tree-pager-title" style={title}>
@@ -450,10 +592,19 @@ export interface SearchBoxProps {
     index?: readonly TreeSearchEntry[];
     /** A stable id, so the key handling finds this box and not another one on the same page. */
     id: string;
+    /** `box`, a labelled input, unless this says `compact`. */
+    variant?: TreeVariant["search"];
+    /** The magnifier in the compact box, as a reference to a symbol on the page. The engine's own when unset. */
+    icon?: string;
 }
 
 /** The most index entries shown at once while the reader types. */
 const INDEX_SHOWN = 8;
+
+/** The label for nothing found, with what was typed put in where it says `{query}`. */
+function emptyLine(template: string, typed: string): string {
+    return template.split("{query}").join(typed);
+}
 
 /**
  * A search box over a collection, as a form.
@@ -466,16 +617,21 @@ const INDEX_SHOWN = 8;
  *
  * The index is markup, not props: a client component's props are serialised into the page, so handing
  * it the entries would ship each one twice.
+ *
+ * `compact` is the same form and the same results in another shape: the icon, the input and the "/"
+ * key hint in one well, the input named by `aria-label` rather than a label on screen, and the results
+ * in a panel floating over whatever comes next rather than pushing it down.
  */
-export function SearchBox({ config, action, param, query, results, index, id }: SearchBoxProps) {
+export function SearchBox({ config, action, param, query, results, index, id, variant = "box", icon }: SearchBoxProps) {
     const t = config.theme;
     const c = t.colors;
     const typed = (query ?? "").trim();
+    const compact = variant === "compact";
     const hitStyle = {
         display: "block",
         padding: "7px 10px",
         borderRadius: tok("search-hit-radius", t.radii.control),
-        fontSize: tok("search-size", t.text.small),
+        fontSize: compact ? tok("search-hit-size", t.text.small) : tok("search-size", t.text.small),
         color: tok("search-hit-ink", c.ink),
     } as const;
     const listStyle = {
@@ -486,58 +642,147 @@ export function SearchBox({ config, action, param, query, results, index, id }: 
         flexDirection: "column",
         gap: tok("search-hit-gap", "2px"),
     } as const;
-    const emptyStyle = { margin: 0, fontSize: tok("search-size", t.text.small), color: tok("search-empty-ink", c.muted) };
+    const emptyStyle: CSSProperties = compact
+        ? {
+              margin: 0,
+              padding: `${tok("search-empty-pad-y", "8px")} ${tok("search-empty-pad-x", "10px")}`,
+              fontSize: tok("search-hit-size", t.text.small),
+              color: tok("search-empty-ink", c.muted),
+          }
+        : { margin: 0, fontSize: tok("search-size", t.text.small), color: tok("search-empty-ink", c.muted) };
+    const panelStyle: CSSProperties = compact
+        ? {
+              position: "absolute",
+              zIndex: 10,
+              insetInline: 0,
+              marginTop: tok("search-panel-gap", "6px"),
+              padding: tok("search-panel-pad", "6px"),
+              background: tok("search-panel-bg", c.surface),
+              border: `1px solid ${tok("search-panel-edge", c.hairline)}`,
+              borderRadius: tok("search-panel-radius", t.radii.panel),
+              boxShadow: tok("search-panel-shadow", "0 10px 24px -12px rgba(16,18,35,.25)"),
+          }
+        : { marginTop: tok("search-results-gap", t.space.sm) };
+
+    const field = compact ? (
+        <div
+            className="bp-tree-search-box"
+            style={{
+                display: "flex",
+                alignItems: "center",
+                gap: tok("search-gap", "9px"),
+                height: tok("search-height", "36px"),
+                boxSizing: "border-box",
+                padding: `0 ${tok("search-pad-x", "12px")}`,
+                borderRadius: tok("search-radius", t.radii.control),
+                background: tok("search-bg", c.pageBg),
+                fontFamily: t.fonts.mono,
+                fontSize: tok("search-size", t.text.meta),
+                color: tok("search-label-ink", c.muted),
+            }}
+        >
+            <Glyph
+                symbol={icon}
+                path={SEARCH_PATH}
+                className="bp-tree-search-icon"
+                style={{ width: tok("search-icon-size", "13px"), height: tok("search-icon-size", "13px"), flexShrink: 0 }}
+            />
+            <input
+                id={id}
+                type="search"
+                name={param}
+                defaultValue={query}
+                placeholder={config.labels.search}
+                aria-label={config.labels.search}
+                autoComplete="off"
+                className="bp-tree-search-input"
+                style={{
+                    flex: 1,
+                    minWidth: 0,
+                    margin: 0,
+                    padding: 0,
+                    border: 0,
+                    outline: "none",
+                    background: "transparent",
+                    font: "inherit",
+                    color: tok("search-ink", c.ink),
+                }}
+            />
+            <span
+                aria-hidden="true"
+                className="bp-tree-search-key"
+                style={{
+                    padding: `${tok("search-key-pad-y", "2px")} ${tok("search-key-pad-x", "6px")}`,
+                    borderRadius: tok("search-key-radius", "6px"),
+                    background: tok("search-key-bg", c.surface),
+                    border: `1px solid ${tok("search-key-edge", c.hairline)}`,
+                    fontSize: tok("search-key-size", t.text.meta),
+                    fontWeight: tok("search-key-weight", "700"),
+                }}
+            >
+                /
+            </span>
+        </div>
+    ) : (
+        <>
+            <label
+                htmlFor={id}
+                className="bp-tree-search-label"
+                style={{
+                    display: "block",
+                    marginBottom: tok("search-label-gap", t.space.xs),
+                    fontFamily: t.fonts.mono,
+                    fontSize: tok("label-size", t.text.meta),
+                    letterSpacing: ".12em",
+                    textTransform: "uppercase",
+                    color: tok("search-label-ink", c.muted),
+                }}
+            >
+                {config.labels.search}
+            </label>
+            <input
+                id={id}
+                type="search"
+                name={param}
+                defaultValue={query}
+                placeholder={config.labels.search}
+                autoComplete="off"
+                className="bp-tree-search-input"
+                style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    padding: `${tok("search-pad-y", "9px")} ${tok("search-pad-x", "12px")}`,
+                    borderRadius: tok("search-radius", t.radii.control),
+                    border: `1px solid ${tok("search-edge", c.hairline)}`,
+                    background: tok("search-bg", c.surface),
+                    color: tok("search-ink", c.ink),
+                    font: "inherit",
+                    fontSize: tok("search-size", t.text.small),
+                }}
+            />
+        </>
+    );
 
     return (
-        <div className="bp-tree-search" {...{ [SEARCH_ROOT_ATTR]: id }}>
+        <div
+            className={compact ? "bp-tree-search bp-tree-search-compact" : "bp-tree-search"}
+            style={compact ? { position: "relative" } : undefined}
+            {...{ [SEARCH_ROOT_ATTR]: id }}
+        >
             <form role="search" method="get" action={action}>
-                <label
-                    htmlFor={id}
-                    className="bp-tree-search-label"
-                    style={{
-                        display: "block",
-                        marginBottom: tok("search-label-gap", t.space.xs),
-                        fontFamily: t.fonts.mono,
-                        fontSize: tok("label-size", t.text.meta),
-                        letterSpacing: ".12em",
-                        textTransform: "uppercase",
-                        color: tok("search-label-ink", c.muted),
-                    }}
-                >
-                    {config.labels.search}
-                </label>
-                <input
-                    id={id}
-                    type="search"
-                    name={param}
-                    defaultValue={query}
-                    placeholder={config.labels.search}
-                    autoComplete="off"
-                    className="bp-tree-search-input"
-                    style={{
-                        width: "100%",
-                        boxSizing: "border-box",
-                        padding: `${tok("search-pad-y", "9px")} ${tok("search-pad-x", "12px")}`,
-                        borderRadius: tok("search-radius", t.radii.control),
-                        border: `1px solid ${tok("search-edge", c.hairline)}`,
-                        background: tok("search-bg", c.surface),
-                        color: tok("search-ink", c.ink),
-                        font: "inherit",
-                        fontSize: tok("search-size", t.text.small),
-                    }}
-                />
+                {field}
             </form>
 
             {results !== undefined && typed !== "" && (
-                <div aria-live="polite" className="bp-tree-search-results" style={{ marginTop: tok("search-results-gap", t.space.sm) }}>
+                <div aria-live="polite" className="bp-tree-search-results" style={panelStyle}>
                     {results.length === 0 ? (
                         <p className="bp-tree-search-empty" style={emptyStyle}>
-                            {config.labels.searchEmpty}
+                            {emptyLine(config.labels.searchEmpty, typed)}
                         </p>
                     ) : (
                         <ul style={listStyle}>
                             {results.map((hit, i) => (
-                                <li key={hit.href ?? `${i}-${hit.title}`}>
+                                <li key={hit.href ?? `${i}-${hit.title}`} className="bp-tree-search-entry">
                                     {hit.href ? (
                                         <Link href={hit.href} className="bp-tree-search-hit" style={hitStyle}>
                                             {hit.title}
@@ -560,7 +805,7 @@ export function SearchBox({ config, action, param, query, results, index, id }: 
                     aria-live="polite"
                     hidden
                     className="bp-tree-search-results bp-tree-search-index"
-                    style={{ marginTop: tok("search-results-gap", t.space.sm) }}
+                    style={panelStyle}
                     {...{ [SEARCH_INDEX_ATTR]: INDEX_SHOWN }}
                 >
                     <ul style={listStyle}>
@@ -568,6 +813,7 @@ export function SearchBox({ config, action, param, query, results, index, id }: 
                             <li
                                 key={entry.href}
                                 hidden
+                                className="bp-tree-search-entry"
                                 {...{ [SEARCH_TEXT_ATTR]: `${entry.heading ?? ""} ${entry.title}`.trim().toLowerCase() }}
                             >
                                 <Link href={entry.href} className="bp-tree-search-hit" style={hitStyle}>
@@ -584,8 +830,13 @@ export function SearchBox({ config, action, param, query, results, index, id }: 
                             </li>
                         ))}
                     </ul>
-                    <p className="bp-tree-search-empty" hidden style={emptyStyle} {...{ [SEARCH_EMPTY_ATTR]: "" }}>
-                        {config.labels.searchEmpty}
+                    <p
+                        className="bp-tree-search-empty"
+                        hidden
+                        style={emptyStyle}
+                        {...{ [SEARCH_EMPTY_ATTR]: config.labels.searchEmpty }}
+                    >
+                        {emptyLine(config.labels.searchEmpty, "")}
                     </p>
                 </div>
             )}
@@ -608,7 +859,7 @@ export function TreeRail({ config, headings }: TreeRailProps) {
     if (headings.length === 0) return null;
     return (
         <nav aria-label={config.labels.onThisPage} className="bp-tree-rail-nav">
-            <p className="bp-tree-rail-label" style={{ margin: 0, ...labelStyle(config) }}>
+            <p className="bp-tree-rail-label bp-label" style={{ margin: 0, ...labelStyle(config) }}>
                 {config.labels.onThisPage}
             </p>
             <div style={{ marginTop: tok("rail-label-gap", t.space.sm), display: "flex", flexDirection: "column", gap: tok("rail-gap", "2px") }}>
@@ -641,6 +892,8 @@ export function treeVariant(config: PressConfig, collection: string): Required<T
         sidebar: v?.sidebar ?? "plain",
         rail: v?.rail ?? false,
         pager: v?.pager ?? "wide",
+        search: v?.search ?? "box",
+        disclosure: v?.disclosure ?? "open",
     };
 }
 
@@ -789,6 +1042,7 @@ export interface TreeAsideProps {
  */
 export function TreeAside({ config, collection, tree, current, product, search }: TreeAsideProps) {
     const switcher = treeVariant(config, collection).switcher;
+    const group = product ? treeProducts(config, collection, product).find((p) => p.current)?.label : undefined;
     if (switcher === "list") {
         const list = treeProducts(config, collection).length > 0 && (
             <TreeSwitcher config={config} collection={collection} current={product} variant="list" />
@@ -796,7 +1050,14 @@ export function TreeAside({ config, collection, tree, current, product, search }
         return (
             <>
                 {search}
-                <TreeSidebar config={config} tree={tree} current={current} switcher={list || undefined} />
+                <TreeSidebar
+                    config={config}
+                    tree={tree}
+                    current={current}
+                    collection={collection}
+                    group={group}
+                    switcher={list || undefined}
+                />
             </>
         );
     }
@@ -804,7 +1065,7 @@ export function TreeAside({ config, collection, tree, current, product, search }
         <>
             <TreeSwitcher config={config} collection={collection} current={product} variant="tabs" />
             {search}
-            <TreeSidebar config={config} tree={tree} current={current} />
+            <TreeSidebar config={config} tree={tree} current={current} collection={collection} group={group} />
         </>
     );
 }

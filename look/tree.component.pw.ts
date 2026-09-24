@@ -96,6 +96,57 @@ test("the designed variants lay out as barakocms.com's docs do at a laptop width
     await context.close();
 });
 
+test("the closed disclosure is shut on a phone, names the page, and opens with a tap", async ({ browser }) => {
+    const { context, page } = await open(browser, "designed", 390);
+    const summary = page.locator(".bp-tree-summary");
+    await expect(summary).toBeVisible();
+    await expect(page.locator(".bp-tree-summary-group")).toHaveText("barakoCMS / Getting started");
+    await expect(page.locator(".bp-tree-summary-title")).toHaveText("Quickstart");
+    await expect(page.locator(".bp-tree-summary-show")).toBeVisible();
+    await expect(page.locator(".bp-tree-sections")).toBeHidden();
+
+    await summary.click();
+    await expect(page.locator(".bp-tree-sections")).toBeVisible();
+    await expect(page.locator(".bp-tree-summary-hide")).toHaveText("Close");
+    await expect(page.locator(".bp-tree-summary-show")).toBeHidden();
+    expect(await css(page, ".bp-tree-summary-chevron", "transform")).not.toBe("none");
+    await context.close();
+});
+
+test("the closed disclosure shows the whole sidebar above a phone, with no control and no script", async ({ browser }) => {
+    const { context, page } = await open(browser, "designed", 1280);
+    expect(await page.locator("details.bp-tree-sidebar").getAttribute("open")).toBeNull();
+    await expect(page.locator(".bp-tree-summary")).toBeHidden();
+    await expect(page.locator(".bp-tree-sections")).toBeVisible();
+    await expect(page.locator(".bp-tree-product")).toHaveCount(3);
+    await context.close();
+});
+
+test("the compact search box is one well, named for a screen reader, with its results floating", async ({ browser }) => {
+    const { context, page } = await open(browser, "designed", 1280, true);
+    await expect(page.locator(".bp-tree-search-label")).toHaveCount(0);
+    const input = page.getByRole("searchbox", { name: "Search the docs" });
+    await expect(input).toBeVisible();
+    const well = await page.locator(".bp-tree-search-box").boundingBox();
+    const icon = await page.locator(".bp-tree-search-icon").boundingBox();
+    const key = await page.locator(".bp-tree-search-key").boundingBox();
+    expect(well!.height).toBe(36);
+    expect(icon!.x).toBeLessThan(key!.x);
+    expect(await css(page, ".bp-tree-search-box", "background-color")).toBe("rgb(242, 243, 249)");
+
+    // The panel covers what follows rather than pushing it down.
+    const before = await page.locator(".bp-tree-sections").boundingBox();
+    await input.fill("install");
+    await expect(page.locator("[data-bp-search-index]")).toBeVisible();
+    expect(await css(page, "[data-bp-search-index]", "position")).toBe("absolute");
+    const after = await page.locator(".bp-tree-sections").boundingBox();
+    expect(after!.y).toBe(before!.y);
+
+    await input.fill("nothing like this");
+    await expect(page.locator("[data-bp-search-empty]")).toHaveText('Nothing matches "nothing like this".');
+    await context.close();
+});
+
 test("the designed variants stack on a phone and give the rail's room back", async ({ browser }) => {
     const { context, page } = await open(browser, "designed", 390);
     await expect(page.locator(".bp-tree-rail")).toBeHidden();

@@ -25,7 +25,7 @@ export const SEARCH_ROOT_ATTR = "data-bp-search";
 export const SEARCH_INDEX_ATTR = "data-bp-search-index";
 /** What an index entry is matched on, already lower case. */
 export const SEARCH_TEXT_ATTR = "data-bp-search-text";
-/** The line an index shows when nothing matched. */
+/** The line an index shows when nothing matched, holding the label it is written from. */
 export const SEARCH_EMPTY_ATTR = "data-bp-search-empty";
 
 /** The links a reader can walk to: what is drawn, not an index entry that is hidden. */
@@ -50,7 +50,12 @@ export function filterIndex(index: HTMLElement, typed: string): void {
     }
     index.hidden = words.length === 0;
     const empty = index.querySelector<HTMLElement>(`[${SEARCH_EMPTY_ATTR}]`);
-    if (empty) empty.hidden = count > 0;
+    if (empty) {
+        empty.hidden = count > 0;
+        // The label may name what was typed, as `{query}`.
+        const template = empty.getAttribute(SEARCH_EMPTY_ATTR) ?? "";
+        if (template.includes("{query}")) empty.textContent = template.split("{query}").join(typed.trim());
+    }
 }
 
 export function SearchKeys({ id }: { id: string }) {

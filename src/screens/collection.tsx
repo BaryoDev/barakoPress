@@ -209,6 +209,8 @@ export function ItemView(props: ItemViewProps) {
                                 action={col.tree.searchPath}
                                 param="q"
                                 index={col.tree.searchIndex ? treeSearchIndex(tree) : undefined}
+                                variant={col.tree.variant?.search}
+                                icon={col.tree.icons?.search}
                                 id={`bp-search-${item.collection}`}
                             />
                         )
@@ -448,6 +450,8 @@ export async function CollectionIndexView({
                                 param="q"
                                 query={query}
                                 index={col.tree.searchIndex ? treeSearchIndex(tree) : undefined}
+                                variant={col.tree.variant?.search}
+                                icon={col.tree.icons?.search}
                                 id={`bp-search-${collection}`}
                             />
                         )

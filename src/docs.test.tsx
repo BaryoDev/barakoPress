@@ -490,15 +490,24 @@ describe("a manual laid out by its settings (#130)", () => {
 
     it("takes the variants, the in-page index and a product's note from the tenant's Collections", async () => {
         laidOut({
-            variant: { switcher: "list", sidebar: "boxed", rail: true, pager: "halves" },
+            variant: { switcher: "list", sidebar: "boxed", rail: true, pager: "halves", search: "compact", disclosure: "closed" },
             searchIndex: true,
+            icons: { search: "#ic-search", chevron: "#ic-chevron-down" },
             products: [
                 { key: "cms", label: "barakoCMS", href: "/docs" },
                 { key: "press", label: "barakoPress", href: "https://github.com/BaryoDev/barakoPress", note: "on GitHub" },
             ],
         });
         const config = await site();
-        expect(config.collections.docs.tree?.variant).toEqual({ switcher: "list", sidebar: "boxed", rail: true, pager: "halves" });
+        expect(config.collections.docs.tree?.variant).toEqual({
+            switcher: "list",
+            sidebar: "boxed",
+            rail: true,
+            pager: "halves",
+            search: "compact",
+            disclosure: "closed",
+        });
+        expect(config.collections.docs.tree?.icons).toEqual({ search: "#ic-search", chevron: "#ic-chevron-down" });
         expect(config.collections.docs.tree?.searchIndex).toBe(true);
 
         const html = await markup(createPage(base)({ params: Promise.resolve({ path: ["docs", "delivery-paging"] }) }));
@@ -506,16 +515,24 @@ describe("a manual laid out by its settings (#130)", () => {
         expect(html).toContain("bp-tree-switcher-list");
         expect(html).toContain(">on GitHub</span>");
         expect(html).toContain("data-bp-search-index");
+        expect(html).toContain("bp-tree-search-compact");
+        expect(html).toContain("bp-tree-nav-closed");
+        expect(html).toContain(">Paging</span>");
         // Every page of the product is in the index, the one being read included.
         expect(html).toContain('data-bp-search-text="quickstart"');
         expect(html).toContain('data-bp-search-text="paging"');
     });
 
     it("keeps today's layout for a part whose variant it does not know, and ignores a rail that is not true", async () => {
-        laidOut({ variant: { switcher: "carousel", sidebar: "floating", rail: "yes", pager: 2 }, searchIndex: "yes" });
+        laidOut({
+            variant: { switcher: "carousel", sidebar: "floating", rail: "yes", pager: 2, search: "huge", disclosure: "sometimes" },
+            searchIndex: "yes",
+            icons: { search: "javascript:alert(1)", chevron: "#ok\" onload=\"x" },
+        });
         const config = await site();
         expect(config.collections.docs.tree?.variant).toBeUndefined();
         expect(config.collections.docs.tree?.searchIndex).toBeUndefined();
+        expect(config.collections.docs.tree?.icons).toBeUndefined();
 
         const html = await markup(createPage(base)({ params: Promise.resolve({ path: ["docs", "delivery-paging"] }) }));
         expect(html).toContain("bp-tree-switcher-tabs");

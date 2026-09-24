@@ -13,6 +13,11 @@
   `treeSearchIndex(tree)` builds that index once per tree read, and `itemHeadings` tokenises a body
   once however many pages list it. New exports: `TreeRail`, `TreeAside`, `treeVariant`,
   `treeSearchIndex`, `itemHeadings`, `markdownHeadings`. New label: `onThisPage`.
+  Two more variants: `search: "compact"`, one well with a magnifier, the input named for a screen
+  reader and a "/" key hint, its results floating; and `disclosure: "closed"`, the sidebar closed on a
+  phone under a control naming the page, with no script. A tree's `icons` may point both glyphs at a
+  site's own sprite. Every label paragraph carries `bp-label`, a result's `li` carries
+  `bp-tree-search-entry`, `searchEmpty` may say `{query}`, and there is a `closeContents` label.
 
 - The tenant-aware `/api/blocks` handler takes its request as required, not optional. Next's route
   type check refuses a handler whose request may be absent, so a consumer built with webpack failed

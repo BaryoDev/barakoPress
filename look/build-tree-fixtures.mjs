@@ -7,8 +7,10 @@
 //   tree-default   every part with no variant and no token: what a site that sets nothing draws.
 //   tree-tokened   the same markup under a stylesheet naming a tree token for each kind of value,
 //                  so the test can read back that each one reached its part in a real browser.
-//   tree-designed  every variant at once, with the tokens barakocms.com's docs are drawn with, and
-//                  the in-page index wired to the same filter the search box's client code runs.
+//   tree-designed  every variant at once (the list switcher, the boxed sidebar, the rail, the pager in
+//                  halves, the compact search box and the phone disclosure closed), with the tokens
+//                  barakocms.com's docs are drawn with, and the in-page index wired to the same filter
+//                  the search box's client code runs.
 import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -65,6 +67,21 @@ export const DESIGNED = {
     "tree-pager-label-size": "11px",
     "tree-pager-title-gap": "6px",
     "tree-pager-title-weight": "700",
+    "tree-search-bg": "#F2F3F9",
+    "tree-search-radius": "10px",
+    "tree-search-size": "12px",
+    "tree-search-key-size": "10.5px",
+    "tree-search-panel-radius": "12px",
+    "tree-search-hit-radius": "8px",
+    "tree-search-hit-size": "13px",
+    "tree-search-hit-weight": "700",
+    "tree-search-hit-gap": "0px",
+    "tree-summary-min-height": "56px",
+    "tree-summary-pad-y": "8px",
+    "tree-summary-pad-x": "14px",
+    "tree-summary-radius": "12px",
+    "tree-summary-title-size": "15px",
+    "tree-summary-action-size": "14px",
 };
 
 const BODY = [
@@ -77,9 +94,10 @@ const BODY = [
     "Ship it.",
 ].join("\n\n");
 
-function config(tree = {}) {
+function config(tree = {}, labels = {}) {
     return defineConfig({
         site: { name: "Tree test", url: "https://tree.example" },
+        labels,
         collections: {
             docs: {
                 type: "doc",
@@ -141,7 +159,10 @@ writeFileSync(join(here, "tree-tokened.generated.html"), page(config(), reading,
 writeFileSync(
     join(here, "tree-designed.generated.html"),
     page(
-        config({ variant: { switcher: "list", sidebar: "boxed", rail: true, pager: "halves" }, searchIndex: true }),
+        config(
+            { variant: { switcher: "list", sidebar: "boxed", rail: true, pager: "halves", search: "compact", disclosure: "closed" }, searchIndex: true },
+            { search: "Search the docs", searchEmpty: 'Nothing matches "{query}".', contents: "All docs" },
+        ),
         item("quickstart", "Quickstart", BODY),
         rootVars(DESIGNED),
         filterScript,

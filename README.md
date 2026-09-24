@@ -314,6 +314,7 @@ sits. `tree` names them, and the settings beside them say what the sidebar and t
 | `limit` | The most pages read to build the tree. 500 unless set, and 500 is the ceiling as well as the default |
 | `variant` | How the parts are laid out. See "Styling the tree" below. Every part is today's layout when unset |
 | `searchIndex` | `true` to search the tree's titles and headings in the page as the reader types. The box is drawn whenever this is set; with `searchPath` too, a reader with no script submits there |
+| `icons` | `{ "search": "#id", "chevron": "#id" }`: symbols already on the page (a site's own sprite) for the compact search box's magnifier and the closed disclosure's chevron. A value that is not `#` and a name is dropped, and the engine draws its own |
 
 A product may also carry a `note`, a few words drawn after its label in the list switcher (`"on GitHub"`).
 
@@ -363,7 +364,10 @@ A site that names none draws what it drew before, pixel for pixel.
 | `tree-aside-gap` | `space.md` | Between the switcher, the search box and the sidebar |
 | `tree-section-gap` | `space.md` | Between sections, and between the list switcher and the sections |
 | `tree-label-gap`, `tree-label-size`, `tree-label-ink` | `space.xs`, `text.meta`, `muted` | Section labels, the list switcher's label and the rail's heading. The size is also the search box's label and the phone control's |
-| `tree-summary-bg`, `tree-summary-edge`, `tree-summary-ink`, `tree-summary-radius` | `surface`, `hairline`, `muted`, `radii.control` | The sidebar's control on a phone |
+| `tree-summary-bg`, `tree-summary-edge`, `tree-summary-ink`, `tree-summary-radius`, `tree-summary-space` | `surface`, `hairline`, `muted`, `radii.control`, `space.sm` | The sidebar's control on a phone, and the space under it while open |
+| `tree-summary-pad-y`, `tree-summary-pad-x`, `tree-summary-min-height`, `tree-summary-gap`, `tree-summary-line-gap` | `10px`, `12px`, `0px`, `space.sm`, `3px` | The closed disclosure's control |
+| `tree-summary-title-size`, `tree-summary-title-weight`, `tree-summary-title-ink` | `text.small`, `700`, `ink` | The page it names |
+| `tree-summary-action-size`, `tree-summary-action-weight`, `tree-summary-action-ink`, `tree-summary-action-gap`, `tree-summary-icon-size` | `text.small`, `600`, `accentInk`, `6px`, `13px` | Its "Contents" and "Close", and the chevron |
 | `tree-link-gap`, `tree-indent` | `0px`, `space.md` | Between rows, and a child's indent |
 | `tree-link-pad-y`, `tree-link-pad-x`, `tree-link-radius`, `tree-link-size`, `tree-link-leading` | `6px`, `10px`, `radii.control`, `text.small`, `1.45` | A row in the sidebar, and a product in the list switcher |
 | `tree-link-ink`, `tree-link-weight` | `secondaryInk`, `inherit` | A row that is not the page being read |
@@ -374,6 +378,10 @@ A site that names none draws what it drew before, pixel for pixel.
 | `tree-search-bg`, `tree-search-edge`, `tree-search-ink`, `tree-search-radius`, `tree-search-size`, `tree-search-pad-y`, `tree-search-pad-x` | `surface`, `hairline`, `ink`, `radii.control`, `text.small`, `9px`, `12px` | The search box |
 | `tree-search-label-gap`, `tree-search-label-ink` | `space.xs`, `muted` | Its label |
 | `tree-search-results-gap`, `tree-search-hit-gap`, `tree-search-hit-radius`, `tree-search-hit-ink`, `tree-search-hit-weight`, `tree-search-empty-ink` | `space.sm`, `2px`, `radii.control`, `ink`, `600`, `muted` | Its results |
+| `tree-search-height`, `tree-search-gap`, `tree-search-icon-size` | `36px`, `9px`, `13px` | The compact well. It also reads `tree-search-bg` (`pageBg` here), `tree-search-radius`, `tree-search-pad-x`, `tree-search-size` (`text.meta` here), `tree-search-ink` and, for the well's own ink, `tree-search-label-ink` |
+| `tree-search-key-pad-y`, `tree-search-key-pad-x`, `tree-search-key-radius`, `tree-search-key-bg`, `tree-search-key-edge`, `tree-search-key-size`, `tree-search-key-weight` | `2px`, `6px`, `6px`, `surface`, `hairline`, `text.meta`, `700` | The "/" key hint |
+| `tree-search-panel-gap`, `tree-search-panel-pad`, `tree-search-panel-bg`, `tree-search-panel-edge`, `tree-search-panel-radius`, `tree-search-panel-shadow` | `6px`, `6px`, `surface`, `hairline`, `radii.panel`, `0 10px 24px -12px rgba(16,18,35,.25)` | The compact box's floating results |
+| `tree-search-hit-size`, `tree-search-empty-pad-y`, `tree-search-empty-pad-x` | `text.small`, `8px`, `10px` | A compact result, and the line saying nothing matched |
 | `tree-rail-width`, `tree-rail-pad-y`, `tree-rail-pad-x`, `tree-rail-label-gap`, `tree-rail-gap` | `layout.columnMin`, `space.xl`, `space.md`, `space.sm`, `2px` | The rail (its padding only when `boxed`) |
 | `tree-rail-link-pad-y`, `tree-rail-link-pad-x`, `tree-rail-link-size`, `tree-rail-link-weight`, `tree-rail-link-ink`, `tree-rail-link-edge` | `6px`, `10px`, `text.small`, `inherit`, `secondaryInk`, `hairline` | A heading in the rail |
 | `tree-pager-top`, `tree-pager-gap`, `tree-pager-pad-y`, `tree-pager-pad-x`, `tree-pager-radius`, `tree-pager-bg`, `tree-pager-edge` | `space.lg`, `space.sm`, `16px`, `18px`, `radii.panel`, `surface`, `hairline` | Previous and next |
@@ -393,6 +401,8 @@ the tree's `variant`, and a `variant` prop on the component:
 | `sidebar` | `plain` (default), `boxed` | The sidebar beside the page in the wide column, or the page split edge to edge with the sidebar a surface column and a hairline between. `boxed` stacks on a phone |
 | `rail` | `false` (default), `true` | An "on this page" column of the item's second level headings at the inline end, linking to the ids its body renders. Hidden below 64rem |
 | `pager` | `wide` (default), `halves` | Previous and next taking the room there is and wrapping on a phone, or two halves that never wrap, next on the right even with no previous |
+| `search` | `box` (default), `compact` | A labelled input with its results under it, or one well holding a magnifier, the input and a "/" key hint, the input named by `aria-label` with no label on screen, and the results in a panel floating over what follows. "/" focuses either |
+| `disclosure` | `open` (default), `closed` | On a phone, the sidebar open under a "Contents" control, or closed until tapped, the control naming the product, the section and the page being read, with "Contents" and a chevron that turn to `closeContents` and point up while open. Above the phone breakpoint both show the whole sidebar and no control. `closed` needs no script: the content is shown above the breakpoint through `::details-content`, and a browser without it keeps the control there too, so the sidebar is one tap away rather than gone |
 
 A value the engine does not know is today's layout for that part.
 
@@ -407,8 +417,14 @@ covers (a hover, a transition): `bp-tree-shell` (and `bp-tree-shell-boxed`), `bp
 `bp-tree-search-hit-title`, `bp-tree-search-hit-page`, `bp-tree-search-empty`, `bp-tree-rail-nav`,
 `bp-tree-rail-label`, `bp-tree-rail-link`, `bp-tree-pager`, `bp-tree-pager-link`,
 `bp-tree-pager-prev`, `bp-tree-pager-next`, `bp-tree-pager-label`, `bp-tree-pager-title`,
-`bp-tree-pager-empty` and `bp-tree-edit`. The styles are inline, so a stylesheet rule that sets a
-property the part already sets needs `!important`; a token does not.
+`bp-tree-pager-empty`, `bp-tree-edit`, and for the variants `bp-tree-search-compact`,
+`bp-tree-search-box`, `bp-tree-search-icon`, `bp-tree-search-key`, `bp-tree-search-entry` (a result's
+`li`), `bp-tree-nav-closed`, `bp-tree-summary-closed`, `bp-tree-summary-group`,
+`bp-tree-summary-title`, `bp-tree-summary-action`, `bp-tree-summary-show`, `bp-tree-summary-hide` and
+`bp-tree-summary-chevron`. Every label paragraph (a section's, the list switcher's, the pager's, the
+rail's) also carries `bp-label`, so a rule aimed at running text can skip them all with
+`:not(.bp-label)`. The styles are inline, so a stylesheet rule that sets a property the part already
+sets needs `!important`; a token does not.
 
 **The search index.** `treeSearchIndex(tree)` lists every page with a route and then its second level
 headings, in reading order, each heading linked to its anchor. It is built once per tree read and
@@ -1054,6 +1070,7 @@ some collection has `feed` on, so a clinic with no posts stops advertising an em
 | `menu` | `Menu`: the name of the phone menu's links |
 | `submenu` | `{label} links`: the button beside a header link with children, `{label}` its label |
 | `onThisPage` | `On this page`: the heading over a tree page's rail |
+| `closeContents` | `Close`: the closed phone disclosure's control while it is open |
 
 A key left out, or saved as anything but a word, keeps the English, so a half-filled map reads. A
 build-time site passes `labels` to `defineConfig`. Nothing about a site's own content is here: a

@@ -34,7 +34,7 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-function configWith(tree: { variant?: Variant; searchIndex?: boolean; searchPath?: string } = {}) {
+function configWith(tree: { variant?: Variant; searchIndex?: boolean; searchPath?: string; icons?: { search?: string; chevron?: string } } = {}) {
     return defineConfig({
         site: { name: "Manual", url: "https://manual.example" },
         collections: {
@@ -189,7 +189,7 @@ describe("the variants", () => {
         expect(search).toBeGreaterThanOrEqual(0);
         expect([search < sidebar, sidebar < list, list < sections]).toEqual([true, true, true]);
         expect(html).not.toContain("bp-tree-tab");
-        expect(html).toContain('<p class="bp-tree-switcher-label"');
+        expect(html).toContain('<p class="bp-tree-switcher-label bp-label"');
         // A product is a sidebar row, marked the way the page being read is.
         expect(html).toMatch(/<span class="bp-tree-link bp-tree-link-current bp-tree-product"[^>]*aria-current="true"[^>]*>Second edition<span class="bp-tree-product-note"[^>]*>draft<\/span><\/span>/);
         expect(html).toMatch(/<a href="\/guide" class="bp-tree-link bp-tree-product"/);
@@ -243,6 +243,74 @@ describe("the variants", () => {
     });
 });
 
+describe("the compact search box", () => {
+    it("is one well: an icon, an input named for a screen reader, and a key hint, with no label on screen", () => {
+        const config = configWith();
+        const html = renderToStaticMarkup(<SearchBox config={config} param="q" id="c" index={treeSearchIndex(tree())} variant="compact" />);
+        expect(html).not.toContain("<label");
+        expect(html).toMatch(/<input id="c" type="search" placeholder="Search" aria-label="Search"[^>]*name="q"/);
+        expect(html).toMatch(/<span aria-hidden="true" class="bp-tree-search-key"[^>]*>\/<\/span>/);
+        expect(html).toMatch(/<svg viewBox="0 0 24 24" aria-hidden="true" class="bp-tree-search-icon"/);
+        // The results float over what follows.
+        expect(html).toMatch(/class="bp-tree-search-results bp-tree-search-index" style="position:absolute;z-index:10;inset-inline:0/);
+    });
+
+    it("draws the site's own glyph when it names a symbol on the page", () => {
+        const html = renderToStaticMarkup(<SearchBox config={configWith()} param="q" id="c" variant="compact" icon="#ic-search" />);
+        expect(html).toContain('<use href="#ic-search"></use>');
+    });
+
+    it("is what the item page draws when the tree asks for it, and today's box when it does not", () => {
+        const compact = renderToStaticMarkup(
+            <ItemView config={configWith({ searchIndex: true, variant: { search: "compact" }, icons: { search: "#ic-search" } })} item={item("keys", "Keys")} tree={tree()} />,
+        );
+        expect(compact).toContain("bp-tree-search-compact");
+        expect(compact).toContain('<use href="#ic-search"></use>');
+        const box = renderToStaticMarkup(<ItemView config={configWith({ searchIndex: true })} item={item("keys", "Keys")} tree={tree()} />);
+        expect(box).not.toContain("bp-tree-search-compact");
+        expect(box).toContain('class="bp-tree-search-label"');
+    });
+
+    it("puts what was typed into the empty line where the label says {query}", () => {
+        const config = defineConfig({ ...configWith(), labels: { searchEmpty: 'Nothing matches "{query}".' } });
+        const html = renderToStaticMarkup(<SearchBox config={config} param="q" id="c" query="zzz" results={[]} variant="compact" />);
+        expect(html).toContain("Nothing matches &quot;zzz&quot;.");
+    });
+});
+
+describe("the closed phone disclosure", () => {
+    it("is a closed details whose control names the product, the section and the page being read", () => {
+        const config = configWith({ variant: { disclosure: "closed" }, icons: { chevron: "#ic-chevron-down" } });
+        const html = renderToStaticMarkup(<TreeAside config={config} collection="guide" tree={tree()} current="keys" product="second" />);
+        expect(html).toMatch(/<details class="bp-tree-sidebar bp-tree-nav-closed">/);
+        expect(html).not.toMatch(/<details[^>]* open/);
+        expect(html).toMatch(/<span class="bp-tree-summary-group"[^>]*>Second edition \/ Basics<\/span>/);
+        expect(html).toMatch(/<span class="bp-tree-summary-title"[^>]*>Keys<\/span>/);
+        expect(html).toContain('<span class="bp-tree-summary-show">Contents</span><span class="bp-tree-summary-hide">Close</span>');
+        expect(html).toContain('<use href="#ic-chevron-down"></use>');
+        // Above a phone the content shows although the element is closed, with no script.
+        expect(html).toContain("@supports selector(::details-content){@media(min-width:48rem){.bp-tree-nav-closed>summary{display:none!important}.bp-tree-nav-closed::details-content{content-visibility:visible}}}");
+    });
+
+    it("stays open, under the Contents control, when the tree does not ask", () => {
+        const html = renderToStaticMarkup(<TreeAside config={configWith()} collection="guide" tree={tree()} current="keys" />);
+        expect(html).toMatch(/<details class="bp-tree-sidebar bp-tree-nav" open="">/);
+        expect(html).not.toContain("bp-tree-summary-title");
+    });
+});
+
+describe("a label a site's stylesheet may need to skip", () => {
+    it("carries bp-label on every label paragraph, and the lists' items carry their own class", () => {
+        const html = all(configWith(), { rail: true });
+        for (const name of ["bp-tree-section-label", "bp-tree-pager-label", "bp-tree-rail-label"]) {
+            expect(html, name).toContain(`class="${name} bp-label"`);
+        }
+        const paragraphs = [...html.matchAll(/<p class="([^"]*)"/g)].map((m) => m[1]);
+        expect(paragraphs.filter((c) => /label/.test(c) && !c.includes("bp-label"))).toEqual([]);
+        expect(html).toContain('<li class="bp-tree-search-entry">');
+    });
+});
+
 describe("the search index", () => {
     it("lists every page and then its headings, in reading order, each heading linked to its anchor", () => {
         const index = treeSearchIndex(tree());
@@ -281,8 +349,8 @@ describe("the search index", () => {
         // No route reads the query here, so the form names none rather than one that ignores it.
         expect(html).not.toMatch(/<form[^>]*action=/);
         expect(html).toMatch(/<div aria-live="polite" hidden="" class="bp-tree-search-results bp-tree-search-index"[^>]*data-bp-search-index="8"/);
-        expect(html).toMatch(/<li hidden="" data-bp-search-text="before you start hello"><a href="\/guide\/hello#before-you-start"/);
-        expect(html).toContain('data-bp-search-empty=""');
+        expect(html).toMatch(/<li hidden="" class="bp-tree-search-entry" data-bp-search-text="before you start hello"><a href="\/guide\/hello#before-you-start"/);
+        expect(html).toContain(`data-bp-search-empty="${config.labels.searchEmpty}"`);
     });
 
     it("stays out of the page unless the tree asks for it", () => {
