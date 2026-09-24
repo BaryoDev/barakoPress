@@ -2,6 +2,9 @@
 
 ## 0.8.0 (unreleased)
 
+- The tenant-aware `/api/blocks` handler takes its request as required, not optional. Next's route
+  type check refuses a handler whose request may be absent, so a consumer built with webpack failed
+  its type check on `app/api/blocks/route.ts`.
 - Counts, sums and groups over a source (#128). `{{count.<collection>}}` is how many published
   entries a collection has, read as the delivery API's `totalItems` for a page of one row and cached
   like any read. Inside a `source`, `{{count}}` is how many rows its filter matched, and

@@ -79,6 +79,11 @@ const config = defineConfig({ sites: {}, cmsUrl: CMS });
 const registry = createBlockRegistry(config);
 const GET = createBlockSchemaRoute(config, registry, { consoleOrigins: [CONSOLE] });
 
+// Next's route type check refuses a handler whose request may be absent, so it must be required.
+// This line does not compile while the parameter is optional.
+const requestIsRequired: undefined extends Parameters<typeof GET>[0] ? false : true = true;
+void requestIsRequired;
+
 function ask(host: string, origin?: string): Request {
     requestHeaders = new Headers({ host, ...(origin ? { origin } : {}) });
     return new Request(`https://${host}/api/blocks`, { headers: requestHeaders });
