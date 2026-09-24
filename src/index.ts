@@ -269,6 +269,7 @@ export {
     SLOT_BLOCK,
     PAGER_BLOCK,
     FILTER_BAR_BLOCK,
+    MAX_FILTER_VALUES,
     MAX_SOURCES,
     MAX_SOURCE_ROWS,
 } from "./blocks/data.js";

@@ -8,7 +8,8 @@
   each with the bar's id and its values, and a click writes one rule that hides the rows without the
   value, escaped as a CSS string and winning over inline `display`. `separator` splits a text field
   holding several values, and `hideEmptyGroups` hides a group of a grouped source once none of its
-  rows is left. A site needs no hide rule of its own. A source with no bar renders as it did.
+  rows is left. A bar offers at most a hundred values, and a row of a nested source belongs to both
+  bars. A site needs no hide rule of its own. A source with no bar renders as it did.
 - Style recipes, and inline marks in text (#131). `StyleRecipes` in the site settings (or
   `theme.recipes`) holds named looks, each `{ class, style }`: classes put on the element, and CSS
   properties to values, where `{name}` in a value is a token and `{colors.accent}`, `{space.lg}` and

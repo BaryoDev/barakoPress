@@ -8,9 +8,9 @@
  * No directive here: the client bar and the binder both read it.
  */
 
-/** Which bar a row belongs to. */
+/** The bars a row belongs to, separated by spaces: a row of a nested source has two. */
 export const FILTER_ATTR = "data-bp-filter";
-/** The row's values, each one a token of `filterToken`, separated by spaces. */
+/** The row's values, each one `<bar id>:<filterToken>`, separated by spaces. */
 export const FILTER_VALUES_ATTR = "data-bp-filter-values";
 /** Set on the bar to the chosen value, and absent while everything shows. */
 export const FILTER_CHOSEN_ATTR = "data-bp-filter-value";
@@ -21,11 +21,33 @@ export const FILTER_CHOSEN_ATTR = "data-bp-filter-value";
  * quote and angle bracket into something else.
  */
 export function filterToken(value: string): string {
-    return encodeURIComponent(value);
+    return encodeURIComponent(wellFormed(value));
 }
 
-export function filterTokens(values: readonly string[]): string {
-    return values.map(filterToken).join(" ");
+/*
+ * A lone surrogate is valid JSON and refused by `encodeURIComponent`, which throws, and a throw here
+ * takes the whole page down. It becomes U+FFFD, as a browser would show it.
+ */
+function wellFormed(value: string): string {
+    return value.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD");
+}
+
+/** A value under one bar, so one row can carry the values of two bars and each rule reads its own. */
+export function markToken(id: string, value: string): string {
+    return `${id}:${filterToken(value)}`;
+}
+
+export interface FilterMark {
+    id: string;
+    values: string[];
+}
+
+/** The two attributes for a block the binder marked. */
+export function filterAttrs(marks: readonly FilterMark[]): Record<string, string> {
+    return {
+        [FILTER_ATTR]: marks.map((mark) => mark.id).join(" "),
+        [FILTER_VALUES_ATTR]: marks.flatMap((mark) => mark.values.map((value) => markToken(mark.id, value))).join(" "),
+    };
 }
 
 /*
@@ -47,7 +69,7 @@ export function cssString(value: string): string {
  */
 export function filterRule(id: string, value: string): string {
     return (
-        `[${FILTER_ATTR}=${cssString(id)}]:not([${FILTER_VALUES_ATTR}~=${cssString(filterToken(value))}])` +
+        `[${FILTER_ATTR}~=${cssString(id)}]:not([${FILTER_VALUES_ATTR}~=${cssString(markToken(id, value))}])` +
         `{display:none!important}`
     );
 }

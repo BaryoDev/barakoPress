@@ -14,6 +14,7 @@ import {
 } from "./bindings.js";
 import {
     FILTER_BAR_BLOCK,
+    MAX_FILTER_VALUES,
     MAX_SOURCES,
     MAX_SOURCE_ROWS,
     PAGER_BLOCK,
@@ -72,8 +73,9 @@ interface Filter {
     id: string;
     field: string;
     separator: string;
-    /** Every value among the rows, in the order the bar offers them. */
+    /** The values the bar offers, in its order, at most MAX_FILTER_VALUES. */
     values: string[];
+    offered: Set<string>;
     hideEmptyGroups: boolean;
     /** Set once the bar has rendered, so a second bar in the same source draws nothing. */
     drawn: boolean;
@@ -96,8 +98,13 @@ export interface BindContext {
     count: (path: string) => Promise<number | undefined> | number | undefined;
     /** One read per collection per render, however many placeholders count it. */
     counts: Map<string, Promise<number | undefined>>;
-    /** How many filters this render has made, so two on one page get two ids. */
+    /** How many filters this bind has made, so two on one page get two ids. */
     filters: number;
+    /*
+     * Random per bind. A page's regions and its body are bound apart, each counting from one, and
+     * two identical bars in them would otherwise share an id, so a click in one filtered both.
+     */
+    salt: string;
 }
 
 export interface BindPageOptions {
@@ -115,6 +122,7 @@ export async function bindBlocks(blocks: ResolvedBlock[], options: BindPageOptio
         count: (path) => collectionCount(ctx, path),
         counts: new Map(),
         filters: 0,
+        salt: Math.random().toString(36).slice(2, 10),
     };
     if (options.scopes.count) ctx.count = options.scopes.count;
     const source = new BindingSource(
@@ -357,8 +365,8 @@ async function bindRepeat(block: ResolvedBlock, frame: Frame, ctx: BindContext):
         const rowFrame = { ...frame, source: frame.source.with({ item: () => scope }), filter: undefined };
         const row = await bindList(content, rowFrame, ctx);
         if (filter) {
-            const values = rowValues(ctx.config, item, filter.field, filter.separator);
-            for (const bound of row) bound.filter = { id: filter.id, values };
+            const values = offeredValues(ctx.config, item, filter);
+            for (const bound of row) mark(bound, filter.id, values);
         }
         out.push(...row);
     }
@@ -427,8 +435,8 @@ async function bindSource(block: ResolvedBlock, frame: Frame, ctx: BindContext):
     const items = loaded?.items ?? [];
     const total = typeof loaded?.total === "number" ? loaded.total : undefined;
 
-    const filter = await filterOf(content, frame, ctx, items);
     const groupBy = (await boundString(block, frame.source, "groupBy")).trim();
+    const filter = await filterOf(content, frame, ctx, items, groupBy !== "");
     if (groupBy !== "") {
         const order = (await boundString(block, frame.source, "groupOrder")).split(",");
         return bindGroups(content, { ...frame, filter }, ctx, groupRows(ctx.config, items, groupBy, order), total);
@@ -443,7 +451,9 @@ async function bindSource(block: ResolvedBlock, frame: Frame, ctx: BindContext):
 
 /*
  * The filter for a source whose content holds a `filterBar`, or undefined. The first bar found, in
- * the order the page is written and not inside a nested source, is the one whose field counts.
+ * the order the page is written and not inside a nested source, is the one whose field counts. In a
+ * grouped source only a bar at the top level of its content counts, since that is the bar drawn
+ * once ahead of the groups; one inside a band would repeat with every group.
  *
  * The values come from the rows this source read, so a source that pages filters the page it is on.
  */
@@ -452,8 +462,9 @@ async function filterOf(
     frame: Frame,
     ctx: BindContext,
     items: Item[],
+    grouped: boolean,
 ): Promise<Filter | undefined> {
-    const bar = findFilterBar(content);
+    const bar = grouped ? content.find((block) => block.definition.type === FILTER_BAR_BLOCK) : findFilterBar(content);
     if (!bar) return undefined;
     const field = (await boundString(bar, frame.source, "field")).trim();
     if (field === "") return undefined;
@@ -462,13 +473,14 @@ async function filterOf(
 
     const seen = new Set<string>();
     for (const item of items) for (const value of rowValues(ctx.config, item, field, separator)) seen.add(value);
-    const values = ordered([...seen], order);
+    const values = ordered([...seen], order).slice(0, MAX_FILTER_VALUES);
     ctx.filters++;
     return {
-        id: `f${ctx.filters}-${hash(`${field}\n${values.join("\n")}`)}`,
+        id: `f${ctx.filters}-${ctx.salt}`,
         field,
         separator,
         values,
+        offered: new Set(values),
         hideEmptyGroups: bar.props.hideEmptyGroups === true,
         drawn: false,
     };
@@ -507,6 +519,17 @@ function rowValues(config: PressConfig, item: Item, field: string, separator: st
     return [...new Set(parts.map((part) => part.trim()).filter((part) => part !== ""))];
 }
 
+/** A row's values that the bar offers. One it does not offer could never be chosen. */
+function offeredValues(config: PressConfig, item: Item, filter: Filter): string[] {
+    return rowValues(config, item, filter.field, filter.separator).filter((value) => filter.offered.has(value));
+}
+
+/** Marks a block as belonging to bar `id`, unless it already does. */
+function mark(block: ResolvedBlock, id: string, values: string[]): void {
+    if (block.filters?.some((mark) => mark.id === id)) return;
+    block.filters = [...(block.filters ?? []), { id, values }];
+}
+
 /** Keys in the order first seen, with the ones `order` names moved to the front in that order. */
 function ordered(keys: string[], order: string[]): string[] {
     const first = order.map((key) => key.trim()).filter((key) => key !== "" && keys.includes(key));
@@ -514,18 +537,6 @@ function ordered(keys: string[], order: string[]): string[] {
     return [...front, ...keys.filter((key) => !front.includes(key))];
 }
 
-/*
- * FNV-1a, so an id differs between two renders that each made one filter, as the header and the
- * page body do when they are bound apart, without being random between two renders of one page.
- */
-function hash(text: string): string {
-    let h = 0x811c9dc5;
-    for (let i = 0; i < text.length; i++) {
-        h ^= text.charCodeAt(i);
-        h = Math.imul(h, 0x01000193);
-    }
-    return (h >>> 0).toString(36);
-}
 
 /*
  * A grouped source renders its content once per group, and inside each the group is the rows: a
@@ -560,10 +571,8 @@ async function bindGroups(
         // A group's own blocks carry every value its rows hold, so the rule that hides a row hides
         // a group none of whose rows is left. A block that is a row already keeps its own.
         if (filter?.hideEmptyGroups) {
-            const values = [
-                ...new Set(group.items.flatMap((item) => rowValues(ctx.config, item, filter.field, filter.separator))),
-            ];
-            for (const block of bound) block.filter ??= { id: filter.id, values };
+            const values = [...new Set(group.items.flatMap((item) => offeredValues(ctx.config, item, filter)))];
+            for (const block of bound) mark(block, filter.id, values);
         }
         out.push(...bound);
     }

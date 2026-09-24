@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { PressTheme } from "../theme.js";
-import { FILTER_ATTR, FILTER_VALUES_ATTR, filterTokens } from "./filter.js";
+import { filterAttrs } from "./filter.js";
 import type { ResolvedBlock } from "./schema.js";
 
 /*
@@ -48,9 +48,7 @@ export function BlockList({ blocks, theme }: { blocks: ResolvedBlock[]; theme: P
                     <div
                         key={index}
                         data-block={block.definition.type}
-                        {...(block.filter
-                            ? { [FILTER_ATTR]: block.filter.id, [FILTER_VALUES_ATTR]: filterTokens(block.filter.values) }
-                            : {})}
+                        {...(block.filters?.length ? filterAttrs(block.filters) : {})}
                         style={block.definition.transparent ? TRANSPARENT : RESET_LIST}
                     >
                         <Component props={block.props} slots={slots} theme={theme} />

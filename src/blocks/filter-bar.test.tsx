@@ -69,13 +69,32 @@ const CHANGES: Entry[] = [
     { id: "x4", slug: "x4", data: { Name: "leak", Kind: "Fixed", Release: "4.2.0" } },
 ];
 
+const ODD: Entry[] = [
+    // Valid JSON the CMS can hold: a lone surrogate, which percent-encoding refuses.
+    { id: "o1", slug: "o1", data: { Name: "odd", Tag: "Bad\ud800x" } },
+    { id: "o2", slug: "o2", data: { Name: "plain", Tag: "Good" } },
+];
+
+// One row holding 150 values, which would otherwise be 150 buttons.
+const MANY: Entry[] = [
+    { id: "m1", slug: "m1", data: { Name: "many", Tags: Array.from({ length: 150 }, (_, i) => `t${i}`).join(",") } },
+];
+
 const COLLECTIONS = {
+    odd: { type: "odd", fields: { title: "Name" } },
+    many: { type: "many", fields: { title: "Name" } },
     packages: { type: "package", fields: { title: "Name" } },
     contributors: { type: "contributor", fields: { title: "Name" } },
     changes: { type: "change", fields: { title: "Name" } },
 };
 
-const CONTENT: Record<string, Entry[]> = { package: PACKAGES, contributor: CONTRIBUTORS, change: CHANGES };
+const CONTENT: Record<string, Entry[]> = {
+    package: PACKAGES,
+    contributor: CONTRIBUTORS,
+    change: CHANGES,
+    odd: ODD,
+    many: MANY,
+};
 
 let pages: Record<string, Entry> = {};
 
@@ -153,14 +172,21 @@ const source = (props: Record<string, unknown>, content: unknown[]) => ({
 /** The buttons' labels, in order. */
 const buttons = (out: string) => [...out.matchAll(/<button[^>]*>([^<]*)<\/button>/g)].map((m) => m[1]);
 
-/** Each marked block's bar, its values decoded, and the first `[[marker]]` inside it. */
+/**
+ * Each marked block's bars, its values under each bar decoded, and the first `[[marker]]` inside
+ * it. `id` and `values` are the first bar's, for a block only one bar marks.
+ */
 function marked(out: string) {
-    return [...out.matchAll(/data-bp-filter="([^"]+)" data-bp-filter-values="([^"]*)"[^>]*>.*?\[\[([^\]]*)\]\]/g)].map(
-        (m) => ({
-            id: m[1],
-            values: m[2] === "" ? [] : m[2].split(" ").map(decodeURIComponent),
-            marker: m[3],
-        }),
+    return [...out.matchAll(/data-bp-filter="([^"]+)" data-bp-filter-values="([^"]*)"[^>]*>(?:(?!data-bp-filter=).)*?\[\[([^\]]*)\]\]/g)].map(
+        (m) => {
+            const ids = m[1].split(" ");
+            const byId: Record<string, string[]> = Object.fromEntries(ids.map((id) => [id, []]));
+            for (const token of m[2] === "" ? [] : m[2].split(" ")) {
+                const at = token.indexOf(":");
+                byId[token.slice(0, at)].push(decodeURIComponent(token.slice(at + 1)));
+            }
+            return { ids, byId, id: ids[0], values: byId[ids[0]], marker: m[3] };
+        },
     );
 }
 
@@ -261,7 +287,7 @@ describe("the rows", () => {
         expect(out).not.toContain("data-bp-filter");
     });
 
-    it("of a source nested in a row are not marked with the outer bar", async () => {
+    it("of a source nested in a row carry the outer row's value, so the outer bar hides them with it", async () => {
         const out = await page([
             source({ collection: "packages", filterField: "Category", filterValue: "Storage" }, [
                 bar({ field: "Name" }),
@@ -280,7 +306,62 @@ describe("the rows", () => {
             "inner crash",
             "inner leak",
         ]);
-        expect(rows.every((r) => r.values.length === 1 && r.values[0] === "Files")).toBe(true);
+        expect(rows.every((r) => r.ids.length === 1 && r.values.length === 1 && r.values[0] === "Files")).toBe(true);
+    });
+
+    it("of a nested source with its own bar carry the inner bar's mark as well as the outer row's", async () => {
+        const out = await page([
+            source({ collection: "packages", filterField: "Category", filterValue: "Storage" }, [
+                bar({ field: "Name" }),
+                repeat([
+                    text("[[outer {{item.Title}}]]"),
+                    source({ collection: "changes" }, [bar({ field: "Kind" }), repeat([text("[[inner {{item.Title}}]]")])]),
+                ]),
+            ]),
+        ]);
+
+        expect(buttons(out)).toEqual(["All", "Added", "Removed", "Fixed"]);
+        const rows = marked(out).filter((r) => r.marker.startsWith("inner "));
+        expect(rows).toHaveLength(4);
+        const outer = marked(out).find((r) => r.marker === "outer Files")!.id;
+        for (const row of rows) {
+            expect(row.ids).toHaveLength(2);
+            expect(row.byId[outer]).toEqual(["Files"]);
+        }
+        const inner = rows[0].ids.find((id) => id !== outer)!;
+        expect(rows.map((r) => r.byId[inner])).toEqual([["Added"], ["Removed"], ["Fixed"], ["Fixed"]]);
+    });
+});
+
+describe("odd input", () => {
+    it("renders a row holding a lone surrogate, bar and all", async () => {
+        const out = await page([source({ collection: "odd" }, [bar({ field: "Tag" }), repeat([text("[[{{item.Title}}]]")])])]);
+
+        expect(out).toContain("[[odd]]");
+        expect(buttons(out)).toHaveLength(3);
+        expect(() => filterRule("f1", "Bad\ud800x")).not.toThrow();
+        expect(filterToken("Bad\ud800x")).toBe("Bad%EF%BF%BDx");
+    });
+
+    it("offers at most a hundred values, and marks rows only with values it offers", async () => {
+        const out = await page([
+            source({ collection: "many" }, [bar({ field: "Tags", separator: "," }), repeat([text("[[{{item.Title}}]]")])]),
+        ]);
+
+        const labels = buttons(out);
+        expect(labels).toHaveLength(101);
+        expect(labels[100]).toBe("t99");
+        const rows = marked(out);
+        expect(rows).toHaveLength(1);
+        expect(rows[0].values).toHaveLength(100);
+    });
+
+    it("gives identical bars in two separate binds two ids, as a region and a page body are bound", async () => {
+        const blocks = [source({ collection: "packages" }, [bar({ field: "Category" }), repeat([text("[[{{item.Title}}]]")])])];
+        const first = marked(await page(blocks))[0].id;
+        const second = marked(await page(blocks))[0].id;
+
+        expect(first).not.toBe(second);
     });
 });
 
@@ -298,6 +379,20 @@ describe("a grouped source", () => {
         expect(buttons(out)).toEqual(["All", "Added", "Removed", "Fixed"]);
         expect(out.match(/role="group"/g)).toHaveLength(1);
         expect(out.indexOf('role="group"')).toBeLessThan(out.indexOf("[[release 4.4.0]]"));
+    });
+
+    it("honours only a bar at the top level of a grouped source, and marks nothing for one inside a band", async () => {
+        const out = await page([
+            source({ collection: "changes", groupBy: "Release" }, [
+                { type: "section", props: { content: [[bar({ field: "Kind" })]] } },
+                text("[[release {{group.key}}]]"),
+                repeat([text("[[change {{item.Title}}]]")]),
+            ]),
+        ]);
+
+        expect(out).toContain("[[change leak]]");
+        expect(buttons(out)).toEqual([]);
+        expect(out).not.toContain("data-bp-filter");
     });
 
     it("keeps the bar out of every group, so hiding a group never hides the bar", async () => {
@@ -336,7 +431,7 @@ describe("a grouped source", () => {
 describe("the hide rule", () => {
     it("hides the rows of one bar whose values do not hold the chosen one, over an inline display", () => {
         expect(filterRule("f1-abc", "Auth")).toBe(
-            '[data-bp-filter="f1-abc"]:not([data-bp-filter-values~="Auth"]){display:none!important}',
+            '[data-bp-filter~="f1-abc"]:not([data-bp-filter-values~="f1-abc\\3a Auth"]){display:none!important}',
         );
     });
 
@@ -363,6 +458,7 @@ describe("the hide rule", () => {
     });
 
     it("matches a value with a space as one token", () => {
+        expect(filterRule("f1", "a b")).toContain('~="f1\\3a a\\25 20b"');
         expect(filterToken("Security fix")).toBe("Security%20fix");
         expect(cssString("Security%20fix")).toBe('"Security\\25 20fix"');
     });

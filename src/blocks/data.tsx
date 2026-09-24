@@ -30,6 +30,8 @@ export const FILTER_BAR_BLOCK = "filterBar";
 /** The most rows one `source` reads, and the most reads one page may make. Untrusted input, bounded. */
 export const MAX_SOURCE_ROWS = 50;
 export const MAX_SOURCES = 8;
+/** The most values one `filterBar` offers. A field split on a separator can hold any number. */
+export const MAX_FILTER_VALUES = 100;
 
 /*
  * The collections a site offers an editor. A request-time site takes any name, because its
