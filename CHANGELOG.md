@@ -2,6 +2,9 @@
 
 ## 0.8.0 (unreleased)
 
+- A look check pair can set its own capture `timeout`, or the defaults can. A page as tall as
+  barakocms.com's changelog (over 100,000px at 390px) took longer than the fixed 30 seconds to
+  screenshot and was reported as not captured, so it was never compared at all.
 - `postFromItem` is exported, so a site's own post view (the `view` option of
   `createCollectionDetail`) maps an item to a post the way the engine does, draft preview included.
   Without it a theme had to read the post again with `getPost`, which returns the published

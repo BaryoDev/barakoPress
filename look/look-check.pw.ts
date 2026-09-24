@@ -31,7 +31,11 @@ test.describe.configure({ mode: "parallel" });
 for (const pair of pairs) {
     for (const width of pair.widths) {
         test(`${pair.id} at ${width}px`, async ({ browser }, testInfo) => {
+            // `timeout` bounds each step of a capture (load, wait, screenshot), not the capture, and
+            // there are two captures: six steps, and room for the settle and the comparison.
+            test.setTimeout(Math.max(testInfo.timeout, pair.timeout * 6 + 30_000));
             const options = {
+                timeout: pair.timeout,
                 width,
                 viewportHeight: pair.viewportHeight,
                 fullPage: pair.fullPage,
