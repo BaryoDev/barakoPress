@@ -1,0 +1,24 @@
+{
+  "name": "barakopress-plugin-sample",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A barakoPress plugin package: one block, the shape a real one takes.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "prepare": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "barakopress": ">=0.8.0",
+    "react": ">=19"
+  }
+}

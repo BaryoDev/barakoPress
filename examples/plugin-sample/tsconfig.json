@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["dom", "ES2022"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    // Only because this sample lives inside the engine's repository. A plugin in its own repository
+    // has barakopress as a dev dependency and drops this line.
+    "paths": { "barakopress": ["../../dist/index.d.ts"] }
+  },
+  "include": ["src"]
+}

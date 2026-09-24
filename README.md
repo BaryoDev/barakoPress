@@ -515,8 +515,10 @@ operator named, the host through the CMS, or `CMS_DEFAULT_TENANT`, so barakoBrew
 schema at that tenant's domain. Nothing else a caller sends picks the tenant. A host with no tenant
 gets 404 `{ "error": "no site" }`, and a lookup that fails gets 503. The settings behind it are the
 cached read every page makes, under the tenant's cache tag, so a settings change shows after the
-delivery that purges it. A build-time site gets the same answer as `createBlockSchemaRoute(blocks)`,
-which still works and still ignores the request.
+delivery that purges it. A build-time site with no plugins gets the same answer as
+`createBlockSchemaRoute(blocks)`, which still works and still ignores the request. Given only the
+registry, the route cannot tell which plugins the site enabled, so it offers no plugin's blocks and
+lists every plugin as off; a site with plugins passes the config.
 
 Field kinds are `text`, `markdown`, `url`, `number`, `boolean`, `select` (with `options`), `slots`
 (lists of nested blocks, handed to the component already rendered), `list` and `group` (below). The list is editor input, so a
@@ -818,6 +820,99 @@ the division, so a GitHub milestone's open and closed issues need no field compu
 first. `changelogList` does not group by itself, because grouping means knowing which field holds
 the kind and that is the tenant's field name. One band per kind with `filterField` and `filterValue`
 is the grouping, and the chip on each entry is the option's own word.
+
+### Plugin packages
+
+When no block covers a need, a developer writes one as a plugin package, and the published image
+stays as it is. A plugin is an npm package that ships built JavaScript, like this one does, and whose
+default export is `definePlugin`:
+
+```tsx
+import { defineBlock, definePlugin } from "barakopress";
+
+type TallyProps = { count: number; label: string };
+
+const tally = defineBlock<TallyProps>({
+  type: "tally",
+  label: "Tally",
+  fields: [
+    { name: "count", kind: "number", required: true },
+    { name: "label", kind: "text", required: true },
+  ],
+  component: ({ props, theme }) => (
+    <p style={{ color: theme.colors.accent }}>{props.count} {props.label}</p>
+  ),
+});
+
+export default definePlugin({ name: "tally", blocks: [tally] });
+```
+
+`defineBlock` checks the fields against the props at compile time, the same as the built-ins: a field
+name the props do not have, a kind that does not suit the prop's type, or an optional field for a prop
+the component treats as always there does not compile. `examples/plugin-sample` is a complete one,
+with its `package.json` and `tsconfig.json`; CI packs it, builds an image with it and renders it.
+
+A plugin block is passed what every block is passed: its props, checked against its fields, its
+slots, rendered, and the theme. It is not passed the config, the CMS address or a token, and data from
+the CMS should reach it through a binding in its props or a module endpoint, not a credential. That is
+what it is handed, not what it can reach: its code runs in the server with full access, `process.env`
+and every `barakopress` export included. Installing a plugin means trusting it with the deployment.
+
+Its name may not be one a built-in, a library block, the site or another plugin already registered.
+Replacing one would change that block for every tenant, including the ones that never enabled the
+plugin.
+
+**Installing: a derived image.** Blocks are registered when the Next build runs, so a package cannot
+be added to a built image. The published image holds the built server and not the source or the
+toolchain, so the derived image is built from the engine's source at a release tag, which is what the
+published image of that tag was built from, with the plugins handed in as a build context:
+
+```bash
+mkdir plugins
+(cd ../my-plugin && npm pack --pack-destination ../site/plugins)   # your own plugin
+npm pack barakopress-plugin-tally@1.2.0 --pack-destination plugins  # one from npm
+
+docker buildx build \
+  --build-context plugins=./plugins \
+  -t my-press:0.8.0-plugins \
+  https://github.com/BaryoDev/barakoPress.git#v0.8.0
+```
+
+`examples/derived-image/compose.yml` is the same thing in compose. The `plugins` directory holds
+tarballs and nothing else, so what is built is exactly the bytes that were packed. The install runs
+offline, so a plugin's own dependencies must travel inside its tarball: list each one in
+`bundleDependencies`, and a tarball with a dependency it does not bundle is refused. So is a plugin
+named like a package the engine already has (`react`, `next`, anything in its lockfile), which would
+otherwise be linked over it. The build installs them beside the engine with no install scripts,
+and writes `press.plugins.ts`, which the reference
+`press.config.ts` passes to `createBlockRegistry(config, [], { plugins })`. An overlay with its own
+`press.config.ts` imports `plugins` from `@/press.plugins` and passes it the same way. Pin the tag,
+and next to it the commit it points at (`git ls-remote https://github.com/BaryoDev/barakoPress.git
+v0.8.0`), since a tag can be moved; building from `#<commit>` is the strict form. The `v0.8.0` tag
+exists from the 0.8.0 release on. Moving it is an engine upgrade, and a plugin should be rebuilt and
+checked against it.
+
+**Enabling: per tenant.** One derived image carries every plugin the deployment installs. A tenant
+renders a plugin's blocks only when the `Plugins` setting in its `site` settings entry names it:
+
+```json
+{ "Plugins": ["tally"] }
+```
+
+Until then, it is as if the plugin were not installed for that tenant: `/api/blocks` does not offer its
+blocks, a page that holds one renders everything around it and not the block, and a preset whose body
+draws one is left out. A list saved empty turns every plugin off; a missing field leaves the ones the
+config names (`plugins` in `defineConfig`, empty unless set). A build-time site enables plugins with
+`plugins` in its config. `/api/blocks` also answers `plugins`, every installed plugin with whether the
+tenant enabled it, which is what barakoBrew reads to show the switch. Each block a plugin added carries
+`plugin` with its name.
+
+What enablement does not do is keep code apart. Every plugin's module is loaded in the container for
+every tenant it serves, and a tenant that has not enabled it is only kept from rendering it. So a
+plugin nobody on the deployment trusts is not installed there. When tenants must not share plugins,
+the answer is a separate deployment, its own barakoCMS, barakoBrew and barakoPress, not a second
+barakoPress against the same API. A hotel's branch landing pages share one deployment; its booking
+system gets its own.
 
 ## Configuring it
 
@@ -1855,6 +1950,9 @@ laid over the reference app the same way. If it ships its own `app/%5Fpress/`, i
 site with its own layout and routes, and its tree replaces the reference one; otherwise the tenant
 tree is removed as above. `PRESS_TRAILING_SLASH=true` sets Next's `trailingSlash`, for a site whose
 URLs end in a slash; configure its webhook URL with the slash too (see the revalidate endpoint).
+
+Extra blocks go in the same way, as a `plugins` build context: see
+[Plugin packages](#plugin-packages).
 
 One thing to expect on a first release: the image prerenders during `docker build`, where the CMS is
 not reachable, so the index, the feed and the sitemap are built empty and correct themselves one

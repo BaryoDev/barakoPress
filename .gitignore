@@ -11,3 +11,4 @@ look-results
 test-results
 look/*.generated.html
 look/*.generated.json
+.press-plugins

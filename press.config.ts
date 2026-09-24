@@ -1,4 +1,5 @@
 import { createBlockRegistry, defineConfig } from "barakopress";
+import { plugins } from "./press.plugins";
 
 /*
  * The reference deployment's configuration, and the image built from it carries no site.
@@ -26,7 +27,8 @@ export const config = defineConfig({
 });
 
 /*
- * The blocks this site's pages can hold: the built-ins, and any the site adds as a second argument.
- * app/api/blocks publishes the same registry, so an editor offers exactly what renders here.
+ * The blocks this site's pages can hold: the built-ins, any the site adds as a second argument, and
+ * the blocks of the plugin packages the image was built with, which render only for a tenant that
+ * enabled them. app/api/blocks publishes the same registry, so an editor offers exactly what renders.
  */
-export const blocks = createBlockRegistry(config);
+export const blocks = createBlockRegistry(config, [], { plugins });
