@@ -41,6 +41,8 @@ const { createPage } = await import("../screens/page.js");
 const { createSiteLayout } = await import("../screens/site-layout.js");
 const { createBlockRegistry } = await import("./registry.js");
 const { createBlockSchemaRoute } = await import("../routes/block-schema.js");
+const { definePlugin } = await import("./plugins.js");
+const { defineBlock } = await import("./schema.js");
 const { cssString, filterRule, filterToken } = await import("./filter.js");
 
 const CMS = "http://cms.test";
@@ -113,7 +115,7 @@ function cms() {
         const paged = (items: unknown[]) =>
             Response.json({ items, page: 1, pageSize: 50, totalItems: items.length, totalPages: 1, hasNextPage: false });
         if (url.pathname === "/api/public/site") {
-            return paged([{ id: "s", data: { Name: "Academy", Url: "https://academy.example", Collections: COLLECTIONS, HeaderPath: "/site/header" } }]);
+            return paged([{ id: "s", data: { Name: "Academy", Url: "https://academy.example", Collections: COLLECTIONS, HeaderPath: "/site/header", Plugins: ["cards"] } }]);
         }
         if (url.pathname === "/api/public/pages/resolve") {
             const path = url.searchParams.get("path") ?? "";
@@ -155,10 +157,10 @@ async function html(node: ReactNode): Promise<string> {
     return new TextDecoder().decode(await new Response(stream).arrayBuffer());
 }
 
-async function page(blocks: unknown[]): Promise<string> {
+async function page(blocks: unknown[], using = registry): Promise<string> {
     pages["/about"] = { id: "p1", slug: "about", data: { Title: "About", Slug: "about", Blocks: blocks } };
     requestHeaders = new Headers({ host: "academy.example" });
-    const Page = createPage(config, registry);
+    const Page = createPage(config, using);
     return html(await Page({ params: Promise.resolve({ path: ["about"] }), searchParams: Promise.resolve({}) }));
 }
 
@@ -388,6 +390,34 @@ describe("odd input", () => {
 
         expect(marked(first)).toHaveLength(10);
         expect(second).toBe(first);
+    });
+});
+
+describe("a plugin block as the row", () => {
+    const card = defineBlock<{ value: string }>({
+        type: "cardsTile",
+        label: "Card",
+        fields: [{ name: "value", kind: "text", required: true }],
+        component: ({ props }) => <p>{`[[card ${props.value}]]`}</p>,
+    });
+    const withPlugin = createBlockRegistry(config, [], { plugins: [definePlugin({ name: "cards", blocks: [card] })] });
+
+    it("is marked like any row, through the registry a tenant with the plugin enabled renders with", async () => {
+        const out = await page(
+            [source({ collection: "packages" }, [bar({ field: "Category" }), repeat([{ type: "cardsTile", props: { value: "{{item.Title}}" } }])])],
+            withPlugin,
+        );
+
+        expect(buttons(out)).toEqual(["All", "Auth", "Storage", "Messaging"]);
+        const rows = marked(out);
+        expect(rows).toHaveLength(5);
+        expect(rows.map((r) => [r.marker, r.values])).toEqual([
+            ["card Auth", ["Auth"]],
+            ["card Files", ["Storage"]],
+            ["card SSO", ["Auth"]],
+            ["card Mail", ["Messaging"]],
+            ["card Core", []],
+        ]);
     });
 });
 
