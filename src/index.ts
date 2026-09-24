@@ -266,9 +266,11 @@ export {
     SHOW_IF_BLOCK,
     SLOT_BLOCK,
     PAGER_BLOCK,
+    FILTER_BAR_BLOCK,
     MAX_SOURCES,
     MAX_SOURCE_ROWS,
 } from "./blocks/data.js";
+export { FILTER_ATTR, FILTER_VALUES_ATTR, FILTER_CHOSEN_ATTR, filterToken } from "./blocks/filter.js";
 export {
     TONES,
     SPACES,
