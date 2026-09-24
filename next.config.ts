@@ -28,6 +28,9 @@ const config: NextConfig = {
     // would be a second resizer in front of a resizer. It also pulls in sharp, which is LGPL.
     unoptimized: true,
   },
+
+  // Read once, at build time, from the Dockerfile's build argument. See PRESS_TRAILING_SLASH there.
+  trailingSlash: process.env.PRESS_TRAILING_SLASH === "true",
 };
 
 export default config;
