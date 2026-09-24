@@ -13,14 +13,20 @@ import { FILTER_CHOSEN_ATTR, filterRule } from "./filter.js";
  * At rest nothing is chosen and no rule is written, so a reader with no script sees every row.
  */
 
+/** A look: the inline style, and the classes a style recipe brings with it. */
+export interface FilterLook {
+    style: CSSProperties;
+    className?: string;
+}
+
 export interface FilterButtonsProps {
     id: string;
     values: string[];
     allLabel: string;
     label?: string;
-    on: CSSProperties;
-    off: CSSProperties;
-    row: CSSProperties;
+    on: FilterLook;
+    off: FilterLook;
+    row: FilterLook;
 }
 
 export function FilterButtons({ id, values, allLabel, label, on, off, row }: FilterButtonsProps) {
@@ -33,7 +39,8 @@ export function FilterButtons({ id, values, allLabel, label, on, off, row }: Fil
             key={value ?? ""}
             type="button"
             aria-pressed={chosen === value}
-            style={chosen === value ? on : off}
+            style={chosen === value ? on.style : off.style}
+            className={(chosen === value ? on.className : off.className) || undefined}
             onClick={() => setChosen(value)}
         >
             {text}
@@ -41,7 +48,7 @@ export function FilterButtons({ id, values, allLabel, label, on, off, row }: Fil
     );
     const chosenAttr = chosen === null ? {} : { [FILTER_CHOSEN_ATTR]: chosen };
     return (
-        <div role="group" aria-label={label} style={row} {...chosenAttr}>
+        <div role="group" aria-label={label} style={row.style} className={row.className || undefined} {...chosenAttr}>
             {button(null, allLabel)}
             {values.map((value) => button(value, value))}
             {chosen !== null && <style dangerouslySetInnerHTML={{ __html: filterRule(id, chosen) }} />}

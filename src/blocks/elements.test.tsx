@@ -21,6 +21,7 @@ const { recipesFrom } = await import("../recipes.js");
 const { createBlockRegistry } = await import("./registry.js");
 const { BlockList } = await import("./render.js");
 const { resolveBlocks } = await import("./schema.js");
+const { writeFilterState } = await import("./filter.js");
 
 const SITE = { name: "Test", url: "https://test.example" };
 const RECIPES = {
@@ -119,6 +120,33 @@ describe("an anchor on a section, a stack or a panel", () => {
     it("is left off when it is not a plain name", () => {
         const html = render([{ type: "stack", props: { anchor: 'x" onclick="y', content: [[text({})]] } }]);
         expect(html).not.toContain("id=");
+    });
+});
+
+describe("a filter bar wearing recipes", () => {
+    const TABS = {
+        tabs: { style: { "margin-top": "28px", display: "flex", "flex-wrap": "wrap", gap: "8px" }, class: "chip-row" },
+        tab: { style: { padding: "8px 15px", background: "#fff", border: "1px solid #E7E8F1" }, class: "hv-edge-accent" },
+        "tab-on": { style: { padding: "8px 15px", background: "#101223", color: "#fff" } },
+    };
+    const bar = (props: Record<string, unknown>) => [
+        { type: "filterBar", props: { field: "Category", allLabel: "All", state: writeFilterState({ id: "f1-body", values: ["Auth", "Ops"] }), ...props } },
+    ];
+
+    it("draws its row and its buttons in them, the pressed one in its own, and keeps them pointers", () => {
+        const html = render(bar({ recipe: "tabs", buttonRecipe: "tab", pressedRecipe: "tab-on" }), TABS);
+
+        expect(html).toContain('<div role="group" style="margin-top:28px;display:flex;flex-wrap:wrap;gap:8px" class="chip-row">');
+        expect(html).toContain('<button type="button" aria-pressed="true" style="padding:8px 15px;background:#101223;color:#fff;cursor:pointer">All</button>');
+        expect(html).toContain('<button type="button" aria-pressed="false" style="padding:8px 15px;background:#fff;border:1px solid #E7E8F1;cursor:pointer" class="hv-edge-accent">Auth</button>');
+        expect(html).toContain('<div data-block="filterBar" style="--bp-list:flex;display:contents">');
+    });
+
+    it("draws its own look for a recipe the site does not have, with no class", () => {
+        const html = render(bar({ recipe: "nobody", buttonRecipe: "nobody" }), TABS);
+
+        expect(html).toContain('<div role="group" style="display:flex;flex-wrap:wrap;gap:');
+        expect(html).not.toContain("class=");
     });
 });
 

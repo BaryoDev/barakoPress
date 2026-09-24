@@ -537,6 +537,9 @@ describe("the schema", () => {
             ["allLabel", "text"],
             ["label", "text"],
             ["hideEmptyGroups", "boolean"],
+            ["recipe", "text"],
+            ["buttonRecipe", "text"],
+            ["pressedRecipe", "text"],
             ["state", "text"],
         ]);
         expect(fields.find((f) => f.name === "field")?.required).toBe(true);

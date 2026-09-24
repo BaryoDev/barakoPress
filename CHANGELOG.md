@@ -7,7 +7,8 @@
   `display: contents`, so the recipe's element is the flex or grid item its parent lays out. `text`
   takes `tag` (`p`, `span`, `code`, `strong`, `em`, `h1` to `h4`), `decorative` (hidden from a
   screen reader) and `title`. `stack` and `panel` take `href`, which makes the whole container a
-  link, and `section`, `stack` and `panel` take `anchor`, drawn as the element's `id`. A site may keep
+  link, and `section`, `stack` and `panel` take `anchor`, drawn as the element's `id`. A `filterBar`
+  takes `recipe`, `buttonRecipe` and `pressedRecipe` for its row and its buttons. A site may keep
   400 recipes, up from 100. A block that uses none of this renders as it did.
 - The tree screens take a site's styling (#130). Every colour, gap, padding, radius and font size in the sidebar,
   the switcher, the search box, the pager and the edit link is read as

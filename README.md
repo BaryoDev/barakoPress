@@ -834,6 +834,10 @@ reader with no script sees every row. The buttons are toggles with `aria-pressed
 group, not a tablist, since the tab pattern promises arrow keys and panels this does not have. A row
 with nothing in the field has no value, so any choice hides it.
 
+The bar draws its buttons from the theme's colours. `recipe` names a style recipe for the row,
+`buttonRecipe` one for each button and `pressedRecipe` one for the button that is pressed, each
+replacing that look outright as a recipe does on a primitive; a button keeps `cursor: pointer`.
+
 In a grouped source the bar is drawn once, ahead of the groups, and filters all of them. With
 `hideEmptyGroups`, a group's own blocks carry every value its rows hold, so the same rule hides a
 group that has no row left. Without it a group stays with its heading and no rows. Only the first bar

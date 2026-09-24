@@ -4,6 +4,7 @@ import type { PressConfig } from "../config.js";
 import { FilterButtons } from "./filter-bar.js";
 import { readFilterState } from "./filter.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
+import { recipeLook } from "../recipes.js";
 import { spaceOf, toneOf } from "./tokens.js";
 
 /*
@@ -199,6 +200,9 @@ type FilterBarProps = {
     allLabel?: string;
     label?: string;
     hideEmptyGroups?: boolean;
+    recipe?: string;
+    buttonRecipe?: string;
+    pressedRecipe?: string;
     state?: string;
 };
 
@@ -213,6 +217,10 @@ const filterBar = defineBlock<FilterBarProps>({
         { name: "allLabel", kind: "text", label: "The button that shows everything" },
         { name: "label", kind: "text", label: "What the buttons filter, for a screen reader" },
         { name: "hideEmptyGroups", kind: "boolean", label: "Hide a group left with no rows" },
+        // The row, a button, and the button that is pressed, each a style recipe like a primitive's.
+        { name: "recipe", kind: "text", label: "Style recipe, the row" },
+        { name: "buttonRecipe", kind: "text", label: "Style recipe, a button" },
+        { name: "pressedRecipe", kind: "text", label: "Style recipe, the pressed button" },
         // Written by the binder, like the pager's.
         { name: "state", kind: "text", label: "Filter state", bindable: false },
     ],
@@ -227,15 +235,21 @@ const filterBar = defineBlock<FilterBarProps>({
             fontSize: "13px",
             cursor: "pointer",
         };
+        // A recipe replaces the default look outright, as on a primitive; a button stays a pointer.
+        const drawn = (name: string | undefined, fallback: CSSProperties, keep: CSSProperties = {}) => {
+            const found = recipeLook(theme, name);
+            return found ? { style: { ...found.style, ...keep }, className: found.className } : { style: fallback };
+        };
+        const pointer = { cursor: "pointer" } as const;
         return (
             <FilterButtons
                 id={state.id}
                 values={state.values}
                 allLabel={props.allLabel ?? "All"}
                 label={props.label}
-                on={{ ...base, background: c.ink, border: `1px solid ${c.ink}`, color: c.surface, fontWeight: 700 }}
-                off={{ ...base, background: c.surface, border: `1px solid ${c.hairline}`, color: c.secondaryInk, fontWeight: 600 }}
-                row={{ display: "flex", flexWrap: "wrap", gap: spaceOf(theme, "xs") }}
+                on={drawn(props.pressedRecipe, { ...base, background: c.ink, border: `1px solid ${c.ink}`, color: c.surface, fontWeight: 700 }, pointer)}
+                off={drawn(props.buttonRecipe, { ...base, background: c.surface, border: `1px solid ${c.hairline}`, color: c.secondaryInk, fontWeight: 600 }, pointer)}
+                row={drawn(props.recipe, { display: "flex", flexWrap: "wrap", gap: spaceOf(theme, "xs") })}
             />
         );
     },
