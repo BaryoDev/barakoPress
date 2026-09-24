@@ -2,6 +2,12 @@
 
 ## 0.8.0 (unreleased)
 
+- A deployment's overlay can live outside this repository. The image build takes it as the `overlay`
+  build context (`--build-context overlay=<dir>`, or `additional_contexts` in compose), and an
+  overlay that ships its own `app/%5Fpress/` replaces the tenant tree instead of losing it, so a
+  request-time site can bring its own layout and routes. `PRESS_TRAILING_SLASH=true` sets Next's
+  `trailingSlash` at build time. Before this, a site theme had to be copied into `deploy/`, and a
+  site whose URLs end in a slash had to ship its own `next.config.ts`.
 - The image workflow can publish a tag that already exists. v0.7.0 was tagged before the workflow
   was written, so nothing ever pushed an image for it, and dispatching against the tag does not work
   because a dispatch runs the workflow file as it exists at that ref. Dispatching from master with

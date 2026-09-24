@@ -1428,6 +1428,22 @@ lives under `app/%5Fpress/[site]`, which only the proxy's rewrite reaches, and t
 when the config sets `sites`. With no tenant to resolve to, every page answers 404 while the feed and
 the sitemap still work.
 
+A site with its own theme keeps the overlay in its own repository and passes the directory as a
+build context instead of copying it into `deploy/`:
+
+```bash
+docker buildx build \
+  --build-context overlay=../barakocms-site/theme \
+  --build-arg PRESS_TRAILING_SLASH=true \
+  -t barako-press:barakocms .
+```
+
+In compose that is `build.additional_contexts: { overlay: ../barakocms-site/theme }`. The overlay is
+laid over the reference app the same way. If it ships its own `app/%5Fpress/`, it is a request-time
+site with its own layout and routes, and its tree replaces the reference one; otherwise the tenant
+tree is removed as above. `PRESS_TRAILING_SLASH=true` sets Next's `trailingSlash`, for a site whose
+URLs end in a slash; configure its webhook URL with the slash too (see the revalidate endpoint).
+
 One thing to expect on a first release: the image prerenders during `docker build`, where the CMS is
 not reachable, so the index, the feed and the sitemap are built empty and correct themselves one
 revalidate window later. That is why the manifest's `verify` greps the page rather than reading the
