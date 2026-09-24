@@ -56,8 +56,9 @@ export interface Pair {
     /** URL globs refused during the capture: analytics, embeds, anything that pulls live content. */
     block: string[];
     /**
-     * How long one capture may take, in milliseconds. A page tall enough to hold a whole changelog
-     * takes longer than 30 seconds to screenshot, and that is its size, not a fault.
+     * How long each step of a capture (the load, a wait, the screenshot) may take, in milliseconds.
+     * A page tall enough to hold a whole changelog takes longer than 30 seconds to screenshot, and
+     * that is its size, not a fault.
      */
     timeout: number;
 }
