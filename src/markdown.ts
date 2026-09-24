@@ -29,6 +29,8 @@ const SAFE_SCHEMES = ["http:", "https:", "mailto:"];
 
 export function isSafeHref(href: string): boolean {
     const trimmed = href.trim();
+    // `//host` and `/\host` are read by a browser as another site, not a path on this one.
+    if (trimmed.startsWith("//") || trimmed.startsWith("/\\")) return false;
     // A relative or anchor link has no scheme and cannot execute.
     if (trimmed.startsWith("/") || trimmed.startsWith("#")) return true;
     try {
@@ -140,7 +142,8 @@ function buildInlineRenderer() {
                     return at < 0 ? undefined : at;
                 },
                 tokenizer(src: string) {
-                    const match = /^==(?=\S)([\s\S]*?\S)==/.exec(src);
+                    // Accents do not nest: `==` inside one ends it or is not an accent at all.
+                    const match = /^==(?=\S)((?:(?!==)[\s\S])*?\S)==/.exec(src);
                     if (!match) return undefined;
                     return { type: "accent", raw: match[0], text: match[1], tokens: this.lexer.inlineTokens(match[1]) };
                 },
@@ -176,9 +179,17 @@ function buildInlineRenderer() {
 
 let inlineRenderer: ReturnType<typeof buildInlineRenderer> | undefined;
 
+/*
+ * The longest value read for marks. Emphasis parsing is quadratic in the worst case (`*a ` repeated
+ * sixty thousand times takes a minute), and a text block's value can be bound from content nobody
+ * editing the page wrote. A line of copy is well under this; past it the value is plain text.
+ */
+export const MAX_INLINE = 2000;
+
 /** A line of text with inline marks, as HTML. Block syntax is left as the text it is. */
 export function renderInlineMarkdown(source: string): string {
     if (!source) return "";
+    if (source.length > MAX_INLINE) return escapeHtml(source);
     inlineRenderer ??= buildInlineRenderer();
     return inlineRenderer.parseInline(source, { async: false }) as string;
 }
