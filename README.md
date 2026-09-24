@@ -768,7 +768,9 @@ The settings are the singleton `site` type from barakoCMS `docs/site-settings.md
 describes. `Variants` are not rendered yet. Every value is checked for shape; one that fails, and any the
 entry leaves out, keeps the configured value, so a half-filled theme renders. A link is a path on the
 site or an absolute http or https URL. Set `Url`: without it the feed and sitemap fall back to the
-host the tenant was found by.
+host the tenant was found by. A link in `HeaderLinks`, `TopBar` or `FooterColumns` may also carry
+`badge`, a marker of up to 12 characters drawn beside the label, and `external: true`, which the
+built-in header does not need (every header link is already a plain anchor) and a theme can read.
 
 `createSiteLayout` and `createSiteMetadata` render the root layout from all of this: `lang`, the
 faces, the palette, the top bar, header links, footer columns, social links and the copyright line.

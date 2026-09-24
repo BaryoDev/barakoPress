@@ -142,6 +142,10 @@ export interface PageSizes {
 export interface SiteLink {
     label: string;
     href: string;
+    /** A short marker drawn beside the label, such as a version. */
+    badge?: string;
+    /** Leaves the site. The built-in header draws every link as a plain anchor either way; a theme may not. */
+    external?: boolean;
 }
 
 export interface FooterColumn {

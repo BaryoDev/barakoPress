@@ -301,6 +301,14 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
                         {(s.headerLinks ?? []).map((l) => (
                             <a key={l.href} href={l.href} style={linkStyle}>
                                 {l.label}
+                                {l.badge && (
+                                    <span
+                                        data-press="badge"
+                                        style={{ marginLeft: "6px", fontFamily: t.fonts.mono, fontSize: "11px", color: c.muted }}
+                                    >
+                                        {l.badge}
+                                    </span>
+                                )}
                             </a>
                         ))}
                         {!cfg.holding && hasFeed(cfg) && (

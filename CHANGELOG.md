@@ -2,6 +2,10 @@
 
 ## 0.8.0 (unreleased)
 
+- A site link can carry a `badge` (up to 12 characters, drawn beside the label in the built-in
+  header) and `external: true`, read from `HeaderLinks`, `TopBar` and `FooterColumns`. A value of
+  the wrong kind is dropped and the link kept. barakocms.com's nav marks barakoBrew with "V1", and
+  had no way to say so in its settings.
 - A deployment's overlay can live outside this repository. The image build takes it as the `overlay`
   build context (`--build-context overlay=<dir>`, or `additional_contexts` in compose), and an
   overlay that ships its own `app/%5Fpress/` replaces the tenant tree instead of losing it, so a

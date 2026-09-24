@@ -61,6 +61,17 @@ const FOOTER_BLOCKS = [
 ];
 
 const TENANTS: Record<string, Tenant> = {
+    studio: {
+        host: "studio.example",
+        settings: {
+            Name: "Studio",
+            Url: "https://studio.example",
+            HeaderLinks: [
+                { label: "Console", href: "https://console.example", external: true, badge: "V1" },
+                { label: "Work", href: "/work" },
+            ],
+        },
+    },
     // Nothing new set. This tenant is the compatibility case.
     bakery: {
         host: "bakery.example",
@@ -275,6 +286,17 @@ describe("reading the region settings", () => {
         expect(applySiteSettings(configured, { FooterPath: "/tenant/footer" }, null).regions).toEqual({
             footer: { path: "/tenant/footer" },
         });
+    });
+});
+
+describe("a header link's badge", () => {
+    it("is drawn beside its label in the built-in header, and only where a link has one", async () => {
+        const html = await layoutHtml("studio.example");
+
+        expect(html.split('data-press="badge"').length - 1).toBe(1);
+        expect(html).toMatch(/>Console<span data-press="badge"[^>]*>V1<\/span><\/a>/);
+        expect(html).toContain('<a href="/work" style="color:inherit;text-decoration:none">Work</a>');
+        expect(await layoutHtml("bakery.example")).not.toContain('data-press="badge"');
     });
 });
 
