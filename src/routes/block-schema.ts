@@ -75,7 +75,7 @@ export function createBlockSchemaRoute(
     config: PressConfig,
     registry: BlockRegistry,
     options?: BlockSchemaRouteOptions,
-): (request?: Request) => Promise<Response>;
+): (request: Request) => Promise<Response>;
 export function createBlockSchemaRoute(
     first: PressConfig | BlockRegistry,
     second?: BlockRegistry | BlockSchemaRouteOptions,
@@ -92,7 +92,8 @@ export function createBlockSchemaRoute(
     const base = first;
     const registry = second as BlockRegistry;
     const options = third;
-    return async function GET(request?: Request): Promise<Response> {
+    // Required, not optional: Next's route type check refuses a handler whose request may be absent.
+    return async function GET(request: Request): Promise<Response> {
         const headers = corsHeaders(allowedOrigin(request, options));
         if (!base.sites) return Response.json(blockSchema(registry), { headers });
 
