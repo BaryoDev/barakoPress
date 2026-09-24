@@ -91,6 +91,7 @@ const TENANTS: Record<string, Tenant> = {
                 breadcrumbs: [crumb("About", "/about"), crumb("Team", "/about/team")],
             },
             "/blog": pageEntry("Blog page", "A page that must never render"),
+            "/notes": { entry: { id: "n", slug: "notes", data: { Title: "Notes", Body: "Only a body here" } } },
         },
         redirects: {
             "/old-about": { fromPath: "/old-about", toPath: "/about", status: 301 },
@@ -397,6 +398,35 @@ describe("the page route", () => {
         const mounted = defineConfig({ site: { name: "T", url: "https://t.example" }, cmsUrl: CMS, tenant: "baryo", pages: "/site" });
         expect(isReservedPath(mounted, "/blog")).toBe(false);
         expect(await outcome(mounted, ["blog"])).toContain("A page that must never render");
+    });
+
+    it("renders only the blocks when a theme asks for a bare page", async () => {
+        visit("baryo.dev");
+        const drawn = await pageHtml(config, ["about", "team"]);
+        const Bare = createPage(config, registry, { bare: true });
+        const bare = renderToStaticMarkup(await Bare({ params: Promise.resolve({ path: ["about", "team"] }) }));
+
+        expect(drawn).toContain("<main");
+        expect(drawn).toContain("<h1");
+        expect(drawn).toContain('data-press="breadcrumbs"');
+
+        expect(bare).toContain("Meet the team");
+        expect(bare).toContain('data-block="richText"');
+        expect(bare).not.toContain("<main");
+        expect(bare).not.toContain("<h1");
+        expect(bare).not.toContain('data-press="breadcrumbs"');
+        expect(bare).not.toContain(`padding:56px ${config.theme.layout.gutter}`);
+    });
+
+    it("still renders a page that has only a body when bare, without the engine's measure", async () => {
+        visit("baryo.dev");
+        const drawn = await pageHtml(config, ["notes"]);
+        const Bare = createPage(config, registry, { bare: true });
+        const bare = renderToStaticMarkup(await Bare({ params: Promise.resolve({ path: ["notes"] }) }));
+
+        expect(drawn).toContain(`max-width:${config.theme.layout.prose}`);
+        expect(bare).toContain("Only a body here");
+        expect(bare).not.toContain(`max-width:${config.theme.layout.prose}`);
     });
 
     it("reads by slug when mounted on a slug route, as before", async () => {

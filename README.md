@@ -390,7 +390,8 @@ because only a string field takes a binding, and a preset has to pass its own `c
 `icon`, `button`, `link`, `list`, `disclosure` (a labelled section that opens; give several the
 same `group` and only one is open at a time), `comparisonTable` (rows typed as lines with `|`
 between the cells, drawn as a real table with a heading on every column and every row) and
-`progressBar` (how far along one thing is, as `role="progressbar"` so it is read and not only seen).
+`progressBar` (how far along one thing is, as `role="progressbar"` so it is read and not only seen,
+from a `value` already worked out, or from a `count` with either a `total` or what is `remaining`).
 
 A comparison's first line is the column headings and the first cell of every line after it is that
 row's heading. What goes in a cell is whatever the tenant types, ticks and dashes included: a mark
@@ -1072,6 +1073,22 @@ stylesheet named in `theme.fontSources` when the face is not loaded from there, 
 They are not a way to compose a post out of arbitrary sections. Anything that has to sit between two
 paragraphs belongs to the block model, which is issue #6, because only the body knows where it goes.
 
+**A theme that draws the page itself.** A deployment that ports an existing design registers its own
+blocks under the built-in type names and ships its own stylesheet. Two things would still be the
+engine's, and neither can be undone from a stylesheet because both are inline: the page frame
+(`main`, its padding, the title and the breadcrumbs) and the gap between blocks. So:
+
+```tsx
+export default createPage(config, blocks, { bare: true });   // only the blocks
+```
+
+```css
+body { --bp-gap: 0; }   /* every block list, at every level */
+```
+
+`bare` is also taken by `createHome` and `createViewerPage`. `--bp-gap` falls back to
+`theme.space.lg`, so a site that sets neither renders as it did.
+
 Read time is derived from the body at 200 words a minute, with fenced code blocks excluded, so there
 is no field to fill in and nothing to keep in sync.
 
@@ -1429,6 +1446,22 @@ routes under `deploy/<name>/` and the manifest passes `PRESS_DEPLOY=<name>` to t
 lives under `app/%5Fpress/[site]`, which only the proxy's rewrite reaches, and the rewrite only fires
 when the config sets `sites`. With no tenant to resolve to, every page answers 404 while the feed and
 the sitemap still work.
+
+A site with its own theme keeps the overlay in its own repository and passes the directory as a
+build context instead of copying it into `deploy/`:
+
+```bash
+docker buildx build \
+  --build-context overlay=../barakocms-site/theme \
+  --build-arg PRESS_TRAILING_SLASH=true \
+  -t barako-press:barakocms .
+```
+
+In compose that is `build.additional_contexts: { overlay: ../barakocms-site/theme }`. The overlay is
+laid over the reference app the same way. If it ships its own `app/%5Fpress/`, it is a request-time
+site with its own layout and routes, and its tree replaces the reference one; otherwise the tenant
+tree is removed as above. `PRESS_TRAILING_SLASH=true` sets Next's `trailingSlash`, for a site whose
+URLs end in a slash; configure its webhook URL with the slash too (see the revalidate endpoint).
 
 One thing to expect on a first release: the image prerenders during `docker build`, where the CMS is
 not reachable, so the index, the feed and the sitemap are built empty and correct themselves one

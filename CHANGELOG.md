@@ -6,6 +6,26 @@
   header) and `external: true`, read from `HeaderLinks`, `TopBar` and `FooterColumns`. A value of
   the wrong kind is dropped and the link kept. barakocms.com's nav marks barakoBrew with "V1", and
   had no way to say so in its settings.
+- A deployment's overlay can live outside this repository. The image build takes it as the `overlay`
+  build context (`--build-context overlay=<dir>`, or `additional_contexts` in compose), and an
+  overlay that ships its own `app/%5Fpress/` replaces the tenant tree instead of losing it, so a
+  request-time site can bring its own layout and routes. `PRESS_TRAILING_SLASH=true` sets Next's
+  `trailingSlash` at build time. Before this, a site theme had to be copied into `deploy/`, and a
+  site whose URLs end in a slash had to ship its own `next.config.ts`.
+- `progressBar` can draw from a count and what is remaining (`remaining`), filled to count over the
+  two added, for a source like a GitHub milestone that answers closed and open issues and no total.
+  `total` wins when both are set, so a page that passes it draws what it drew before (#114).
+- A site theme can draw the page itself. `createPage`, `createHome` and `createViewerPage` take
+  `{ bare: true }` and render only the blocks, with no `main`, page padding, title or breadcrumbs,
+  and the gap between blocks reads `--bp-gap` before the theme's `space.lg`. Both were inline
+  styles, so a deployment porting an existing design had no way to take them off: every page kept a
+  40px strip either side and 24px between sections that the design does not have.
+- A link and a heading could still lay a page out wider than the phone it was read on. #101 gave
+  `code` somewhere to break and gave `a` nothing, so a changelog entry citing a wiki page by its URL
+  laid a 390px viewport out 603px wide; and the `text` primitive set no wrapping rule at all, so a
+  package id in a heading laid the same site out 403px wide. Both measured on barakocms.com's
+  rebuild. `anywhere` rather than `break-word`, because only `anywhere` counts in the intrinsic
+  minimum a flex or grid parent measures, which is what sizes the cell.
 - The image workflow can publish a tag that already exists. v0.7.0 was tagged before the workflow
   was written, so nothing ever pushed an image for it, and dispatching against the tag does not work
   because a dispatch runs the workflow file as it exists at that ref. Dispatching from master with
