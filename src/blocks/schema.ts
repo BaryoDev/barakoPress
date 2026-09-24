@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { isSafeHref } from "../markdown.js";
 import type { PressTheme } from "../theme.js";
-import { BINDING_FORMATS, BINDING_SCOPES, hasBinding, readBindings } from "./bindings.js";
+import { BINDING_FORMATS, BINDING_SCOPES, hasBinding, readBindings, wholeBinding } from "./bindings.js";
 
 /*
  * The block model.
@@ -18,7 +18,33 @@ import { BINDING_FORMATS, BINDING_SCOPES, hasBinding, readBindings } from "./bin
  * a prop its definition did not declare, and a url prop has already passed `isSafeHref`.
  */
 
-export type FieldKind = "text" | "markdown" | "url" | "number" | "boolean" | "select" | "slots";
+export type FieldKind =
+    | "text"
+    | "markdown"
+    | "url"
+    | "number"
+    | "boolean"
+    | "select"
+    | "slots"
+    | "list"
+    | "group";
+
+/** What one entry of a `list` may be. */
+export type ListItemKind = "text" | "url" | "number" | "group";
+
+export const LIST_ITEM_KINDS: readonly ListItemKind[] = ["text", "url", "number", "group"];
+
+/** One entry of a `list`: a scalar with its own range, or a group with its own fields. */
+export interface ListItem {
+    kind: ListItemKind;
+    label?: string;
+    /** A `number` item's range. Inclusive. */
+    min?: number;
+    max?: number;
+    /** A `group` item's fields. */
+    fields?: BlockField[];
+    bindable?: boolean;
+}
 
 export interface BlockField {
     name: string;
@@ -28,20 +54,37 @@ export interface BlockField {
     required?: boolean;
     /** The allowed values of a `select`. */
     options?: string[];
-    /** A `number` value's range, or how many lists a `slots` field holds. Inclusive. */
+    /**
+     * A `number` value's range, or how many entries a `slots` or a `list` field holds. Inclusive.
+     */
     min?: number;
     max?: number;
+    /** What each entry of a `list` is. */
+    item?: ListItem;
+    /** A `group`'s own fields. */
+    fields?: BlockField[];
     /**
      * Whether the stored value may hold `{{scope.Field}}` placeholders. Every string field takes
      * them unless it says otherwise. A number or a boolean does not: a binding resolves to text,
      * and a number that arrives as text is a bug rather than a binding.
+     *
+     * On a `list` or a `group` it means the whole value may be one placeholder, `{{item.Tags}}`,
+     * which resolves to the array or the object it names rather than to text. The strings inside
+     * one follow their own fields.
      *
      * Published in the block schema, so an editor knows which inputs get a binding picker.
      */
     bindable?: boolean;
 }
 
-const BINDABLE_BY_DEFAULT: ReadonlySet<FieldKind> = new Set<FieldKind>(["text", "markdown", "url", "select"]);
+const BINDABLE_BY_DEFAULT: ReadonlySet<FieldKind> = new Set<FieldKind>([
+    "text",
+    "markdown",
+    "url",
+    "select",
+    "list",
+    "group",
+]);
 
 export function isBindable(field: BlockField): boolean {
     return field.bindable ?? BINDABLE_BY_DEFAULT.has(field.kind);
@@ -61,14 +104,19 @@ type ValueKind<V> = [V] extends [boolean]
       ? "number"
       : [V] extends [string]
         ? "text" | "markdown" | "url" | "select"
-        : Exclude<FieldKind, "slots">;
+        : [V] extends [readonly unknown[]]
+          ? "list"
+          : [V] extends [object]
+            ? "group"
+            : Exclude<FieldKind, "slots">;
 
 type Presence<P, K extends keyof P> = {} extends Pick<P, K> ? { required?: boolean } : { required: true };
 
 type ValueField<P> = {
     [K in keyof P & string]: Omit<BlockField, "name" | "kind" | "required"> & {
         name: K;
-        kind: ValueKind<NonNullable<P[K]>>;
+        // An untyped prop takes any kind. Checked before NonNullable, which turns unknown into {}.
+        kind: unknown extends P[K] ? Exclude<FieldKind, "slots"> : ValueKind<NonNullable<P[K]>>;
     } & Presence<P, K>;
 }[keyof P & string];
 
@@ -168,19 +216,58 @@ export function defineBlock<P extends BlockProps = BlockProps, S extends string 
 export const MAX_BLOCKS = 400;
 export const MAX_DEPTH = 10;
 
+/*
+ * How deep lists and groups may nest inside one field, counting the field itself. A list of stages,
+ * each holding a list of links, is two; a list of groups counts once. Past three a block is a
+ * page, and a page is blocks.
+ */
+export const MAX_FIELD_DEPTH = 3;
+
+/** The most entries a `list` holds when it names no `max` of its own. */
+export const MAX_LIST_ITEMS = 100;
+
 /** Refuses a definition that could never render, at startup rather than on some page later. */
 export function checkDefinition(definition: BlockDefinition): void {
     if (!definition.type) throw new Error("a block definition needs a type");
+    checkFields(definition.type, definition.fields as BlockField[], 0);
+}
+
+function checkFields(type: string, fields: BlockField[], depth: number): void {
     const names = new Set<string>();
-    for (const field of definition.fields as BlockField[]) {
-        if (!field.name) throw new Error(`block "${definition.type}" has a field with no name`);
+    for (const field of fields) {
+        if (!field.name) throw new Error(`block "${type}" has a field with no name`);
         if (names.has(field.name)) {
-            throw new Error(`block "${definition.type}" declares "${field.name}" twice`);
+            throw new Error(`block "${type}" declares "${field.name}" twice`);
         }
         names.add(field.name);
-        if (field.kind === "select" && !field.options?.length) {
-            throw new Error(`block "${definition.type}" field "${field.name}" is a select with no options`);
-        }
+        checkField(type, field, depth);
+    }
+}
+
+function checkField(type: string, field: BlockField | (ListItem & { name: string }), depth: number): void {
+    const where = `block "${type}" field "${field.name}"`;
+    if (field.kind === "select" && !("options" in field && field.options?.length)) {
+        throw new Error(`${where} is a select with no options`);
+    }
+    if (field.kind === "slots" && depth > 0) {
+        throw new Error(`${where} is slots inside a list or a group, which holds values and not blocks`);
+    }
+    if (field.kind !== "list" && field.kind !== "group") return;
+    if (depth + 1 > MAX_FIELD_DEPTH) {
+        throw new Error(`${where} nests lists and groups more than ${MAX_FIELD_DEPTH} deep`);
+    }
+    if (field.kind === "group") {
+        if (!field.fields?.length) throw new Error(`${where} is a group with no fields`);
+        checkFields(type, field.fields, depth + 1);
+        return;
+    }
+    const item = "item" in field ? field.item : undefined;
+    if (!item || !LIST_ITEM_KINDS.includes(item.kind)) {
+        throw new Error(`${where} needs an item kind, one of ${LIST_ITEM_KINDS.join(", ")}`);
+    }
+    if (item.kind === "group") {
+        if (!item.fields?.length) throw new Error(`${where} is a list of groups with no fields`);
+        checkFields(type, item.fields, depth + 1);
     }
 }
 
@@ -188,8 +275,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function inRange(field: BlockField, n: number): boolean {
+function inRange(field: { min?: number; max?: number }, n: number): boolean {
     return (field.min === undefined || n >= field.min) && (field.max === undefined || n <= field.max);
+}
+
+/** A list's entry as a field of its own, so it is checked by the same rules a prop is. */
+export function itemField(field: BlockField): BlockField {
+    return { ...(field.item ?? { kind: "text" }), name: field.name };
 }
 
 /*
@@ -214,10 +306,65 @@ export function withoutBindings(field: BlockField, value: string): string {
 }
 
 export function accepts(field: BlockField, value: unknown): boolean {
-    if (typeof value === "string" && isBindable(field) && hasBinding(value)) {
-        return acceptsValue(field, withoutBindings(field, value));
+    return readValue(field, value, "template") !== INVALID;
+}
+
+/*
+ * The value a prop holds, cleaned, or INVALID.
+ *
+ * `template` is a stored value an editor typed, where a string may hold placeholders to resolve
+ * later. `data` is what a binding already resolved to, where every string is literal: it is never
+ * scanned again, which is the invariant bindings.ts holds for text and this holds for a list.
+ *
+ * A list or a group is copied rather than passed through, so a group hands its component only the
+ * keys its fields declare, the same promise `readProps` makes for a block.
+ */
+export const INVALID: unique symbol = Symbol("invalid");
+
+export type ReadMode = "template" | "data";
+
+export function readValue(field: BlockField, value: unknown, mode: ReadMode): unknown {
+    if (field.kind === "list") return readList(field, value, mode);
+    if (field.kind === "group") return readGroup(field, value, mode);
+    if (mode === "template" && typeof value === "string" && isBindable(field) && hasBinding(value)) {
+        return acceptsValue(field, withoutBindings(field, value)) ? value : INVALID;
     }
-    return acceptsValue(field, value);
+    return acceptsValue(field, value) ? value : INVALID;
+}
+
+function isWholeBinding(field: BlockField, value: unknown, mode: ReadMode): value is string {
+    return mode === "template" && typeof value === "string" && isBindable(field) && wholeBinding(value) !== null;
+}
+
+/*
+ * A stored list that is too long or holds a wrong entry fails, the way any wrong stored value does:
+ * an editor typed it and the console can show them. A bound list is the CMS's data, which nobody
+ * editing the page can shorten, so an entry that fails its field is left out and the list is cut at
+ * its `max`. Coming up short of `min` still fails, since fewer than that is not the block.
+ */
+function readList(field: BlockField, value: unknown, mode: ReadMode): unknown {
+    if (isWholeBinding(field, value, mode)) return value;
+    if (!Array.isArray(value)) return INVALID;
+    const cap = Math.min(field.max ?? MAX_LIST_ITEMS, MAX_LIST_ITEMS);
+    if (mode === "template" && value.length > cap) return INVALID;
+    const entry = itemField(field);
+    const out: unknown[] = [];
+    for (const raw of value) {
+        if (out.length >= cap) break;
+        const read = raw === undefined || raw === null ? INVALID : readValue(entry, raw, mode);
+        if (read === INVALID) {
+            if (mode === "template") return INVALID;
+            continue;
+        }
+        out.push(read);
+    }
+    if (out.length > 0 && !inRange(field, out.length)) return INVALID;
+    return out;
+}
+
+function readGroup(field: BlockField, value: unknown, mode: ReadMode): unknown {
+    if (isWholeBinding(field, value, mode)) return value;
+    return readRecord(field.fields ?? [], value, mode) ?? INVALID;
 }
 
 function acceptsValue(field: BlockField, value: unknown): boolean {
@@ -235,7 +382,16 @@ function acceptsValue(field: BlockField, value: unknown): boolean {
             return typeof value === "string" && (field.options ?? []).includes(value);
         case "slots":
             return Array.isArray(value) && value.every(Array.isArray) && inRange(field, value.length);
+        case "list":
+        case "group":
+            return false;
     }
+}
+
+/** Nothing there. An empty `list` reads as absent too, so a required one needs an entry. */
+export function isAbsent(field: BlockField, value: unknown): boolean {
+    if (value === undefined || value === null || value === "") return true;
+    return field.kind === "list" && Array.isArray(value) && value.length === 0;
 }
 
 /*
@@ -246,16 +402,21 @@ function acceptsValue(field: BlockField, value: unknown): boolean {
  * than a missing block an editor can see is missing.
  */
 export function readProps(fields: BlockField[], raw: unknown): BlockProps | null {
+    return readRecord(fields, raw, "template");
+}
+
+export function readRecord(fields: BlockField[], raw: unknown, mode: ReadMode): BlockProps | null {
     if (!isRecord(raw)) return null;
     const props: BlockProps = {};
     for (const field of fields) {
-        const value = raw[field.name];
-        if (value === undefined || value === null || value === "") {
+        const value = Object.hasOwn(raw, field.name) ? raw[field.name] : undefined;
+        const read = isAbsent(field, value) ? undefined : readValue(field, value, mode);
+        if (read === INVALID) return null;
+        if (read === undefined || isAbsent(field, read)) {
             if (field.required) return null;
             continue;
         }
-        if (!accepts(field, value)) return null;
-        props[field.name] = value;
+        props[field.name] = read;
     }
     return props;
 }
@@ -377,7 +538,21 @@ function resolveList(
     return resolved;
 }
 
+/** A field as the schema publishes it: bindability resolved, and every nested part copied. */
+export type SchemaField = Omit<BlockField, "item" | "fields"> & {
+    bindable: boolean;
+    item?: Omit<ListItem, "fields"> & { bindable: boolean; fields?: SchemaField[] };
+    fields?: SchemaField[];
+};
+
 export interface BlockSchema {
+    /*
+     * Still 2 with `list` and `group` in it, because they only add a kind and two keys. barakoBrew
+     * 1.4.0 refuses a version it does not know and falls back to JSON for every block, but edits a
+     * kind it does not know as JSON for that one field and keeps the rest of the form. A bump would
+     * take the form editor away from every site until a new console shipped; this takes it away from
+     * the new fields only.
+     */
     version: 2;
     /** The scopes and formats a binding may name, so an editor offers exactly what renders. */
     bindings: { scopes: string[]; formats: string[] };
@@ -386,8 +561,23 @@ export interface BlockSchema {
         label: string;
         layer: "primitive" | "preset" | "data" | "block";
         perViewer: boolean;
-        fields: (BlockField & { bindable: boolean })[];
+        fields: SchemaField[];
     }[];
+}
+
+// Options copied too: the registry validates against its own array, and this result is handed to
+// callers. `bindable` is resolved rather than passed through, so an editor reads one answer instead
+// of reimplementing the default.
+function publishField(f: BlockField): SchemaField {
+    return {
+        ...f,
+        options: f.options ? [...f.options] : undefined,
+        bindable: isBindable(f),
+        item: f.item
+            ? { ...f.item, bindable: isBindable(itemField(f)), fields: f.item.fields?.map(publishField) }
+            : undefined,
+        fields: f.fields?.map(publishField),
+    };
 }
 
 /** What this site can render, as data an editor can build a form from. */
@@ -400,14 +590,7 @@ export function blockSchema(registry: BlockRegistry): BlockSchema {
             label: d.label,
             layer: d.layer ?? "block",
             perViewer: d.perViewer === true,
-            // Options copied too: the registry validates against its own array, and this result is
-            // handed to callers. `bindable` is resolved rather than passed through, so an editor
-            // reads one answer instead of reimplementing the default.
-            fields: (d.fields as BlockField[]).map((f) => ({
-                ...f,
-                options: f.options ? [...f.options] : undefined,
-                bindable: isBindable(f),
-            })),
+            fields: (d.fields as BlockField[]).map(publishField),
         })),
     };
 }

@@ -2,6 +2,15 @@
 
 ## 0.8.0 (unreleased)
 
+- Block fields can be a `list` (entries of `text`, `url`, `number` or `group`, with `min` and
+  `max`) or a `group` (its own `fields`), so a block declares "a list of stages, each a label, a
+  name and a body" instead of numbered fields or comma separated text, and an editor adds a fifth
+  stage without a code change (#124). A whole-value binding such as `{{item.Tags}}` fills a list
+  with the array itself, checked entry by entry and never rescanned; strings typed inside a list or
+  a group bind like any string prop. Presets can declare both kinds. `rotatingText` takes a `words`
+  list and still reads the comma separated `items` pages already store. The block schema stays
+  version 2 and publishes `item` and `fields` as added keys: barakoBrew 1.4.0 edits a kind it does
+  not know as JSON for that field alone, so its form editor keeps working for every other field.
 - A look check pair can set its own capture `timeout`, or the defaults can. A page as tall as
   barakocms.com's changelog (over 100,000px at 390px) took longer than the fixed 30 seconds to
   screenshot and was reported as not captured, so it was never compared at all.
