@@ -41,9 +41,11 @@ import { readEnv } from "./env.js";
 import { CmsError, isTenantHandle, list, tenantForHost } from "./delivery.js";
 import { readSecret } from "./secret.js";
 import { parseSiteSegment, type SiteRoute } from "./site-route.js";
+import { isPluginName } from "./blocks/plugins.js";
 import { presetsFrom } from "./blocks/presets.js";
 import { SPACES, TONES } from "./blocks/tokens.js";
 import { COLOR, FLUID_LENGTH, LENGTH, mergeColors, tokensFrom, tonesFrom } from "./theme.js";
+import { recipesFrom } from "./recipes.js";
 import type {
     PressTheme,
     SuppliedAsset,
@@ -1097,6 +1099,21 @@ function home(base: Home | undefined, d: Record<string, unknown>): Home | undefi
     return { ...(path ? { path } : {}), ...(collection ? { collection } : {}) };
 }
 
+/*
+ * `Plugins`: the plugin packages this tenant renders, by name (#25).
+ *
+ * A list replaces the configured one, and a list saved empty turns every plugin off, the way the link
+ * lists clear. A name that is not a plugin name is dropped. A name the image does not carry is kept
+ * and does nothing, so enabling a plugin ahead of the image that installs it is harmless.
+ */
+const MAX_PLUGINS = 50;
+
+function pluginsFrom(base: string[], v: unknown): string[] {
+    const listed = array(v);
+    if (!listed) return base;
+    return [...new Set(listed.slice(0, MAX_PLUGINS).map((raw) => str(raw)).filter(isPluginName))];
+}
+
 export function applySiteSettings(
     config: PressConfig,
     data: Record<string, unknown> | undefined,
@@ -1129,6 +1146,7 @@ export function applySiteSettings(
     const colors = colorsFrom(config.theme.colors, d.Colors);
     const named = tokensFrom(config.theme.tokens, record(d.Tokens));
     const tones = tonesFrom(config.theme.tones, record(d.Tones), { colors, tokens: named });
+    const recipes = recipesFrom(config.theme.recipes, record(d.StyleRecipes));
     const theme: PressTheme = {
         colors,
         fonts: face.fonts,
@@ -1140,6 +1158,7 @@ export function applySiteSettings(
         asSupplied: assetsAsSupplied(config.theme.asSupplied, d, site),
         ...(named ? { tokens: named } : {}),
         ...(tones ? { tones } : {}),
+        ...(recipes ? { recipes } : {}),
     };
 
     const { holding: _ignored, ...rest } = config;
@@ -1159,6 +1178,7 @@ export function applySiteSettings(
         // A tenant's named blocks. Saved in barakoBrew, so anything that is not a preset is left
         // out rather than half applied, the same as every other setting.
         presets: array(d.Presets) ? presetsFrom(array(d.Presets), pinnedTenant(config)) : config.presets,
+        plugins: pluginsFrom(config.plugins, d.Plugins),
         collections: collectionsFrom(config.collections, d.Collections),
         optionColors: optionColorsFrom(config.optionColors, theme, d.Colors, d.OptionColors),
         optionStyles: optionStylesFrom(config.optionStyles, theme, d.Colors, d.OptionColors, d.OptionStyles),

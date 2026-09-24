@@ -524,7 +524,9 @@ single list and lays out whatever is in it, which is what a `repeat` and a prese
 a card per row that came back, however many that is. Its column count is a choice and not a number,
 because only a string field takes a binding, and a preset has to pass its own `columns` through.
 
-**Content primitives** hold content and no layout: `text` (a variant from the theme's type scale),
+**Content primitives** hold content and no layout: `text` (a variant from the theme's type scale,
+and `format: "inline"` for code, emphasis, strong, links and an accent in the line; see
+[Inline marks](#inline-marks-in-a-text-block)),
 `richText` (markdown), `image`, `video`, `embed` (an iframe, only for a host in `embedHosts`),
 `icon`, `button`, `link`, `list`, `disclosure` (a labelled section that opens; give several the
 same `group` and only one is open at a time), `comparisonTable` (rows typed as lines with `|`
@@ -557,6 +559,9 @@ it) and `wash`, plus any the site names in `Tones` (see [Tokens and tones](#toke
 `theme.text`; corners are `none`, `control`, `panel` or `pill`. A tenant that changes the scale
 changes every page built from primitives, and nobody can put one client's blue into a block.
 
+The one way past the tokens is a [style recipe](#style-recipes): every primitive takes `recipe`, the
+name of a look the site defines in its settings, and draws with it in place of its own.
+
 A tone belongs to the band and everything in it: a `section` or a `panel` publishes its ink, its
 accent and its hairline, and the blocks inside read those rather than the page's. That is what makes
 an inverse band readable, and it is why a block dropped anywhere still looks like it belongs.
@@ -564,7 +569,8 @@ an inverse band readable, and it is why a block dropped anywhere still looks lik
 **Presets** are named arrangements of primitives, stored as data: the shipped library below, plus
 whatever a tenant saves of its own.
 
-**Data blocks** load and choose rather than draw: `source`, `repeat`, `showIf`, `pager` and `slot`.
+**Data blocks** load and choose rather than draw: `source`, `repeat`, `showIf`, `pager`, `filterBar`
+and `slot`.
 See bindings below.
 
 Also built in, from before the layers: `columns` (up to four lists of blocks), `callToAction` and
@@ -606,8 +612,10 @@ operator named, the host through the CMS, or `CMS_DEFAULT_TENANT`, so barakoBrew
 schema at that tenant's domain. Nothing else a caller sends picks the tenant. A host with no tenant
 gets 404 `{ "error": "no site" }`, and a lookup that fails gets 503. The settings behind it are the
 cached read every page makes, under the tenant's cache tag, so a settings change shows after the
-delivery that purges it. A build-time site gets the same answer as `createBlockSchemaRoute(blocks)`,
-which still works and still ignores the request.
+delivery that purges it. A build-time site with no plugins gets the same answer as
+`createBlockSchemaRoute(blocks)`, which still works and still ignores the request. Given only the
+registry, the route cannot tell which plugins the site enabled, so it offers no plugin's blocks and
+lists every plugin as off; a site with plugins passes the config.
 
 Field kinds are `text`, `markdown`, `url`, `number`, `boolean`, `select` (with `options`), `slots`
 (lists of nested blocks, handed to the component already rendered), `list` and `group` (below). The list is editor input, so a
@@ -766,6 +774,46 @@ where a source per value was one read each:
 All of it resolves on the server as the request's tenant, so a count or a sum never makes the
 browser call the API. A page that uses none of it reads and renders exactly what it did before.
 
+**Filter buttons.** A `filterBar` inside a `source` draws one button per distinct value of `field`
+among the rows the source read, after an "all" button (`allLabel`, which binds, so `All {{count}}`
+works). The values come in the order first seen; `order` is a comma separated list to put first, and
+a value it names that no row holds gets no button. `separator` splits a text field that holds several
+values, such as `4.4.0, 4.3.0`, and a list field gives one value per entry. A bar offers at most a
+hundred values (`MAX_FILTER_VALUES`), the first hundred in that order, and a row carries only values
+the bar offers. Fewer than two values is no choice, so the bar draws nothing.
+
+```json
+{ "type": "source", "props": {
+    "collection": "packages", "mode": "list", "pageSize": 50,
+    "content": [[
+      { "type": "filterBar", "props": { "field": "Category", "allLabel": "All {{count}}", "label": "Filter by category" } },
+      { "type": "repeat", "props": { "content": [[ { "type": "text", "props": { "value": "{{item.Title}}" } } ]] } }
+    ]]
+} }
+```
+
+The rows stay server-rendered and the buttons read nothing. The binder marks each row's own blocks
+with `data-bp-filter`, the bar's id, and `data-bp-filter-values`, its values, each written as
+`<id>:<value>` with the value percent-encoded so a value with a space is one token. A row of a source
+nested in another source's row belongs to both bars, so each attribute can hold two, and each bar's
+rule reads only its own. The id is `f<n>-<scope>`, where the scope is the part of the page the bind
+draws (`body`, `header`, `footer`, or `index` for a collection's index page, and `scope` in
+`bindBlocks` options for a site that binds its own), so a bar in the header and an identical one in the
+body never share an id, and the same page renders the same bytes every time. A click sets `aria-pressed` on the button and
+`data-bp-filter-value` on the bar, and writes one rule that hides every row of that bar without the
+value, with the value escaped as a CSS string and `!important` so it wins over a row's inline
+`display`. A site writes no rule of its own, so a value nobody planned for still filters, and a
+reader with no script sees every row. The buttons are toggles with `aria-pressed` inside a labelled
+group, not a tablist, since the tab pattern promises arrow keys and panels this does not have. A row
+with nothing in the field has no value, so any choice hides it.
+
+In a grouped source the bar is drawn once, ahead of the groups, and filters all of them. With
+`hideEmptyGroups`, a group's own blocks carry every value its rows hold, so the same rule hides a
+group that has no row left. Without it a group stays with its heading and no rows. Only the first bar
+in a source counts. A grouped source honours only a bar at the top level of its content; one inside a
+band there would repeat with every group, so it draws nothing and marks no row. The
+values are those of the rows read, at most fifty, so a source that pages filters the page it is on.
+
 ### Presets
 
 A preset is a named block saved as data, not code: a few props and an arrangement of primitives that
@@ -870,6 +918,99 @@ first. `changelogList` does not group by itself, because grouping means knowing 
 the kind and that is the tenant's field name. One band per kind with `filterField` and `filterValue`
 is the grouping, and the chip on each entry is the option's own word.
 
+### Plugin packages
+
+When no block covers a need, a developer writes one as a plugin package, and the published image
+stays as it is. A plugin is an npm package that ships built JavaScript, like this one does, and whose
+default export is `definePlugin`:
+
+```tsx
+import { defineBlock, definePlugin } from "barakopress";
+
+type TallyProps = { count: number; label: string };
+
+const tally = defineBlock<TallyProps>({
+  type: "tally",
+  label: "Tally",
+  fields: [
+    { name: "count", kind: "number", required: true },
+    { name: "label", kind: "text", required: true },
+  ],
+  component: ({ props, theme }) => (
+    <p style={{ color: theme.colors.accent }}>{props.count} {props.label}</p>
+  ),
+});
+
+export default definePlugin({ name: "tally", blocks: [tally] });
+```
+
+`defineBlock` checks the fields against the props at compile time, the same as the built-ins: a field
+name the props do not have, a kind that does not suit the prop's type, or an optional field for a prop
+the component treats as always there does not compile. `examples/plugin-sample` is a complete one,
+with its `package.json` and `tsconfig.json`; CI packs it, builds an image with it and renders it.
+
+A plugin block is passed what every block is passed: its props, checked against its fields, its
+slots, rendered, and the theme. It is not passed the config, the CMS address or a token, and data from
+the CMS should reach it through a binding in its props or a module endpoint, not a credential. That is
+what it is handed, not what it can reach: its code runs in the server with full access, `process.env`
+and every `barakopress` export included. Installing a plugin means trusting it with the deployment.
+
+Its name may not be one a built-in, a library block, the site or another plugin already registered.
+Replacing one would change that block for every tenant, including the ones that never enabled the
+plugin.
+
+**Installing: a derived image.** Blocks are registered when the Next build runs, so a package cannot
+be added to a built image. The published image holds the built server and not the source or the
+toolchain, so the derived image is built from the engine's source at a release tag, which is what the
+published image of that tag was built from, with the plugins handed in as a build context:
+
+```bash
+mkdir plugins
+(cd ../my-plugin && npm pack --pack-destination ../site/plugins)   # your own plugin
+npm pack barakopress-plugin-tally@1.2.0 --pack-destination plugins  # one from npm
+
+docker buildx build \
+  --build-context plugins=./plugins \
+  -t my-press:0.8.0-plugins \
+  https://github.com/BaryoDev/barakoPress.git#v0.8.0
+```
+
+`examples/derived-image/compose.yml` is the same thing in compose. The `plugins` directory holds
+tarballs and nothing else, so what is built is exactly the bytes that were packed. The install runs
+offline, so a plugin's own dependencies must travel inside its tarball: list each one in
+`bundleDependencies`, and a tarball with a dependency it does not bundle is refused. So is a plugin
+named like a package the engine already has (`react`, `next`, anything in its lockfile), which would
+otherwise be linked over it. The build installs them beside the engine with no install scripts,
+and writes `press.plugins.ts`, which the reference
+`press.config.ts` passes to `createBlockRegistry(config, [], { plugins })`. An overlay with its own
+`press.config.ts` imports `plugins` from `@/press.plugins` and passes it the same way. Pin the tag,
+and next to it the commit it points at (`git ls-remote https://github.com/BaryoDev/barakoPress.git
+v0.8.0`), since a tag can be moved; building from `#<commit>` is the strict form. The `v0.8.0` tag
+exists from the 0.8.0 release on. Moving it is an engine upgrade, and a plugin should be rebuilt and
+checked against it.
+
+**Enabling: per tenant.** One derived image carries every plugin the deployment installs. A tenant
+renders a plugin's blocks only when the `Plugins` setting in its `site` settings entry names it:
+
+```json
+{ "Plugins": ["tally"] }
+```
+
+Until then, it is as if the plugin were not installed for that tenant: `/api/blocks` does not offer its
+blocks, a page that holds one renders everything around it and not the block, and a preset whose body
+draws one is left out. A list saved empty turns every plugin off; a missing field leaves the ones the
+config names (`plugins` in `defineConfig`, empty unless set). A build-time site enables plugins with
+`plugins` in its config. `/api/blocks` also answers `plugins`, every installed plugin with whether the
+tenant enabled it, which is what barakoBrew reads to show the switch. Each block a plugin added carries
+`plugin` with its name.
+
+What enablement does not do is keep code apart. Every plugin's module is loaded in the container for
+every tenant it serves, and a tenant that has not enabled it is only kept from rendering it. So a
+plugin nobody on the deployment trusts is not installed there. When tenants must not share plugins,
+the answer is a separate deployment, its own barakoCMS, barakoBrew and barakoPress, not a second
+barakoPress against the same API. A hotel's branch landing pages share one deployment; its booking
+system gets its own.
+
 ## Configuring it
 
 `press.config.ts` is the one file a site owns, and the seam the whole package turns on.
@@ -920,7 +1061,7 @@ for a post type with no such field.
 | `labels` | English | `Labels` | The words the screens print for a visitor. See below |
 | `store` | in process | operator only | Where the state a fleet has to agree on is kept: kept answers, the host map, the replay guard, the generation of each cache tag. Needed only when more than one container serves the site. See below |
 | `home` | the post index | `HomePath`, `HomeCollection` | What `createHome` serves at `/`. See below |
-| `theme` | the barakoCMS palette | `Colors`, `Fonts`, `Radii`, `Layout`, `Space`, `Text`, `Tokens`, `Tones` | Colours, faces, radii, column widths, and a site's own named values and tones. See below |
+| `theme` | the barakoCMS palette | `Colors`, `Fonts`, `Radii`, `Layout`, `Space`, `Text`, `Tokens`, `Tones`, `StyleRecipes` | Colours, faces, radii, column widths, a site's own named values and tones, and the looks its blocks can name. See below |
 
 The third column is the whole of the split. A key marked operator only is one the image decides for
 every tenant it serves, and each is that for a reason you can name: `types`, `fields`, `pageFields`
@@ -1015,7 +1156,7 @@ The settings are the singleton `site` type from barakoCMS `docs/site-settings.md
 (`POST /api/content-types/blueprints/site`, then publish its one entry). The engine reads `Name`,
 `Tagline`, `Url`, `Locale`, `Logo`, `LogoAlt`, `FooterLogo`, `Favicon`, `ShareImage`, `Copyright`,
 `Colors` (the theme slots), `Fonts` (a family name per role, and the stylesheet that loads it),
-`Radii`, `Layout`, `Tokens` and `Tones` (see [Tokens and tones](#tokens-and-tones)), `TopBar`, `HeaderLinks`, `MenuLinks`, `HeaderActions`, `FooterColumns`, `SocialLinks`, `HeaderPath`,
+`Radii`, `Layout`, `Tokens` and `Tones` (see [Tokens and tones](#tokens-and-tones)), `StyleRecipes` (see [Style recipes](#style-recipes)), `TopBar`, `HeaderLinks`, `MenuLinks`, `HeaderActions`, `FooterColumns`, `SocialLinks`, `HeaderPath`,
 `HeaderTone`, `FooterPath`, `FooterTone`, `AssetsAsSupplied`, `LogoAsSupplied`, `LogoClearSpace`,
 `PageSizes`, `ReservedSlugs`, `Labels`, `HomePath` and `HomeCollection`. `Collections`, `OptionStyles` and `OptionColors` are read as the collections section
 describes. `Variants` are not rendered yet. Every value is checked for shape; one that fails, and any the
@@ -1408,6 +1549,136 @@ byte as it did.
 Read time is derived from the body at 200 words a minute, with fenced code blocks excluded, so there
 is no field to fill in and nothing to keep in sync.
 
+### Style recipes
+
+A primitive draws itself from tokens, which keeps every page one design and also means a designed
+section cannot be built from primitives: a card with its own padding, border, corner and shadow is
+not something any token names. A recipe is that card, said once in the site settings as
+`StyleRecipes` (or `theme.recipes` in `defineConfig`), and a block wears it with `recipe`.
+
+```json
+"StyleRecipes": {
+  "card": {
+    "class": "lift",
+    "style": {
+      "padding": "22px 24px",
+      "background": "{colors.surface}",
+      "border": "1px solid {colors.hairline}",
+      "border-radius": "16px",
+      "box-shadow": "0 1px 2px rgba(16,18,35,.04)",
+      "display": "flex",
+      "flex-direction": "column",
+      "gap": "{space.sm}"
+    }
+  },
+  "eyebrow": {
+    "style": {
+      "font-family": "{fonts.mono}",
+      "font-size": "11px",
+      "letter-spacing": ".16em",
+      "text-transform": "uppercase",
+      "color": "{colors.muted}"
+    }
+  }
+}
+```
+
+```json
+{ "type": "panel", "props": { "recipe": "card", "content": [[
+  { "type": "text", "props": { "value": "01 Products", "recipe": "eyebrow" } }
+]] } }
+```
+
+A recipe is a name and two keys, both optional but not both empty:
+
+- `class`: class names, space separated, put on the element beside the style. A style attribute
+  cannot say `:hover`, a focus ring or a media query, so those go in the site's own stylesheet under
+  this class. Up to 8, each a letter or underscore, then letters, digits, `_` and `-`.
+- `style`: CSS property names, written as a stylesheet writes them, to values. Up to 40.
+
+A value is CSS text, and `{name}` in it stands for a theme value: `{accent}` is the token of that
+name from `Tokens`, and `{colors.<slot>}`, `{space.<step>}`, `{radii.<name>}`, `{text.<role>}`,
+`{fonts.<role>}` and `{layout.<name>}` are the theme's own. References are resolved when the block
+draws, against the requesting tenant's theme, so changing a token changes every recipe that names
+it. A declaration whose reference does not resolve is left out and the rest of the recipe draws.
+
+The properties a recipe may set:
+
+| Group | Properties |
+| --- | --- |
+| box | `display`, `position` (`static` or `relative` only), `box-sizing`, `width`, `min-width`, `max-width`, `height`, `min-height`, `max-height`, `aspect-ratio`, `overflow`, `overflow-x`, `overflow-y`, `vertical-align`, `opacity` |
+| spacing | `margin`, `padding` and their four sides, `margin-block`, `margin-inline`, `padding-block`, `padding-inline`, `gap`, `row-gap`, `column-gap` |
+| typography | `font-family`, `font-size`, `font-weight`, `font-style`, `font-variant-numeric`, `line-height`, `letter-spacing`, `text-align`, `text-transform`, `text-decoration`, `text-underline-offset`, `text-wrap`, `text-overflow`, `white-space`, `overflow-wrap`, `word-break` |
+| colour | `color`, `background`, `background-color` |
+| border | `border`, `border-top`, `border-right`, `border-bottom`, `border-left`, `border-color`, `border-style`, `border-width` |
+| radius | `border-radius` |
+| shadow | `box-shadow`, `text-shadow` |
+| grid | `grid-template-columns`, `grid-template-rows`, `grid-auto-flow`, `grid-auto-rows`, `grid-column`, `grid-row`, `justify-items`, `place-items`, `place-content` |
+| flex | `flex`, `flex-direction`, `flex-wrap`, `flex-grow`, `flex-shrink`, `flex-basis`, `align-items`, `align-content`, `align-self`, `justify-content`, `justify-self`, `order` |
+| engine | `--bp-ink`, `--bp-ink-soft`, `--bp-muted`, `--bp-hairline`, `--bp-accent`, `--bp-on-accent` (the tone the blocks inside read), `--bp-gap`, `--bp-list` (a block list's gap and display), `--bp-code-ink`, `--bp-code-bg`, `--bp-code-size`, `--bp-code-pad`, `--bp-code-radius` (inline code in a text block) |
+
+The list is also exported as `RECIPE_PROPERTY_GROUPS`, for an editor.
+
+The values reach a style attribute, which React writes by joining `name:value;` with no CSS
+escaping, so a value is held to a narrow shape rather than cleaned. It is letters, digits, spaces
+and `# % . , ( ) / + * -`, up to 240 characters, with quotes only around a plain family name
+(`'JetBrains Mono'`). Parentheses balance, and a function is one of `calc`, `min`, `max`, `clamp`,
+`minmax`, `repeat`, `fit-content`, `var` (naming a custom property and nothing else), the colour
+functions (`rgb`, `rgba`, `hsl`, `hsla`, `hwb`, `lab`, `lch`, `oklab`, `oklch`, `color-mix`) and the
+gradients. So `;`, `:`, braces, angle brackets, a backslash, `!important`, `@`, a comment, `url()`,
+`expression()`, `image-set()` and `attr()` are all refused: a recipe cannot load anything and
+cannot leave its own declaration. A property off the list, or a value that fails, is dropped and
+the rest of the recipe kept, the way `Colors` drops one bad colour. The check runs again when the
+block draws, on the resolved value, so a theme built by hand gets it too. A name is lower case
+letters, digits and hyphens, up to 40. Up to 100 recipes, merged over the configured ones name by
+name.
+
+What wearing one does to a block:
+
+- The recipe replaces the block's own inline look on its outer element outright. It is not merged
+  over it: the card's own padding under a recipe that only set the corner is a look nobody drew.
+  The block's token props for that element (`padding`, `radius`, `border` and so on) are not
+  applied.
+- What makes the block work stays: a `stickyBar` keeps `position: sticky`, a `flow` keeps its cells
+  (`--bp-list: contents`), a `row` and a `tabGroup` stay wrapping rows, a `list` keeps its marker, a
+  `comparisonTable` keeps its own horizontal scroll, an `embed` keeps its width, shape and no
+  border, a `figure` keeps no margin, and a `rotatingText` keeps the box its words stack in.
+- So does the layout the block's own props ask for: a `grid` or `flow` with `columns` keeps its
+  grid and track list, and `align` and `justify` on a `stack`, `row` or `flow` are kept. A prop left
+  unset leaves the recipe to say it, so a `flow` with no `columns` takes its grid from the recipe.
+- A `tone` named beside a recipe still sets the tone the blocks inside read. Without one, a recipe
+  that changes the background sets `--bp-ink` and its neighbours itself.
+- A `tabPanel`'s recipe is its tab in the strip, and the open tab keeps its colours over it.
+- `recipe` is a text field, so a preset passes its own prop through, and a bound name picks a look
+  per row: `"recipe": "card-{{item.Product}}"`.
+- A name the site has no recipe for draws the block's own look. A block that names none renders
+  byte for byte as it did.
+
+### Inline marks in a text block
+
+`text` takes `format`, `plain` (the default) or `inline`. Inline, its value is one line with marks
+in it: `` `code` ``, `*emphasis*`, `**strong**`, `[links](/docs)` and `==an accent==`, which is drawn
+as `<span class="bp-accent">`. Accents do not nest: `==` inside one ends it. Nothing that makes a
+block of its own is read, so a heading stays one element: `# x`, a list or a quote is the text it
+is, and an image keeps only its alt text. A value longer than 2000 characters is read as plain text,
+since emphasis parsing is quadratic at worst and the value may be bound from content.
+
+It goes through the same safe renderer as a body (`renderInlineMarkdown` in `barakopress/markdown`):
+raw HTML is escaped, a link must be a path, an anchor, http, https or mailto or it keeps its words
+and loses the link, and every attribute is escaped. A path starting `//` or `/\` is another site
+to a browser, so it is refused here and in a body alike.
+
+The marks are styled under `:where(.bp-inline)`, so each rule weighs no more than the element it
+names and a site's own `.lede code` wins. The accent and a link take the band's accent. Code is the
+mono face, and reads `--bp-code-ink`, `--bp-code-bg`, `--bp-code-size`, `--bp-code-pad` and
+`--bp-code-radius` first, so a recipe gives the code in one block a tint and a corner:
+
+```json
+"StyleRecipes": {
+  "grabs-body": { "style": { "font-size": "14px", "--bp-code-bg": "#EEEBFD", "--bp-code-ink": "#4034A8", "--bp-code-pad": "1px 5px", "--bp-code-radius": "5px" } }
+}
+```
+
 ### Assets used exactly as supplied
 
 Some marks come with an identity manual: never recoloured, never outlined, never put in a box, never
@@ -1778,6 +2049,9 @@ laid over the reference app the same way. If it ships its own `app/%5Fpress/`, i
 site with its own layout and routes, and its tree replaces the reference one; otherwise the tenant
 tree is removed as above. `PRESS_TRAILING_SLASH=true` sets Next's `trailingSlash`, for a site whose
 URLs end in a slash; configure its webhook URL with the slash too (see the revalidate endpoint).
+
+Extra blocks go in the same way, as a `plugins` build context: see
+[Plugin packages](#plugin-packages).
 
 One thing to expect on a first release: the image prerenders during `docker build`, where the CMS is
 not reachable, so the index, the feed and the sitemap are built empty and correct themselves one

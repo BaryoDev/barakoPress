@@ -721,6 +721,12 @@ export interface PressConfig {
      */
     presets: BlockPreset[];
     /**
+     * The plugin packages whose blocks render, by name. Empty unless the site says otherwise, so an
+     * image carrying plugins renders exactly as one without them until a tenant turns one on. A
+     * request-time site reads its tenant's `Plugins` setting.
+     */
+    plugins: string[];
+    /**
      * Where the CMS is, as the config file named it. Empty means it did not, and `CMS_URL` answers
      * when the call is made. Read it through `cmsUrlFor`, never straight off the config.
      */
@@ -995,6 +1001,7 @@ export function defineConfig(
         ...(input.currency ? { currency: input.currency } : {}),
         embedHosts: embedHosts(input.embedHosts) ?? [...EMBED_HOSTS],
         presets: input.presets ?? [],
+        plugins: [...(input.plugins ?? [])],
         cmsUrl: trimSlash(input.cmsUrl ?? ""),
         tenant: input.tenant,
         theme: resolveTheme(input.theme),

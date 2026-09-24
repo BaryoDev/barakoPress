@@ -13,12 +13,17 @@ RUN npm ci --omit=dev --ignore-scripts 2>/dev/null || npm install --omit=dev --i
 # That is how a site keeps its theme in its own repository and still builds the published engine.
 FROM scratch AS overlay
 
+# Empty unless the build names a context for it: `--build-context plugins=<dir>` replaces this stage.
+# The directory holds `npm pack` tarballs of plugin packages. See "Plugin packages" in the README.
+FROM scratch AS plugins
+
 FROM node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts
 COPY . .
 COPY --from=overlay / /overlay/
+COPY --from=plugins / /plugins/
 
 # One deployment's own files, laid over the reference app.
 #
@@ -45,6 +50,10 @@ RUN if [ -n "$(ls -A /overlay)" ]; then \
       cp -R "$source/." .; \
     fi; \
     rm -rf /overlay
+
+# After the overlay, so an overlay's own press.config.ts registers the plugins too: it imports
+# `plugins` from press.plugins.ts the way the reference one does. With no tarballs this changes nothing.
+RUN node scripts/plugins.mjs /plugins && rm -rf /plugins
 
 # barakocms.com's URLs end in a slash. Set here rather than by an overlay's own next.config.ts, which
 # would be a site owning a file the engine's build depends on.

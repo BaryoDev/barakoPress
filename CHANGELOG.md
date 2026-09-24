@@ -19,6 +19,43 @@
   site's own sprite. Every label paragraph carries `bp-label`, a result's `li` carries
   `bp-tree-search-entry`, `searchEmpty` may say `{query}`, and there is a `closeContents` label.
 
+- A `filterBar` block inside a `source` (#129) draws one button per distinct value of a field among
+  the source's rows, in the order first seen or as `order` says, after an "all" button. The buttons
+  are toggles with `aria-pressed`, not a tablist. The rows stay server-rendered: the binder marks
+  each with the bar's id and its values, and a click writes one rule that hides the rows without the
+  value, escaped as a CSS string and winning over inline `display`. `separator` splits a text field
+  holding several values, and `hideEmptyGroups` hides a group of a grouped source once none of its
+  rows is left. A bar offers at most a hundred values, and a row of a nested source belongs to both
+  bars. A site needs no hide rule of its own. A source with no bar renders as it did.
+- Plugin packages (#25). A plugin is an npm package whose default export is
+  `definePlugin({ name, blocks })`, its blocks written with `defineBlock` and checked at compile time
+  the same as the built-ins. It reaches a deployment through a derived image: `npm pack` tarballs in a
+  directory passed to the Dockerfile as the `plugins` build context, built from the engine's source at
+  a pinned release tag (`examples/derived-image/compose.yml`). One image carries every plugin, and a
+  tenant renders a plugin's blocks only when its `Plugins` site setting names it; a build-time site
+  sets `plugins` in its config. Until then the blocks are not in `/api/blocks`, a page holding one
+  renders without it, and a preset drawing one is left out. `/api/blocks` adds `plugins`, each
+  installed plugin with whether the tenant enabled it, and `plugin` on each block a plugin added.
+  `createBlockRegistry` takes `plugins`, and refuses a plugin block whose name is already taken. A
+  plugin block is passed its props, slots and theme and not the config, but its code runs in the
+  server with full access, so installing a plugin is trusting it with the deployment. Every plugin's
+  code is loaded for every tenant the container serves, so tenants that must not share plugins need
+  separate deployments. A plugin's dependencies must be bundled in its tarball, since the install
+  runs offline, and a plugin named like a package the engine has is refused. An image built with no plugins renders exactly as before.
+- Style recipes, and inline marks in text (#131). `StyleRecipes` in the site settings (or
+  `theme.recipes`) holds named looks, each `{ class, style }`: classes put on the element, and CSS
+  properties to values, where `{name}` in a value is a token and `{colors.accent}`, `{space.lg}` and
+  the like are the theme's own. Every primitive takes `recipe`, and a recipe it names replaces its
+  own inline look on its outer element, keeping only what the block needs to work. Properties are
+  held to a list (box, spacing, typography, colour, border, radius, shadow, grid, flex and the
+  engine's own custom properties), and a value to letters, digits, a few symbols, quoted family
+  names and a short list of functions, so `url()`, `expression()`, `;`, braces and `!important` are
+  refused. A bad property or value is dropped and the rest kept. `text` takes `format: "inline"`,
+  which reads code, emphasis, strong, links and `==an accent==` through the safe renderer
+  (`renderInlineMarkdown`), up to 2000 characters, past which the value is plain text. A block that
+  names no recipe, and a text block left `plain`, render as they did.
+- A markdown link or a `url` field starting `//` or `/\` is refused. A browser reads both as another
+  site, and they were let through as paths.
 - The tenant-aware `/api/blocks` handler takes its request as required, not optional. Next's route
   type check refuses a handler whose request may be absent, so a consumer built with webpack failed
   its type check on `app/api/blocks/route.ts`.

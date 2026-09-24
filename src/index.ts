@@ -92,6 +92,8 @@ export type {
     ThemeText,
     ThemeTone,
 } from "./theme.js";
+export { RECIPE_PROPERTIES, RECIPE_PROPERTY_GROUPS, recipeLook, recipeValueOk } from "./recipes.js";
+export type { RecipeLook, StyleRecipe } from "./recipes.js";
 export { readingMinutes, initials } from "./reading-time.js";
 export type {
     PressConfig,
@@ -180,7 +182,7 @@ export type { Post, Ref, Term, Page, NavItem, Breadcrumb, PageAtPath, Redirect }
 export { Navigation, Breadcrumbs } from "./screens/navigation.js";
 export type { NavigationProps, BreadcrumbsProps } from "./screens/navigation.js";
 
-export { renderMarkdown, isSafeHref, anchor, markdownHeadings } from "./markdown.js";
+export { renderMarkdown, renderInlineMarkdown, isSafeHref, anchor, markdownHeadings } from "./markdown.js";
 export type { RenderMarkdownOptions, MarkdownHeading } from "./markdown.js";
 
 export { Asset, renderProse, suppliedAssetFor, suppliedAssetOn, clearSpaceOf } from "./assets.js";
@@ -291,9 +293,11 @@ export type {
     ResolveOptions,
 } from "./blocks/schema.js";
 export { createBlockRegistry, registryFor } from "./blocks/registry.js";
+export { definePlugin } from "./blocks/plugins.js";
+export type { PressPlugin } from "./blocks/plugins.js";
 export { builtInBlocks, collectionItems, BLOCK_PROSE_CLASS } from "./blocks/built-in.js";
 export type { CollectionItem } from "./blocks/built-in.js";
-export { primitiveBlocks, PROSE_CLASS, ICONS, FLOW_COLUMNS } from "./blocks/primitives.js";
+export { primitiveBlocks, PROSE_CLASS, ICONS, FLOW_COLUMNS, INLINE_CLASS, TEXT_FORMATS } from "./blocks/primitives.js";
 export {
     dataBlocks,
     SOURCE_BLOCK,
@@ -301,9 +305,12 @@ export {
     SHOW_IF_BLOCK,
     SLOT_BLOCK,
     PAGER_BLOCK,
+    FILTER_BAR_BLOCK,
+    MAX_FILTER_VALUES,
     MAX_SOURCES,
     MAX_SOURCE_ROWS,
 } from "./blocks/data.js";
+export { FILTER_ATTR, FILTER_VALUES_ATTR, FILTER_CHOSEN_ATTR, filterToken } from "./blocks/filter.js";
 export {
     TONES,
     SPACES,

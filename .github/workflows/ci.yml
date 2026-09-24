@@ -58,7 +58,11 @@ jobs:
           test -f dist/markdown.d.ts
 
       - name: Typecheck
-        run: npx tsc --noEmit
+        # The sample plugin resolves `barakopress` the way a plugin in its own repository does, so it
+        # has its own tsconfig and is checked on its own.
+        run: |
+          npx tsc --noEmit
+          npx tsc -p examples/plugin-sample --noEmit
 
       - name: Unit tests
         # The engine's own build proves almost nothing, which is why the consumer job below exists.
@@ -102,6 +106,33 @@ jobs:
         # a host with no tenant is a 404, a purge stays inside its tenant, and a purged tenant still
         # answers 200 as itself once the CMS is gone.
         run: scripts/two-hosts.sh
+
+  plugins:
+    # The derived image recipe (#25), built the way a deployment builds it: the sample plugin packed
+    # into a tarball, handed to the Dockerfile as the `plugins` context, and the image run against two
+    # tenants where only one enabled the plugin.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Pack the sample plugin
+        run: |
+          mkdir -p "$RUNNER_TEMP/plugins"
+          (cd examples/plugin-sample && npm pack --pack-destination "$RUNNER_TEMP/plugins")
+          ls "$RUNNER_TEMP/plugins"
+
+      - name: Build the image with the plugin, through the recipe
+        run: docker buildx build --load --build-context plugins="$RUNNER_TEMP/plugins" -t press-plugins:ci .
+
+      - name: One image, the plugin on for one tenant and off for the other
+        run: PRESS_IMAGE=press-plugins:ci scripts/plugin-hosts.sh
 
   consumer:
     # The test that matters: can somebody else install this and render their own content model.

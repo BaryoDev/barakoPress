@@ -172,6 +172,11 @@ export interface BlockDefinition<P extends BlockProps = BlockProps, S extends st
      * band's top goes from 0 to -400 after scrolling 400px; transparent, it stays at 0.
      */
     transparent?: boolean;
+    /**
+     * The plugin package this block came from. Set by the registry, never by hand: a tenant renders
+     * it only when its `Plugins` setting names this plugin.
+     */
+    plugin?: string;
     // Method syntax, so a definition typed for its own props still fits a registry of any props.
     component(args: BlockComponentProps<P, S>): ReactNode | Promise<ReactNode>;
 }
@@ -426,6 +431,12 @@ export interface ResolvedBlock {
     props: BlockProps;
     /** Each `slots` field's lists, resolved. The raw lists are not left in `props`. */
     slots: Record<string, ResolvedBlock[][]>;
+    /**
+     * Set by the binder on a row of a `source` that holds a `filterBar`: each bar the row belongs
+     * to, with the values this row's field holds under it. A row of a source nested in another's
+     * row belongs to both bars. `BlockList` writes them onto the block's wrapper.
+     */
+    filters?: { id: string; values: string[] }[];
 }
 
 export interface ResolveOptions {
@@ -554,6 +565,11 @@ export interface BlockSchema {
      * the new fields only.
      */
     version: 2;
+    /**
+     * Every plugin the deployment installed and whether this tenant enabled it, so an editor can offer
+     * the switch. A plugin that is off lists here and nowhere in `blocks`.
+     */
+    plugins: { name: string; enabled: boolean }[];
     /** The scopes and formats a binding may name, so an editor offers exactly what renders. */
     bindings: { scopes: string[]; formats: string[] };
     blocks: {
@@ -561,6 +577,8 @@ export interface BlockSchema {
         label: string;
         layer: "primitive" | "preset" | "data" | "block";
         perViewer: boolean;
+        /** Set on a block a plugin package added. */
+        plugin?: string;
         fields: SchemaField[];
     }[];
 }
@@ -580,17 +598,33 @@ function publishField(f: BlockField): SchemaField {
     };
 }
 
-/** What this site can render, as data an editor can build a form from. */
-export function blockSchema(registry: BlockRegistry): BlockSchema {
+/**
+ * What this site can render, as data an editor can build a form from. `plugins` is what the
+ * deployment installed, with the ones this tenant enabled; left out, the plugins are read off the
+ * registry and all of them count as enabled, since everything in it renders.
+ */
+export function blockSchema(
+    registry: BlockRegistry,
+    plugins: { name: string; enabled: boolean }[] = installedPlugins(registry).map((name) => ({ name, enabled: true })),
+): BlockSchema {
     return {
         version: 2,
+        plugins: plugins.map((p) => ({ ...p })),
         bindings: { scopes: [...BINDING_SCOPES], formats: [...BINDING_FORMATS] },
         blocks: [...registry.values()].map((d) => ({
             type: d.type,
             label: d.label,
             layer: d.layer ?? "block",
             perViewer: d.perViewer === true,
+            ...(d.plugin ? { plugin: d.plugin } : {}),
             fields: (d.fields as BlockField[]).map(publishField),
         })),
     };
+}
+
+/** The plugins a registry carries blocks for, in the order they were registered. */
+export function installedPlugins(registry: BlockRegistry): string[] {
+    const names = new Set<string>();
+    for (const definition of registry.values()) if (definition.plugin) names.add(definition.plugin);
+    return [...names];
 }
