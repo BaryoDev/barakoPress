@@ -431,6 +431,12 @@ export interface ResolvedBlock {
     props: BlockProps;
     /** Each `slots` field's lists, resolved. The raw lists are not left in `props`. */
     slots: Record<string, ResolvedBlock[][]>;
+    /**
+     * Set by the binder on a row of a `source` that holds a `filterBar`: each bar the row belongs
+     * to, with the values this row's field holds under it. A row of a source nested in another's
+     * row belongs to both bars. `BlockList` writes them onto the block's wrapper.
+     */
+    filters?: { id: string; values: string[] }[];
 }
 
 export interface ResolveOptions {

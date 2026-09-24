@@ -1,5 +1,8 @@
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import type { PressConfig } from "../config.js";
+import { FilterButtons } from "./filter-bar.js";
+import { readFilterState } from "./filter.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
 import { spaceOf, toneOf } from "./tokens.js";
 
@@ -22,10 +25,13 @@ export const REPEAT_BLOCK = "repeat";
 export const SHOW_IF_BLOCK = "showIf";
 export const SLOT_BLOCK = "slot";
 export const PAGER_BLOCK = "pager";
+export const FILTER_BAR_BLOCK = "filterBar";
 
 /** The most rows one `source` reads, and the most reads one page may make. Untrusted input, bounded. */
 export const MAX_SOURCE_ROWS = 50;
 export const MAX_SOURCES = 8;
+/** The most values one `filterBar` offers. A field split on a separator can hold any number. */
+export const MAX_FILTER_VALUES = 100;
 
 /*
  * The collections a site offers an editor. A request-time site takes any name, because its
@@ -178,6 +184,63 @@ export function readPagerState(value: string | undefined): PagerState | null {
     return { param: parts[0], page, hasNext: parts[2] === "1" };
 }
 
+/*
+ * Buttons that show only the rows of the `source` around it holding one value of a field (#129).
+ * The binder reads the values from the rows the source loaded and writes them into `state`, and
+ * marks each row with its own; the buttons hide the others in the browser, with no second read.
+ *
+ * Fewer than two values is no choice, so the bar draws nothing. The buttons are drawn from the
+ * theme, and carry `aria-pressed` for a stylesheet to key off as well as for a screen reader.
+ */
+type FilterBarProps = {
+    field: string;
+    order?: string;
+    separator?: string;
+    allLabel?: string;
+    label?: string;
+    hideEmptyGroups?: boolean;
+    state?: string;
+};
+
+const filterBar = defineBlock<FilterBarProps>({
+    type: FILTER_BAR_BLOCK,
+    label: "Filter buttons",
+    layer: "data",
+    fields: [
+        { name: "field", kind: "text", label: "Filter on the field", required: true },
+        { name: "order", kind: "text", label: "Buttons first, in this order, comma separated" },
+        { name: "separator", kind: "text", label: "One field holds several values, separated by" },
+        { name: "allLabel", kind: "text", label: "The button that shows everything" },
+        { name: "label", kind: "text", label: "What the buttons filter, for a screen reader" },
+        { name: "hideEmptyGroups", kind: "boolean", label: "Hide a group left with no rows" },
+        // Written by the binder, like the pager's.
+        { name: "state", kind: "text", label: "Filter state", bindable: false },
+    ],
+    component: ({ props, theme }) => {
+        const state = readFilterState(props.state);
+        if (!state || state.values.length < 2) return null;
+        const c = theme.colors;
+        const base: CSSProperties = {
+            padding: "8px 15px",
+            borderRadius: theme.radii.pill,
+            fontFamily: "inherit",
+            fontSize: "13px",
+            cursor: "pointer",
+        };
+        return (
+            <FilterButtons
+                id={state.id}
+                values={state.values}
+                allLabel={props.allLabel ?? "All"}
+                label={props.label}
+                on={{ ...base, background: c.ink, border: `1px solid ${c.ink}`, color: c.surface, fontWeight: 700 }}
+                off={{ ...base, background: c.surface, border: `1px solid ${c.hairline}`, color: c.secondaryInk, fontWeight: 600 }}
+                row={{ display: "flex", flexWrap: "wrap", gap: spaceOf(theme, "xs") }}
+            />
+        );
+    },
+});
+
 export function dataBlocks(config: PressConfig): BlockDefinition[] {
-    return [source(config), repeat, showIf, slot, pager];
+    return [source(config), repeat, showIf, slot, pager, filterBar];
 }

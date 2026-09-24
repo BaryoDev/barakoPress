@@ -454,7 +454,9 @@ async function indexLead(config: PressConfig, path: string, blocks: BlockRegistr
         return null;
     }
     if (!page) return null;
-    const resolved = await pageBlocks(config, page, registryFor(config, blocks ?? createBlockRegistry(config, [], { presets: [] })));
+    const resolved = await pageBlocks(config, page, registryFor(config, blocks ?? createBlockRegistry(config, [], { presets: [] })), {
+        scope: "index",
+    });
     if (resolved.length === 0) return null;
     return (
         <>

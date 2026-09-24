@@ -2,6 +2,14 @@
 
 ## 0.8.0 (unreleased)
 
+- A `filterBar` block inside a `source` (#129) draws one button per distinct value of a field among
+  the source's rows, in the order first seen or as `order` says, after an "all" button. The buttons
+  are toggles with `aria-pressed`, not a tablist. The rows stay server-rendered: the binder marks
+  each with the bar's id and its values, and a click writes one rule that hides the rows without the
+  value, escaped as a CSS string and winning over inline `display`. `separator` splits a text field
+  holding several values, and `hideEmptyGroups` hides a group of a grouped source once none of its
+  rows is left. A bar offers at most a hundred values, and a row of a nested source belongs to both
+  bars. A site needs no hide rule of its own. A source with no bar renders as it did.
 - Plugin packages (#25). A plugin is an npm package whose default export is
   `definePlugin({ name, blocks })`, its blocks written with `defineBlock` and checked at compile time
   the same as the built-ins. It reaches a deployment through a derived image: `npm pack` tarballs in a

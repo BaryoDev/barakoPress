@@ -472,7 +472,8 @@ an inverse band readable, and it is why a block dropped anywhere still looks lik
 **Presets** are named arrangements of primitives, stored as data: the shipped library below, plus
 whatever a tenant saves of its own.
 
-**Data blocks** load and choose rather than draw: `source`, `repeat`, `showIf`, `pager` and `slot`.
+**Data blocks** load and choose rather than draw: `source`, `repeat`, `showIf`, `pager`, `filterBar`
+and `slot`.
 See bindings below.
 
 Also built in, from before the layers: `columns` (up to four lists of blocks), `callToAction` and
@@ -675,6 +676,46 @@ where a source per value was one read each:
 
 All of it resolves on the server as the request's tenant, so a count or a sum never makes the
 browser call the API. A page that uses none of it reads and renders exactly what it did before.
+
+**Filter buttons.** A `filterBar` inside a `source` draws one button per distinct value of `field`
+among the rows the source read, after an "all" button (`allLabel`, which binds, so `All {{count}}`
+works). The values come in the order first seen; `order` is a comma separated list to put first, and
+a value it names that no row holds gets no button. `separator` splits a text field that holds several
+values, such as `4.4.0, 4.3.0`, and a list field gives one value per entry. A bar offers at most a
+hundred values (`MAX_FILTER_VALUES`), the first hundred in that order, and a row carries only values
+the bar offers. Fewer than two values is no choice, so the bar draws nothing.
+
+```json
+{ "type": "source", "props": {
+    "collection": "packages", "mode": "list", "pageSize": 50,
+    "content": [[
+      { "type": "filterBar", "props": { "field": "Category", "allLabel": "All {{count}}", "label": "Filter by category" } },
+      { "type": "repeat", "props": { "content": [[ { "type": "text", "props": { "value": "{{item.Title}}" } } ]] } }
+    ]]
+} }
+```
+
+The rows stay server-rendered and the buttons read nothing. The binder marks each row's own blocks
+with `data-bp-filter`, the bar's id, and `data-bp-filter-values`, its values, each written as
+`<id>:<value>` with the value percent-encoded so a value with a space is one token. A row of a source
+nested in another source's row belongs to both bars, so each attribute can hold two, and each bar's
+rule reads only its own. The id is `f<n>-<scope>`, where the scope is the part of the page the bind
+draws (`body`, `header`, `footer`, or `index` for a collection's index page, and `scope` in
+`bindBlocks` options for a site that binds its own), so a bar in the header and an identical one in the
+body never share an id, and the same page renders the same bytes every time. A click sets `aria-pressed` on the button and
+`data-bp-filter-value` on the bar, and writes one rule that hides every row of that bar without the
+value, with the value escaped as a CSS string and `!important` so it wins over a row's inline
+`display`. A site writes no rule of its own, so a value nobody planned for still filters, and a
+reader with no script sees every row. The buttons are toggles with `aria-pressed` inside a labelled
+group, not a tablist, since the tab pattern promises arrow keys and panels this does not have. A row
+with nothing in the field has no value, so any choice hides it.
+
+In a grouped source the bar is drawn once, ahead of the groups, and filters all of them. With
+`hideEmptyGroups`, a group's own blocks carry every value its rows hold, so the same rule hides a
+group that has no row left. Without it a group stays with its heading and no rows. Only the first bar
+in a source counts. A grouped source honours only a bar at the top level of its content; one inside a
+band there would repeat with every group, so it draws nothing and marks no row. The
+values are those of the rows read, at most fifty, so a source that pages filters the page it is on.
 
 ### Presets
 
