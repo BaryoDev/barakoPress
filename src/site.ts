@@ -10,6 +10,8 @@ import {
     type CollectionTree,
     type FieldNames,
     type FooterColumn,
+    type HeaderAction,
+    HEADER_ACTION_VARIANTS,
     type Holding,
     type Home,
     type Labels,
@@ -27,6 +29,7 @@ import {
     pinnedTenant,
     TREE_LIMIT,
 } from "./config.js";
+import { ACTIVE_ON_MAX } from "./current-path.js";
 import { readEnv } from "./env.js";
 import { CmsError, isTenantHandle, list, tenantForHost } from "./delivery.js";
 import { readSecret } from "./secret.js";
@@ -365,18 +368,63 @@ function origin(v: unknown): string | undefined {
 
 const BADGE_MAX = 12;
 
-function links(v: unknown, max = 24): SiteLink[] | undefined {
+/** `activeOn`: the plain site paths in it, space separated. None readable is none at all. */
+function activeOn(v: unknown): string | undefined {
+    const paths = (str(v) ?? "")
+        .split(/\s+/)
+        .map((p) => sitePath(p))
+        .filter((p): p is string => Boolean(p))
+        .slice(0, ACTIVE_ON_MAX);
+    return paths.length > 0 ? paths.join(" ") : undefined;
+}
+
+/** The fields every link shares. `label` and `href` may be missing; the caller drops those. */
+function linkFields(item: Record<string, unknown> | undefined): Partial<SiteLink> {
+    const link: Partial<SiteLink> = { label: str(item?.label), href: siteHref(item?.href) };
+    const badge = str(item?.badge);
+    if (badge && badge.length <= BADGE_MAX) link.badge = badge;
+    if (item?.external === true) link.external = true;
+    return link;
+}
+
+const complete = <T extends Partial<SiteLink>>(l: T): l is T & SiteLink => Boolean(l.label && l.href);
+
+/*
+ * `nested` is for the header and the phone menu, the two places that draw children. A child's own
+ * children are never read: one level is what a dropdown can show.
+ */
+function links(v: unknown, max = 24, nested = false): SiteLink[] | undefined {
     return array(v)
         ?.map((item) => record(item))
         .map((item) => {
-            const link: Partial<SiteLink> = { label: str(item?.label), href: siteHref(item?.href) };
-            const badge = str(item?.badge);
-            if (badge && badge.length <= BADGE_MAX) link.badge = badge;
-            if (item?.external === true) link.external = true;
+            const link = linkFields(item);
+            const on = activeOn(item?.activeOn);
+            if (on) link.activeOn = on;
+            if (nested) {
+                const children = links(item?.children, 12);
+                if (children && children.length > 0) link.children = children;
+            }
             return link;
         })
-        .filter((l): l is SiteLink => Boolean(l.label && l.href))
+        .filter(complete)
         .slice(0, max);
+}
+
+/*
+ * `HeaderActions`: a variant the header knows, `primary` when unset or unknown, since a call to
+ * action with no say in how it looks is the main one. No `activeOn` and no children: an action is a
+ * button, not a place in the site.
+ */
+function headerActions(v: unknown): HeaderAction[] | undefined {
+    return array(v)
+        ?.map((item) => record(item))
+        .map((item) => {
+            const named = str(item?.variant)?.toLowerCase();
+            const variant = HEADER_ACTION_VARIANTS.find((x) => x === named) ?? "primary";
+            return { ...linkFields(item), variant };
+        })
+        .filter(complete)
+        .slice(0, 4);
 }
 
 function footerColumns(v: unknown): FooterColumn[] | undefined {
@@ -595,10 +643,13 @@ function withoutHoldingPage(site: SiteIdentity, path: string): SiteIdentity {
         const local = localPathOf(l.href, site.url);
         return local === null || !samePath(local, path);
     };
+    const keepChildren = (l: SiteLink): SiteLink => (l.children ? { ...l, children: l.children.filter(keep) } : l);
     return {
         ...site,
         topBar: site.topBar ? { ...site.topBar, links: site.topBar.links.filter(keep) } : site.topBar,
-        headerLinks: site.headerLinks?.filter(keep),
+        headerLinks: site.headerLinks?.filter(keep).map(keepChildren),
+        menuLinks: site.menuLinks?.filter(keep).map(keepChildren),
+        headerActions: site.headerActions?.filter(keep),
         footerColumns: site.footerColumns?.map((c) => ({ ...c, links: c.links.filter(keep) })),
     };
 }
@@ -1017,7 +1068,9 @@ export function applySiteSettings(
         copyright: str(d.Copyright) ?? base.copyright,
         topBar: topBar(d.TopBar) ?? base.topBar,
         // A list saved empty clears the configured one. A field that is not a list keeps it.
-        headerLinks: links(d.HeaderLinks) ?? base.headerLinks,
+        headerLinks: links(d.HeaderLinks, 24, true) ?? base.headerLinks,
+        menuLinks: links(d.MenuLinks, 24, true) ?? base.menuLinks,
+        headerActions: headerActions(d.HeaderActions) ?? base.headerActions,
         footerColumns: footerColumns(d.FooterColumns) ?? base.footerColumns,
         socialLinks: socialLinks(d.SocialLinks) ?? base.socialLinks,
     };

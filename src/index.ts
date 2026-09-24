@@ -102,6 +102,8 @@ export type {
     Region,
     SiteRegions,
     SiteLink,
+    HeaderAction,
+    HeaderActionVariant,
     FooterColumn,
     SocialLink,
     TopBar,
