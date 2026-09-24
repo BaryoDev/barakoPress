@@ -2,6 +2,11 @@
 
 ## 0.8.0 (unreleased)
 
+- A collection whose index is off frees its one-segment route for a page at exactly that path
+  wherever it was configured, the post collection at `/blog` included. Before, only a collection a
+  tenant's settings brought was freed, since the build config reserves its own routes. What the
+  engine serves at the root stays reserved, and anything below the route is still the collection's.
+
 - A `source` with `mode: "all"` reads every row of a collection, fifty to a request and up to 500,
   as one of the page's reads, for a page that is a whole collection such as a changelog. A `repeat`
   draws every row its source read unless `limit` names fewer, and the blocks its rows draw spend a

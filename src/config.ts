@@ -919,7 +919,8 @@ function ownCollections(input: Record<string, CollectionConfig> | undefined): Re
 }
 
 /** Paths the engine's own route files answer, which a page at the site root must not take. */
-const RESERVED_AT_ROOT = ["api", "feed.xml", "sitemap.xml", "robots.txt", "_next", "_press", "_share", "%5fshare", "favicon.ico"];
+/** What the engine itself serves at the root, which no page and no collection setting can have. */
+export const RESERVED_AT_ROOT = ["api", "feed.xml", "sitemap.xml", "robots.txt", "_next", "_press", "_share", "%5fshare", "favicon.ico"];
 
 function firstSegment(route: string | undefined): string | undefined {
     return route?.split("/").find(Boolean)?.toLowerCase();

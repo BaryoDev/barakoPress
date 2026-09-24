@@ -704,6 +704,42 @@ describe("collections from a tenant's settings", () => {
         expect(isReservedPath(config, "/docs")).toBe(false);
     });
 
+    /*
+     * A one-segment route is also in `reservedSlugs`, which the build config fills from its own
+     * collections and from the post route. That list was checked first, so turning the index off freed
+     * the route only for a collection a tenant's settings brought, and never for the blog's own.
+     */
+    it("frees a root route for a page when its index is off, wherever the collection was configured", () => {
+        const built = defineConfig({
+            site: { name: "Docs", url: "https://docs.example" },
+            pages: "/",
+            collections: {
+                modules: { type: "module", route: "/modules", index: false, fields: { title: "Title" } },
+                doctors: { type: "doctor", route: "/doctors", fields: { title: "Name" } },
+            },
+        });
+        expect(built.reservedSlugs).toContain("modules");
+        expect(isReservedPath(built, "/modules")).toBe(false);
+        expect(isReservedPath(built, "/Modules/")).toBe(false);
+        expect(isReservedPath(built, "/modules/barako-cli")).toBe(true);
+        expect(isReservedPath(built, "/doctors")).toBe(true);
+
+        const blog = defineConfig({ site: { name: "B", url: "https://b.example" }, pages: "/" });
+        const post = blog.collections.post;
+        const unindexed = { ...blog, collections: { ...blog.collections, post: { ...post, index: false } } };
+        expect(isReservedPath(blog, "/blog")).toBe(true);
+        expect(isReservedPath(unindexed, "/blog")).toBe(false);
+        expect(isReservedPath(unindexed, "/blog/first-post")).toBe(true);
+
+        // A slug reserved for another reason stays reserved, whatever a collection there says.
+        const api = defineConfig({
+            site: { name: "A", url: "https://a.example" },
+            pages: "/",
+            collections: { calls: { type: "call", route: "/api", index: false, fields: { title: "Title" } } },
+        });
+        expect(isReservedPath(api, "/api")).toBe(true);
+    });
+
     it("shows a read time and its nearest items on a collection that is not the post collection", async () => {
         visit("agency.example");
         const study = await route(config, ["cases", "harbour-rebrand"]);
