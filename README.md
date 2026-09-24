@@ -697,8 +697,10 @@ The rows stay server-rendered and the buttons read nothing. The binder marks eac
 with `data-bp-filter`, the bar's id, and `data-bp-filter-values`, its values, each written as
 `<id>:<value>` with the value percent-encoded so a value with a space is one token. A row of a source
 nested in another source's row belongs to both bars, so each attribute can hold two, and each bar's
-rule reads only its own. The id is new on every render, so a bar in a header region and an identical
-one in the page body never share one. A click sets `aria-pressed` on the button and
+rule reads only its own. The id is `f<n>-<scope>`, where the scope is the part of the page the bind
+draws (`body`, `header`, `footer`, or `index` for a collection's index page, and `scope` in
+`bindBlocks` options for a site that binds its own), so a bar in the header and an identical one in the
+body never share an id, and the same page renders the same bytes every time. A click sets `aria-pressed` on the button and
 `data-bp-filter-value` on the bar, and writes one rule that hides every row of that bar without the
 value, with the value escaped as a CSS string and `!important` so it wins over a row's inline
 `display`. A site writes no rule of its own, so a value nobody planned for still filters, and a

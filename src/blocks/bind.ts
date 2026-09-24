@@ -100,11 +100,8 @@ export interface BindContext {
     counts: Map<string, Promise<number | undefined>>;
     /** How many filters this bind has made, so two on one page get two ids. */
     filters: number;
-    /*
-     * Random per bind. A page's regions and its body are bound apart, each counting from one, and
-     * two identical bars in them would otherwise share an id, so a click in one filtered both.
-     */
-    salt: string;
+    /** Which bind this is, from `BindPageOptions.scope`, so two binds on one page never share an id. */
+    scope: string;
 }
 
 export interface BindPageOptions {
@@ -112,6 +109,13 @@ export interface BindPageOptions {
     registry: BlockRegistry;
     scopes: BindingScopes;
     onProblem?: (problem: BindingProblem) => void;
+    /**
+     * Which part of the page this bind draws: `body` when unset, or a region such as `header` or
+     * `footer`. A page's regions and its body are bound apart, each counting its filters from one,
+     * so the scope is what keeps two identical bars in them from sharing an id, and a click in one
+     * from filtering both. It keeps the id the same on every render of a page, so the HTML is too.
+     */
+    scope?: string;
 }
 
 export async function bindBlocks(blocks: ResolvedBlock[], options: BindPageOptions): Promise<ResolvedBlock[]> {
@@ -122,7 +126,7 @@ export async function bindBlocks(blocks: ResolvedBlock[], options: BindPageOptio
         count: (path) => collectionCount(ctx, path),
         counts: new Map(),
         filters: 0,
-        salt: Math.random().toString(36).slice(2, 10),
+        scope: (options.scope ?? "body").replace(/[^A-Za-z0-9_-]/g, "") || "body",
     };
     if (options.scopes.count) ctx.count = options.scopes.count;
     const source = new BindingSource(
@@ -476,7 +480,7 @@ async function filterOf(
     const values = ordered([...seen], order).slice(0, MAX_FILTER_VALUES);
     ctx.filters++;
     return {
-        id: `f${ctx.filters}-${ctx.salt}`,
+        id: `f${ctx.filters}-${ctx.scope}`,
         field,
         separator,
         values,

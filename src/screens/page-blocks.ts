@@ -21,13 +21,14 @@ export async function pageBlocks(
     config: PressConfig,
     page: Page,
     registry: BlockRegistry,
-    options: { perViewer?: boolean; searchParams?: SearchParams } = {},
+    options: { perViewer?: boolean; searchParams?: SearchParams; scope?: string } = {},
 ): Promise<ResolvedBlock[]> {
     if (!Array.isArray(page.blocks) || page.blocks.length === 0) return [];
     const blocks = resolveBlocks(page.blocks, registry, { perViewer: options.perViewer === true });
     return bindBlocks(blocks, {
         config,
         registry,
+        scope: options.scope,
         scopes: {
             site: async () => siteScope(config, await getGlobals(config)),
             page: () => pageScope(page),

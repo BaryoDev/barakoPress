@@ -38,6 +38,7 @@ vi.mock("next/link", () => ({
 const { defineConfig } = await import("../config.js");
 const { forgetCachedReads } = await import("../delivery.js");
 const { createPage } = await import("../screens/page.js");
+const { createSiteLayout } = await import("../screens/site-layout.js");
 const { createBlockRegistry } = await import("./registry.js");
 const { createBlockSchemaRoute } = await import("../routes/block-schema.js");
 const { cssString, filterRule, filterToken } = await import("./filter.js");
@@ -112,7 +113,7 @@ function cms() {
         const paged = (items: unknown[]) =>
             Response.json({ items, page: 1, pageSize: 50, totalItems: items.length, totalPages: 1, hasNextPage: false });
         if (url.pathname === "/api/public/site") {
-            return paged([{ id: "s", data: { Name: "Academy", Url: "https://academy.example", Collections: COLLECTIONS } }]);
+            return paged([{ id: "s", data: { Name: "Academy", Url: "https://academy.example", Collections: COLLECTIONS, HeaderPath: "/site/header" } }]);
         }
         if (url.pathname === "/api/public/pages/resolve") {
             const path = url.searchParams.get("path") ?? "";
@@ -159,6 +160,17 @@ async function page(blocks: unknown[]): Promise<string> {
     requestHeaders = new Headers({ host: "academy.example" });
     const Page = createPage(config, registry);
     return html(await Page({ params: Promise.resolve({ path: ["about"] }), searchParams: Promise.resolve({}) }));
+}
+
+/** A page body inside the site layout, whose header region is a page of its own, bound apart. */
+async function withHeader(header: unknown[], body: unknown[]): Promise<string> {
+    pages["/about"] = { id: "p1", slug: "about", data: { Title: "About", Slug: "about", Blocks: body } };
+    pages["/site/header"] = { id: "h1", slug: "header", data: { Title: "Header", Slug: "header", Blocks: header } };
+    requestHeaders = new Headers({ host: "academy.example" });
+    const Page = createPage(config, registry);
+    const Layout = createSiteLayout(config, { loadFonts: false });
+    const inner = await Page({ params: Promise.resolve({ path: ["about"] }), searchParams: Promise.resolve({}) });
+    return html(await Layout({ children: inner }));
 }
 
 const text = (value: string) => ({ type: "text", props: { value } });
@@ -358,10 +370,24 @@ describe("odd input", () => {
 
     it("gives identical bars in two separate binds two ids, as a region and a page body are bound", async () => {
         const blocks = [source({ collection: "packages" }, [bar({ field: "Category" }), repeat([text("[[{{item.Title}}]]")])])];
-        const first = marked(await page(blocks))[0].id;
-        const second = marked(await page(blocks))[0].id;
+        const out = await withHeader(blocks, blocks);
 
-        expect(first).not.toBe(second);
+        const rows = marked(out);
+        expect(rows).toHaveLength(10);
+        const ids = [...new Set(rows.map((r) => r.id))];
+        expect(ids).toHaveLength(2);
+        expect(ids).toContain("f1-header");
+        expect(ids).toContain("f1-body");
+    });
+
+    it("renders the same page twice to the same bytes", async () => {
+        const blocks = [source({ collection: "packages" }, [bar({ field: "Category" }), repeat([text("[[{{item.Title}}]]")])])];
+        const first = await withHeader(blocks, blocks);
+        forgetCachedReads();
+        const second = await withHeader(blocks, blocks);
+
+        expect(marked(first)).toHaveLength(10);
+        expect(second).toBe(first);
     });
 });
 

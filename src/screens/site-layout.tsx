@@ -162,7 +162,7 @@ async function RegionBand({
 }) {
     const t = cfg.theme;
     const tone = toneOf(t, region.tone);
-    const blocks = await pageBlocks(cfg, page, registry);
+    const blocks = await pageBlocks(cfg, page, registry, { scope: tag });
     const Tag = tag;
 
     return (
