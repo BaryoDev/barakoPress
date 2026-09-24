@@ -12,8 +12,10 @@
   names and a short list of functions, so `url()`, `expression()`, `;`, braces and `!important` are
   refused. A bad property or value is dropped and the rest kept. `text` takes `format: "inline"`,
   which reads code, emphasis, strong, links and `==an accent==` through the safe renderer
-  (`renderInlineMarkdown`). A block that names no recipe, and a text block left `plain`, render as
-  they did.
+  (`renderInlineMarkdown`), up to 2000 characters, past which the value is plain text. A block that
+  names no recipe, and a text block left `plain`, render as they did.
+- A markdown link or a `url` field starting `//` or `/\` is refused. A browser reads both as another
+  site, and they were let through as paths.
 - The tenant-aware `/api/blocks` handler takes its request as required, not optional. Next's route
   type check refuses a handler whose request may be absent, so a consumer built with webpack failed
   its type check on `app/api/blocks/route.ts`.

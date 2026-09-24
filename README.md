@@ -1405,9 +1405,12 @@ What wearing one does to a block:
   The block's token props for that element (`padding`, `radius`, `border` and so on) are not
   applied.
 - What makes the block work stays: a `stickyBar` keeps `position: sticky`, a `flow` keeps its cells
-  (`--bp-list: contents`), a `tabGroup` stays a wrapping row, a `list` keeps its marker, a
-  `comparisonTable` keeps its own horizontal scroll, and a `rotatingText` keeps the box its words
-  stack in.
+  (`--bp-list: contents`), a `row` and a `tabGroup` stay wrapping rows, a `list` keeps its marker, a
+  `comparisonTable` keeps its own horizontal scroll, an `embed` keeps its width, shape and no
+  border, a `figure` keeps no margin, and a `rotatingText` keeps the box its words stack in.
+- So does the layout the block's own props ask for: a `grid` or `flow` with `columns` keeps its
+  grid and track list, and `align` and `justify` on a `stack`, `row` or `flow` are kept. A prop left
+  unset leaves the recipe to say it, so a `flow` with no `columns` takes its grid from the recipe.
 - A `tone` named beside a recipe still sets the tone the blocks inside read. Without one, a recipe
   that changes the background sets `--bp-ink` and its neighbours itself.
 - A `tabPanel`'s recipe is its tab in the strip, and the open tab keeps its colours over it.
@@ -1420,12 +1423,15 @@ What wearing one does to a block:
 
 `text` takes `format`, `plain` (the default) or `inline`. Inline, its value is one line with marks
 in it: `` `code` ``, `*emphasis*`, `**strong**`, `[links](/docs)` and `==an accent==`, which is drawn
-as `<span class="bp-accent">`. Nothing that makes a block of its own is read, so a heading stays one
-element: `# x`, a list or a quote is the text it is, and an image keeps only its alt text.
+as `<span class="bp-accent">`. Accents do not nest: `==` inside one ends it. Nothing that makes a
+block of its own is read, so a heading stays one element: `# x`, a list or a quote is the text it
+is, and an image keeps only its alt text. A value longer than 2000 characters is read as plain text,
+since emphasis parsing is quadratic at worst and the value may be bound from content.
 
 It goes through the same safe renderer as a body (`renderInlineMarkdown` in `barakopress/markdown`):
 raw HTML is escaped, a link must be a path, an anchor, http, https or mailto or it keeps its words
-and loses the link, and every attribute is escaped.
+and loses the link, and every attribute is escaped. A path starting `//` or `/\` is another site
+to a browser, so it is refused here and in a body alike.
 
 The marks are styled under `:where(.bp-inline)`, so each rule weighs no more than the element it
 names and a site's own `.lede code` wins. The accent and a link take the band's accent. Code is the

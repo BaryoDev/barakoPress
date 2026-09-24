@@ -184,7 +184,7 @@ const MAX_VALUE = 240;
 /** A family name in quotes, the only thing a value may quote. */
 const QUOTED = /'[A-Za-z0-9 -]{1,60}'|"[A-Za-z0-9 -]{1,60}"/g;
 const ALPHABET = /^[A-Za-z0-9 #%.,()/+*-]+$/;
-const CALL = /([A-Za-z-]+)\(/g;
+const CALL = /(-?[A-Za-z_][A-Za-z0-9_-]*)\(/g;
 const VAR_ARGUMENT = /^var\(\s*--[A-Za-z0-9-]{1,60}\s*[,)]/;
 
 /**
@@ -314,12 +314,19 @@ export interface RecipeLook {
 
 const looks = new WeakMap<PressTheme, Map<string, RecipeLook | null>>();
 
+/** For tests: how many looks a theme has remembered. */
+export function cachedLooks(theme: PressTheme): number {
+    return looks.get(theme)?.size ?? 0;
+}
+
 /**
  * What a block naming `name` is drawn with, or undefined when the theme has no such recipe. A
  * declaration whose reference does not resolve is left out, so the rest of the recipe still draws.
  */
 export function recipeLook(theme: PressTheme, name: string | undefined): RecipeLook | undefined {
-    if (!name || !theme.recipes) return undefined;
+    // A miss is not remembered: a name can come from bound content, and a theme configured in
+    // defineConfig lives as long as the process, so caching misses would grow without bound.
+    if (!name || !theme.recipes || !Object.hasOwn(theme.recipes, name)) return undefined;
     let cache = looks.get(theme);
     if (!cache) looks.set(theme, (cache = new Map()));
     const cached = cache.get(name);

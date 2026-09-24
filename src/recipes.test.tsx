@@ -21,8 +21,8 @@ vi.mock("next/link", () => ({
 const { defineConfig } = await import("./config.js");
 const { applySiteSettings } = await import("./site.js");
 const { resolveTheme } = await import("./theme.js");
-const { RECIPE_PROPERTIES, recipeLook, recipeValueOk, recipesFrom } = await import("./recipes.js");
-const { renderInlineMarkdown } = await import("./markdown.js");
+const { RECIPE_PROPERTIES, cachedLooks, recipeLook, recipeValueOk, recipesFrom } = await import("./recipes.js");
+const { MAX_INLINE, isSafeHref, renderInlineMarkdown, renderMarkdown } = await import("./markdown.js");
 const { createBlockRegistry } = await import("./blocks/registry.js");
 const { BlockList } = await import("./blocks/render.js");
 const { blockSchema, resolveBlocks } = await import("./blocks/schema.js");
@@ -110,6 +110,10 @@ describe("reading recipes", () => {
             "var(x)",
             "var(--a, url(x))",
             "calc(1px",
+            "x9(anything)",
+            "i1(x)",
+            "var(--a,x9(y))",
+            "_x(y)",
             "1px)",
             "red\nposition:fixed",
             "x".repeat(241),
@@ -271,6 +275,51 @@ describe("a block wearing a recipe", () => {
         expect(flow).toContain("display:grid;gap:16px");
     });
 
+    it("keeps the layout a block's own props ask for, and lets the recipe draw the rest", () => {
+        const cfg = configWith({ round: { style: { "border-radius": "16px" } } });
+        const one = (block: Record<string, unknown>) => render([block], cfg);
+
+        const grid = one({ type: "grid", props: { recipe: "round", columns: 3, items: [[], [], []] } });
+        expect(grid).toContain("display:grid");
+        expect(grid).toContain("repeat(3, minmax(");
+
+        const flow = one({ type: "flow", props: { recipe: "round", columns: "3", justify: "between", content: [[]] } });
+        expect(flow).toContain("display:grid");
+        expect(flow).toContain("/ 3)");
+        expect(flow).toContain("justify-content:space-between");
+
+        const row = one({ type: "row", props: { recipe: "round", justify: "center", align: "end", items: [[]] } });
+        expect(row).toContain("display:flex");
+        expect(row).toContain("flex-wrap:wrap");
+        expect(row).toContain("justify-content:center");
+        expect(row).toContain("align-items:flex-end");
+
+        const embedCfg = defineConfig({ site: SITE, embedHosts: ["www.youtube.com"], theme: { recipes: { round: { style: { "border-radius": "16px" } } } } });
+        const embed = render([{ type: "embed", props: { recipe: "round", src: "https://www.youtube.com/embed/x", title: "V", aspect: "4:3" } }], embedCfg);
+        expect(embed).toContain("width:100%");
+        expect(embed).toContain("aspect-ratio:4 / 3");
+        expect(embed).toContain("border:0");
+
+        expect(one({ type: "image", props: { recipe: "round", src: "/a.png" } })).toMatch(/<figure style="[^"]*margin:0/);
+        expect(one({ type: "video", props: { recipe: "round", src: "/a.mp4" } })).toMatch(/<figure style="[^"]*margin:0/);
+    });
+
+    it("lets a recipe set the grid when the block names no columns of its own", () => {
+        const cfg = configWith({ cells: { style: { display: "grid", "grid-template-columns": "1fr 1fr" } } });
+        const flow = render([{ type: "flow", props: { recipe: "cells", content: [[]] } }], cfg);
+
+        expect(flow).toContain("grid-template-columns:1fr 1fr");
+        expect(flow).not.toContain("flex-wrap");
+    });
+
+    it("remembers only the recipes the theme has, so bound names that miss cannot grow memory", () => {
+        const cfg = configWith({ card: CARD });
+        for (let i = 0; i < 500; i++) recipeLook(cfg.theme, `card-${i}`);
+        recipeLook(cfg.theme, "card");
+
+        expect(cachedLooks(cfg.theme)).toBe(1);
+    });
+
     it("sets the tone's variables for what is inside when the block also names a tone", () => {
         const cfg = configWith({ dark: { style: { background: "#101223", "--bp-ink": "#FFFFFF" } } });
         const alone = render([panel({ recipe: "dark" })], cfg);
@@ -370,6 +419,30 @@ describe("inline marks in a text block", () => {
         expect(html).toMatch(/<h2 style="[^"]*" class="bp-inline">/);
         expect(html).toContain("># Title</h2>");
         expect(html).not.toContain("<h1");
+    });
+
+    it("does not nest accents, so a stray pair cannot swallow the line", () => {
+        expect(renderInlineMarkdown("==a ==b== c==")).toBe('==a <span class="bp-accent">b</span> c==');
+    });
+
+    it("refuses a link that leaves the site without saying so", () => {
+        for (const href of ["//evil.example", "/\\evil.example", " //evil.example"]) {
+            expect(isSafeHref(href), href).toBe(false);
+        }
+        expect(isSafeHref("/docs")).toBe(true);
+        expect(renderInlineMarkdown("[a](//evil.example)")).toBe("a");
+        expect(renderMarkdown("[a](//evil.example)")).not.toContain("href");
+    });
+
+    it("reads a long value as plain text, before the parser can spend quadratic time on it", () => {
+        const long = "**x** " + "a".repeat(MAX_INLINE);
+        expect(renderInlineMarkdown(long)).toBe(long);
+        expect(renderInlineMarkdown("<b>" + "a".repeat(MAX_INLINE))).toContain("&lt;b&gt;");
+
+        const bait = "*a ".repeat(20_000);
+        const started = performance.now();
+        renderInlineMarkdown(bait);
+        expect(performance.now() - started).toBeLessThan(500);
     });
 
     it("leaves the marks as typed when the block is plain, which is the default", () => {

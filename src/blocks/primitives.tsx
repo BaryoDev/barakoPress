@@ -132,6 +132,19 @@ function look(
     return { style: { ...found.style, ...keep }, ...(classes ? { className: classes } : {}) };
 }
 
+/*
+ * The layout a block's own props ask for, kept under a recipe. Columns, alignment and distribution
+ * are what the author placed the block for, the same way a list's marker is, so a recipe that only
+ * rounds the corners must not turn a three column grid into a stack. A prop left unset leaves the
+ * recipe free to say it.
+ */
+function placed(align: string | undefined, justify: string | undefined): CSSProperties {
+    return {
+        ...(align ? { alignItems: alignOf(align) } : {}),
+        ...(justify ? { justifyContent: justify === "between" ? "space-between" : alignOf(justify) } : {}),
+    };
+}
+
 /** A named tone's variables when the block chose a tone, for the blocks inside a recipe's element. */
 function chosenTone(theme: PressTheme, name: string | undefined): CSSProperties {
     return name ? toneVars(toneOf(theme, name)) : {};
@@ -194,12 +207,17 @@ const stack = defineBlock<StackProps, "content">({
     ],
     component: ({ props, slots, theme }) => (
         <div
-            {...look(theme, props.recipe, {
-                display: "flex",
-                flexDirection: "column",
-                gap: gap(theme, props.gap),
-                alignItems: props.align ? alignOf(props.align) : "stretch",
-            })}
+            {...look(
+                theme,
+                props.recipe,
+                {
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: gap(theme, props.gap),
+                    alignItems: props.align ? alignOf(props.align) : "stretch",
+                },
+                placed(props.align, undefined),
+            )}
         >
             {slots.content?.[0]}
         </div>
@@ -230,13 +248,19 @@ const row = defineBlock<RowProps, "items">({
     ],
     component: ({ props, slots, theme }) => (
         <div
-            {...look(theme, props.recipe, {
-                display: "flex",
-                flexWrap: "wrap",
-                gap: gap(theme, props.gap),
-                alignItems: props.align ? alignOf(props.align) : "stretch",
-                justifyContent: props.justify === "between" ? "space-between" : alignOf(props.justify),
-            })}
+            {...look(
+                theme,
+                props.recipe,
+                {
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: gap(theme, props.gap),
+                    alignItems: props.align ? alignOf(props.align) : "stretch",
+                    justifyContent: props.justify === "between" ? "space-between" : alignOf(props.justify),
+                },
+                // Its cells are sized as flex items, so it is a wrapping row or they are nothing.
+                { display: "flex", flexWrap: "wrap", ...placed(props.align, props.justify) },
+            )}
         >
             {(slots.items ?? []).map((item, i) => (
                 <div key={i} style={{ flex: `1 1 min(100%, ${theme.layout.columnMin})`, minWidth: 0 }}>
@@ -261,11 +285,21 @@ const grid = defineBlock<GridProps, "items">({
     ],
     component: ({ props, slots, theme }) => (
         <div
-            {...look(theme, props.recipe, {
-                display: "grid",
-                gridTemplateColumns: `repeat(${props.columns ?? 2}, minmax(min(100%, ${theme.layout.columnMin}), 1fr))`,
-                gap: gap(theme, props.gap),
-            })}
+            {...look(
+                theme,
+                props.recipe,
+                {
+                    display: "grid",
+                    gridTemplateColumns: `repeat(${props.columns ?? 2}, minmax(min(100%, ${theme.layout.columnMin}), 1fr))`,
+                    gap: gap(theme, props.gap),
+                },
+                props.columns === undefined
+                    ? {}
+                    : {
+                          display: "grid",
+                          gridTemplateColumns: `repeat(${props.columns}, minmax(min(100%, ${theme.layout.columnMin}), 1fr))`,
+                      },
+            )}
         >
             {(slots.items ?? []).map((item, i) => (
                 <div key={i} style={{ minWidth: 0 }}>
@@ -355,7 +389,11 @@ const flow = defineBlock<FlowProps, "content">({
             <>
                 {hue && <style dangerouslySetInnerHTML={{ __html: hue }} />}
                 <div
-                    {...look(theme, props.recipe, style, { "--bp-list": "contents" } as CSSProperties)}
+                    {...look(theme, props.recipe, style, {
+                        "--bp-list": "contents",
+                        ...(asGrid ? { display: "grid", gridTemplateColumns: style.gridTemplateColumns } : {}),
+                        ...placed(props.align, props.justify),
+                    } as CSSProperties)}
                     data-bp-hue={hue ? props.hueRotate : undefined}
                 >
                     {slots.content?.[0]}
@@ -667,6 +705,9 @@ const richText = defineBlock<{ markdown: string; width?: string; recipe?: string
     ),
 });
 
+/** A figure's browser margin is 40px each side, which no recipe meant, so it stays off under one. */
+const FIGURE: CSSProperties = { margin: 0 };
+
 type ImageProps = {
     src: string;
     alt?: string;
@@ -705,7 +746,7 @@ const image = defineBlock<ImageProps>({
         recipeField,
     ],
     component: ({ props, theme }) => (
-        <figure {...look(theme, props.recipe, { margin: 0, maxWidth: widthOf(theme, props.width ?? "full") })}>
+        <figure {...look(theme, props.recipe, { margin: 0, maxWidth: widthOf(theme, props.width ?? "full") }, FIGURE)}>
             <Asset
                 src={props.src}
                 alt={props.alt}
@@ -751,7 +792,7 @@ const video = defineBlock<VideoProps>({
         recipeField,
     ],
     component: ({ props, theme }) => (
-        <figure {...look(theme, props.recipe, { margin: 0 })}>
+        <figure {...look(theme, props.recipe, { margin: 0 }, FIGURE)}>
             <video
                 src={props.src}
                 poster={props.poster}
@@ -818,13 +859,25 @@ function embed(config: PressConfig): BlockDefinition {
                     referrerPolicy="no-referrer"
                     sandbox="allow-scripts allow-same-origin allow-presentation"
                     allowFullScreen
-                    {...look(theme, props.recipe, {
-                        display: "block",
-                        width: "100%",
-                        aspectRatio: ASPECTS[props.aspect ?? "16:9"] ?? ASPECTS["16:9"],
-                        border: 0,
-                        borderRadius: radiusOf(theme, props.radius ?? "panel"),
-                    })}
+                    {...look(
+                        theme,
+                        props.recipe,
+                        {
+                            display: "block",
+                            width: "100%",
+                            aspectRatio: ASPECTS[props.aspect ?? "16:9"] ?? ASPECTS["16:9"],
+                            border: 0,
+                            borderRadius: radiusOf(theme, props.radius ?? "panel"),
+                        },
+                        // An iframe is 300 by 150 with an inset border unless told otherwise, and
+                        // its shape is the block's `aspect`, so those stay.
+                        {
+                            display: "block",
+                            width: "100%",
+                            aspectRatio: ASPECTS[props.aspect ?? "16:9"] ?? ASPECTS["16:9"],
+                            border: 0,
+                        },
+                    )}
                 />
             );
         },
