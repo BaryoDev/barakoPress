@@ -41,8 +41,11 @@ export function createBlockRegistry(
     }
     // Lazily, because this runs at module scope in a site's press.config.ts: the name is resolved in
     // the warning that needs it, not here (barakoPress #51).
-    const all = withPresets(registry, options.presets ?? config.presets, () => pinnedTenant(config));
-    return withToneNames(all, toneNames(config.theme));
+    const names = toneNames(config.theme);
+    const all = withPresets(withToneNames(registry, names), options.presets ?? config.presets, () =>
+        pinnedTenant(config),
+    );
+    return withToneNames(all, names);
 }
 
 /**
@@ -63,8 +66,9 @@ export function registryFor(
     options: { holding?: boolean } = {},
 ): BlockRegistry {
     const bound = boundToSite(registry, config, options.holding === true);
-    const all = withPresets(bound, config.presets, () => pinnedTenant(config));
-    return withToneNames(all, toneNames(config.theme));
+    const names = toneNames(config.theme);
+    const all = withPresets(withToneNames(bound, names), config.presets, () => pinnedTenant(config));
+    return withToneNames(all, names);
 }
 
 /*
@@ -75,9 +79,10 @@ export function registryFor(
  * on `text`, is left alone. A select checks its value against its own options, so this is what lets
  * a block store `tone: "cms"` at all, and it is also what the schema publishes.
  *
- * A preset's body was resolved once against the definitions it was compiled with, and its props are
- * checked against those again when it expands, so the body is carried over to the widened copies
- * too. Nothing is copied when every tone field already offers every name, so a site with no tones
+ * A preset's body is resolved against the definitions it is compiled with, and its props are checked
+ * against those again when it expands. So the registry is widened before a preset is compiled, which
+ * lets a body name a site tone outright, and again after, which carries the bodies of presets
+ * compiled earlier, and a preset's own tone fields, over to the widened copies. Nothing is copied when every tone field already offers every name, so a site with no tones
  * of its own keeps the registry it had.
  */
 function isToneField(field: BlockField): boolean {

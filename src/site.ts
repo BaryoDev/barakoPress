@@ -994,8 +994,8 @@ export function applySiteSettings(
 
     const face = fontsFrom(config.theme.fonts, config.theme.fontSources, d.Fonts);
     const colors = colorsFrom(config.theme.colors, d.Colors);
-    const named = tokensFrom(config.theme.tokens, d.Tokens);
-    const tones = tonesFrom(config.theme.tones, d.Tones, { colors, tokens: named });
+    const named = tokensFrom(config.theme.tokens, record(d.Tokens));
+    const tones = tonesFrom(config.theme.tones, record(d.Tones), { colors, tokens: named });
     const theme: PressTheme = {
         colors,
         fonts: face.fonts,

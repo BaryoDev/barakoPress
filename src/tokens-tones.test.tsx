@@ -142,9 +142,12 @@ async function layoutHtml(host: string): Promise<string> {
     return render(await Layout({ children: <p>the page</p> }));
 }
 
-/** Blocks resolved, bound and rendered the way a page route does, against this config's registry. */
+/*
+ * Blocks resolved, bound and rendered the way a request-time page route does: the registry is built
+ * once from the site's own config, which names no tenant, and the tenant's settings arrive per request.
+ */
 async function renderBlocks(cfg: typeof config, raw: unknown): Promise<string> {
-    const registry = registryFor(cfg, createBlockRegistry(cfg));
+    const registry = registryFor(cfg, createBlockRegistry(config));
     const resolved = resolveBlocks(raw, registry, { perViewer: false });
     const bound = await bindBlocks(resolved, { config: cfg, registry, scopes: {} });
     return renderToStaticMarkup(<BlockList blocks={bound} theme={cfg.theme} />);
@@ -204,6 +207,17 @@ describe("Tokens", () => {
         expect(css).toContain("--t-display:clamp(32px, 4vw, 48px)");
         expect(css).toContain("--t-serif:'Zilla Slab', Georgia, serif");
         expect(css.startsWith(":root{")).toBe(true);
+    });
+
+    it("reads Tokens and Tones saved as JSON text, the way the other settings are", () => {
+        const theme = applySiteSettings(
+            base,
+            { Tokens: JSON.stringify(PALETTE.Tokens), Tones: JSON.stringify(PALETTE.Tones) },
+            null,
+        ).theme;
+        expect(theme.tokens).toEqual(PALETTE.Tokens);
+        expect(Object.keys(theme.tones ?? {})).toEqual(["cms", "brew"]);
+        expect(toneOf(theme, "cms").bg).toBe("#E8EEFD");
     });
 
     it("merges a tenant's tokens over the configured ones, one at a time", () => {
@@ -287,6 +301,36 @@ describe("Tones", () => {
             { type: "band", props: { tone: "cms", heading: "Ship it", label: "Go", href: "/go" } },
         ]);
         expect(html).toContain("Ship it");
+        expect(html).toContain("background:#E8EEFD");
+    });
+
+    it("renders a tenant preset whose body names a tenant tone outright", async () => {
+        const cfg = applySiteSettings(
+            base,
+            {
+                ...PALETTE,
+                Presets: [
+                    {
+                        type: "cmsBand",
+                        label: "CMS band",
+                        fields: [{ name: "heading", kind: "text" }],
+                        blocks: [
+                            {
+                                type: "section",
+                                props: {
+                                    tone: "cms",
+                                    content: [[{ type: "text", props: { value: "{{props.heading}}" } }]],
+                                },
+                            },
+                        ],
+                    },
+                ],
+            },
+            null,
+        );
+        expect(cfg.presets.length).toBe(1);
+        const html = await renderBlocks(cfg, [{ type: "cmsBand", props: { heading: "Fixed tone" } }]);
+        expect(html).toContain("Fixed tone");
         expect(html).toContain("background:#E8EEFD");
     });
 
