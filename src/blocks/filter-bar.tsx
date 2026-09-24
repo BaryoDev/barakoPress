@@ -24,7 +24,10 @@ export interface FilterButtonsProps {
 }
 
 export function FilterButtons({ id, values, allLabel, label, on, off, row }: FilterButtonsProps) {
-    const [chosen, setChosen] = useState<string | null>(null);
+    const [picked, setChosen] = useState<string | null>(null);
+    // The bar can stay mounted across a navigation that changes the rows, and a value the new rows
+    // do not hold would hide every one of them with no button pressed.
+    const chosen = picked !== null && values.includes(picked) ? picked : null;
     const button = (value: string | null, text: string) => (
         <button
             key={value ?? ""}
