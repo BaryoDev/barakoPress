@@ -653,7 +653,8 @@ value fails the whole block, a `url` must pass the same check markdown links do,
 never receives a prop its fields did not declare. A page reads at most 400 blocks in total, nested
 ones included, and ten levels deep. The count is spent on every block the binder walks through as
 well as every one that comes out, so a band from the library costs eight or ten of it, and a page
-that goes over loses its tail with nothing said.
+that goes over loses its tail with nothing said. What a `repeat` draws for its rows is counted
+against a budget of its own; see `mode: "all"` under Bindings.
 
 **Lists and groups.** A block that needs several of one thing declares a `list`, and a thing made
 of parts declares a `group`, rather than numbered fields or text split in the component:
@@ -747,6 +748,14 @@ keeps its content only when a bound value has something, or equals what it names
 A filter narrows what the API already lets the reader see. It is never access control: who may read
 which rows is decided in barakoCMS. A page reads at most eight sources, and a `source` at most fifty
 rows a page.
+
+`mode: "all"` is for a page that is the whole of a collection rather than a page of it, a changelog
+say: the source reads every row, fifty to a request, up to 500 (`MAX_ALL_ROWS`), and it is one of the
+page's eight reads however many requests that takes. A `pager` inside it draws nothing, and counts,
+sums, groups and a filter bar cover every row it read. A `repeat` draws every row its source read
+unless its `limit` names fewer. What the rows of a repeat draw spends a budget of its own, 10,000
+blocks (`MAX_ROW_BLOCKS`), rather than the page's 400, so a long list neither takes the blocks after
+it off the page nor renders without end.
 
 **Counts, sums and groups.** `{{count.<collection>}}` anywhere on a page is how many published
 entries the collection has, for example `{{count.posts}}`. It is the delivery API's `totalItems` for

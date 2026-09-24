@@ -1,5 +1,5 @@
 import type { PressConfig } from "../config.js";
-import { collectionOf, getItem, listCollection, names, type Item } from "../collections.js";
+import { collectionOf, getItem, listAllCollection, listCollection, names, type Item } from "../collections.js";
 import type { Page } from "../cms.js";
 import {
     BindingSource,
@@ -16,6 +16,8 @@ import {
     FILTER_BAR_BLOCK,
     MAX_FILTER_VALUES,
     MAX_SOURCES,
+    MAX_ALL_ROWS,
+    MAX_ROW_BLOCKS,
     MAX_SOURCE_ROWS,
     PAGER_BLOCK,
     REPEAT_BLOCK,
@@ -88,12 +90,14 @@ interface Frame {
     rows?: Rows;
     slots?: Record<string, PresetSlot[]>;
     filter?: Filter;
+    /** Inside a repeat's row, whose blocks spend the rows' budget rather than the page's. */
+    inRow?: boolean;
 }
 
 export interface BindContext {
     config: PressConfig;
     registry: BlockRegistry;
-    budget: { blocks: number; reads: number };
+    budget: { blocks: number; reads: number; rowBlocks: number };
     /** What `{{count.<collection>}}` resolves through, wherever on the page it is written. */
     count: (path: string) => Promise<number | undefined> | number | undefined;
     /** One read per collection per render, however many placeholders count it. */
@@ -122,7 +126,7 @@ export async function bindBlocks(blocks: ResolvedBlock[], options: BindPageOptio
     const ctx: BindContext = {
         config: options.config,
         registry: options.registry,
-        budget: { blocks: MAX_BLOCKS, reads: MAX_SOURCES },
+        budget: { blocks: MAX_BLOCKS, reads: MAX_SOURCES, rowBlocks: MAX_ROW_BLOCKS },
         count: (path) => collectionCount(ctx, path),
         counts: new Map(),
         filters: 0,
@@ -198,12 +202,23 @@ function unnestLinks(blocks: ResolvedBlock[]): ResolvedBlock[] {
 
 async function bindList(blocks: ResolvedBlock[], frame: Frame, ctx: BindContext): Promise<ResolvedBlock[]> {
     const out: ResolvedBlock[] = [];
+    const counter = frame.inRow ? "rowBlocks" : "blocks";
     for (const block of blocks) {
-        if (ctx.budget.blocks <= 0) break;
-        ctx.budget.blocks--;
+        if (ctx.budget[counter] <= 0) {
+            if (frame.inRow) sayRowsOver();
+            break;
+        }
+        ctx.budget[counter]--;
         out.push(...(await bindBlock(block, frame, ctx)));
     }
     return out;
+}
+
+let rowsOverSaid = false;
+function sayRowsOver(): void {
+    if (rowsOverSaid) return;
+    rowsOverSaid = true;
+    console.warn(`blocks: a page's rows drew more than ${MAX_ROW_BLOCKS} blocks between them, so the rest were left out`);
 }
 
 async function bindBlock(block: ResolvedBlock, frame: Frame, ctx: BindContext): Promise<ResolvedBlock[]> {
@@ -412,7 +427,8 @@ async function bindFilterBar(block: ResolvedBlock, frame: Frame): Promise<Resolv
 async function bindRepeat(block: ResolvedBlock, frame: Frame, ctx: BindContext): Promise<ResolvedBlock[]> {
     const content = block.slots.content?.[0] ?? [];
     const items = frame.rows?.items ?? [];
-    const limit = typeof block.props.limit === "number" ? block.props.limit : MAX_SOURCE_ROWS;
+    // Every row the source read unless the repeat names fewer: the source is what bounds the rows.
+    const limit = typeof block.props.limit === "number" ? block.props.limit : items.length;
 
     if (items.length === 0) {
         const empty = await boundString(block, frame.source, "empty");
@@ -422,11 +438,11 @@ async function bindRepeat(block: ResolvedBlock, frame: Frame, ctx: BindContext):
     const out: ResolvedBlock[] = [];
     const filter = frame.filter;
     for (const item of items.slice(0, limit)) {
-        if (ctx.budget.blocks <= 0) break;
+        if (ctx.budget.rowBlocks <= 0) break;
         const scope = itemScope(ctx.config, item);
         // A row's own blocks carry its values; what is inside them is hidden with them, so the row's
         // frame carries no filter and a repeat nested in a row marks nothing.
-        const rowFrame = { ...frame, source: frame.source.with({ item: () => scope }), filter: undefined };
+        const rowFrame = { ...frame, source: frame.source.with({ item: () => scope }), filter: undefined, inRow: true };
         const row = await bindList(content, rowFrame, ctx);
         if (filter) {
             const values = offeredValues(ctx.config, item, filter);
@@ -485,17 +501,19 @@ async function bindSource(block: ResolvedBlock, frame: Frame, ctx: BindContext):
     // enrollments in this class" is every class. No value, no rows.
     if (field !== "" && want === "") return [];
 
-    const param = typeof block.props.pageParam === "string" ? block.props.pageParam : "";
+    const all = block.props.mode === "all";
+    const param = all || typeof block.props.pageParam !== "string" ? "" : block.props.pageParam;
     const page = param === "" ? 1 : pageNumber(await frame.source.read("query"), param);
     const pageSize = typeof block.props.pageSize === "number" ? block.props.pageSize : 12;
+    const narrowed = field !== "" ? { [field]: want } : undefined;
 
-    const loaded = await read(() =>
-        listCollection(ctx.config, key, {
-            page,
-            pageSize: Math.min(pageSize, MAX_SOURCE_ROWS),
-            filter: field !== "" ? { [field]: want } : undefined,
-        }),
-    );
+    // Every row, a page at a time, as one of the page's reads; or the one page the source asks for.
+    const loaded = all
+        ? await read(async () => {
+              const run = await listAllCollection(ctx.config, key, { limit: MAX_ALL_ROWS, pageSize: MAX_SOURCE_ROWS, filter: narrowed });
+              return { items: run.items, total: run.items.length, hasNextPage: false };
+          })
+        : await read(() => listCollection(ctx.config, key, { page, pageSize: Math.min(pageSize, MAX_SOURCE_ROWS), filter: narrowed }));
     const items = loaded?.items ?? [];
     const total = typeof loaded?.total === "number" ? loaded.total : undefined;
 
