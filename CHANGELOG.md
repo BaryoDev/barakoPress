@@ -2,6 +2,10 @@
 
 ## 0.8.0 (unreleased)
 
+- A site link can carry a `badge` (up to 12 characters, drawn beside the label in the built-in
+  header) and `external: true`, read from `HeaderLinks`, `TopBar` and `FooterColumns`. A value of
+  the wrong kind is dropped and the link kept. barakocms.com's nav marks barakoBrew with "V1", and
+  had no way to say so in its settings.
 - The image workflow can publish a tag that already exists. v0.7.0 was tagged before the workflow
   was written, so nothing ever pushed an image for it, and dispatching against the tag does not work
   because a dispatch runs the workflow file as it exists at that ref. Dispatching from master with

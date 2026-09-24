@@ -362,10 +362,18 @@ function origin(v: unknown): string | undefined {
     return href && !href.startsWith("/") ? withoutTrailingSlashes(href) : undefined;
 }
 
+const BADGE_MAX = 12;
+
 function links(v: unknown, max = 24): SiteLink[] | undefined {
     return array(v)
         ?.map((item) => record(item))
-        .map((item) => ({ label: str(item?.label), href: siteHref(item?.href) }))
+        .map((item) => {
+            const link: Partial<SiteLink> = { label: str(item?.label), href: siteHref(item?.href) };
+            const badge = str(item?.badge);
+            if (badge && badge.length <= BADGE_MAX) link.badge = badge;
+            if (item?.external === true) link.external = true;
+            return link;
+        })
         .filter((l): l is SiteLink => Boolean(l.label && l.href))
         .slice(0, max);
 }

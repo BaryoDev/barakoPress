@@ -472,6 +472,29 @@ describe("applySiteSettings", () => {
         expect(cleared.site.socialLinks).toEqual([]);
     });
 
+    it("reads a link's badge and external flag, and drops either when it is not the right kind", () => {
+        const out = applySiteSettings(
+            base,
+            {
+                HeaderLinks: [
+                    { label: "barakoBrew", href: "https://github.com/BaryoDev/barakoBrew", external: true, badge: "V1" },
+                    { label: "Docs", href: "/docs/", external: "yes", badge: 7 },
+                    { label: "Blog", href: "/blog/", badge: "a badge far too long to be one" },
+                    { label: "Roadmap", href: "/roadmap/" },
+                ],
+            },
+            null,
+        );
+
+        expect(out.site.headerLinks).toHaveLength(4);
+        expect(out.site.headerLinks).toEqual([
+            { label: "barakoBrew", href: "https://github.com/BaryoDev/barakoBrew", external: true, badge: "V1" },
+            { label: "Docs", href: "/docs/" },
+            { label: "Blog", href: "/blog/" },
+            { label: "Roadmap", href: "/roadmap/" },
+        ]);
+    });
+
     it("falls back to the configured identity and theme when there are no settings", () => {
         const out = applySiteSettings(base, undefined, "t.example");
         expect(out.site.name).toBe("Fallback");
