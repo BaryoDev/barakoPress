@@ -18,7 +18,7 @@ vi.mock("next/link", () => ({
 const { defineConfig } = await import("../config.js");
 const { createBlockRegistry } = await import("./registry.js");
 const { BlockList } = await import("./render.js");
-const { blockSchema, defineBlock, resolveBlocks, readProps } = await import("./schema.js");
+const { blockSchema, defineBlock, isBindable, resolveBlocks, readProps } = await import("./schema.js");
 const { bindBlocks } = await import("./bind.js");
 const { forgetPresetWarnings, presetsFrom } = await import("./presets.js");
 const { createBlockSchemaRoute } = await import("../routes/block-schema.js");
@@ -466,7 +466,7 @@ describe("the block schema at /api/blocks", () => {
             blocks: { type: string; fields: Record<string, unknown>[] }[];
         };
 
-        expect(body.version).toBe(3);
+        expect(body.version).toBe(2);
         const block = body.blocks.find((b) => b.type === "stages");
         expect(block).toBeDefined();
         const fields = block?.fields ?? [];
@@ -510,5 +510,26 @@ describe("the block schema at /api/blocks", () => {
 
         expect(resolved({ stages: FOUR })).toHaveLength(1);
         expect(resolved({ stages: FOUR })[0].props.stages).toHaveLength(4);
+    });
+
+    /*
+     * barakoBrew 1.4.0 reads version 1 and 2 and refuses anything else whole, and edits a kind it
+     * does not know as JSON for that field alone. So the version stays 2, and a block with no list or
+     * group has to publish exactly what it published before those kinds existed.
+     */
+    it("keeps version 2, and shows an old console the same fields for a block with no list or group", () => {
+        const before = (f: BlockField) => ({ ...f, options: f.options ? [...f.options] : undefined, bindable: isBindable(f) });
+        const plain = [...registry.values()].filter((d) =>
+            (d.fields as BlockField[]).every((f) => f.kind !== "list" && f.kind !== "group"),
+        );
+        expect(plain.length).toBeGreaterThan(10);
+
+        const schema = blockSchema(registry);
+        expect(schema.version).toBe(2);
+        for (const definition of plain) {
+            const published = schema.blocks.find((b) => b.type === definition.type);
+            expect(published).toBeDefined();
+            expect(JSON.stringify(published?.fields)).toBe(JSON.stringify((definition.fields as BlockField[]).map(before)));
+        }
     });
 });

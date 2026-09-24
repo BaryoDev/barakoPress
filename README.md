@@ -500,8 +500,10 @@ entry, and one wrong entry, a list too short or too long, or a group missing a r
 the block like any wrong value. An empty list reads as absent. A group hands its component only the
 keys its fields declare.
 
-The schema at `app/api/blocks` is version 3 and publishes `item` and `fields` for these, with
-`bindable` resolved at every level.
+The schema at `app/api/blocks` stays version 2 and publishes `item` and `fields` for these, with
+`bindable` resolved at every level. They only add a kind and two keys, and a console that does not
+know a kind edits that one field as JSON, so a block with no list or group publishes exactly what it
+did before.
 
 `defineBlock<Props, SlotNames>` checks the fields against the props at compile time: every field
 names a prop, its kind suits the prop's type, and a prop that is not optional must be `required`.

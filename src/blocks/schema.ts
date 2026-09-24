@@ -546,11 +546,14 @@ export type SchemaField = Omit<BlockField, "item" | "fields"> & {
 };
 
 export interface BlockSchema {
-    /**
-     * 3 added the `list` and `group` kinds. A console that reads 2 would draw a list as a text box
-     * and save a string where an array belongs, so it is told this is a shape it does not know.
+    /*
+     * Still 2 with `list` and `group` in it, because they only add a kind and two keys. barakoBrew
+     * 1.4.0 refuses a version it does not know and falls back to JSON for every block, but edits a
+     * kind it does not know as JSON for that one field and keeps the rest of the form. A bump would
+     * take the form editor away from every site until a new console shipped; this takes it away from
+     * the new fields only.
      */
-    version: 3;
+    version: 2;
     /** The scopes and formats a binding may name, so an editor offers exactly what renders. */
     bindings: { scopes: string[]; formats: string[] };
     blocks: {
@@ -580,7 +583,7 @@ function publishField(f: BlockField): SchemaField {
 /** What this site can render, as data an editor can build a form from. */
 export function blockSchema(registry: BlockRegistry): BlockSchema {
     return {
-        version: 3,
+        version: 2,
         bindings: { scopes: [...BINDING_SCOPES], formats: [...BINDING_FORMATS] },
         blocks: [...registry.values()].map((d) => ({
             type: d.type,
