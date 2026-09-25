@@ -490,6 +490,10 @@ describe("a manual whose items name their own path", () => {
         expect(treeItemHref({ slug: "phish", href: "https://evil.example/phish" }, "/docs")).toBe("/docs/phish");
         expect(treeItemHref({ slug: "q", href: "//evil.example/q" }, "/docs")).toBe("/docs/q");
         expect(treeItemHref({ slug: "q", href: "/docs/cms/q/" }, "/docs")).toBe("/docs/cms/q/");
+        // A browser reads a backslash as a slash, so "/\\host" is off site too.
+        expect(treeItemHref({ slug: "b", href: "/\\evil.example/phish" }, "/docs")).toBe("/docs/b");
+        expect(treeItemHref({ slug: "c", href: "/docs\\x" }, "/docs")).toBe("/docs/c");
+        expect(treeItemHref({ slug: "t", href: "/\tevil.example" }, "/docs")).toBe("/docs/t");
     });
 
     it("lists each item in the sitemap at its own path", async () => {
@@ -535,6 +539,24 @@ describe("the sitemap and an href field", () => {
             // The card collection over the same entries lists them at its route, never at the cards' targets.
             expect(urls).toContain("https://barakocms.com/cards/quickstart");
             expect(urls).toContain("https://barakocms.com/cards/contact-a");
+        } finally {
+            DOCS.splice(0, DOCS.length, ...saved);
+        }
+    });
+
+    it("never lists the home page twice through a tree item that names it", async () => {
+        const settings = {
+            ...SETTINGS,
+            Collections: { docs: { ...DOCS_COLLECTION, fields: { ...DOCS_COLLECTION.fields, href: "Path" } } },
+        };
+        const saved = [...DOCS];
+        DOCS.push({ id: "d9", slug: "home", data: { Title: "Home", Slug: "home", Path: "/", Section: "Reference", Product: "cms" } });
+        try {
+            vi.stubGlobal("fetch", cms(settings));
+            requestHeaders = new Headers({ host: "barakocms.com" });
+            const urls = (await createSitemap(base)()).map((e) => e.url.replace(/\/$/, ""));
+            expect(urls.length).toBeGreaterThan(3);
+            expect(urls.filter((u) => u === "https://barakocms.com")).toHaveLength(1);
         } finally {
             DOCS.splice(0, DOCS.length, ...saved);
         }
