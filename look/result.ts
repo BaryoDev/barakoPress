@@ -11,6 +11,8 @@ export interface LookResult {
     passed: boolean;
     diffRatio: number;
     maxDiffRatio: number;
+    /** The pixel count allowed, when the pair sets one. */
+    maxDiffPixels?: number;
     diffPixels: number;
     comparedPixels: number;
     sizeMismatch: boolean;

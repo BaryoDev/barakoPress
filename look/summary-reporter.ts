@@ -52,8 +52,9 @@ export default class SummaryReporter implements Reporter {
             "| Page | Width | Difference | Allowed | Verdict |",
             "| --- | ---: | ---: | ---: | --- |",
             ...ordered.map((one) => {
-                const difference = one.error ? "not captured" : asPercent(one.diffRatio);
-                const allowed = one.error ? "" : asPercent(one.maxDiffRatio);
+                const difference = one.error ? "not captured" : `${asPercent(one.diffRatio)} (${one.diffPixels} px)`;
+                const cap = one.maxDiffPixels !== undefined ? `, ${one.maxDiffPixels} px` : "";
+                const allowed = one.error ? "" : `${asPercent(one.maxDiffRatio)}${cap}`;
                 const verdict = one.error ? `error: ${firstLine(one.error)}` : one.passed ? "same" : "different";
                 return `| ${one.id} | ${one.width}px | ${difference} | ${allowed} | ${verdict} |`;
             }),

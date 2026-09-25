@@ -88,6 +88,7 @@ Every key, and what happens when it is left out:
 | `viewportHeight` | both | `900` | The viewport height. Full page capture makes it mostly invisible, except to anything sized in `vh`. |
 | `fullPage` | both | `true` | Capture the whole page rather than the first screen. |
 | `maxDiffRatio` | both | `0.001` | The share of pixels allowed to differ, 0 to 1. Above it the pair fails. |
+| `maxDiffPixels` | both | none | How many pixels may differ, whatever the page's size. Unset, only the ratio applies. A ratio dilutes on a tall page: a tenth of a percent of a changelog 250,000px tall at 390px is a whole section of it. A pair fails when it is over either. Pages of different heights count the area only one has, so a small cap also holds the heights equal. |
 | `pixelThreshold` | both | `0.1` | How far one pixel's colour may move before it counts as different, 0 to 1. |
 | `fixedTime` | both | `2026-01-01T09:00:00.000Z` | The clock both sides render against. |
 | `mask` | both | none | Selectors painted over before the comparison. A list applies to both sides, or `{ both, reference, rebuilt }`. |

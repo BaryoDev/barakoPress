@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { addressOf, loadPairs, masksFor, parsePairs, type Env, type Pair } from "./pairs.js";
+import { addressOf, loadPairs, masksFor, parsePairs, withinAllowance, type Env, type Pair } from "./pairs.js";
 
 const baseDir = "/sites/rckoronadal/look";
 
@@ -156,6 +156,35 @@ describe("parsePairs", () => {
         expect(pairs).toHaveLength(2);
         expect(pairs[0].maxDiffRatio).toBe(0.0005);
         expect(pairs[1].maxDiffRatio).toBe(0.01);
+    });
+
+    it("takes a pixel count beside the ratio, for a page tall enough to dilute any ratio", () => {
+        const pairs = parse({
+            defaults: { rebuiltBase: "https://s.example", maxDiffPixels: 0 },
+            pairs: [
+                { id: "changelog", reference: "c.html", rebuilt: "/changelog" },
+                { id: "home", reference: "c.html", rebuilt: "/", maxDiffPixels: 20 },
+            ],
+        });
+        expect(pairs).toHaveLength(2);
+        expect(pairs[0].maxDiffPixels).toBe(0);
+        expect(pairs[1].maxDiffPixels).toBe(20);
+        expect(parse(minimal)[0].maxDiffPixels).toBeUndefined();
+
+        const message = problems({
+            defaults: { rebuiltBase: "https://s.example" },
+            pairs: [{ id: "home", reference: "c.html", rebuilt: "/", maxDiffPixels: 2.5 }],
+        });
+        expect(message).toContain("pairs[0].maxDiffPixels");
+    });
+
+    it("fails a tall page on a few thousand changed pixels its ratio would let through", () => {
+        // A section of a changelog 250,000px tall at 390px: well under a tenth of a percent.
+        const section = { diffPixels: 90_000, diffRatio: 90_000 / (390 * 250_000) };
+        expect(withinAllowance({ maxDiffRatio: 0.001 }, section)).toBe(true);
+        expect(withinAllowance({ maxDiffRatio: 0.001, maxDiffPixels: 50 }, section)).toBe(false);
+        expect(withinAllowance({ maxDiffRatio: 0.001, maxDiffPixels: 50 }, { diffPixels: 13, diffRatio: 13 / (390 * 9588) })).toBe(true);
+        expect(withinAllowance({ maxDiffRatio: 0.001, maxDiffPixels: 1_000_000 }, { diffPixels: 5000, diffRatio: 0.01 })).toBe(false);
     });
 
     it("gives a tall page longer to capture, and refuses a timeout that is not a whole number of milliseconds", () => {

@@ -48,6 +48,12 @@ export interface Pair {
     fullPage: boolean;
     /** Fraction of compared pixels that may differ, 0 to 1. Above it the pair fails. */
     maxDiffRatio: number;
+    /**
+     * How many pixels may differ, whatever the page's size. Unset, only the ratio applies. A ratio
+     * dilutes on a tall page: 0.1% of a changelog 250,000px tall at 390 is 97,000 pixels, a whole
+     * section. A count does not.
+     */
+    maxDiffPixels?: number;
     /** Per pixel colour distance tolerated before a pixel counts as different, 0 to 1. */
     pixelThreshold: number;
     /** The clock both sides render against, so a rendered date cannot differ between captures. */
@@ -75,6 +81,7 @@ const DEFAULTS_KEYS = [
     "viewportHeight",
     "fullPage",
     "maxDiffRatio",
+    "maxDiffPixels",
     "pixelThreshold",
     "fixedTime",
     "mask",
@@ -92,6 +99,7 @@ const PAIR_KEYS = [
     "viewportHeight",
     "fullPage",
     "maxDiffRatio",
+    "maxDiffPixels",
     "pixelThreshold",
     "fixedTime",
     "mask",
@@ -141,6 +149,22 @@ function optionalNumber(
         return fallback;
     }
     return value;
+}
+
+/** A whole number of pixels, zero allowed, or the fallback when unset. */
+function optionalCount(value: unknown, where: string, problems: Problems, fallback: number | undefined): number | undefined {
+    if (value === undefined) return fallback;
+    if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+        problems.add(where, `must be a whole number of pixels, zero or more, got ${describe(value)}`);
+        return fallback;
+    }
+    return value;
+}
+
+/** Whether a comparison is inside what the pair allows: its ratio, and its pixel count when it has one. */
+export function withinAllowance(pair: Pick<Pair, "maxDiffRatio" | "maxDiffPixels">, comparison: { diffRatio: number; diffPixels: number }): boolean {
+    if (comparison.diffRatio > pair.maxDiffRatio) return false;
+    return pair.maxDiffPixels === undefined || comparison.diffPixels <= pair.maxDiffPixels;
 }
 
 function optionalBoolean(value: unknown, where: string, problems: Problems, fallback: boolean): boolean {
@@ -309,6 +333,7 @@ export function parsePairs(raw: unknown, options: ParseOptions): Pair[] {
         viewportHeight: optionalNumber(rawDefaults.viewportHeight, "defaults.viewportHeight", problems, DEFAULT_VIEWPORT_HEIGHT, positiveInteger),
         fullPage: optionalBoolean(rawDefaults.fullPage, "defaults.fullPage", problems, true),
         maxDiffRatio: optionalNumber(rawDefaults.maxDiffRatio, "defaults.maxDiffRatio", problems, DEFAULT_MAX_DIFF_RATIO, ratio),
+        maxDiffPixels: optionalCount(rawDefaults.maxDiffPixels, "defaults.maxDiffPixels", problems, undefined),
         pixelThreshold: optionalNumber(rawDefaults.pixelThreshold, "defaults.pixelThreshold", problems, DEFAULT_PIXEL_THRESHOLD, ratio),
         fixedTime: parseTime(rawDefaults.fixedTime, "defaults.fixedTime", problems, DEFAULT_FIXED_TIME),
         mask: parseMask(rawDefaults.mask, "defaults.mask", problems, emptyMask),
@@ -363,6 +388,7 @@ export function parsePairs(raw: unknown, options: ParseOptions): Pair[] {
             viewportHeight: optionalNumber(entry.viewportHeight, `${where}.viewportHeight`, problems, defaults.viewportHeight, positiveInteger),
             fullPage: optionalBoolean(entry.fullPage, `${where}.fullPage`, problems, defaults.fullPage),
             maxDiffRatio: optionalNumber(entry.maxDiffRatio, `${where}.maxDiffRatio`, problems, defaults.maxDiffRatio, ratio),
+            maxDiffPixels: optionalCount(entry.maxDiffPixels, `${where}.maxDiffPixels`, problems, defaults.maxDiffPixels),
             pixelThreshold: optionalNumber(entry.pixelThreshold, `${where}.pixelThreshold`, problems, defaults.pixelThreshold, ratio),
             fixedTime: parseTime(entry.fixedTime, `${where}.fixedTime`, problems, defaults.fixedTime),
             mask: parseMask(entry.mask, `${where}.mask`, problems, defaults.mask),
