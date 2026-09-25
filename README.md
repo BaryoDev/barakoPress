@@ -780,6 +780,14 @@ any row is not a sum and renders its fallback, and a source with no rows has no 
 `{{sum.Open ?? 0}}` where zero is the right answer. A sum covers the rows read, at most fifty; a
 source that pages sums the page it is on.
 
+`{{distinct.<Field>}}` is how many different values that field holds among the same rows: the
+repositories a list of issues spans, "16 issues across 3 repositories". Values compare as the text a
+placeholder prints, each entry of a list field counts on its own, and a row with nothing in the field
+adds nothing, so a field no row holds renders its fallback. Inside a group it counts that group's rows.
+It counts only what the source read, so a source that matched more rows than it read (a page of a
+longer list) has no distinct counts and renders the fallback: `{{distinct.Repo ?? several}}`. It
+reads a top-level field; a dotted path such as `Owner.Login` renders the fallback.
+
 `groupBy` names a field, and the source's content then renders once per distinct value of it among
 the rows read, in the order first seen. `groupOrder` is a comma separated list of values to put
 first, in that order; the rest follow in the order first seen. Inside each group `{{group.key}}` is
