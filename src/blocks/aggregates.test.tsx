@@ -65,7 +65,7 @@ const MILESTONES: Entry[] = [
 const RELEASES: Entry[] = Array.from({ length: 120 }, (_, i) => ({
     id: `r${i}`,
     slug: `r${i}`,
-    data: { Name: `v${i}`, Kind: i % 3 === 0 ? "Major" : "Minor" },
+    data: { Name: `v${i}`, Kind: i % 3 === 0 ? "Major" : "Minor", Number: i },
 }));
 
 const COLLECTIONS = {
@@ -391,10 +391,13 @@ describe("a source that reads every row", () => {
     it("counts, sums and groups over every row it read", async () => {
         const out = await page([
             source({ collection: "releases", mode: "all", groupBy: "Kind" }, [text("[{{group.key}} {{group.count}} of {{count}}]")]),
+            source({ collection: "releases", mode: "all" }, [text("(sum {{sum.Number}})")]),
         ]);
 
         expect(out).toContain("[Major 40 of 120]");
         expect(out).toContain("[Minor 80 of 120]");
+        // 0 + 1 + ... + 119, every row and not the first fifty.
+        expect(out).toContain("(sum 7140)");
     });
 
     it("still reads one page in list mode, as before", async () => {
