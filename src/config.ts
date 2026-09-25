@@ -763,6 +763,12 @@ export interface PressConfig {
      */
     reservedSlugs: string[];
     /**
+     * The part of `reservedSlugs` a collection with its index off never frees (#152): what the engine
+     * serves at the root, the slugs the input and a tenant's `ReservedSlugs` name, and the blog's author
+     * and category routes. Only a slug held by a collection's route and nothing else is freed.
+     */
+    heldSlugs?: string[];
+    /**
      * Every collection the site renders, by key. `post`, `author` and `category` are derived from
      * `types`, `fields` and `routes`; `collections` in the input adds to them or replaces one by key,
      * and a request-time site's `Collections` setting does the same per tenant.
@@ -919,7 +925,8 @@ function ownCollections(input: Record<string, CollectionConfig> | undefined): Re
 }
 
 /** Paths the engine's own route files answer, which a page at the site root must not take. */
-const RESERVED_AT_ROOT = ["api", "feed.xml", "sitemap.xml", "robots.txt", "_next", "_press", "_share", "%5fshare", "favicon.ico"];
+/** What the engine itself serves at the root, which no page and no collection setting can have. */
+export const RESERVED_AT_ROOT = ["api", "feed.xml", "sitemap.xml", "robots.txt", "_next", "_press", "_share", "%5fshare", "favicon.ico"];
 
 function firstSegment(route: string | undefined): string | undefined {
     return route?.split("/").find(Boolean)?.toLowerCase();
@@ -1015,6 +1022,7 @@ export function defineConfig(
             [routes.post, routes.author, routes.category, ...Object.values(collections).map((c) => c.route)],
             input.reservedSlugs,
         ),
+        heldSlugs: reservedSlugs([routes.author, routes.category], input.reservedSlugs),
         ...(input.pages !== undefined ? { pages: mountPath(input.pages) } : {}),
         ...(input.regions ? { regions: input.regions } : {}),
         ...(input.sites

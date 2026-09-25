@@ -1,5 +1,5 @@
 import type { PressConfig } from "./config.js";
-import { AUTHOR_COLLECTION, CATEGORY_COLLECTION, POST_COLLECTION } from "./config.js";
+import { AUTHOR_COLLECTION, CATEGORY_COLLECTION, POST_COLLECTION, RESERVED_AT_ROOT } from "./config.js";
 import { bySlug, list, navigationTree, pageAtPath, redirectAt, type PublicContent, type Seo } from "./delivery.js";
 import { collectionOf, getItem, getItemPreview, listCollection, toItem, type Item } from "./collections.js";
 import { samePath, siteHref } from "./site.js";
@@ -406,7 +406,7 @@ export function isReservedPath(config: PressConfig, path: string): boolean {
     const parts = path.split("/").filter(Boolean);
     const first = parts[0]?.toLowerCase();
     if (first === undefined) return false;
-    if (config.reservedSlugs.includes(first)) return true;
+    if (config.reservedSlugs.includes(first) && !(parts.length === 1 && unindexedRoute(config, first))) return true;
     return Object.values(config.collections).some((c) => {
         const route = c.route?.split("/").filter(Boolean);
         if (!route?.length) return false;
@@ -418,6 +418,23 @@ export function isReservedPath(config: PressConfig, path: string): boolean {
         // reserved.
         return c.index !== false || parts.length > route.length;
     });
+}
+
+/*
+ * True when `slug` is reserved only as the route of collections that all have their index off. The
+ * build config puts every one-segment collection route, the post route included, in `reservedSlugs`,
+ * so without this the index being off freed the route only for a collection a tenant's settings
+ * brought. A slug held for any other reason (`heldSlugs`: the engine's own files, a name the build
+ * config or a tenant reserved, the author and category routes) stays reserved whatever a collection
+ * there says.
+ */
+function unindexedRoute(config: PressConfig, slug: string): boolean {
+    if ((config.heldSlugs ?? RESERVED_AT_ROOT).includes(slug)) return false;
+    const here = Object.values(config.collections).filter((c) => {
+        const route = c.route?.split("/").filter(Boolean);
+        return route?.length === 1 && route[0].toLowerCase() === slug;
+    });
+    return here.length > 0 && here.every((c) => c.index === false);
 }
 
 /**
