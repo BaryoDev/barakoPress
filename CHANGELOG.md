@@ -4,10 +4,15 @@
 
 - The element a primitive draws, for a design rebuilt from primitives and recipes
   (arnelirobles/barakocms-site#46). A block wearing a recipe is its own cell: its list wrapper is
-  `display: contents`, so the recipe's element is the flex or grid item its parent lays out. `text`
+  `display: contents`, so the recipe's element is the flex or grid item its parent lays out, an
+  inline one included: in a column list a link wearing `display: inline-block` is stretched to the
+  column's width unless its recipe sets `align-self: flex-start` or `width: fit-content`. Such a
+  wrapper carries `data-bp-contents`, and a hue flow turns the element inside it. `text`
   takes `tag` (`p`, `span`, `code`, `strong`, `em`, `h1` to `h4`), `decorative` (hidden from a
   screen reader) and `title`. `stack` and `panel` take `href`, which makes the whole container a
-  link, and `section`, `stack` and `panel` take `anchor`, drawn as the element's `id`. A `filterBar`
+  link (an address off the site with `rel="noopener noreferrer"`), dropped when what the container
+  holds renders a link or a control of its own, and `section`, `stack` and `panel` take `anchor`,
+  drawn as the element's `id`. A `filterBar`
   takes `recipe`, `buttonRecipe` and `pressedRecipe` for its row and its buttons. A site may keep
   400 recipes, up from 100. A block that uses none of this renders as it did.
 - The tree screens take a site's styling (#130). Every colour, gap, padding, radius and font size in the sidebar,

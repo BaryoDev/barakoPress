@@ -1672,6 +1672,10 @@ What wearing one does to a block:
   is `display: contents`, as a transparent block's is, so the recipe's element is what its parent
   lays out: a lede that takes `flex: 1 1 420px` beside a claim, a card that is the grid's item. A
   name the site has no recipe for keeps the wrapper along with the block's own look.
+  That holds for an inline element too. A `link` or a `span` text wearing `display: inline-block`
+  in a list, which is a column, is that column's flex item and is stretched to its width like any
+  other; without a recipe it sits inside a block wrapper at its own width. A recipe that wants its
+  own width says so: `align-self: flex-start`, or `width: fit-content`.
 - The recipe replaces the block's own inline look on its outer element outright. It is not merged
   over it: the card's own padding under a recipe that only set the corner is a look nobody drew.
   The block's token props for that element (`padding`, `radius`, `border` and so on) are not
