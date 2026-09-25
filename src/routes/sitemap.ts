@@ -41,7 +41,9 @@ export function createSitemap(base: PressConfig) {
         if (!config || config.holding) notFound();
 
         const items: MetadataRoute.Sitemap = [];
-        const listedUrls = new Set<string>();
+        const home = config.site.url;
+        // Home is listed first on its own, so an entry or a page that names "/" is not listed again.
+        const listedUrls = new Set<string>([home]);
         // The home page takes the first slot, so the rest of the file is one URL shorter than the cap.
         const room = () => SITEMAP_MAX_URLS - 1 - items.length;
         for (const [key, col] of Object.entries(config.collections)) {
@@ -65,7 +67,8 @@ export function createSitemap(base: PressConfig) {
                     // A tree's item is read where the tree links it. Any other collection's `href` is
                     // where its card sends a reader, not where the item is served.
                     const at = col.tree ? pagePart(treeItemHref(item, col.route)) : undefined;
-                    const url = `${config.site.url}${at ?? `${col.route}/${item.slug}`}`;
+                    const path = at ?? `${col.route}/${item.slug}`;
+                    const url = path === "/" ? home : `${home}${path}`;
                     if (listedUrls.has(url)) continue;
                     listedUrls.add(url);
                     items.push({
@@ -92,10 +95,9 @@ export function createSitemap(base: PressConfig) {
             }
         }
 
-        const home = config.site.url;
         const pages = [...new Set(pagePaths.map((p) => pageHref(config, p)))]
             .map((href) => `${home}${href === "/" ? "" : href}`)
-            .filter((url) => url !== home)
+            .filter((url) => !listedUrls.has(url))
             .map((url) => ({ url, changeFrequency: "monthly" as const, priority: 0.5 }));
 
         if (pages.length > room()) sayOnce(sitemapFull(config));

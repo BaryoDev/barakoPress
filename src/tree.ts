@@ -115,6 +115,12 @@ function nest(items: Item[], bySlug: Map<string, Item>): TreeNode[] {
 }
 
 /**
+ * A path on this site: one leading slash, and no backslash, whitespace or control character anywhere,
+ * since a browser reads "/\\host" and "/\thost" as another host.
+ */
+const SITE_PATH = /^\/(?!\/)[^\\\s\u0000-\u001f\u007f]*$/;
+
+/**
  * Where an item of a tree is read: its own `href` field when the collection maps one and it is a path
  * on this site, and otherwise its route and slug. A manual whose products share a slug keeps its slugs
  * unique and names the path in the field, `/docs/cms/quickstart` beside `/docs/press/quickstart`.
@@ -123,7 +129,7 @@ function nest(items: Item[], bySlug: Map<string, Item>): TreeNode[] {
  * address somewhere else would read as a page of the manual and take the reader off site unmarked.
  */
 export function treeItemHref(item: Pick<Item, "href" | "slug">, route: string | undefined): string | undefined {
-    if (item.href?.startsWith("/") && !item.href.startsWith("//")) return item.href;
+    if (item.href !== undefined && SITE_PATH.test(item.href)) return item.href;
     return route !== undefined && item.slug ? `${route}/${item.slug}` : undefined;
 }
 
