@@ -38,6 +38,13 @@ export const MAX_SOURCES = 8;
  */
 export const MAX_ALL_ROWS = 500;
 /*
+ * The API requests past the first that a page's `all` sources may make between them. Each source's
+ * first page is one of the page's reads (MAX_SOURCES); the rest are drawn from this, and a source
+ * whose rows it cannot cover reads what it can and says so. Without it eight such sources were eighty
+ * requests a render, which a visitor could multiply with a filter bound to the query.
+ */
+export const MAX_ALL_REQUESTS = 16;
+/*
  * What the rows of a `repeat` may draw between them. The page's own budget (MAX_BLOCKS) bounds what an
  * editor stored; this bounds what the data multiplies it into, so a long list neither eats the blocks
  * around it nor renders without end.
