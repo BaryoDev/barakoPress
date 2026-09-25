@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
 import { Asset, renderProse } from "../assets.js";
 import type { PressConfig } from "../config.js";
-import { renderInlineMarkdown } from "../markdown.js";
+import { holdsLink, renderInlineMarkdown } from "../markdown.js";
 import { recipeLook } from "../recipes.js";
 import type { PressTheme } from "../theme.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
@@ -186,7 +186,7 @@ function Container({
     }
     if (/^[a-z][a-z0-9+.-]*:/i.test(target)) {
         return (
-            <a href={target} id={id} {...drawn}>
+            <a href={target} rel="noopener noreferrer" id={id} {...drawn}>
                 {children}
             </a>
         );
@@ -707,7 +707,7 @@ const text = defineBlock<TextProps>({
         const heading = variant.tag !== "p";
         // Decoration is hidden from a screen reader, which a link a keyboard can still reach must never
         // be: inline marks that hold one keep the text in the accessibility tree.
-        const inlineLink = props.format === "inline" && /\]\(|<https?:/i.test(props.value);
+        const inlineLink = props.format === "inline" && holdsLink(props.value, "inline");
         const hidden = {
             ...(props.decorative && !inlineLink ? { "aria-hidden": true as const } : {}),
             ...(props.title ? { title: props.title } : {}),

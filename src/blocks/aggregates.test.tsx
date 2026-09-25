@@ -65,7 +65,7 @@ const MILESTONES: Entry[] = [
 const RELEASES: Entry[] = Array.from({ length: 120 }, (_, i) => ({
     id: `r${i}`,
     slug: `r${i}`,
-    data: { Name: `v${i}`, Kind: i % 3 === 0 ? "Major" : "Minor" },
+    data: { Name: `v${i}`, Kind: i % 3 === 0 ? "Major" : "Minor", Number: i },
 }));
 
 const COLLECTIONS = {
@@ -341,6 +341,20 @@ describe("distinct", () => {
         expect(grouped).toContain("[barakoPress:1]");
     });
 
+    /*
+     * `{{count}}` is what the collection matched and a distinct only what the page read. With the
+     * third repository past the page, "4 across 2" would read as a fact, so a source that read part of
+     * what it matched has no distinct count and renders the fallback.
+     */
+    it("renders the fallback when the source read only part of what it matched", async () => {
+        const out = await page([
+            source({ collection: "milestones", pageSize: 2 }, [text("[{{count}} across {{distinct.Repository ?? some}}]")]),
+            source({ collection: "milestones", pageSize: 4 }, [text("({{count}} across {{distinct.Repository ?? some}})")]),
+        ]);
+        expect(out).toContain("[4 across some]");
+        expect(out).toContain("(4 across 3)");
+    });
+
     it("renders the fallback for a field no row holds, and is unbound outside a source", async () => {
         const out = await page([
             source({ collection: "milestones" }, [text("[{{distinct.Nothing ?? 0}}]")]),
@@ -377,10 +391,13 @@ describe("a source that reads every row", () => {
     it("counts, sums and groups over every row it read", async () => {
         const out = await page([
             source({ collection: "releases", mode: "all", groupBy: "Kind" }, [text("[{{group.key}} {{group.count}} of {{count}}]")]),
+            source({ collection: "releases", mode: "all" }, [text("(sum {{sum.Number}})")]),
         ]);
 
         expect(out).toContain("[Major 40 of 120]");
         expect(out).toContain("[Minor 80 of 120]");
+        // 0 + 1 + ... + 119, every row and not the first fifty.
+        expect(out).toContain("(sum 7140)");
     });
 
     it("still reads one page in list mode, as before", async () => {

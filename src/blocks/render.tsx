@@ -52,6 +52,9 @@ export function BlockList({ blocks, theme }: { blocks: ResolvedBlock[]; theme: P
         <div style={{ display: LIST_DISPLAY, flexDirection: "column", gap: listGap(theme) }}>
             {blocks.map((block, index) => {
                 const Component = block.definition.component;
+                // Marked, so a rule that styles a list's cells (a hue flow's) can reach the element
+                // inside a wrapper that takes no box of its own.
+                const contents = block.definition.transparent || wearsRecipe(block, theme);
                 const slots: Record<string, ReactNode[]> = {};
                 for (const [name, lists] of Object.entries(block.slots)) {
                     slots[name] = lists.map((list, i) => (
@@ -63,7 +66,8 @@ export function BlockList({ blocks, theme }: { blocks: ResolvedBlock[]; theme: P
                         key={index}
                         data-block={block.definition.type}
                         {...(block.filters?.length ? filterAttrs(block.filters) : {})}
-                        style={block.definition.transparent || wearsRecipe(block, theme) ? TRANSPARENT : RESET_LIST}
+                        style={contents ? TRANSPARENT : RESET_LIST}
+                        {...(contents ? { "data-bp-contents": "" } : {})}
                     >
                         <Component props={block.props} slots={slots} theme={theme} />
                     </div>
