@@ -96,7 +96,7 @@ describe("a stack or a panel that links", () => {
 
     it("is a plain anchor for a link off the site", () => {
         const html = render([linked("panel", "https://github.com/BaryoDev")]);
-        expect(html).toContain('<a href="https://github.com/BaryoDev" style="padding:22px;display:flex;justify-content:space-between" class="lift">');
+        expect(html).toContain('<a href="https://github.com/BaryoDev" rel="noopener noreferrer" style="padding:22px;display:flex;justify-content:space-between" class="lift">');
     });
 
     it("is refused, as any link field is, when the address is not one a link may hold", () => {
@@ -188,7 +188,7 @@ describe("a filter bar wearing recipes", () => {
         expect(html).toContain('<div role="group" style="margin-top:28px;display:flex;flex-wrap:wrap;gap:8px" class="chip-row">');
         expect(html).toContain('<button type="button" aria-pressed="true" style="padding:8px 15px;background:#101223;color:#fff;cursor:pointer">All</button>');
         expect(html).toContain('<button type="button" aria-pressed="false" style="padding:8px 15px;background:#fff;border:1px solid #E7E8F1;cursor:pointer" class="hv-edge-accent">Auth</button>');
-        expect(html).toContain('<div data-block="filterBar" style="--bp-list:flex;display:contents">');
+        expect(html).toContain('<div data-block="filterBar" style="--bp-list:flex;display:contents" data-bp-contents="">');
     });
 
     it("draws its own look for a recipe the site does not have, with no class", () => {
@@ -204,5 +204,73 @@ describe("how many recipes a site may keep", () => {
         const many = Object.fromEntries(Array.from({ length: 450 }, (_, i) => [`r${i}`, { style: { margin: "0" } }]));
         const read = recipesFrom(undefined, many);
         expect(Object.keys(read ?? {})).toHaveLength(400);
+    });
+});
+
+/*
+ * Review findings on #147. Whether something inside a linked container can be pressed is read from
+ * what the engine renders, not guessed from the markdown's spelling: an autolinked address, a
+ * reference link and a call to action are links, and a code span holding a URL is not.
+ */
+describe("a linked container and what its content draws", () => {
+    async function bound(raw: unknown): Promise<string> {
+        const cfg = defineConfig({ site: SITE, theme: { recipes: RECIPES as never } });
+        const registry = createBlockRegistry(cfg);
+        const blocks = await bindBlocks(resolveBlocks(raw, registry, { perViewer: false }), { config: cfg, registry, scopes: {} });
+        return renderToStaticMarkup(<BlockList blocks={blocks} theme={cfg.theme} />);
+    }
+    const inside = (block: unknown) => [{ type: "stack", props: { href: "/docs/", content: [[block]] } }];
+    const anchors = (html: string) => (html.match(/<a /g) ?? []).length;
+
+    it("drops its href when the content renders a link of its own, however the link is written", async () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        const drawn = {
+            www: await bound(inside(text({ value: "See www.example.com", format: "inline" }))),
+            email: await bound(inside(text({ value: "Mail hi@example.com", format: "inline" }))),
+            reference: await bound(inside({ type: "richText", props: { markdown: "Read [the docs][d].\n\n[d]: /docs/x" } })),
+            callToAction: await bound(inside({ type: "callToAction", props: { heading: "H", label: "Go", href: "/go/" } })),
+        };
+        warn.mockRestore();
+        for (const [name, html] of Object.entries(drawn)) {
+            expect(anchors(html), name).toBe(1);
+            expect(html, name).not.toContain('href="/docs/"');
+        }
+    });
+
+    it("keeps its href when a URL sits in a code span and nothing inside links", async () => {
+        const kept = [
+            await bound(inside(text({ value: "Base URL `https://api.example.com`", format: "inline" }))),
+            await bound(inside({ type: "richText", props: { markdown: "Call `https://api.example.com/v1`" } })),
+        ];
+        for (const html of kept) {
+            expect(anchors(html)).toBe(1);
+            expect(html).toContain('href="/docs/"');
+        }
+    });
+
+    it("opens an address elsewhere without handing it this page", () => {
+        const html = render([{ type: "stack", props: { href: "https://elsewhere.example/", content: [[text({})]] } }]);
+        expect(html).toContain('<a href="https://elsewhere.example/" rel="noopener noreferrer"');
+    });
+});
+
+describe("decorative inline text", () => {
+    it("stays in the accessibility tree when what it renders holds a link, an autolink included", () => {
+        const html = render([text({ value: "https://example.com", format: "inline", decorative: true })]);
+        expect(html).toContain('<a href="https://example.com"');
+        expect(html).not.toContain('aria-hidden="true"');
+        expect(render([text({ value: "Just words", format: "inline", decorative: true })])).toContain('aria-hidden="true"');
+    });
+});
+
+describe("a hue flow whose cells wear recipes", () => {
+    it("turns the element the recipe draws, since the cell's wrapper takes no box to filter", async () => {
+        const { hueCss } = await import("./motion.js");
+        const panel = (value: string) => ({ type: "panel", props: { recipe: "card", content: [[text({ value })]] } });
+        const html = render([{ type: "flow", props: { columns: "3", hueRotate: "wide", content: [[panel("a"), panel("b"), panel("c")]] } }]);
+        expect((html.match(/data-bp-contents=""/g) ?? []).length).toBeGreaterThanOrEqual(3);
+        const css = hueCss("wide");
+        expect(css).toContain('[data-bp-hue="wide"]>*>[data-bp-contents]:nth-child(3n+2)>*{filter:hue-rotate(40deg)}');
+        expect(css).toContain('[data-bp-hue="wide"]>*>[data-bp-contents]:nth-child(3n+3)>*{filter:hue-rotate(-40deg)}');
     });
 });
