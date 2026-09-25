@@ -1051,15 +1051,19 @@ const RESERVED_SLUG = /^[A-Za-z0-9._~-]{1,64}$/;
 const MAX_RESERVED_SLUGS = 50;
 
 function reservedSlugsFrom(base: string[], v: unknown): string[] {
+    return [...new Set([...base, ...namedSlugs(v)])];
+}
+
+/** The slugs a tenant's `ReservedSlugs` names, which no collection setting of its own can free. */
+function namedSlugs(v: unknown): string[] {
     const listed = array(v);
-    if (!listed) return base;
-    const added = listed.slice(0, MAX_RESERVED_SLUGS).flatMap((raw) => {
+    if (!listed) return [];
+    return listed.slice(0, MAX_RESERVED_SLUGS).flatMap((raw) => {
         const written = str(raw);
         if (!written) return [];
         const slug = withoutTrailingSlashes(written.startsWith("/") ? written.slice(1) : written).toLowerCase();
         return RESERVED_SLUG.test(slug) ? [slug] : [];
     });
-    return [...new Set([...base, ...added])];
 }
 
 /*
@@ -1185,6 +1189,7 @@ export function applySiteSettings(
         pageSizes: pageSizesFrom(config.pageSizes, d.PageSizes),
         labels: labelsFrom(config.labels, d.Labels),
         reservedSlugs: reservedSlugsFrom(config.reservedSlugs, d.ReservedSlugs),
+        heldSlugs: reservedSlugsFrom(config.heldSlugs ?? [], d.ReservedSlugs),
         ...(bands ? { regions: bands } : {}),
         ...(root ? { home: root } : {}),
         ...(held ? { holding: held } : {}),

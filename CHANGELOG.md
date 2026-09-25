@@ -4,8 +4,11 @@
 
 - A collection whose index is off frees its one-segment route for a page at exactly that path
   wherever it was configured, the post collection at `/blog` included. Before, only a collection a
-  tenant's settings brought was freed, since the build config reserves its own routes. What the
-  engine serves at the root stays reserved, and anything below the route is still the collection's.
+  tenant's settings brought was freed, since the build config reserves its own routes. Only a slug
+  held by a collection's route and nothing else is freed: what the engine serves at the root, a slug
+  the build config's `reservedSlugs` or a tenant's `ReservedSlugs` names, and the blog's `/authors`
+  and `/categories` stay reserved (the new `heldSlugs` lists them). Anything below the route is still
+  the collection's.
 
 - A `source` with `mode: "all"` reads every row of a collection, fifty to a request and up to 500,
   as one of the page's reads, for a page that is a whole collection such as a changelog. A `repeat`
