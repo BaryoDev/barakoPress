@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { recipeLook } from "../recipes.js";
 import type { PressTheme } from "../theme.js";
 import { filterAttrs } from "./filter.js";
 import type { ResolvedBlock } from "./schema.js";
@@ -32,12 +33,28 @@ const listGap = (theme: PressTheme) => `var(--bp-gap, ${theme.space.lg})`;
  */
 const TRANSPARENT: CSSProperties = { "--bp-list": "flex", display: "contents" } as CSSProperties;
 
+/*
+ * A block wearing a recipe is its own cell. The recipe is the design of that element, and a design
+ * places its elements directly in their row or grid: a lede that takes `flex: 1 1 420px` beside a
+ * claim, a card that is a grid item. With the wrapper in the box tree, those are the wrapper's to
+ * take and it takes none of them. So under a recipe the wrapper is taken out of the layout the same
+ * way a transparent block's is, and the recipe's element is the one its parent lays out. A recipe
+ * the site does not have draws the block's own look, and the block keeps its wrapper with it.
+ */
+function wearsRecipe(block: ResolvedBlock, theme: PressTheme): boolean {
+    const name = block.props.recipe;
+    return typeof name === "string" && recipeLook(theme, name) !== undefined;
+}
+
 /** Renders resolved blocks in order. Resolve first with `resolveBlocks`; this trusts its input. */
 export function BlockList({ blocks, theme }: { blocks: ResolvedBlock[]; theme: PressTheme }) {
     return (
         <div style={{ display: LIST_DISPLAY, flexDirection: "column", gap: listGap(theme) }}>
             {blocks.map((block, index) => {
                 const Component = block.definition.component;
+                // Marked, so a rule that styles a list's cells (a hue flow's) can reach the element
+                // inside a wrapper that takes no box of its own.
+                const contents = block.definition.transparent || wearsRecipe(block, theme);
                 const slots: Record<string, ReactNode[]> = {};
                 for (const [name, lists] of Object.entries(block.slots)) {
                     slots[name] = lists.map((list, i) => (
@@ -49,7 +66,8 @@ export function BlockList({ blocks, theme }: { blocks: ResolvedBlock[]; theme: P
                         key={index}
                         data-block={block.definition.type}
                         {...(block.filters?.length ? filterAttrs(block.filters) : {})}
-                        style={block.definition.transparent ? TRANSPARENT : RESET_LIST}
+                        style={contents ? TRANSPARENT : RESET_LIST}
+                        {...(contents ? { "data-bp-contents": "" } : {})}
                     >
                         <Component props={block.props} slots={slots} theme={theme} />
                     </div>

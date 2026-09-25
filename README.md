@@ -538,6 +538,14 @@ Blocks come in four layers.
 a frame), `stickyBar` (a band that stays put while the page moves under it, at the top or the
 bottom), `spacer` and `divider`.
 
+A `stack` or a `panel` given an `href` is a link, the whole of it: a card whose face goes somewhere.
+A site path is drawn with Next's `Link`, anything with a scheme as a plain anchor, and the address is
+held to the same check as any link field. What is inside is the link's name, so nothing inside should
+be a link of its own: one that holds a link, a button, a linked container, a control or a text with
+a markdown link in it is drawn without its `href`, and the server log says so once, since a link
+inside a link is markup a browser rewrites. A `section`, `stack` or `panel` given an `anchor` carries
+it as its `id`, for a link to `#start` elsewhere; one that is not a plain name is left off.
+
 `row` and `grid` take one list per cell, which suits a designer placing each one. `flow` takes a
 single list and lays out whatever is in it, which is what a `repeat` and a preset's `slot` produce:
 a card per row that came back, however many that is. Its column count is a choice and not a number,
@@ -545,7 +553,9 @@ because only a string field takes a binding, and a preset has to pass its own `c
 
 **Content primitives** hold content and no layout: `text` (a variant from the theme's type scale,
 and `format: "inline"` for code, emphasis, strong, links and an accent in the line; see
-[Inline marks](#inline-marks-in-a-text-block)),
+[Inline marks](#inline-marks-in-a-text-block); `tag` draws it as `p`, `span`, `code`, `strong`,
+`em` or `h1` to `h4` rather than the variant's element, `decorative` hides it from a screen reader,
+for an arrow after a link's words, unless its inline marks hold a link, and `title` is shown on hover),
 `richText` (markdown), `image`, `video`, `embed` (an iframe, only for a host in `embedHosts`),
 `icon`, `button`, `link`, `list`, `disclosure` (a labelled section that opens; give several the
 same `group` and only one is open at a time), `comparisonTable` (rows typed as lines with `|`
@@ -825,6 +835,10 @@ value, with the value escaped as a CSS string and `!important` so it wins over a
 reader with no script sees every row. The buttons are toggles with `aria-pressed` inside a labelled
 group, not a tablist, since the tab pattern promises arrow keys and panels this does not have. A row
 with nothing in the field has no value, so any choice hides it.
+
+The bar draws its buttons from the theme's colours. `recipe` names a style recipe for the row,
+`buttonRecipe` one for each button and `pressedRecipe` one for the button that is pressed, each
+replacing that look outright as a recipe does on a primitive; a button keeps `cursor: pointer`.
 
 In a grouped source the bar is drawn once, ahead of the groups, and filters all of them. With
 `hideEmptyGroups`, a group's own blocks carry every value its rows hold, so the same rule hides a
@@ -1649,11 +1663,19 @@ gradients. So `;`, `:`, braces, angle brackets, a backslash, `!important`, `@`, 
 cannot leave its own declaration. A property off the list, or a value that fails, is dropped and
 the rest of the recipe kept, the way `Colors` drops one bad colour. The check runs again when the
 block draws, on the resolved value, so a theme built by hand gets it too. A name is lower case
-letters, digits and hyphens, up to 40. Up to 100 recipes, merged over the configured ones name by
-name.
+letters, digits and hyphens, up to 40. Up to 400 recipes, merged over the configured ones name by
+name: barakocms.com's pages are about three hundred looks, one per element its design styles.
 
 What wearing one does to a block:
 
+- The block is its own cell. Every block in a list sits in a wrapper, and under a recipe the wrapper
+  is `display: contents`, as a transparent block's is, so the recipe's element is what its parent
+  lays out: a lede that takes `flex: 1 1 420px` beside a claim, a card that is the grid's item. A
+  name the site has no recipe for keeps the wrapper along with the block's own look.
+  That holds for an inline element too. A `link` or a `span` text wearing `display: inline-block`
+  in a list, which is a column, is that column's flex item and is stretched to its width like any
+  other; without a recipe it sits inside a block wrapper at its own width. A recipe that wants its
+  own width says so: `align-self: flex-start`, or `width: fit-content`.
 - The recipe replaces the block's own inline look on its outer element outright. It is not merged
   over it: the card's own padding under a recipe that only set the corner is a look nobody drew.
   The block's token props for that element (`padding`, `radius`, `border` and so on) are not
