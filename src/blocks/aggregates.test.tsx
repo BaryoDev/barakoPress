@@ -341,6 +341,20 @@ describe("distinct", () => {
         expect(grouped).toContain("[barakoPress:1]");
     });
 
+    /*
+     * `{{count}}` is what the collection matched and a distinct only what the page read. With the
+     * third repository past the page, "4 across 2" would read as a fact, so a source that read part of
+     * what it matched has no distinct count and renders the fallback.
+     */
+    it("renders the fallback when the source read only part of what it matched", async () => {
+        const out = await page([
+            source({ collection: "milestones", pageSize: 2 }, [text("[{{count}} across {{distinct.Repository ?? some}}]")]),
+            source({ collection: "milestones", pageSize: 4 }, [text("({{count}} across {{distinct.Repository ?? some}})")]),
+        ]);
+        expect(out).toContain("[4 across some]");
+        expect(out).toContain("(4 across 3)");
+    });
+
     it("renders the fallback for a field no row holds, and is unbound outside a source", async () => {
         const out = await page([
             source({ collection: "milestones" }, [text("[{{distinct.Nothing ?? 0}}]")]),

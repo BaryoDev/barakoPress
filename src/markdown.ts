@@ -257,3 +257,14 @@ export function renderInlineMarkdown(source: string): string {
     inlineRenderer ??= buildInlineRenderer();
     return inlineRenderer.parseInline(source, { async: false }) as string;
 }
+
+/**
+ * Whether markdown renders to a link, read from what the renderer draws rather than from how the
+ * source is spelled: an autolinked address, an email and a reference link are links, and a URL in a
+ * code span is not. `inline` is a text block's inline marks, `block` a rich text's body.
+ */
+export function holdsLink(source: string, as: "inline" | "block"): boolean {
+    if (!source) return false;
+    const html = as === "inline" ? renderInlineMarkdown(source) : renderMarkdown(source);
+    return /<a\s/i.test(html);
+}

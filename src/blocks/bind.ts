@@ -27,6 +27,7 @@ import {
     writePagerState,
 } from "./data.js";
 import { writeFilterState } from "./filter.js";
+import { holdsLink } from "../markdown.js";
 import {
     INVALID,
     MAX_BLOCKS,
@@ -147,13 +148,17 @@ export async function bindBlocks(blocks: ResolvedBlock[], options: BindPageOptio
  * loses its `href`, and the server log says so once. Decided here, on the bound tree, because
  * whether an inline text holds a link or a container links at all can come from a binding.
  *
- * What counts is what the engine draws: a link, a button, a linked container, a text or rich text
- * holding a markdown link, and the blocks that are controls (a filter bar, a pager, a disclosure, a
- * tab, a search box, an embed, a video). A plugin's own controls are the plugin's to keep out.
+ * What counts is what the engine draws: a link, a button, a linked container, a call to action, a
+ * collection's cards, a text or rich text whose rendered markup holds a link (an autolinked address
+ * and a reference link included, a URL in a code span not), and the blocks that are controls (a
+ * filter bar, a pager, a disclosure, a tab, a search box, an embed, a video). A plugin's own controls
+ * are the plugin's to keep out.
  */
 const CONTROLS = new Set([
     "link",
     "button",
+    "callToAction",
+    "collection",
     "filterBar",
     "pager",
     "disclosure",
@@ -167,7 +172,6 @@ const CONTROLS = new Set([
     "docsSwitcher",
 ]);
 const LINKING = new Set(["stack", "panel"]);
-const MARKDOWN_LINK = /\]\(|<https?:|https?:\/\//i;
 const unnestSaid = new Set<string>();
 
 function linksAsAWhole(block: ResolvedBlock): boolean {
@@ -177,8 +181,8 @@ function linksAsAWhole(block: ResolvedBlock): boolean {
 function pressable(block: ResolvedBlock): boolean {
     const type = block.definition.type;
     if (CONTROLS.has(type) || linksAsAWhole(block)) return true;
-    if (type === "text" && block.props.format === "inline") return MARKDOWN_LINK.test(String(block.props.value ?? ""));
-    if (type === "richText") return MARKDOWN_LINK.test(String(block.props.markdown ?? ""));
+    if (type === "text" && block.props.format === "inline") return holdsLink(String(block.props.value ?? ""), "inline");
+    if (type === "richText") return holdsLink(String(block.props.markdown ?? ""), "block");
     return Object.values(block.slots).some((lists) => lists.some((list) => list.some(pressable)));
 }
 
@@ -637,10 +641,12 @@ async function bindGroups(
 ): Promise<ResolvedBlock[]> {
     const out: ResolvedBlock[] = [];
     const filter = frame.filter;
+    const all = groups.flatMap((group) => group.items);
+    // A group of a page that read part of what it matched is part of that group.
+    const complete = total === undefined || total <= all.length;
     // The bar filters every group at once, so it is drawn once, ahead of them, and not per group.
     const bars = content.filter((block) => block.definition.type === FILTER_BAR_BLOCK);
     if (filter && bars.length > 0) {
-        const all = groups.flatMap((group) => group.items);
         out.push(...(await bindList(bars, { ...frame, source: frame.source.with(rowScopes(ctx, all, total)) }, ctx)));
     }
     const body = bars.length > 0 ? content.filter((block) => !bars.includes(block)) : content;
@@ -648,7 +654,7 @@ async function bindGroups(
     for (const group of groups) {
         if (ctx.budget.blocks <= 0) break;
         const scope = { key: group.key, count: group.items.length };
-        const source = frame.source.with({ ...rowScopes(ctx, group.items, total), group: () => scope });
+        const source = frame.source.with({ ...rowScopes(ctx, group.items, total, complete), group: () => scope });
         const bound = await bindList(body, { ...frame, source, rows: { items: group.items }, filter: inGroup }, ctx);
         // A group's own blocks carry every value its rows hold, so the rule that hides a row hides
         // a group none of whose rows is left. A block that is a row already keeps its own.
@@ -678,22 +684,32 @@ function groupRows(config: PressConfig, items: Item[], field: string, order: str
     return ordered([...groups.keys()], order).map((key) => ({ key, items: groups.get(key) ?? [] }));
 }
 
-/** `count`, `sum` and `distinct` for the blocks inside a source, over the rows it read. */
-function rowScopes(ctx: BindContext, items: Item[], total: number | undefined): BindingScopes {
+/**
+ * `count`, `sum` and `distinct` for the blocks inside a source, over the rows it read. `complete` is
+ * whether those rows are everything the source matched: a distinct count beside `{{count}}` of the
+ * whole match would otherwise read "60 issues across 2 repositories" when the third is on page two, so
+ * a partial read has no distinct counts and each renders its fallback.
+ */
+function rowScopes(
+    ctx: BindContext,
+    items: Item[],
+    total: number | undefined,
+    complete = total === undefined || total <= items.length,
+): BindingScopes {
     return {
         count: (path) => (path === "" ? total : ctx.count(path)),
         sum: () => sums(ctx.config, items),
-        distinct: () => distincts(ctx.config, items),
+        distinct: () => (complete ? distincts(ctx.config, items) : {}),
     };
 }
 
 /**
- * How many different values each field holds among the rows read: the repositories a list of issues
- * spans, which is the number of groups a `groupBy` on that field would draw. Compared as the text a
- * placeholder would print, and each entry of a list counts on its own, as a filter bar reads one. A row
- * with nothing in the field adds nothing.
- *
- * Over the rows the source read, which is at most fifty, like a sum.
+ * How many different values each top-level field holds among the rows read: the repositories a list
+ * of issues spans. Compared as the text a placeholder would print, and each entry of a list counts on
+ * its own, as a filter bar reads one; a row with nothing in the field adds nothing. So it is not
+ * always the number of groups a `groupBy` on the field draws, which puts the empty rows in a group of
+ * their own and keys a list by its whole text. A dotted path (`Owner.Login`) is not walked and
+ * renders its fallback.
  */
 function distincts(config: PressConfig, items: Item[]): Record<string, number> {
     const seen = new Map<string, Set<string>>();

@@ -793,6 +793,9 @@ source that pages sums the page it is on.
 repositories a list of issues spans, "16 issues across 3 repositories". Values compare as the text a
 placeholder prints, each entry of a list field counts on its own, and a row with nothing in the field
 adds nothing, so a field no row holds renders its fallback. Inside a group it counts that group's rows.
+It counts only what the source read, so a source that matched more rows than it read (a page of a
+longer list) has no distinct counts and renders the fallback: `{{distinct.Repo ?? several}}`. It
+reads a top-level field; a dotted path such as `Owner.Login` renders the fallback.
 
 `groupBy` names a field, and the source's content then renders once per distinct value of it among
 the rows read, in the order first seen. `groupOrder` is a comma separated list of values to put
@@ -1686,6 +1689,10 @@ What wearing one does to a block:
   is `display: contents`, as a transparent block's is, so the recipe's element is what its parent
   lays out: a lede that takes `flex: 1 1 420px` beside a claim, a card that is the grid's item. A
   name the site has no recipe for keeps the wrapper along with the block's own look.
+  That holds for an inline element too. A `link` or a `span` text wearing `display: inline-block`
+  in a list, which is a column, is that column's flex item and is stretched to its width like any
+  other; without a recipe it sits inside a block wrapper at its own width. A recipe that wants its
+  own width says so: `align-self: flex-start`, or `width: fit-content`.
 - The recipe replaces the block's own inline look on its outer element outright. It is not merged
   over it: the card's own padding under a recipe that only set the corner is a look nobody drew.
   The block's token props for that element (`padding`, `radius`, `border` and so on) are not
