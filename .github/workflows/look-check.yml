@@ -121,7 +121,7 @@ jobs:
         # On failure, because a number alone does not tell anyone what moved. The table of every
         # page's difference is in the job summary either way.
         if: failure()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.artifact-name }}
           path: ${{ github.workspace }}/look-results
