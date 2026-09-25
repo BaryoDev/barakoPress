@@ -4,11 +4,14 @@
 # dependencies go inside its tarball as bundleDependencies, since the install runs offline.
 #
 # The engine is the source at a release tag, which is what the published image of that tag was built
-# from. The v0.8.0 tag exists from the 0.8.0 release on. A tag can be moved, so record the commit it
-# points at beside it, and build from the commit for the strict form:
+# from. A tag can be moved, so the commit it points at is recorded beside it, and building from the
+# commit is the strict form:
 #
-#   git ls-remote https://github.com/BaryoDev/barakoPress.git v0.8.0
-#   context: https://github.com/BaryoDev/barakoPress.git#<that commit>
+#   v0.8.0 is db77cfafd126db575bd9f73b0584c99ba815b7c8
+#   git ls-remote https://github.com/BaryoDev/barakoPress.git 'v0.8.0^{}'
+#   context: https://github.com/BaryoDev/barakoPress.git#db77cfafd126db575bd9f73b0584c99ba815b7c8
+#
+# The tag is annotated, so ask for `^{}`: plain `v0.8.0` answers with the tag object, not the commit.
 #
 # Move it only as an engine upgrade: rebuild and check the plugins against the new one.
 #
@@ -17,6 +20,7 @@
 services:
   press:
     build:
+      # v0.8.0 is db77cfafd126db575bd9f73b0584c99ba815b7c8
       context: https://github.com/BaryoDev/barakoPress.git#v0.8.0
       additional_contexts:
         plugins: ./plugins

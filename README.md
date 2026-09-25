@@ -1045,10 +1045,11 @@ otherwise be linked over it. The build installs them beside the engine with no i
 and writes `press.plugins.ts`, which the reference
 `press.config.ts` passes to `createBlockRegistry(config, [], { plugins })`. An overlay with its own
 `press.config.ts` imports `plugins` from `@/press.plugins` and passes it the same way. Pin the tag,
-and next to it the commit it points at (`git ls-remote https://github.com/BaryoDev/barakoPress.git
-v0.8.0`), since a tag can be moved; building from `#<commit>` is the strict form. The `v0.8.0` tag
-exists from the 0.8.0 release on. Moving it is an engine upgrade, and a plugin should be rebuilt and
-checked against it.
+and next to it the commit it points at, since a tag can be moved; building from `#<commit>` is the
+strict form. `v0.8.0` is `db77cfafd126db575bd9f73b0584c99ba815b7c8`. The tags are annotated, so
+`git ls-remote https://github.com/BaryoDev/barakoPress.git 'v0.8.0^{}'` is what prints the commit;
+without the `^{}` it prints the tag object. Moving the pin is an engine upgrade, and a plugin should
+be rebuilt and checked against it.
 
 **Enabling: per tenant.** One derived image carries every plugin the deployment installs. A tenant
 renders a plugin's blocks only when the `Plugins` setting in its `site` settings entry names it:
