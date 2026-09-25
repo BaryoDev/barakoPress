@@ -213,6 +213,7 @@ export {
     editHref,
     flattenTree,
     itemHeadings,
+    treeItemHref,
     treeNeighbours,
     treeProducts,
     treeSearchIndex,

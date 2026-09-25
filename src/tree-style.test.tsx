@@ -314,6 +314,21 @@ describe("the closed phone disclosure", () => {
         expect(html).toContain("@supports selector(::details-content){@media(min-width:48rem){.bp-tree-nav-closed>summary{display:none!important}.bp-tree-nav-closed::details-content{content-visibility:visible}}}");
     });
 
+    it("says what a page outside the tree tells it to, in place of the product, section and page", () => {
+        const config = configWith({ variant: { disclosure: "closed" } });
+        const html = renderToStaticMarkup(
+            <TreeAside config={config} collection="guide" tree={tree()} current="keys" product="second" summary={{ line: "Overview" }} />,
+        );
+        expect(html).toMatch(/<span class="bp-tree-summary-group"[^>]*>Overview<\/span>/);
+        expect(html).toMatch(/<span class="bp-tree-summary-title"[^>]*>Keys<\/span>/);
+
+        const index = renderToStaticMarkup(
+            <TreeSidebar config={config} tree={tree()} collection="guide" group="Overview" summary={{ title: "Which edition you need" }} />,
+        );
+        expect(index).toMatch(/<span class="bp-tree-summary-group"[^>]*>Overview<\/span>/);
+        expect(index).toMatch(/<span class="bp-tree-summary-title"[^>]*>Which edition you need<\/span>/);
+    });
+
     it("stays open, under the Contents control, when the tree does not ask", () => {
         const html = renderToStaticMarkup(<TreeAside config={configWith()} collection="guide" tree={tree()} current="keys" />);
         expect(html).toMatch(/<details class="bp-tree-sidebar bp-tree-nav" open="">/);

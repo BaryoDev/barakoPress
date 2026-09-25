@@ -2,6 +2,14 @@
 
 ## 0.8.0 (unreleased)
 
+- A tree's items link where the collection's `href` field says they are read, when it maps one and
+  it is a path on this site: the sidebar, previous and next, the in-page index and the sitemap,
+  through the exported `treeItemHref`. An item with no such field, or an absolute address in it, is
+  linked at its route and slug as before. The sitemap follows `href` for a tree only, without its
+  fragment or query, and lists a URL once. `TreeAside`
+  and `TreeSidebar` take a `summary` (`{ line, title }`) that the closed phone control says in place
+  of the product, the section and the page, for a page the tree does not hold.
+
 - A collection whose index is off frees its one-segment route for a page at exactly that path
   wherever it was configured, the post collection at `/blog` included. Before, only a collection a
   tenant's settings brought was freed, since the build config reserves its own routes. Only a slug
