@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.0 (unreleased)
+## 0.8.0 (2026-09-25)
 
 - The look check takes `maxDiffPixels`, a count of pixels a pair may differ by beside its ratio,
   for a page tall enough that any ratio lets a whole section through. Unset, a pair is judged as it
