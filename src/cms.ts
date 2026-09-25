@@ -424,10 +424,12 @@ export function isReservedPath(config: PressConfig, path: string): boolean {
  * True when `slug` is reserved only as the route of collections that all have their index off. The
  * build config puts every one-segment collection route, the post route included, in `reservedSlugs`,
  * so without this the index being off freed the route only for a collection a tenant's settings
- * brought. What the engine serves itself stays reserved whatever a collection there says.
+ * brought. A slug held for any other reason (`heldSlugs`: the engine's own files, a name the build
+ * config or a tenant reserved, the author and category routes) stays reserved whatever a collection
+ * there says.
  */
 function unindexedRoute(config: PressConfig, slug: string): boolean {
-    if (RESERVED_AT_ROOT.includes(slug)) return false;
+    if ((config.heldSlugs ?? RESERVED_AT_ROOT).includes(slug)) return false;
     const here = Object.values(config.collections).filter((c) => {
         const route = c.route?.split("/").filter(Boolean);
         return route?.length === 1 && route[0].toLowerCase() === slug;

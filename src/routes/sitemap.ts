@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import { pinnedTenant, type PressConfig } from "../config.js";
 import { flattenNavigation, getNavigation, isChromePath, isReservedPath, pageHref } from "../cms.js";
 import { listAllCollection } from "../collections.js";
+import { treeItemHref } from "../tree.js";
 import { notFound } from "next/navigation";
 import { siteConfigOrNull } from "../site.js";
 
@@ -40,6 +41,7 @@ export function createSitemap(base: PressConfig) {
         if (!config || config.holding) notFound();
 
         const items: MetadataRoute.Sitemap = [];
+        const listedUrls = new Set<string>();
         // The home page takes the first slot, so the rest of the file is one URL shorter than the cap.
         const room = () => SITEMAP_MAX_URLS - 1 - items.length;
         for (const [key, col] of Object.entries(config.collections)) {
@@ -60,9 +62,14 @@ export function createSitemap(base: PressConfig) {
                 }
                 for (const item of listed.items) {
                     if (item.seo?.noIndex) continue;
+                    // A tree's item is read where the tree links it. Any other collection's `href` is
+                    // where its card sends a reader, not where the item is served.
+                    const at = col.tree ? pagePart(treeItemHref(item, col.route)) : undefined;
+                    const url = `${config.site.url}${at ?? `${col.route}/${item.slug}`}`;
+                    if (listedUrls.has(url)) continue;
+                    listedUrls.add(url);
                     items.push({
-                        // An item that names its own path is read there, the way its tree links it.
-                        url: `${config.site.url}${item.href?.startsWith("/") ? item.href : `${col.route}/${item.slug}`}`,
+                        url,
                         lastModified: item.date ? new Date(item.date) : undefined,
                         changeFrequency: "monthly" as const,
                         priority: 0.7,
@@ -118,4 +125,11 @@ function sitemapFull(config: PressConfig): string {
 /** For tests: say every message again. */
 export function forgetSitemapWarnings(): void {
     said.clear();
+}
+
+/** A path without its fragment or query, which name a place on a page and not a page. */
+function pagePart(href: string | undefined): string | undefined {
+    if (!href) return undefined;
+    const end = [href.indexOf("#"), href.indexOf("?")].filter((i) => i >= 0);
+    return end.length > 0 ? href.slice(0, Math.min(...end)) : href;
 }
