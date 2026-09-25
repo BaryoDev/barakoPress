@@ -25,6 +25,7 @@ import {
     writePagerState,
 } from "./data.js";
 import { writeFilterState } from "./filter.js";
+import { holdsLink } from "../markdown.js";
 import {
     INVALID,
     MAX_BLOCKS,
@@ -143,13 +144,17 @@ export async function bindBlocks(blocks: ResolvedBlock[], options: BindPageOptio
  * loses its `href`, and the server log says so once. Decided here, on the bound tree, because
  * whether an inline text holds a link or a container links at all can come from a binding.
  *
- * What counts is what the engine draws: a link, a button, a linked container, a text or rich text
- * holding a markdown link, and the blocks that are controls (a filter bar, a pager, a disclosure, a
- * tab, a search box, an embed, a video). A plugin's own controls are the plugin's to keep out.
+ * What counts is what the engine draws: a link, a button, a linked container, a call to action, a
+ * collection's cards, a text or rich text whose rendered markup holds a link (an autolinked address
+ * and a reference link included, a URL in a code span not), and the blocks that are controls (a
+ * filter bar, a pager, a disclosure, a tab, a search box, an embed, a video). A plugin's own controls
+ * are the plugin's to keep out.
  */
 const CONTROLS = new Set([
     "link",
     "button",
+    "callToAction",
+    "collection",
     "filterBar",
     "pager",
     "disclosure",
@@ -163,7 +168,6 @@ const CONTROLS = new Set([
     "docsSwitcher",
 ]);
 const LINKING = new Set(["stack", "panel"]);
-const MARKDOWN_LINK = /\]\(|<https?:|https?:\/\//i;
 const unnestSaid = new Set<string>();
 
 function linksAsAWhole(block: ResolvedBlock): boolean {
@@ -173,8 +177,8 @@ function linksAsAWhole(block: ResolvedBlock): boolean {
 function pressable(block: ResolvedBlock): boolean {
     const type = block.definition.type;
     if (CONTROLS.has(type) || linksAsAWhole(block)) return true;
-    if (type === "text" && block.props.format === "inline") return MARKDOWN_LINK.test(String(block.props.value ?? ""));
-    if (type === "richText") return MARKDOWN_LINK.test(String(block.props.markdown ?? ""));
+    if (type === "text" && block.props.format === "inline") return holdsLink(String(block.props.value ?? ""), "inline");
+    if (type === "richText") return holdsLink(String(block.props.markdown ?? ""), "block");
     return Object.values(block.slots).some((lists) => lists.some((list) => list.some(pressable)));
 }
 
