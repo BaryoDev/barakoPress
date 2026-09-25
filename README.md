@@ -750,12 +750,16 @@ which rows is decided in barakoCMS. A page reads at most eight sources, and a `s
 rows a page.
 
 `mode: "all"` is for a page that is the whole of a collection rather than a page of it, a changelog
-say: the source reads every row, fifty to a request, up to 500 (`MAX_ALL_ROWS`), and it is one of the
-page's eight reads however many requests that takes. A `pager` inside it draws nothing, and counts,
-sums, groups and a filter bar cover every row it read. A `repeat` draws every row its source read
-unless its `limit` names fewer. What the rows of a repeat draw spends a budget of its own, 10,000
+say: the source reads every row, fifty to a request, up to 500 (`MAX_ALL_ROWS`). Its first request
+is one of the page's eight reads, and the rest are made at once, out of 16 more a page's `all`
+sources share between them (`MAX_ALL_REQUESTS`). A source past 500 rows, or past what the requests
+cover, reads what it can and says so in the server log, and `{{count}}` stays what the collection
+holds. A `pager` inside it draws nothing, and sums, distinct counts, groups and a filter bar cover
+every row it read. A `repeat` draws every row its source read unless its `limit` names fewer. What
+the rows of a repeat and the groups of a grouped source draw spends a budget of its own, 10,000
 blocks (`MAX_ROW_BLOCKS`), rather than the page's 400, so a long list neither takes the blocks after
-it off the page nor renders without end.
+it off the page nor renders without end; rows or groups past it are left out and the log says how
+many were drawn.
 
 **Counts, sums and groups.** `{{count.<collection>}}` anywhere on a page is how many published
 entries the collection has, for example `{{count.posts}}`. It is the delivery API's `totalItems` for
@@ -786,13 +790,16 @@ have, and one whose read failed all render the fallback and are reported as `no 
 `{{sum.<Field>}}` inside a `source` adds that field over the rows the source read, for example the
 open issues across a roadmap's milestones. A number stored as text counts. A field with a word in
 any row is not a sum and renders its fallback, and a source with no rows has no sums, so write
-`{{sum.Open ?? 0}}` where zero is the right answer. A sum covers the rows read, at most fifty; a
-source that pages sums the page it is on.
+`{{sum.Open ?? 0}}` where zero is the right answer. A sum covers the rows read: fifty at most in
+`list` mode, where a source that pages sums the page it is on, and up to 500 in `all` mode.
 
 `{{distinct.<Field>}}` is how many different values that field holds among the same rows: the
 repositories a list of issues spans, "16 issues across 3 repositories". Values compare as the text a
 placeholder prints, each entry of a list field counts on its own, and a row with nothing in the field
 adds nothing, so a field no row holds renders its fallback. Inside a group it counts that group's rows.
+It counts only what the source read, so a source that matched more rows than it read (a page of a
+longer list) has no distinct counts and renders the fallback: `{{distinct.Repo ?? several}}`. It
+reads a top-level field; a dotted path such as `Owner.Login` renders the fallback.
 
 `groupBy` names a field, and the source's content then renders once per distinct value of it among
 the rows read, in the order first seen. `groupOrder` is a comma separated list of values to put
@@ -859,7 +866,7 @@ In a grouped source the bar is drawn once, ahead of the groups, and filters all 
 group that has no row left. Without it a group stays with its heading and no rows. Only the first bar
 in a source counts. A grouped source honours only a bar at the top level of its content; one inside a
 band there would repeat with every group, so it draws nothing and marks no row. The
-values are those of the rows read, at most fifty, so a source that pages filters the page it is on.
+values are those of the rows read, so a source that pages filters the page it is on.
 
 ### Presets
 
@@ -1686,6 +1693,10 @@ What wearing one does to a block:
   is `display: contents`, as a transparent block's is, so the recipe's element is what its parent
   lays out: a lede that takes `flex: 1 1 420px` beside a claim, a card that is the grid's item. A
   name the site has no recipe for keeps the wrapper along with the block's own look.
+  That holds for an inline element too. A `link` or a `span` text wearing `display: inline-block`
+  in a list, which is a column, is that column's flex item and is stretched to its width like any
+  other; without a recipe it sits inside a block wrapper at its own width. A recipe that wants its
+  own width says so: `align-self: flex-start`, or `width: fit-content`.
 - The recipe replaces the block's own inline look on its outer element outright. It is not merged
   over it: the card's own padding under a recipe that only set the corner is a look nobody drew.
   The block's token props for that element (`padding`, `radius`, `border` and so on) are not
