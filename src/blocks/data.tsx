@@ -31,6 +31,25 @@ export const FILTER_BAR_BLOCK = "filterBar";
 /** The most rows one `source` reads, and the most reads one page may make. Untrusted input, bounded. */
 export const MAX_SOURCE_ROWS = 50;
 export const MAX_SOURCES = 8;
+/*
+ * A source with `mode: "all"` reads every row, a page of fifty at a time, up to this many: a document
+ * that lists a whole collection, like a changelog, rather than a page of cards. It is one of the page's
+ * reads however many pages of the API it takes.
+ */
+export const MAX_ALL_ROWS = 500;
+/*
+ * The API requests past the first that a page's `all` sources may make between them. Each source's
+ * first page is one of the page's reads (MAX_SOURCES); the rest are drawn from this, and a source
+ * whose rows it cannot cover reads what it can and says so. Without it eight such sources were eighty
+ * requests a render, which a visitor could multiply with a filter bound to the query.
+ */
+export const MAX_ALL_REQUESTS = 16;
+/*
+ * What the rows of a `repeat` may draw between them. The page's own budget (MAX_BLOCKS) bounds what an
+ * editor stored; this bounds what the data multiplies it into, so a long list neither eats the blocks
+ * around it nor renders without end.
+ */
+export const MAX_ROW_BLOCKS = 10000;
 /** The most values one `filterBar` offers. A field split on a separator can hold any number. */
 export const MAX_FILTER_VALUES = 100;
 
@@ -64,7 +83,7 @@ function source(config: PressConfig): BlockDefinition {
         layer: "data",
         fields: [
             collectionField(config, "Collection"),
-            { name: "mode", kind: "select", label: "How much", options: ["one", "list"] },
+            { name: "mode", kind: "select", label: "How much", options: ["one", "list", "all"] },
             { name: "slug", kind: "text", label: "Which one, by slug" },
             { name: "filterField", kind: "text", label: "Only rows whose field" },
             { name: "filterValue", kind: "text", label: "Holds the value" },

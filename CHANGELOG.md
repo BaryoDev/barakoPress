@@ -2,6 +2,15 @@
 
 ## 0.8.0 (unreleased)
 
+- A `source` with `mode: "all"` reads every row of a collection, fifty to a request and up to 500,
+  as one of the page's reads, for a page that is a whole collection such as a changelog. A `repeat`
+  draws every row its source read unless `limit` names fewer, and the blocks its rows draw spend a
+  budget of their own (10,000) rather than the page's 400, and so do a grouped source's groups. The
+  requests past each source's first come at once, out of 16 a page's `all` sources share. A source
+  that could not read everything it matched, a repeat or a grouped source cut short by the budget,
+  says so in the server log, and `{{count}}` stays what the collection holds. A sum and a distinct
+  count are worked out once per source. `MAX_ALL_ROWS`, `MAX_ALL_REQUESTS` and `MAX_ROW_BLOCKS` are
+  exported. A source in `one` or `list` mode reads what it did.
 - `{{distinct.<Field>}}` inside a `source` is how many different values a field holds among the
   rows read, each entry of a list counting on its own and an empty field adding nothing: the number
   of repositories a list of issues spans, beside `{{count}}` of the issues. A source that read part

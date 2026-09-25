@@ -653,7 +653,8 @@ value fails the whole block, a `url` must pass the same check markdown links do,
 never receives a prop its fields did not declare. A page reads at most 400 blocks in total, nested
 ones included, and ten levels deep. The count is spent on every block the binder walks through as
 well as every one that comes out, so a band from the library costs eight or ten of it, and a page
-that goes over loses its tail with nothing said.
+that goes over loses its tail with nothing said. What a `repeat` draws for its rows is counted
+against a budget of its own; see `mode: "all"` under Bindings.
 
 **Lists and groups.** A block that needs several of one thing declares a `list`, and a thing made
 of parts declares a `group`, rather than numbered fields or text split in the component:
@@ -748,6 +749,18 @@ A filter narrows what the API already lets the reader see. It is never access co
 which rows is decided in barakoCMS. A page reads at most eight sources, and a `source` at most fifty
 rows a page.
 
+`mode: "all"` is for a page that is the whole of a collection rather than a page of it, a changelog
+say: the source reads every row, fifty to a request, up to 500 (`MAX_ALL_ROWS`). Its first request
+is one of the page's eight reads, and the rest are made at once, out of 16 more a page's `all`
+sources share between them (`MAX_ALL_REQUESTS`). A source past 500 rows, or past what the requests
+cover, reads what it can and says so in the server log, and `{{count}}` stays what the collection
+holds. A `pager` inside it draws nothing, and sums, distinct counts, groups and a filter bar cover
+every row it read. A `repeat` draws every row its source read unless its `limit` names fewer. What
+the rows of a repeat and the groups of a grouped source draw spends a budget of its own, 10,000
+blocks (`MAX_ROW_BLOCKS`), rather than the page's 400, so a long list neither takes the blocks after
+it off the page nor renders without end; rows or groups past it are left out and the log says how
+many were drawn.
+
 **Counts, sums and groups.** `{{count.<collection>}}` anywhere on a page is how many published
 entries the collection has, for example `{{count.posts}}`. It is the delivery API's `totalItems` for
 a page of one row, cached like every other read, and the public API lists published entries only, so
@@ -777,8 +790,8 @@ have, and one whose read failed all render the fallback and are reported as `no 
 `{{sum.<Field>}}` inside a `source` adds that field over the rows the source read, for example the
 open issues across a roadmap's milestones. A number stored as text counts. A field with a word in
 any row is not a sum and renders its fallback, and a source with no rows has no sums, so write
-`{{sum.Open ?? 0}}` where zero is the right answer. A sum covers the rows read, at most fifty; a
-source that pages sums the page it is on.
+`{{sum.Open ?? 0}}` where zero is the right answer. A sum covers the rows read: fifty at most in
+`list` mode, where a source that pages sums the page it is on, and up to 500 in `all` mode.
 
 `{{distinct.<Field>}}` is how many different values that field holds among the same rows: the
 repositories a list of issues spans, "16 issues across 3 repositories". Values compare as the text a
@@ -853,7 +866,7 @@ In a grouped source the bar is drawn once, ahead of the groups, and filters all 
 group that has no row left. Without it a group stays with its heading and no rows. Only the first bar
 in a source counts. A grouped source honours only a bar at the top level of its content; one inside a
 band there would repeat with every group, so it draws nothing and marks no row. The
-values are those of the rows read, at most fifty, so a source that pages filters the page it is on.
+values are those of the rows read, so a source that pages filters the page it is on.
 
 ### Presets
 

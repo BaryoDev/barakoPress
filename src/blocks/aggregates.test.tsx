@@ -61,13 +61,22 @@ const MILESTONES: Entry[] = [
     { id: "m4", slug: "m4", data: { Name: "1.0", Repository: "barakoBrew", Open: 5 } },
 ];
 
+// A changelog is a document, not a page of cards: more rows than one read of fifty.
+const RELEASES: Entry[] = Array.from({ length: 120 }, (_, i) => ({
+    id: `r${i}`,
+    slug: `r${i}`,
+    data: { Name: `v${i}`, Kind: i % 3 === 0 ? "Major" : "Minor", Number: i },
+}));
+
 const COLLECTIONS = {
+    releases: { type: "release", fields: { title: "Name" } },
     packages: { type: "package", fields: { title: "Name" }, sort: "Name" },
     milestones: { type: "milestone", fields: { title: "Name" } },
     posts: { type: "post", fields: { title: "Name" } },
 };
 
 const CONTENT: Record<string, Entry[]> = {
+    release: RELEASES,
     package: PACKAGES,
     milestone: MILESTONES,
     post: [
@@ -354,6 +363,48 @@ describe("distinct", () => {
 
         expect(out).toContain("[0]");
         expect(out).toContain("[none]");
+    });
+});
+
+describe("a source that reads every row", () => {
+    const rows = (out: string) => (out.match(/\[v\d+\]/g) ?? []).length;
+
+    it("reads past fifty, a page of the API at a time, as one of the page's reads", async () => {
+        const out = await page([source({ collection: "releases", mode: "all" }, [{ type: "repeat", props: { content: [[text("[{{item.Title}}]")]] } }])]);
+
+        expect(rows(out)).toBe(120);
+        expect(out).toContain("[v119]");
+        expect(listReads("release")).toHaveLength(3);
+    });
+
+    it("gives its rows their own budget, so a long list leaves the rest of the page drawn", async () => {
+        const five = Array.from({ length: 5 }, (_, i) => text(i === 0 ? "[{{item.Title}}]" : "."));
+        const out = await page([
+            source({ collection: "releases", mode: "all" }, [{ type: "repeat", props: { content: [five] } }]),
+            text("after the list"),
+        ]);
+
+        expect(rows(out)).toBe(120);
+        expect(out).toContain("after the list");
+    });
+
+    it("counts, sums and groups over every row it read", async () => {
+        const out = await page([
+            source({ collection: "releases", mode: "all", groupBy: "Kind" }, [text("[{{group.key}} {{group.count}} of {{count}}]")]),
+            source({ collection: "releases", mode: "all" }, [text("(sum {{sum.Number}})")]),
+        ]);
+
+        expect(out).toContain("[Major 40 of 120]");
+        expect(out).toContain("[Minor 80 of 120]");
+        // 0 + 1 + ... + 119, every row and not the first fifty.
+        expect(out).toContain("(sum 7140)");
+    });
+
+    it("still reads one page in list mode, as before", async () => {
+        const out = await page([source({ collection: "releases", pageSize: 50 }, [{ type: "repeat", props: { content: [[text("[{{item.Title}}]")]] } }])]);
+
+        expect(rows(out)).toBe(50);
+        expect(listReads("release")).toHaveLength(1);
     });
 });
 

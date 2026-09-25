@@ -310,6 +310,9 @@ export {
     MAX_FILTER_VALUES,
     MAX_SOURCES,
     MAX_SOURCE_ROWS,
+    MAX_ALL_REQUESTS,
+    MAX_ALL_ROWS,
+    MAX_ROW_BLOCKS,
 } from "./blocks/data.js";
 export { FILTER_ATTR, FILTER_VALUES_ATTR, FILTER_CHOSEN_ATTR, filterToken } from "./blocks/filter.js";
 export {
