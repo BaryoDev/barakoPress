@@ -12,12 +12,8 @@ import {
     type TreeNode,
     type TreeSearchEntry,
 } from "../tree.js";
-import {
-    SearchKeys,
-    SEARCH_EMPTY_ATTR,
-    SEARCH_INDEX_ATTR,
-    SEARCH_ROOT_ATTR,
-} from "../blocks/search-keys.js";
+import { SearchKeys } from "../blocks/search-keys.js";
+import { SEARCH_EMPTY_ATTR, SEARCH_INDEX_ATTR, SEARCH_ROOT_ATTR } from "../blocks/search-attrs.js";
 
 /*
  * The chrome a documentation collection draws around its pages (#23): a sidebar of the tree, a

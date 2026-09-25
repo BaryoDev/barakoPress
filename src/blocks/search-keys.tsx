@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { SEARCH_EMPTY_ATTR, SEARCH_INDEX_ATTR, SEARCH_ROOT_ATTR } from "./search-attrs.js";
 
 /*
  * Keyboard handling for the search box, and the in-page filter over a tree's index.
@@ -20,12 +21,6 @@ import { useEffect } from "react";
  * Next reads off the module it resolves. See CLAUDE.md, section 2a.
  */
 
-/** The attribute the box marks its root with, so the listeners stay inside one box on a page with two. */
-export const SEARCH_ROOT_ATTR = "data-bp-search";
-/** Marks an in-page index, and holds how many of its entries show at once. */
-export const SEARCH_INDEX_ATTR = "data-bp-search-index";
-/** The line an index shows when nothing matched, holding the label it is written from. */
-export const SEARCH_EMPTY_ATTR = "data-bp-search-empty";
 
 /** The links a reader can walk to: what is drawn, not an index entry that is hidden. */
 export function focusable(root: Element): HTMLElement[] {

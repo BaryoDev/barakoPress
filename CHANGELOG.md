@@ -2,6 +2,10 @@
 
 ## 0.8.0 (unreleased)
 
+- The docs search box works in a Next app. Its attribute names came from a `"use client"` module,
+  which a server component receives as references rather than strings, so the box rendered without
+  them and its client code wired nothing. They now live in `src/blocks/search-attrs.ts`.
+
 - A tree's items link where the collection's `href` field says they are read, when it maps one and
   it is a path on this site: the sidebar, previous and next, the in-page index and the sitemap,
   through the exported `treeItemHref`. An item with no such field, or an absolute address in it, is
