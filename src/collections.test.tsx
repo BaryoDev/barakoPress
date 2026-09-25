@@ -709,6 +709,33 @@ describe("collections from a tenant's settings", () => {
      * collections and from the post route. That list was checked first, so turning the index off freed
      * the route only for a collection a tenant's settings brought, and never for the blog's own.
      */
+    /*
+     * Freed only when the route is the whole reason the slug is held. A slug the build config or a
+     * tenant reserved by name stays reserved whatever a collection there says, and the blog's author
+     * and category routes, off-index by default, stay reserved as they always were.
+     */
+    it("keeps a slug reserved by name, by a tenant, or as an author or category route, whatever a collection says", () => {
+        const unindexed = (route: string) => ({ type: "x", route, index: false as const, fields: { title: "Title" } });
+        const named = defineConfig({
+            site: { name: "S", url: "https://s.example" },
+            pages: "/",
+            reservedSlugs: ["shop"],
+            collections: { shop: unindexed("/shop") },
+        });
+        expect(isReservedPath(named, "/shop")).toBe(true);
+
+        const built = defineConfig({ site: { name: "S", url: "https://s.example" }, pages: "/", reservedSlugs: ["docs"] });
+        const tenant = applySiteSettings(built, { Collections: { x: unindexed("/docs"), y: unindexed("/status") }, ReservedSlugs: ["status"] }, null);
+        expect(tenant.collections.x?.route).toBe("/docs");
+        expect(isReservedPath(tenant, "/docs")).toBe(true);
+        expect(isReservedPath(tenant, "/status")).toBe(true);
+
+        const blog = defineConfig({ site: { name: "B", url: "https://b.example" }, pages: "/" });
+        expect(blog.collections.author?.index).toBe(false);
+        expect(isReservedPath(blog, "/authors")).toBe(true);
+        expect(isReservedPath(blog, "/categories")).toBe(true);
+    });
+
     it("frees a root route for a page when its index is off, wherever the collection was configured", () => {
         const built = defineConfig({
             site: { name: "Docs", url: "https://docs.example" },

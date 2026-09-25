@@ -485,6 +485,13 @@ describe("a manual whose items name their own path", () => {
         expect(html).toContain('<li><a href="/docs/cms/quickstart"><span>Quickstart</span></a></li>');
     });
 
+    it("links an item of a tree off site only at its route, never at an absolute href", async () => {
+        const { treeItemHref } = await import("./tree.js");
+        expect(treeItemHref({ slug: "phish", href: "https://evil.example/phish" }, "/docs")).toBe("/docs/phish");
+        expect(treeItemHref({ slug: "q", href: "//evil.example/q" }, "/docs")).toBe("/docs/q");
+        expect(treeItemHref({ slug: "q", href: "/docs/cms/q/" }, "/docs")).toBe("/docs/cms/q/");
+    });
+
     it("lists each item in the sitemap at its own path", async () => {
         pathed();
         const entries = await createSitemap(base)();
@@ -493,6 +500,44 @@ describe("a manual whose items name their own path", () => {
         expect(urls).toContain("https://barakocms.com/docs/cms/quickstart");
         expect(urls).not.toContain("https://barakocms.com/docs/quickstart");
         expect(urls).toContain("https://barakocms.com/docs/webhooks");
+    });
+});
+
+/*
+ * Only a tree's items are listed at their `href`: a card's target on any other collection is where the
+ * card sends a reader, not where the item is served. A fragment or a query is not a page of its own,
+ * and two items naming one path are one URL.
+ */
+describe("the sitemap and an href field", () => {
+    it("follows href only for a tree, without its fragment or query, and lists a path once", async () => {
+        const settings = {
+            ...SETTINGS,
+            Collections: {
+                docs: {
+                    ...DOCS_COLLECTION,
+                    fields: { ...DOCS_COLLECTION.fields, href: "Path" },
+                },
+                pages: { type: "doc", route: "/cards", fields: { title: "Title", slug: "Slug", href: "Path" } },
+            },
+        };
+        const saved = [...DOCS];
+        DOCS.push(
+            { id: "d7", slug: "contact-a", data: { Title: "A", Slug: "contact-a", Path: "/docs/cms/quickstart#top", Section: "Reference", Product: "cms" } },
+            { id: "d8", slug: "contact-b", data: { Title: "B", Slug: "contact-b", Path: "/docs/cms/quickstart?x=1", Section: "Reference", Product: "cms" } },
+        );
+        try {
+            vi.stubGlobal("fetch", cms(settings));
+            requestHeaders = new Headers({ host: "barakocms.com" });
+            const urls = (await createSitemap(base)()).map((e) => e.url);
+            expect(urls.length).toBeGreaterThan(3);
+            expect(urls.filter((u) => u === "https://barakocms.com/docs/cms/quickstart")).toHaveLength(1);
+            expect(urls.some((u) => u.includes("#") || u.includes("?"))).toBe(false);
+            // The card collection over the same entries lists them at its route, never at the cards' targets.
+            expect(urls).toContain("https://barakocms.com/cards/quickstart");
+            expect(urls).toContain("https://barakocms.com/cards/contact-a");
+        } finally {
+            DOCS.splice(0, DOCS.length, ...saved);
+        }
     });
 });
 

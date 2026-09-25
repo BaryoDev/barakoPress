@@ -115,12 +115,15 @@ function nest(items: Item[], bySlug: Map<string, Item>): TreeNode[] {
 }
 
 /**
- * Where an item of a tree is read: its own `href` field when the collection maps one, as a card links
- * it, and otherwise its route and slug. A manual whose products share a slug keeps its slugs unique
- * and names the path in the field, `/docs/cms/quickstart` beside `/docs/press/quickstart`.
+ * Where an item of a tree is read: its own `href` field when the collection maps one and it is a path
+ * on this site, and otherwise its route and slug. A manual whose products share a slug keeps its slugs
+ * unique and names the path in the field, `/docs/cms/quickstart` beside `/docs/press/quickstart`.
+ *
+ * Only a site path. The sidebar, the pager and the index draw these as the site's own links, so an
+ * address somewhere else would read as a page of the manual and take the reader off site unmarked.
  */
 export function treeItemHref(item: Pick<Item, "href" | "slug">, route: string | undefined): string | undefined {
-    if (item.href) return item.href;
+    if (item.href?.startsWith("/") && !item.href.startsWith("//")) return item.href;
     return route !== undefined && item.slug ? `${route}/${item.slug}` : undefined;
 }
 

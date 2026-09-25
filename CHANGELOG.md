@@ -10,16 +10,21 @@
   which a server component receives as references rather than strings, so the box rendered without
   them and its client code wired nothing. They now live in `src/blocks/search-attrs.ts`.
 
-- A tree's items link where the collection's `href` field says they are read, when it maps one: the
-  sidebar, previous and next, the in-page index and the sitemap, through the exported
-  `treeItemHref`. An item with no such field is linked at its route and slug as before. `TreeAside`
+- A tree's items link where the collection's `href` field says they are read, when it maps one and
+  it is a path on this site: the sidebar, previous and next, the in-page index and the sitemap,
+  through the exported `treeItemHref`. An item with no such field, or an absolute address in it, is
+  linked at its route and slug as before. The sitemap follows `href` for a tree only, without its
+  fragment or query, and lists a URL once. `TreeAside`
   and `TreeSidebar` take a `summary` (`{ line, title }`) that the closed phone control says in place
   of the product, the section and the page, for a page the tree does not hold.
 
 - A collection whose index is off frees its one-segment route for a page at exactly that path
   wherever it was configured, the post collection at `/blog` included. Before, only a collection a
-  tenant's settings brought was freed, since the build config reserves its own routes. What the
-  engine serves at the root stays reserved, and anything below the route is still the collection's.
+  tenant's settings brought was freed, since the build config reserves its own routes. Only a slug
+  held by a collection's route and nothing else is freed: what the engine serves at the root, a slug
+  the build config's `reservedSlugs` or a tenant's `ReservedSlugs` names, and the blog's `/authors`
+  and `/categories` stay reserved (the new `heldSlugs` lists them). Anything below the route is still
+  the collection's.
 
 - A `source` with `mode: "all"` reads every row of a collection, fifty to a request and up to 500,
   as one of the page's reads, for a page that is a whole collection such as a changelog. A `repeat`
