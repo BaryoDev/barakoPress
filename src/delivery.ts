@@ -670,7 +670,7 @@ export function singleIp(raw: string | null | undefined): string | null {
  * The key goes in the body, not the URL, so no access log records it. Nothing here logs it either.
  * A 200 whose expiry is missing, unreadable or already past counts as a failure: there is nothing
  * safe to sign. A redirect is refused rather than followed, because a 307 or 308 would send the key
- * on to wherever it points. The renderer key rides along for the same reason, and is never logged.
+ * on to wherever it points. The renderer key goes only over https or loopback, and is never logged.
  */
 export async function redeemShareLink(
     config: PressConfig,
@@ -678,14 +678,14 @@ export async function redeemShareLink(
     now: number = Date.now(),
     caller: ShareRedeemCaller = {},
 ): Promise<ShareRedeemAnswer> {
+    const cmsUrl = cmsUrlFor(config);
     const sent: Record<string, string> = { ...(headers(config) as Record<string, string>), "content-type": "application/json" };
-    // Usually the same value `headers` already put there from the environment: this lets a caller
-    // pass a different one (share.ts does not, today), and is otherwise a harmless overwrite.
-    if (caller.rendererKey) sent["X-Barako-Renderer-Key"] = caller.rendererKey;
+    // The caller's key keeps the rule `headers` applies to every read: only over https or loopback.
+    if (caller.rendererKey && carriesSecretsSafely(cmsUrl)) sent["X-Barako-Renderer-Key"] = caller.rendererKey;
     const visitorIp = singleIp(caller.visitorIp);
     if (visitorIp) sent["X-Barako-Visitor-IP"] = visitorIp;
     try {
-        const res = await fetch(`${cmsUrlFor(config)}/api/public/site/share-links/redeem`, {
+        const res = await fetch(`${cmsUrl}/api/public/site/share-links/redeem`, {
             method: "POST",
             headers: sent,
             body: JSON.stringify({ key }),

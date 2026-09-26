@@ -2,6 +2,11 @@
 
 ## 0.9.0 (unreleased)
 
+- A share link redemption no longer sends `CMS_RENDERER_KEY` over plain http to a CMS that is not on
+  loopback, such as one reached by container name on a docker network. The share route passed the
+  key to the redemption as the caller's, which set it without the https or loopback check every
+  delivery read applies (#173).
+
 - `baryovm.release.json` and `baryovm.site.json` sync `scripts/plugins.mjs`, `press.plugins.ts` and
   `proxy.ts`. A release to a fresh VM failed at `node scripts/plugins.mjs`, and a VM with an older
   tree built with its old copies. `test/release-manifests.test.ts` works out what the image build

@@ -44,7 +44,8 @@ const { createRobots } = await import("./routes/robots.js");
 const { createSharePage, createShareRedeemRoute } = await import("./routes/share.js");
 const { createBlockRegistry } = await import("./blocks/registry.js");
 
-const CMS = "http://cms.test";
+// https, because the renderer key is only sent over https or loopback and these tests assert it is sent.
+const CMS = "https://cms.test";
 const KEY = "share-key-for-tests-0123456789";
 const SHORT_KEY = "short-share-key-for-tests-0123";
 const THROTTLED = "throttled-key-for-tests-0123";
