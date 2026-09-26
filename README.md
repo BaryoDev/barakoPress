@@ -1970,8 +1970,12 @@ holding `/` is never holding one visitor's gate for the next visitor.
 ### One secret
 
 `PRESS_SECRET` keys everything this renderer signs: each tenant's webhook key, each tenant's binding
-report key and each share session cookie. Every signature puts its purpose first in what it signs
-(`revalidate.`, `bindings.` or `press-share.`), so one made for one purpose never verifies as another. It is read per request and has one rule for every
+report key and each share session cookie. A key derived from it puts its purpose first in what it
+signs (`revalidate.`, `bindings.` or `press-share.`), so one derived for one purpose never verifies as
+another. Webhook keys are derived per tenant on a request-time site, binding report keys when the
+tenant is pinned or resolved per request. Elsewhere `PRESS_SECRET` itself is the key, so a
+build-time site with no pinned tenant verifies its webhook and its binding report with the same
+value. It is read per request and has one rule for every
 purpose: at least 32 characters, for example `openssl rand -base64 48`.
 
 | When `PRESS_SECRET` is | Webhooks | Share sessions | Binding reports |
