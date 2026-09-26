@@ -374,3 +374,34 @@ describe("the renderer key only rides on a channel that protects it", () => {
         expect(await keyOn("not a url")).toBeNull();
     });
 });
+
+/*
+ * Redemption keeps the same rule. The share route hands the environment's key to `redeemShareLink`
+ * as the caller's, so a check that lived only in `headers` would be undone there, and a CMS reached
+ * by container name over plain http would get the key in the clear.
+ */
+describe("a redemption sends the renderer key only on a channel that protects it", () => {
+    async function keyOn(cmsUrl: string): Promise<string | null> {
+        const fetcher = answer(200, { expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
+        vi.stubGlobal("fetch", fetcher);
+        const config = defineConfig({ site: { name: "Test", url: "https://test.example" }, cmsUrl });
+        await redeemShareLink(config, "share-key-for-tests-0123456789", Date.now(), { rendererKey: "a-shared-secret" });
+        expect(fetcher.mock.calls).toHaveLength(1);
+        const init = fetcher.mock.calls[0][1] as RequestInit;
+        return new Headers(init.headers).get("X-Barako-Renderer-Key");
+    }
+
+    it("sends it to an https CMS", async () => {
+        expect(await keyOn("https://cms.example")).toBe("a-shared-secret");
+    });
+
+    it("sends it to http on loopback", async () => {
+        expect(await keyOn("http://127.0.0.1:5000")).toBe("a-shared-secret");
+        expect(await keyOn("http://localhost:5000")).toBe("a-shared-secret");
+    });
+
+    it("withholds it from plain http anywhere else, a container name included", async () => {
+        expect(await keyOn("http://barakocms-cms-api-1:8080")).toBeNull();
+        expect(await keyOn("http://10.0.0.5:5000")).toBeNull();
+    });
+});
