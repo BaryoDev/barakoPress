@@ -7,10 +7,11 @@ Read by the adversarial-review skill (arnelirobles/lean-agent-method) before any
 - **barakoPress is a published package.** barakocms.com and any other site consume its exports, so removing or changing an export, a component prop or a config key is a breaking change under semver. Old helpers stay as thin wrappers until a major release.
 - **The API bodies it reads carry their own `contract` integer** (the Pages module's navigation and resolve). A body outside the supported range degrades, for example to no menu, and never stops a public site.
 
-## The renderer computes nothing
+## Rules live in barakoCMS
 
-- **Rules live in barakoCMS** (D20, D22). Navigation is drawn in the order given and linked to the paths given; nothing here sorts, nests, filters by permission or derives a path.
-- **Identity, theme and holding mode come from the tenant's site settings at request time.** Nothing tenant specific is baked into the build.
+- **Rules live in barakoCMS** (D20, D22). The Pages module's navigation is drawn in the order given and linked to the paths given; nothing here sorts, nests, filters by permission or derives a path for it.
+- **What the renderer works out is presentation over rows it already read:** a docs tree's order and nesting from its fields, counts, sums, distinct counts and groups, a read time, and progress from two counts. It never decides who may read a row or whether an entry is published.
+- **On a request-time site, identity, theme and holding mode come from the tenant's site settings at request time,** and nothing tenant specific is baked into the published image. A build-time site (`deploy/<name>/`, `PRESS_DEPLOY`) and a derived image built with an overlay or plugins carry that site's own files; that is the site's image, not the published one.
 
 ## Tenancy and caching
 

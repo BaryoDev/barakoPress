@@ -1,7 +1,7 @@
 {
   "name": "barakopress",
   "version": "0.8.0",
-  "description": "A configurable blog engine for barakoCMS: Next.js server components, cached until the CMS says otherwise.",
+  "description": "The renderer for barakoCMS sites: pages from blocks, collections and docs trees, cached until the CMS says otherwise.",
   "license": "MIT",
   "author": "Arnel Robles",
   "type": "module",
@@ -73,8 +73,8 @@
   "keywords": [
     "barakocms",
     "headless-cms",
+    "renderer",
     "blog",
-    "blog-engine",
     "nextjs",
     "react-server-components",
     "rss",

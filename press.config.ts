@@ -11,7 +11,9 @@ import { plugins } from "./press.plugins";
  * to pin the container to one tenant or CMS_DEFAULT_TENANT for a host that has no tenant.
  *
  * A site that wants identity written here instead leaves `sites` out and passes `site`, as
- * barakocms.com does. That is a build-time site, and it behaves exactly as it did before this.
+ * deploy/press.baryo.dev/press.config.ts does. That is a build-time site, and it behaves exactly as it
+ * did before this. barakocms.com runs this request-time config, with its identity and theme in its
+ * CMS settings and its own layout from an overlay.
  *
  * `pages: ""` mounts the Pages module's page tree at the site root: app/[...path] renders the page at
  * each path, and the layout draws each tenant's menu in its header. `/` is whatever the tenant
