@@ -85,8 +85,8 @@ decision, not the engine's.
 | --- | --- | --- |
 | `app/page.tsx` | `default`, `generateMetadata` | `createHome(config, blocks)`, `createHomeMetadata(config)` |
 | `app/blog/[slug]/page.tsx` | `default`, `generateMetadata` | `createBlogPost(config)`, `createPostMetadata(config)` |
-| `app/authors/[slug]/page.tsx` | `default` | `createArchive(config, "author")` |
-| `app/categories/[slug]/page.tsx` | `default` | `createArchive(config, "category")` |
+| `app/authors/[slug]/page.tsx` | `default` | `createCollectionDetail(config, "author", { related: { collection: "post", via: "Author" } })` |
+| `app/categories/[slug]/page.tsx` | `default` | `createCollectionDetail(config, "category", { related: { collection: "post", via: "Category" } })` |
 | `app/feed.xml/route.ts` | `GET` | `createFeed(config)` |
 | `app/sitemap.ts` | `default` | `createSitemap(config)` |
 | `app/robots.ts` | `default` | `createRobots(config)` |
@@ -104,13 +104,17 @@ decision, not the engine's.
 `HomeCollection`, or the post index when it picked neither, which is what `createBlogIndex` did and
 still does for a site that mounts that instead.
 
+`via` is the post's field that references the author or category. `createArchive(config, "author")`
+makes that same call and is `@deprecated` since 0.7.0, as is `createArchiveStaticParams`, which is
+`createCollectionStaticParams`.
+
 Mount only what you want. Nothing requires anything else. The paths only have to agree with the
 `routes` in your config, which is what every generated link is built from.
 
 `createBlogPostPreview` replaces `createBlogPost` when you want `?preview=TOKEN` to render a draft.
 It reads `searchParams`, which forces the route dynamic, so a site using `output: "export"` takes
-`createBlogPost` and gives up preview. `createPostStaticParams` and `createArchiveStaticParams` exist
-for that static case.
+`createBlogPost` and gives up preview. `createPostStaticParams` and `createCollectionStaticParams`
+exist for that static case.
 
 A site that draws its own post page keeps preview by giving the detail route its own view, and maps
 the item with the engine's own mapping:
@@ -126,10 +130,13 @@ The binding report says why a binding on a page did not resolve, so an editor fi
 instead of asking whoever can read the server log. Ask for one page at a time, by `?slug=` or
 `?path=`, and each problem names the binding as typed, the reason (`unknown scope`, `unbound scope`
 or `no value`), and the block and field it came from. It reports the page as rendered, not as
-stored, so a `{{item.X}}` outside a repeat is reported as an unbound scope. Give it the same `query`
-option the page route has: off, which is the default, a `{{query.X}}` is an unbound scope for every
-visitor and the report says so, and a report that resolved one anyway would tell an editor a field
-works where it does not. It is never anonymous:
+stored, so a `{{item.X}}` outside a repeat is reported as an unbound scope. Give it the `query`
+option the page's route works out to. `createPage` and `createHome` default it by where they are
+mounted: off under a request-time site's `app/%5Fpress/[site]`, where a `{{query.X}}` is an unbound
+scope for every visitor, and on for a route outside it, such as a build-time site's
+`app/[...path]`. The report defaults to off wherever it is mounted, so for a page on a route outside
+the tenant segment pass `{ query: true }`, or the report calls a `{{query.X}}` that works on the page
+an unbound scope. It is never anonymous:
 the caller presents the tenant's key as `Authorization: Bearer`, derived from `PRESS_SECRET` and
 printed by `barakopress bindings-key <tenant>`. Answers are never cached.
 
@@ -193,12 +200,16 @@ routes match, the longer one wins.
 
 A request-time site cannot add a route file per tenant, so the root catch-all from the pages section
 also serves every collection with a route: its index at the route, and an item one segment below. A
-route file wins where there is one. A collection's first segment is reserved from pages at the root.
+route file wins where there is one. A collection's route, and every path below it, is reserved from
+pages at the root. A route of one segment reserves that segment; a deeper one is matched segment by
+segment, so a collection at `/docs/modules` leaves `/docs/guides/start` to a page. A collection with
+`index: false` frees its route's own path for a page, the blog's `/blog` included, and keeps what
+is below it. See [Reserved slugs](#pages-and-navigation-from-the-pages-module) for what is never freed.
 
 A detail page lists the items of the first collection that references it, so `/departments/cardiology`
-lists its doctors, the way an author's archive lists their posts. `listRelated(config, "doctors",
-department, { via: "Department" })` returns the same list; `listRelated(config, post)` still returns
-related posts by semantic search.
+lists its doctors, the way an author's archive lists their posts. `listCollection(config, "doctors",
+{ filter: { Department: "cardiology" } })` returns the same list. `listRelated`, which did this and
+the semantic search below for posts, is `@deprecated` since 0.7.0.
 
 With `related: "semantic"` it lists the items of its own collection nearest it by meaning instead, so
 an agency's case study gets the band a post has. That needs the CMS AI module: without it the search
@@ -267,7 +278,11 @@ and a style for the same option wins field by field. A build-time site passes `o
 
 `Card` and `ItemView` are exported for a site that wants its own page, and `Card` still takes a `post`.
 `getItem`, `listCollection` and `getGlobals(config)`, the tenant's settings entry as stored, are
-exported too.
+exported too, with `getItemPreview(config, key, slug, token)` for a draft read uncached,
+`listAllCollection(config, key, { limit })` for every item a page at a time up to `limit` (it says
+whether it stopped short), and `toItem(config, key, entry)`, which maps a stored entry through the
+collection's field map. `toPost`, `listPosts`, `getPost`, `getPostPreview` and `listPostsBy` are
+`@deprecated` since 0.7.0 in favour of these.
 
 **A long-form layout.** `layout: "article"` draws an item as a reading column: a back link, the title
 and standfirst, a byline from the collection's first reference, the date, a read time worked out from
@@ -335,8 +350,8 @@ which matches only over the fields a type publishes, so a draft or a field held 
 delivery can never come back. `createCollectionIndex(config, key, { search: true })` answers `?q=` with
 what matched instead of the index; that reads the query, so the route is dynamic and `output: "export"`
 refuses it, which is why it is off unless asked for. The box is a `form`, the results are links, and
-the keyboard handling on top ("/" to focus, the arrow keys to walk the results, escape to clear) is the
-one client component in the package. The root catch-all answers `?q=` on a collection index too, but
+the keyboard handling on top ("/" to focus, the arrow keys to walk the results, escape to clear) is a
+client component, one of three in the package with the filter bar and the header's menu. The root catch-all answers `?q=` on a collection index too, but
 only where the route may be dynamic: a request-time site rewrites to a kept route, and a kept route
 asking for the query fails rather than bailing out, so there the index lists and a page of blocks
 holding the `search` block is where a reader searches.
@@ -496,9 +511,14 @@ export const revalidate = 300;
 - **Reserved slugs.** Next answers a static route before a catch-all, so a root page slugged `blog`
   or `feed.xml` would silently never render. At the root mount, a path whose first segment is
   reserved is a 404 and is never asked for, and it is left out of the sitemap and static params with
-  a warning. The list is the first segment of each configured route plus `api`, `feed.xml`,
-  `sitemap.xml`, `robots.txt`, `_next`, `_share` and `favicon.ico`; `reservedSlugs` adds to it. Give
-  barakoCMS the same list as `Modules:Pages:ReservedSlugs` and an editor is refused the slug on save.
+  a warning. The list is `api`, `feed.xml`, `sitemap.xml`, `robots.txt`, `_next`, `_press`,
+  `_share`, `%5fshare` and `favicon.ico`, plus each configured route that is one segment long;
+  `reservedSlugs` adds to it. A deeper route reserves itself and what is below it, matched segment
+  by segment, not its first segment. A one-segment route whose collections all have `index: false`
+  is freed at exactly that path unless something else holds the slug: the engine's own names above,
+  a `reservedSlugs` entry or a tenant's `ReservedSlugs`, or the blog's author and category routes.
+  The resolved config lists those as `heldSlugs`. Give barakoCMS the same list as
+  `Modules:Pages:ReservedSlugs` and an editor is refused the slug on save.
 - **Contract.** Both bodies carry `contract`, and this renderer reads the range in `PAGES_CONTRACT`
   (1 to 1). A body outside it logs a warning and reads as absent: no menu, no page. A public site does
   not stop rendering because a menu shape moved.
@@ -543,7 +563,9 @@ Blocks come in four layers.
 **Layout primitives** hold blocks and no content: `section` (a tone, a width and a padding step),
 `stack`, `row` (side by side, wrapping on a phone), `grid`, `flow`, `panel` (a card with a tone and
 a frame), `stickyBar` (a band that stays put while the page moves under it, at the top or the
-bottom), `spacer` and `divider`.
+bottom), `spacer`, `divider`, and `tabGroup` with `tabPanel` (tabs that need no script: each
+`tabPanel` in a `tabGroup` is a `label` in the strip and the panel it opens, the panels that share
+a `group` open one at a time, and `open` picks the one shown first).
 
 A `stack` or a `panel` given an `href` is a link, the whole of it: a card whose face goes somewhere.
 A site path is drawn with Next's `Link`, anything with a scheme as a plain anchor, and the address is
@@ -659,8 +681,9 @@ block renders only when its type is registered and every prop passes its field. 
 value fails the whole block, a `url` must pass the same check markdown links do, and a component
 never receives a prop its fields did not declare. A page reads at most 400 blocks in total, nested
 ones included, and ten levels deep. The count is spent on every block the binder walks through as
-well as every one that comes out, so a band from the library costs eight or ten of it, and a page
-that goes over loses its tail with nothing said. What a `repeat` draws for its rows is counted
+well as every one that comes out, so a band from the library costs eight or ten of it. A page that
+goes over renders what fits, drops the rest, and says so once in the server log (`blocks: a page
+storing N blocks held more than 400 ...`). What a `repeat` draws for its rows is counted
 against a budget of its own; see `mode: "all"` under Bindings.
 
 **Lists and groups.** A block that needs several of one thing declares a `list`, and a thing made
@@ -935,7 +958,7 @@ one to look different saves its own under the same name and that one wins.
 | `hero` | The band at the head of a page | heading, body, image, imageAlt, primaryLabel, primaryHref, secondaryLabel, secondaryHref, tone, columns, align, padding |
 | `band` | Copy with one call to action | tone, heading, body, label, href, align, padding, width |
 | `statBand` | A row of figures | heading, tone, columns, padding, items |
-| `cardGrid` | Cards from a collection | heading, collection, filterField, filterValue, empty, tone, columns, padding, hueRotate, option |
+| `cardGrid` | Cards from a collection, typed in place, or both | heading, collection, filterField, filterValue, empty, tone, columns, padding, hueRotate, option, items |
 | `peopleGrid` | People from a collection, typed in place, or both | heading, collection, filterField, filterValue, role, tone, columns, padding, items |
 | `timeline` | Dated entries | heading, tone, padding, width, items |
 | `steps` | Numbered entries | heading, tone, padding, width, items |
@@ -956,10 +979,13 @@ one to look different saves its own under the same name and that one wins.
 | `keyValueRow` | One fact | label, value |
 | `codeTab` | One more way to run it | label, code, language, selectLabel, group |
 | `faqItem` | One question and its answer | question, answer, tone |
+| `card` | One card typed in place | title, tag, body, meta, icon, tint, linkLabel, href, image, imageAlt |
 
 The blocks in the second half go in the first half's slots: stats in a `statBand`, entries in a
 `timeline`, `disclosure` blocks in `tabs`, `codeTab` blocks in `codeTabs`, `faqItem` blocks in
-`faq`. A card grid reads its entries through `{{item.Title}}`, `{{item.Summary}}`,
+`faq`, and `card` blocks in a `cardGrid`'s `items`, after any cards its collection draws. A
+`card`'s `tint` is a colour written out, and it colours the icon. A card grid reads its entries
+through `{{item.Title}}`, `{{item.Summary}}`,
 `{{item.Date | date}}` and `{{item.Href}}`, so it works against whatever the tenant calls those
 fields, and it takes the collection as a prop rather than knowing any name. `{{item.Href}}` is the
 collection's `href` field when it has one, and the item's own route otherwise, so a collection with
@@ -974,8 +1000,10 @@ with its own. It is off by default, so a grid that did not ask for it draws what
 `progressList` reads its figure through `{{item.Progress}}`, which is the collection's `progress`
 field role: the tenant says which of its own fields holds a number from 0 to 100. Where a source
 gives two counts instead, `progressCount` and `progressTotal` carry those through and the bar does
-the division, so a GitHub milestone's open and closed issues need no field computing a percentage
-first. `changelogList` does not group by itself, because grouping means knowing which field holds
+the division. It needs a total: there is no field role for what is left, so a source that counts
+closed and open issues, as a GitHub milestone does, needs a field holding the total before
+`progressList` can draw it. Mapping the open count to `progressTotal` draws the wrong bar. A
+`progressBar` placed on its own takes `remaining` in place of `total`. `changelogList` does not group by itself, because grouping means knowing which field holds
 the kind and that is the tenant's field name. One band per kind with `filterField` and `filterValue`
 is the grouping, and the chip on each entry is the option's own word.
 
@@ -1146,14 +1174,20 @@ per request, so when a value was read depended on which value it was.
 | `CMS_URL` | Where the delivery API is. `cmsUrl` in the config wins |
 | `CMS_TENANT` | Pins the process to one tenant. `tenant` in the config wins |
 | `CMS_DEFAULT_TENANT` | The tenant for a host the CMS does not know. `sites.defaultTenant` wins |
-| `CMS_RENDERER_KEY` | Sent to the CMS when a share link is redeemed. See [Share links](#one-build-many-sites) |
+| `CMS_RENDERER_KEY` | Sent to the CMS as `X-Barako-Renderer-Key` on every delivery read when the CMS URL is https or loopback, and when a share link is redeemed, so the CMS rate limits by renderer. See [Share links](#one-build-many-sites) |
 | `PRESS_CONSOLE_ORIGINS` | Browser origins allowed to read the block schema, comma separated |
 | `PRESS_SECRET` | The HMAC key for everything this renderer signs. See [One secret](#one-secret) |
 | `REVALIDATE_SECRET` | The webhook key before `PRESS_SECRET`, read only while that is unset |
 | `PRESS_PREVIEW_SECRET` | The share key before `PRESS_SECRET`, read only while that is unset |
+| `PRESS_FONT_ORIGINS` | The origins a font stylesheet may be linked from. Unset, Google Fonts only. See [One build, many sites](#one-build-many-sites) |
 
 Values are used exactly as the environment has them, untrimmed. A secret with a trailing space is a
 different HMAC key, so trimming one here would stop a webhook that verifies today.
+
+The reference app's `Dockerfile` also takes two build arguments, read when the image is built and
+not by the package: `PRESS_DEPLOY` names a directory under `deploy/` to lay over the reference app,
+and `PRESS_TRAILING_SLASH=true` sets Next's `trailingSlash` in `next.config.ts`. See
+[The reference deployment](#the-reference-deployment-in-this-repository).
 
 **A site is build time or request time.** Without `sites`, identity is build time: the index, the
 feed, the sitemap and robots are prerendered, so anything *your own* `press.config.ts` reads from the
@@ -1218,9 +1252,11 @@ The settings are the singleton `site` type from barakoCMS `docs/site-settings.md
 (`POST /api/content-types/blueprints/site`, then publish its one entry). The engine reads `Name`,
 `Tagline`, `Url`, `Locale`, `Logo`, `LogoAlt`, `FooterLogo`, `Favicon`, `ShareImage`, `Copyright`,
 `Colors` (the theme slots), `Fonts` (a family name per role, and the stylesheet that loads it),
-`Radii`, `Layout`, `Tokens` and `Tones` (see [Tokens and tones](#tokens-and-tones)), `StyleRecipes` (see [Style recipes](#style-recipes)), `TopBar`, `HeaderLinks`, `MenuLinks`, `HeaderActions`, `FooterColumns`, `SocialLinks`, `HeaderPath`,
+`Radii`, `Layout`, `Space` and `Text` (the spacing and type scales), `Tokens` and `Tones` (see [Tokens and tones](#tokens-and-tones)), `StyleRecipes` (see [Style recipes](#style-recipes)), `TopBar`, `HeaderLinks`, `MenuLinks`, `HeaderActions`, `FooterColumns`, `SocialLinks`, `HeaderPath`,
 `HeaderTone`, `FooterPath`, `FooterTone`, `AssetsAsSupplied`, `LogoAsSupplied`, `LogoClearSpace`,
-`PageSizes`, `ReservedSlugs`, `Labels`, `HomePath` and `HomeCollection`. `Collections`, `OptionStyles` and `OptionColors` are read as the collections section
+`PageSizes`, `ReservedSlugs`, `Labels`, `HomePath`, `HomeCollection`, `Currency`, `EmbedHosts`,
+`Presets`, `Plugins` (see [Plugin packages](#plugin-packages)), and `Mode`, `HoldingPath` and
+`HoldingMessage` (see Holding mode below). `Collections`, `OptionStyles` and `OptionColors` are read as the collections section
 describes. `Variants` are not rendered yet. Every value is checked for shape; one that fails, and any the
 entry leaves out, keeps the configured value, so a half-filled theme renders. A link is a path on the
 site or an absolute http or https URL. Set `Url`: without it the feed and sitemap fall back to the
@@ -1269,6 +1305,15 @@ some collection has `feed` on, so a clinic with no posts stops advertising an em
 | `empty`, `emptyNote` | The notice on an index with nothing published |
 | `failed`, `failedNote` | The notice on an index whose read failed |
 | `shareInvalid` | `This link is not valid or has expired.` |
+| `shareTitle` | `Opening a share link`: the title of the page a share link lands on |
+| `shareNoScript` | What that page says to a browser that runs no script |
+| `shareOpening` | `Opening the site.`: what it shows while the link is redeemed |
+| `search` | `Search`: the label and placeholder on the search box |
+| `searchEmpty` | `Nothing matches that.`: a search that matched nothing. A tree's search box puts what was typed in place of `{query}` |
+| `previous`, `next` | `Previous`, `Next`: a tree page's links along the reading order |
+| `editPage` | `Edit this page`: the link to where a tree page is written |
+| `contents` | `Contents`: the collapsed tree sidebar on a phone |
+| `products` | `Products`: the label on a tree's product switcher |
 | `openMenu`, `closeMenu` | `Open menu`, `Close menu`: the header's phone menu button |
 | `menu` | `Menu`: the name of the phone menu's links |
 | `submenu` | `{label} links`: the button beside a header link with children, `{label}` its label |
@@ -1489,7 +1534,7 @@ other. It needs one setting:
 | Variable | What |
 | --- | --- |
 | `PRESS_SECRET` | The HMAC key, at least 32 characters, for example `openssl rand -base64 48`. Read per request. Unset or shorter, no session is issued or accepted and everyone gets the holding page. Every instance behind one domain needs the same value. `PRESS_PREVIEW_SECRET` is read in its place when `PRESS_SECRET` is unset. See [One secret](#one-secret) |
-| `CMS_RENDERER_KEY` | Optional. Sent to barakoCMS as `X-Barako-Renderer-Key` when a link is redeemed, and must match the renderer key barakoCMS is configured with. Read per request and never logged. Unset, no key header is sent |
+| `CMS_RENDERER_KEY` | Optional. Sent to barakoCMS as `X-Barako-Renderer-Key` when a link is redeemed, and on every delivery read when the CMS URL is https or loopback, and must match the renderer key barakoCMS is configured with. Read per request and never logged. Unset, no key header is sent |
 
 **Redemption is rate limited per tenant and visitor.** Every redemption leaves this container from the
 same address, so barakoCMS needs the visitor's address to tell visitors apart. Name the header a
@@ -1532,9 +1577,11 @@ export const config = defineConfig({
 });
 ```
 
-Each group merges over the defaults on its own, so setting one colour keeps the other seventeen. The
-groups are `colors` (18 values), `fonts` (`heading`, `body`, `mono`), `radii` (`panel`, `control`,
-`pill`) and `layout` (`prose`, `wide`, `gutter`). `DEFAULT_THEME` is exported if you want to read the
+Each group merges over the defaults on its own, so setting one colour keeps the other eighteen. The
+groups are `colors` (19 role slots, plus six older names kept in step with them until 2.0.0), `fonts`
+(`heading`, `body`, `mono`), `radii` (`panel`, `control`, `pill`), `layout` (`prose`, `wide`,
+`gutter`, `columnMin`), `space` and `text`. The theme also carries `fontSources`, `asSupplied`,
+`tokens`, `tones` and `recipes`, covered below. `DEFAULT_THEME` is exported if you want to read the
 values or build a palette from them.
 
 Loading the faces is the site's job, not the engine's. The default theme names Sora, Manrope and
@@ -1556,7 +1603,9 @@ stylesheet named in `theme.fontSources` when the face is not loaded from there, 
 ```
 
 They are not a way to compose a post out of arbitrary sections. Anything that has to sit between two
-paragraphs belongs to the block model, which is issue #6, because only the body knows where it goes.
+paragraphs belongs in blocks (see [Pages built from blocks](#pages-built-from-blocks)), because only
+the body knows where it goes. `PostView` is `@deprecated` since 0.7.0. `ArticleView`, what `ItemView`
+draws for a collection with `layout: "article"`, takes the same three slots.
 
 **A theme that draws the page itself.** A deployment that ports an existing design registers its own
 blocks under the built-in type names and ships its own stylesheet. Two things would still be the
@@ -1790,9 +1839,10 @@ tenant's, and a white box behind the mark would itself be the boxing the rule fo
 
 ### Related posts, if the CMS has the AI module
 
-`listRelated` asks `BarakoCMS.AI` for the posts closest to this one and hands them to `PostView`,
-which renders a band of cards with the similarity score on each. `createBlogPost` already does the
-call, so a site using the factory gets it for nothing.
+`createBlogPost` asks `BarakoCMS.AI` for the posts closest to this one and renders a band of cards
+with the similarity score on each, so a site using the factory gets it for nothing. Any collection
+gets the same band with `related: "semantic"`, and `listRelatedItems(config, key, item)` returns the
+list on its own. `listRelated`, the post-only call, is `@deprecated` since 0.7.0.
 
 Nothing about it is required. A CMS without the module answers 404, a type that is not publicly
 deliverable answers 404, a module installed but not enabled answers an empty list, and an
@@ -1919,16 +1969,20 @@ holding `/` is never holding one visitor's gate for the next visitor.
 
 ### One secret
 
-`PRESS_SECRET` keys everything this renderer signs: each tenant's webhook key and each share session
-cookie. Every signature puts its purpose first in what it signs (`revalidate.` or `press-share.`), so
-one made for one purpose never verifies as another. It is read per request and has one rule for every
+`PRESS_SECRET` keys everything this renderer signs: each tenant's webhook key, each tenant's binding
+report key and each share session cookie. A key derived from it puts its purpose first in what it
+signs (`revalidate.`, `bindings.` or `press-share.`), so one derived for one purpose never verifies as
+another. Webhook keys are derived per tenant on a request-time site, binding report keys when the
+tenant is pinned or resolved per request. Elsewhere `PRESS_SECRET` itself is the key, so a
+build-time site with no pinned tenant verifies its webhook and its binding report with the same
+value. It is read per request and has one rule for every
 purpose: at least 32 characters, for example `openssl rand -base64 48`.
 
-| When `PRESS_SECRET` is | Webhooks | Share sessions |
-| --- | --- | --- |
-| 32 characters or more | verified with it | signed with it |
-| set but shorter | refused with 503 | none issued or accepted |
-| unset | `REVALIDATE_SECRET`, as in 0.3.0 | `PRESS_PREVIEW_SECRET` |
+| When `PRESS_SECRET` is | Webhooks | Share sessions | Binding reports |
+| --- | --- | --- | --- |
+| 32 characters or more | verified with it | signed with it | verified with it |
+| set but shorter | refused with 503 | none issued or accepted | refused with 503 |
+| unset | `REVALIDATE_SECRET`, as in 0.3.0 | `PRESS_PREVIEW_SECRET` | refused with 503, since there is no older name |
 
 The older names are read only when `PRESS_SECRET` is unset, so a site that set them keeps working, and
 the keys derive byte for byte as before, so a key already pasted into a tenant's workflow keeps
@@ -2005,7 +2059,8 @@ because an open cache-purge endpoint is a free denial of service.
 
 The `blog` blueprint barakoCMS ships: `post`, `category`, `author`, `page`. Apply it with
 `POST /api/content-types/blueprints/blog`. Field names are PascalCase because that is what the
-blueprint creates, and `src/cms.ts` is the only file in the package that knows any field name.
+blueprint creates. The default names live in `src/config.ts`, the blueprint's field map and
+`REFERENCE_FIELDS`, and a site's config replaces any of them.
 
 Only published entries of a type opted into public delivery appear. Ordering is asked of the API
 rather than applied to the page that came back, because sorting one page of results gives you the
@@ -2050,6 +2105,12 @@ requests per delivery and tripled what an attacker got from one captured signatu
 does, so the package cannot quietly depend on something only its own repository has. It comes with a
 container, a compose stack with Caddy terminating TLS, and a BaryoVM release manifest.
 
+The container is published as `ghcr.io/baryodev/barako-press`, one manifest list for linux/amd64 and
+linux/arm64. Each release tag is pushed as its version (`0.8.0`) and `latest`, and each push to
+master as `dev` and `dev-<commit sha>` (`.github/workflows/publish.yml`). It is this reference app
+as built here: request-time identity, no overlay and no plugins. A site with its own theme or blocks
+builds from the same source; see the overlay and [Plugin packages](#plugin-packages) below.
+
 ```bash
 cp .env.example .env      # point CMS_URL at your instance, set PRESS_SECRET
 npm install
@@ -2062,7 +2123,7 @@ Deploying that stack to a VM:
 baryovm vm provision blog1                     # or bring your own VM
 baryovm vm bootstrap blog1                     # installs Docker, and only Docker
 baryovm vm harden blog1                        # sshd policy and fail2ban
-baryovm stack add blog --vm blog1 --sudo --release-file ./baryovm.release.json
+baryovm stack add blog --vm blog1 --sudo --path /opt/barakopress --release-file ./baryovm.release.json
 baryovm stack release blog
 ```
 
@@ -2123,10 +2184,14 @@ URLs end in a slash; configure its webhook URL with the slash too (see the reval
 Extra blocks go in the same way, as a `plugins` build context: see
 [Plugin packages](#plugin-packages).
 
-One thing to expect on a first release: the image prerenders during `docker build`, where the CMS is
-not reachable, so the index, the feed and the sitemap are built empty and correct themselves one
-revalidate window later. That is why the manifest's `verify` greps the page rather than reading the
-status code, and why it waits long enough to see it happen.
+What a first release looks like depends on the config. The reference app resolves its tenant per
+request, so its build renders nothing from the CMS, and `baryovm.release.json`'s `verify` checks that
+the site, the feed, the sitemap and the API's `/health` answer (`curl --fail`) and that the revalidate
+endpoint answers 401. A build-time site under `deploy/<name>/` prerenders during `docker build`,
+where the CMS is not reachable, so its index, feed and sitemap are built empty and correct themselves
+one revalidate window later. That is why `baryovm.site.json`'s `verify` greps the home page, the
+feed and the sitemap for content rather than reading the status code, and why it retries 26 times,
+15 seconds apart.
 
 ## The look check
 

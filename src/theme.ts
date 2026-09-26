@@ -53,17 +53,17 @@ export interface ThemeColors {
     /** Code, the one thing in a palette named after what it marks up rather than where it sits. */
     code: string;
     success: string;
-    /** @deprecated 0.6.0, removed in 2.0.0. Use `accentBorderStrong`; the two are kept in step. */
+    /** @deprecated 0.7.0, removed in 2.0.0. Use `accentBorderStrong`; the two are kept in step. */
     accentTintBorderStrong: string;
-    /** @deprecated 0.6.0, removed in 2.0.0. Use `inverse`; the two are kept in step. */
+    /** @deprecated 0.7.0, removed in 2.0.0. Use `inverse`; the two are kept in step. */
     darkPanel: string;
-    /** @deprecated 0.6.0, removed in 2.0.0. Use `inverseChrome`; the two are kept in step. */
+    /** @deprecated 0.7.0, removed in 2.0.0. Use `inverseChrome`; the two are kept in step. */
     darkPanelChrome: string;
-    /** @deprecated 0.6.0, removed in 2.0.0. Use `inverseInk`; the two are kept in step. */
+    /** @deprecated 0.7.0, removed in 2.0.0. Use `inverseInk`; the two are kept in step. */
     darkPanelInk: string;
-    /** @deprecated 0.6.0, removed in 2.0.0. Use `inverseAccent`; the two are kept in step. */
+    /** @deprecated 0.7.0, removed in 2.0.0. Use `inverseAccent`; the two are kept in step. */
     darkPanelAccent: string;
-    /** @deprecated 0.6.0, removed in 2.0.0. Use `code`; the two are kept in step. */
+    /** @deprecated 0.7.0, removed in 2.0.0. Use `code`; the two are kept in step. */
     codeGreen: string;
 }
 

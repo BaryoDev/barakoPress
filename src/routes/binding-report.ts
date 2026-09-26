@@ -33,11 +33,13 @@ import { parseOrigins, type BlockSchemaRouteOptions } from "./block-schema.js";
  * the key that reads one tenant's problems reads no other tenant's and cannot purge anything. An
  * operator prints it with `barakopress bindings-key <tenant>`.
  *
- * The query is off unless the page route has it on. `createPage` hands blocks the request's query
- * only when it is mounted with `{ query: true }`, so a report that always supplied one would resolve
- * a `{{query.X}}` the visitor's page leaves unbound, and say a binding works where it does not. A
- * report that lies in that direction is worse than no report, so this takes the same option and
- * defaults it the same way the page route's own default works out for a kept route.
+ * The query is off unless the caller turns it on. `createPage` hands blocks the request's query when
+ * it is mounted with `{ query: true }`, and by default on a route outside the tenant segment, but
+ * not on the kept `[site]` route a request-time site renders through. A report that always supplied
+ * one would resolve a `{{query.X}}` a kept page leaves unbound, and say a binding works where it
+ * does not. A report that lies in that direction is worse than no report, so this takes the same
+ * option and defaults it the way the page route's default works out for a kept route. A build-time
+ * site whose pages read the query passes `{ query: true }` here too.
  *
  * Nothing here changes what a visitor gets. The page is bound a second time, for this caller, and
  * the answer is never cached.
@@ -47,10 +49,11 @@ export interface BindingReportOptions extends BlockSchemaRouteOptions {
     /** Defaults to PRESS_SECRET. A request-time site derives each tenant's key from it. */
     secret?: string;
     /**
-     * Whether the page being reported on is mounted with `createPage(config, blocks, { query: true })`.
-     * Off by default, which is what a page route without it does: a `{{query.X}}` on such a page is
-     * an unbound scope for every visitor, and the report has to say so. On, the report's own query
-     * string past `path` and `slug` is what the bindings read.
+     * Whether the page being reported on is handed the request's query. Off by default, which is what
+     * a page on a request-time site's kept `[site]` route gets: a `{{query.X}}` there is an unbound
+     * scope for every visitor, and the report has to say so. A `createPage` or `createHome` route
+     * outside the tenant segment reads the query unless told not to, so a report for one sets this.
+     * On, the report's own query string past `path` and `slug` is what the bindings read.
      */
     query?: boolean;
     /** The most problems one answer spells out. */

@@ -1,10 +1,16 @@
 /*
  * The one local secret this renderer keys its signatures with (barakoPress #50).
  *
- * PRESS_SECRET keys every signed thing, and each thing puts its own purpose label first in what it
- * signs (`revalidate.` for a tenant's webhook key, `press-share.` for a share session cookie), so a
- * signature made for one purpose never verifies as another. When PRESS_SECRET is unset, each purpose
- * reads the variable it used before, so a deployment that set those keeps working unchanged.
+ * PRESS_SECRET keys every signed thing. A share session cookie always signs `press-share.` first. A
+ * tenant's webhook key is derived under `revalidate.` on a request-time site (`sites`), and its
+ * binding report key under `bindings.` when the tenant is pinned or resolved per request, so a key
+ * derived for one purpose never verifies as another. Where nothing is derived, PRESS_SECRET itself is
+ * the key: the webhook of a site without `sites`, and the binding report of a site with no tenant.
+ * A build-time site with no pinned tenant therefore verifies both with the same value. The key
+ * `barakopress bindings-key` prints is always a derived one, and opens neither there.
+ *
+ * When PRESS_SECRET is unset, each purpose reads the variable it used before, so a deployment that
+ * set those keeps working unchanged.
  *
  * The values come from `readEnv` like every other environment value (barakoPress #51), untrimmed:
  * a secret with a trailing space is a different HMAC key, so trimming it would stop every webhook

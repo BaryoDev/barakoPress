@@ -34,7 +34,7 @@ way a consumer's are.
 src/config.ts        the seam. Type names, field map, routes, page sizes, identity, cache tag
 src/site.ts          request-time sites: host to tenant, settings to identity and theme
 src/delivery.ts      HTTP against the public delivery API. Takes config, reads no globals
-src/cms.ts           maps a stored entry onto what a page renders. The only place field names live
+src/cms.ts           maps a stored entry onto what a page renders, through the field names config holds
 src/markdown.ts      markdown to HTML, treating the input as untrusted
 src/screens/*.tsx    factories that take config and return a page component
 src/routes/*.ts      factories for the feed, sitemap, robots and the revalidate endpoint
@@ -67,12 +67,11 @@ What the build may not do, because of what is exported:
 - **No bundler.** `tsc` transpiles per file, one in and one out. The module graph is the contract
   here: `next/*` and `react` must stay external so the consumer's copies are what run, and the
   export names are what a consumer writes in its own route files. A bundler that inlines or reorders
-  that hands Next something it cannot wire up. It also keeps the door open for the first
-  `"use client"` or `"use server"` file. There is no directive anywhere in `src` today, so that half
-  is a rule for the file that adds one rather than a thing currently breaking: a directive is a file
-  level marker Next reads off the module it resolves, and a bundler is free to move it.
-- **No minifying or mangling.** Same reason. An export name is load-bearing, and a directive would
-  be.
+  that hands Next something it cannot wire up. It also keeps the `"use client"` directive where Next
+  looks for it. Three files in `src` carry one (`src/blocks/search-keys.tsx`,
+  `src/blocks/filter-bar.tsx`, `src/screens/header-menu.tsx`): a directive is a file level marker
+  Next reads off the module it resolves, and a bundler is free to move it.
+- **No minifying or mangling.** Same reason. An export name is load-bearing, and so is a directive.
 - **Every relative import carries `.js`, and the reason is narrower than it looks.** The package is
   `type: module`, so `./config.js` is the specifier ESM asks for and `./config` is not, and `tsc`
   never rewrites a specifier. What this does **not** buy is a default Next build. Measured on Next

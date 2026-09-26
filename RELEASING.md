@@ -1,7 +1,8 @@
 # Releasing
 
-barakoPress publishes to npm as [`barakopress`](https://www.npmjs.com/package/barakopress). Every
-release after the first is a tag, and no token is stored anywhere.
+barakoPress publishes to npm as [`barakopress`](https://www.npmjs.com/package/barakopress), and as
+the container image `ghcr.io/baryodev/barako-press`. Every release after the first is a tag, and no
+token is stored anywhere.
 
 ```bash
 # bump "version" in package.json, commit it, then
@@ -13,6 +14,20 @@ git push origin v0.2.1
 over OIDC, npm checks the request came from this repository and this workflow file, and mints a
 short-lived credential itself. Provenance is attached automatically, which is why there is no
 `--provenance` flag in the workflow.
+
+The same tag publishes the container image. `.github/workflows/publish.yml` builds the reference app
+into `ghcr.io/baryodev/barako-press` on an amd64 and an arm64 runner, joins the two into one manifest
+list, and refuses to publish unless the pushed manifest carries both. The tags it pushes:
+
+| Trigger | Tags |
+| --- | --- |
+| a `v*` tag push | the version (`0.8.0`) and `latest` |
+| a push to master | `dev` and `dev-<commit sha>` |
+| a manual run with `tag` set, e.g. `v0.7.0` | that version only, built from the tag's source; `latest` does not move |
+
+The manual run is for a release that has no image, which is how `0.7.0` got one: it was tagged before
+this workflow existed. Run it from master, since a run started on the old tag would use that tag's
+copy of the workflow, which does not exist.
 
 ## One time, before any of that works
 

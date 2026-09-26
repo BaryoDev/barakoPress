@@ -5,8 +5,8 @@
  * so the module graph has to survive the build: next/* and react stay external so the consumer's
  * copies are the ones that run, and export names stay what the consumer writes. A bundler is also
  * free to move a "use client" or "use server" directive, which is a file level marker Next reads
- * from the module it resolves, so the build has to leave the first one that arrives where it is.
- * There is no directive in src today. Transpiling per file leaves all of it alone.
+ * from the module it resolves, so the build has to leave each one where it is. Three files in src
+ * are "use client". Transpiling per file leaves all of it alone.
  *
  * Every relative import in src carries a `.js` extension. CLAUDE.md section 2a has the measured
  * reason and its limits: a default Next build resolves the extensionless form fine under both
