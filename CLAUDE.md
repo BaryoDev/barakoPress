@@ -177,3 +177,18 @@ anywhere, in code, comments, commits or docs. CI fails on one.
 
 Comments earn their place by explaining a non-obvious why, an invariant the types cannot express,
 or a decision that will look wrong later. Most of the comments in `src/` are the second kind.
+
+## 8. How work is done here
+
+This repository follows the [lean agent method](https://github.com/arnelirobles/lean-agent-method).
+
+- Search open issues before filing. If one covers the area, add to its Covers list instead.
+- One ticket is one agent pass, written agent-ready (the org's Agent-ready template): Goal, Where,
+  Covers, Done when, Risks, Constraints, Out of scope.
+- Scripts, not instructions: run what CI runs (`npm run typecheck`, `npm test`, `npm run build`),
+  and `scripts/needs-review.sh` for what a reviewer should read. Anything reasoned through twice
+  becomes a script.
+- A bug fix ships with a test that failed before the fix.
+- Every change gets an adversarial review by a separate agent, and findings go back to the agent
+  that wrote the change.
+- After a batch merges, run the retro and propose method changes with evidence.
