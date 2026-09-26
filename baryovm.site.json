@@ -10,6 +10,9 @@
     "package-lock.json",
     "next.config.ts",
     "press.config.ts",
+    "press.plugins.ts",
+    "proxy.ts",
+    "scripts/plugins.mjs",
     "tsconfig.json",
     "tsconfig.build.json",
     "deploy/press.baryo.dev/"
