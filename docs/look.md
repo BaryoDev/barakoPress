@@ -30,12 +30,15 @@ stylesheet named in `theme.fontSources` when the face is not loaded from there, 
 **Three slots**, for what belongs to the site rather than the engine:
 
 ```tsx
+// headerBackdrop: decoration behind the header band
+// beforeBody: a wide band under the header
+// afterBody: the foot of the reading column
 <PostView
   config={config}
   post={post}
-  headerBackdrop={<Bean />}      {/* decoration behind the header band */}
-  beforeBody={<RoleStrip />}     {/* a wide band under the header */}
-  afterBody={<Newsletter />}     {/* the foot of the reading column */}
+  headerBackdrop={<Bean />}
+  beforeBody={<RoleStrip />}
+  afterBody={<Newsletter />}
 />
 ```
 

@@ -47,8 +47,8 @@ Each read also carries a backstop, 300 seconds by default. That is not for corre
 deployment where nobody ever created the webhook: without it their blog would be empty forever and
 nothing would say why. With it, a missing webhook degrades publishing from instant to a few minutes.
 
-**The cache invalidation is configuration, not code.** In barakoBrew: a workflow on your post content
-type, trigger `Published`, one Webhook action with the URL and a shared secret. Nothing is deployed
+**The cache invalidation is configuration, not code.** In barakoBrew: a workflow on each content type
+the site renders, trigger `Published`, one Webhook action with the URL and a shared secret. Nothing is deployed
 to change it.
 
 ## The render cache
@@ -127,9 +127,12 @@ and each tenant given its new key.
 ## Wiring the webhook
 
 1. Put a random value of at least 32 characters in `PRESS_SECRET` where your app runs.
-2. In barakoBrew, create a workflow on your post content type, event `Published`.
-3. Add a Webhook action with `Url` set to `https://your-site/api/revalidate` and `Secret` set to the
-   same value. On a site with `sites` configured, the `Secret` is the tenant's key instead, below.
+2. In barakoBrew, create a workflow for each content type the site renders, event `Published`. A
+   workflow matches one content type, so a site whose posts are an `article` type needs it on
+   `article`, and one on `post` never fires.
+3. Add a Webhook action to each with `Url` set to `https://your-site/api/revalidate` and `Secret`
+   set to the same value. On a site with `sites` configured, the `Secret` is the tenant's key
+   instead, below.
 
 ## One key per tenant
 
