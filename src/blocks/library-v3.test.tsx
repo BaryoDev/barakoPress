@@ -13,6 +13,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * nothing else, and what is asserted is that the page came out whole. A block this site could not
  * render is dropped silently, which is why every page also counts what it stored against what
  * resolved: a page that quietly lost its comparison table still renders, and still looks fine.
+ *
+ * These are the pages as they were stored for #24. The live barakocms.com pages have since taken
+ * blocks from the site's own plugin, and the site runs a derived image with an overlay (#166 to
+ * #170), so this proves the engine's blocks cover these five pages, not that the live site has no
+ * code of its own.
  */
 vi.mock("next/link", () => ({
     default: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
@@ -299,7 +304,7 @@ const PAGES: { name: string; blocks: unknown[] }[] = [
     { name: "community", blocks: community },
 ];
 
-describe("barakocms.com's pages assemble from blocks, with no site code", () => {
+describe("barakocms.com's five pages, as stored for #24, assemble from the engine's blocks", () => {
     it("has a page for each of the five, and names a block on every one", () => {
         expect(PAGES).toHaveLength(5);
         for (const page of PAGES) {
