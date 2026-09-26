@@ -1,6 +1,6 @@
 # Review rules
 
-Read by the adversarial-review skill (arnelirobles/lean-agent-method) before any code. Each rule is answered yes or no with a line.
+Read by the adversarial-review skill (arnelirobles/lean-agent) before any code. Each rule is answered yes or no with a line.
 
 ## Contract
 

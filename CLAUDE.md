@@ -180,7 +180,7 @@ or a decision that will look wrong later. Most of the comments in `src/` are the
 
 ## 8. How work is done here
 
-This repository follows the [lean agent method](https://github.com/arnelirobles/lean-agent-method).
+This repository follows the [lean agent](https://github.com/arnelirobles/lean-agent).
 
 - Search open issues before filing. If one covers the area, add to its Covers list instead.
 - One ticket is one agent pass, written agent-ready (the org's Agent-ready template): Goal, Where,
