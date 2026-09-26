@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.0 (unreleased)
+
+- `baryovm.release.json` and `baryovm.site.json` sync `scripts/plugins.mjs`, `press.plugins.ts` and
+  `proxy.ts`. A release to a fresh VM failed at `node scripts/plugins.mjs`, and a VM with an older
+  tree built with its old copies. `test/release-manifests.test.ts` works out what the image build
+  reads (the scripts the Dockerfile runs, Next's root files, and what they import) and fails when a
+  manifest leaves one out.
+
 ## 0.8.0 (2026-09-25)
 
 - The look check takes `maxDiffPixels`, a count of pixels a pair may differ by beside its ratio,
