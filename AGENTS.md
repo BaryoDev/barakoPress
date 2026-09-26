@@ -3,7 +3,7 @@ for the tool that reads it automatically rather than because it is only for that
 
 ## How work is done here
 
-This repository follows the [lean agent method](https://github.com/arnelirobles/lean-agent-method).
+This repository follows the [lean agent](https://github.com/arnelirobles/lean-agent).
 
 - Search open issues before filing. If one covers the area, add to its Covers list instead.
 - One ticket is one agent pass, written agent-ready (the org's Agent-ready template): Goal, Where,
