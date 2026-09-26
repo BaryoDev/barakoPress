@@ -2,8 +2,9 @@
  * The one local secret this renderer keys its signatures with (barakoPress #50).
  *
  * PRESS_SECRET keys every signed thing, and each thing puts its own purpose label first in what it
- * signs (`revalidate.` for a tenant's webhook key, `press-share.` for a share session cookie), so a
- * signature made for one purpose never verifies as another. When PRESS_SECRET is unset, each purpose
+ * signs (`revalidate.` for a tenant's webhook key, `bindings.` for its binding report key,
+ * `press-share.` for a share session cookie), so a signature made for one purpose never verifies as
+ * another. When PRESS_SECRET is unset, each purpose
  * reads the variable it used before, so a deployment that set those keeps working unchanged.
  *
  * The values come from `readEnv` like every other environment value (barakoPress #51), untrimmed:
