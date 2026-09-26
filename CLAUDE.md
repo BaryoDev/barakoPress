@@ -1,7 +1,8 @@
 # barakoPress
 
-A blog engine on [barakoCMS](https://github.com/BaryoDev/barakoCMS). A site depends on it as a
-package and re-exports what it wants from its own route files.
+The renderer for barakoCMS sites: pages from blocks, collections and docs trees, cached until the CMS
+says otherwise. [barakoCMS](https://github.com/BaryoDev/barakoCMS) is the API it reads. A site depends
+on it as a package and re-exports what it wants from its own route files, or runs its published image.
 
 This file is the working agreement for anyone changing code here, person or agent. It is named for
 the tool that reads it automatically.
