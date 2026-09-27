@@ -230,7 +230,9 @@ The tag renders only when the URL is https with no credentials, its origin is on
 is a UUID. Anything else renders no tag, and a refused origin is said once in the server log. Only
 the site's own pages carry the tag: the holding page and the document a request with no tenant gets
 do not. A build-time site sets `site.analyticsScript` and `site.analyticsWebsiteId` in its config,
-held to the same list, and a tenant's settings win over them. This is Umami's script and nothing
+held to the same list, and a tenant's settings win over them. On a request-time site that means a tenant that
+sets neither field reports to the config's website id, so leave them out of a config that serves
+more than one tenant. This is Umami's script and nothing
 else; there is no setting that puts other markup in the head.
 
 The tag is part of the cached page, like every other identity field, so a change to either setting
