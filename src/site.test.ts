@@ -574,4 +574,43 @@ describe("applySiteSettings", () => {
         expect(out.site.footerColumns?.[0].links).toEqual([{ label: "About", href: "/about" }]);
         expect(out.theme.layout.prose).toBe("680px");
     });
+
+    describe("the analytics script (#179)", () => {
+        const SCRIPT = "https://playground.baryo.dev/analytics/script.js";
+        const ID = "0f6a1c2e-3b4d-4e5f-8a9b-1c2d3e4f5a6b";
+
+        it("reads AnalyticsScript and AnalyticsWebsiteId from the settings", () => {
+            const out = applySiteSettings(base, { AnalyticsScript: SCRIPT, AnalyticsWebsiteId: ID }, null);
+            expect(out.site.analyticsScript).toBe(SCRIPT);
+            expect(out.site.analyticsWebsiteId).toBe(ID);
+        });
+
+        it("falls back to the configured script and id when the settings leave them out", () => {
+            const configured = {
+                ...base,
+                site: { ...base.site, analyticsScript: SCRIPT, analyticsWebsiteId: ID },
+            };
+            const out = applySiteSettings(configured, { Name: "Club" }, null);
+            expect(out.site.analyticsScript).toBe(SCRIPT);
+            expect(out.site.analyticsWebsiteId).toBe(ID);
+        });
+
+        it("drops a script that is not an https URL and an id that is not a UUID", () => {
+            // The same fields written right are read, so the loop below cannot pass on a function
+            // that reads neither.
+            expect(applySiteSettings(base, { AnalyticsScript: SCRIPT, AnalyticsWebsiteId: ID }, null).site.analyticsScript).toBe(SCRIPT);
+            for (const [script, id] of [
+                ["javascript:alert(1)", `${ID}" onload="alert(1)`],
+                ["http://playground.baryo.dev/analytics/script.js", "not-a-uuid"],
+                ["//playground.baryo.dev/analytics/script.js", `"${ID}"`],
+                ["/analytics/script.js", 42],
+                ["https://user:pass@playground.baryo.dev/analytics/script.js", ""],
+                ['https://playground.baryo.dev/a"><script>alert(1)</script>', `${ID}x`],
+            ]) {
+                const out = applySiteSettings(base, { AnalyticsScript: script, AnalyticsWebsiteId: id }, null);
+                expect(out.site.analyticsScript).toBeUndefined();
+                expect(out.site.analyticsWebsiteId).toBeUndefined();
+            }
+        });
+    });
 });
