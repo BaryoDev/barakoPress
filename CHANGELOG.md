@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.9.0 (unreleased)
+## 0.9.0 (2026-09-27)
 
 - A site can name a Umami tracking script in its settings, `AnalyticsScript` (an https URL) and
   `AnalyticsWebsiteId` (a UUID), or `site.analyticsScript` and `site.analyticsWebsiteId` in its
