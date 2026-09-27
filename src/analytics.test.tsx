@@ -34,6 +34,7 @@ vi.mock("next/link", () => ({
 const { defineConfig } = await import("./config.js");
 const { forgetCachedReads } = await import("./delivery.js");
 const { createSiteLayout } = await import("./screens/site-layout.js");
+const { allowedScriptOrigins } = await import("./analytics.js");
 
 const CMS = "http://cms.test";
 const SCRIPT = "https://playground.baryo.dev/analytics/script.js";
@@ -213,5 +214,18 @@ describe("the analytics script in the head", () => {
         const html = await pageHtml(BOTH, "nobody.example");
         expect(html).toContain("the page");
         expect(html).not.toContain("<script");
+    });
+});
+
+describe("the allow list", () => {
+    it("reads the first 32 origins, and says when it was given more", () => {
+        const hosts = Array.from({ length: 40 }, (_, i) => `https://s${i}.example`);
+        const allowed = allowedScriptOrigins(hosts.join(" "));
+        expect(allowed.size).toBe(32);
+        expect(allowed.has("https://s31.example")).toBe(true);
+        expect(allowed.has("https://s32.example")).toBe(false);
+        expect(vi.mocked(console.warn).mock.calls.map((c) => String(c[0]))).toContain(
+            "analytics: PRESS_SCRIPT_ORIGINS names 40 origins, and only the first 32 are read",
+        );
     });
 });

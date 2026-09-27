@@ -76,8 +76,11 @@ export function allowedScriptOrigins(
     const written = raw?.trim();
     if (!written) return origins;
 
-    for (const entry of written.split(/[\s,]+/).slice(0, MAX_ORIGINS)) {
-        if (!entry) continue;
+    const entries = written.split(/[\s,]+/).filter(Boolean);
+    if (entries.length > MAX_ORIGINS) {
+        sayOnce(`analytics: PRESS_SCRIPT_ORIGINS names ${entries.length} origins, and only the first ${MAX_ORIGINS} are read`);
+    }
+    for (const entry of entries.slice(0, MAX_ORIGINS)) {
         const candidate = entry.includes("://") ? entry : HOST_PORT.test(entry) ? `https://${entry}` : entry;
         const href = analyticsScriptUrl(candidate);
         if (href) origins.add(new URL(href).origin);
