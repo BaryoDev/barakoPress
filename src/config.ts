@@ -198,6 +198,10 @@ export interface SiteIdentity {
     headerActions?: HeaderAction[];
     footerColumns?: FooterColumn[];
     socialLinks?: SocialLink[];
+    /** A Umami tracking script, absolute https. Rendered only with `analyticsWebsiteId`, and only from an origin in `PRESS_SCRIPT_ORIGINS`. */
+    analyticsScript?: string;
+    /** The Umami website id, a UUID, sent as the script's `data-website-id`. */
+    analyticsWebsiteId?: string;
 }
 
 /**

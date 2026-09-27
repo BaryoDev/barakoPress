@@ -2,6 +2,13 @@
 
 ## 0.9.0 (unreleased)
 
+- A site can name a Umami tracking script in its settings, `AnalyticsScript` (an https URL) and
+  `AnalyticsWebsiteId` (a UUID), or `site.analyticsScript` and `site.analyticsWebsiteId` in its
+  config. Every page of the site then carries `<script defer src data-website-id>` in its head. The
+  script's origin has to be in `PRESS_SCRIPT_ORIGINS`, read per request and empty by default, so no
+  existing site renders anything new until its operator allows an origin. The holding page and the
+  no-tenant 404 carry no script (#179).
+
 - A share link redemption no longer sends `CMS_RENDERER_KEY` over plain http to a CMS that is not on
   loopback, such as one reached by container name on a docker network. The share route passed the
   key to the redemption as the caller's, which set it without the https or loopback check every

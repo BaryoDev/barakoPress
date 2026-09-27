@@ -60,6 +60,7 @@ The settings are the singleton `site` type from barakoCMS `docs/site-settings.md
 `Radii`, `Layout`, `Space` and `Text` (the spacing and type scales), `Tokens` and `Tones` (see [Tokens and tones](look.md#tokens-and-tones)), `StyleRecipes` (see [Style recipes](look.md#style-recipes)), `TopBar`, `HeaderLinks`, `MenuLinks`, `HeaderActions`, `FooterColumns`, `SocialLinks`, `HeaderPath`,
 `HeaderTone`, `FooterPath`, `FooterTone`, `AssetsAsSupplied`, `LogoAsSupplied`, `LogoClearSpace`,
 `PageSizes`, `ReservedSlugs`, `Labels`, `HomePath`, `HomeCollection`, `Currency`, `EmbedHosts`,
+`AnalyticsScript` and `AnalyticsWebsiteId` (see Analytics below),
 `Presets`, `Plugins` (see [Plugin packages](blocks.md#plugin-packages)), and `Mode`, `HoldingPath` and
 `HoldingMessage` (see Holding mode below). `Collections`, `OptionStyles` and `OptionColors` are read as [Collections](collections.md)
 describes. `Variants` are not rendered yet. Every value is checked for shape; one that fails, and any the
@@ -210,6 +211,50 @@ site this serves, so allowing it would mean rendering a link that never loads. A
 is the tenant's, family and stylesheet together, so a family set with no url clears a configured
 stylesheet rather than leaving the page loading a face it no longer uses. A build-time site sets the
 same thing in `theme.fontSources`, and it is held to the same list.
+
+**Analytics, from an allow list.** A site counted by Umami names the tracking script and its website
+id, and every page of the site gets `<script defer src="..." data-website-id="...">` in its head:
+
+| Setting | What |
+| --- | --- |
+| `AnalyticsScript` | The Umami script, an absolute https URL |
+| `AnalyticsWebsiteId` | The site's Umami website id, a UUID |
+
+Both are a tenant's settings on their way into a script tag in every visitor's page, so which origins
+a page may run a script from is the deployment's decision and not the tenant's. `PRESS_SCRIPT_ORIGINS`
+is the list, written the way `PRESS_FONT_ORIGINS` is: origins separated by commas or spaces, each
+`https://host`, a bare host read as https. Unset or blank, it allows nothing, so a deployment that sets
+nothing renders the head it rendered before, whatever its tenants have saved.
+
+The tag renders only when the URL is https with no credentials, its origin is on the list, and the id
+is a UUID. Anything else renders no tag, and a refused origin is said once in the server log. Only
+the site's own pages carry the tag: the holding page and the document a request with no tenant gets
+do not. A build-time site sets `site.analyticsScript` and `site.analyticsWebsiteId` in its config,
+held to the same list, and a tenant's settings win over them. This is Umami's script and nothing
+else; there is no setting that puts other markup in the head.
+
+The tag is part of the cached page, like every other identity field, so a change to either setting
+reaches visitors on the next revalidation: the webhook that follows publishing the settings entry, or
+the backstop.
+
+barakocms.com, as the worked example:
+
+1. Register the site in Umami, through the console's Analytics page or
+   `POST /api/analytics/websites` on the barakoCMS API. The answer's snippet holds the script URL and
+   the website id.
+2. Allow the script's origin on the renderer: `PRESS_SCRIPT_ORIGINS=https://playground.baryo.dev`.
+3. Set both in the tenant's `site` entry and publish it:
+
+```json
+{
+  "AnalyticsScript": "https://playground.baryo.dev/analytics/script.js",
+  "AnalyticsWebsiteId": "0f6a1c2e-3b4d-4e5f-8a9b-1c2d3e4f5a6b"
+}
+```
+
+The id above is a placeholder; use the one Umami gave. A look check that captures a page carrying the
+tag should refuse the script with a `block` glob such as `**/analytics/script.js`, so a capture never
+depends on the tracker answering.
 
 **Header and footer as block regions.** The built-in header and footer take links and text and
 nothing else, so a clinic that wants a light footer with opening hours and a map cannot have one, and

@@ -194,7 +194,7 @@ for a post type with no such field.
 
 | Key | Default | Tenant setting | What |
 | --- | --- | --- | --- |
-| `site` | required | `Name`, `Tagline`, `Url` and one per field | Name, tagline and absolute origin. Every absolute link is built from the origin |
+| `site` | required | `Name`, `Tagline`, `Url` and one per field | Name, tagline and absolute origin. Every absolute link is built from the origin. `analyticsScript` and `analyticsWebsiteId` (`AnalyticsScript`, `AnalyticsWebsiteId`) put a Umami script in the head, from an origin in `PRESS_SCRIPT_ORIGINS` |
 | `types` | `post`, `author`, `category` | operator only | The content type names |
 | `fields` | the blueprint's PascalCase names | operator only | Which field holds what |
 | `pageFields` | the blueprint's PascalCase names | operator only | Which field on the page type holds what |
@@ -248,6 +248,7 @@ per request, so when a value was read depended on which value it was.
 | `REVALIDATE_SECRET` | The webhook key before `PRESS_SECRET`, read only while that is unset |
 | `PRESS_PREVIEW_SECRET` | The share key before `PRESS_SECRET`, read only while that is unset |
 | `PRESS_FONT_ORIGINS` | The origins a font stylesheet may be linked from. Unset, Google Fonts only. See [One build, many sites](https://github.com/BaryoDev/barakoPress/blob/master/docs/sites.md#one-build-many-sites) |
+| `PRESS_SCRIPT_ORIGINS` | The origins a site's Umami script (`AnalyticsScript`) may be loaded from. Unset, none, so no script is rendered. See [One build, many sites](https://github.com/BaryoDev/barakoPress/blob/master/docs/sites.md#one-build-many-sites) |
 
 Values are used exactly as the environment has them, untrimmed. A secret with a trailing space is a
 different HMAC key, so trimming one here would stop a webhook that verifies today.

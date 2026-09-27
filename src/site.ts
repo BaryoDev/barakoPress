@@ -58,6 +58,7 @@ import type {
     ThemeText,
 } from "./theme.js";
 import { FONT_FAMILY, FONT_ROLES, fontStylesheetHref } from "./fonts.js";
+import { analyticsScriptUrl, analyticsWebsiteId } from "./analytics.js";
 
 /*
  * Request-time sites: one build, many domains (barakoCMS D22, barakoPress #20).
@@ -1144,6 +1145,8 @@ export function applySiteSettings(
         headerActions: headerActions(d.HeaderActions) ?? base.headerActions,
         footerColumns: footerColumns(d.FooterColumns) ?? base.footerColumns,
         socialLinks: socialLinks(d.SocialLinks) ?? base.socialLinks,
+        analyticsScript: analyticsScriptUrl(d.AnalyticsScript) ?? base.analyticsScript,
+        analyticsWebsiteId: analyticsWebsiteId(d.AnalyticsWebsiteId) ?? base.analyticsWebsiteId,
     };
 
     const face = fontsFrom(config.theme.fonts, config.theme.fontSources, d.Fonts);

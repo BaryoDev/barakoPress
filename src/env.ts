@@ -42,6 +42,8 @@ export interface PressEnv {
     previewSecret?: string;
     /** `PRESS_FONT_ORIGINS`. The origins a font stylesheet may be loaded from. */
     fontOrigins?: string;
+    /** `PRESS_SCRIPT_ORIGINS`. The origins a site's analytics script may be loaded from. */
+    scriptOrigins?: string;
 }
 
 /** The variable each value comes from. A log line names this, never the value. */
@@ -55,6 +57,7 @@ export const ENV_NAMES = {
     revalidateSecret: "REVALIDATE_SECRET",
     previewSecret: "PRESS_PREVIEW_SECRET",
     fontOrigins: "PRESS_FONT_ORIGINS",
+    scriptOrigins: "PRESS_SCRIPT_ORIGINS",
 } as const satisfies Record<keyof PressEnv, string>;
 
 /** Reads every value, now. Call it where the value is used, never at module scope. */

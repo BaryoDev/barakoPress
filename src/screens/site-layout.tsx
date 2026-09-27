@@ -10,6 +10,7 @@ import {
     GOOGLE_FONTS_FILES_ORIGIN,
     GOOGLE_FONTS_ORIGIN,
 } from "../fonts.js";
+import { allowedScriptOrigins, analyticsTag, type AnalyticsTag } from "../analytics.js";
 import { SHARE_INVALID_FRAGMENT } from "../routes/share.js";
 import { themeVariablesCss, type PressTheme } from "../theme.js";
 import type { BlockRegistry } from "../blocks/schema.js";
@@ -50,8 +51,19 @@ type LayoutProps = { children: ReactNode; params?: SiteParams };
  * The preconnects go out only when something is actually loaded from Google Fonts. Nothing is
  * preconnected for another origin: the stylesheet opens that connection itself, and where it fetches
  * its font files from is not something this can know.
+ *
+ * The analytics script (#179) comes in only from the site's own document. The holding page is not
+ * given one, since nobody should be counted visiting a site that is not open yet.
  */
-function ThemeHead({ theme, loadFonts }: { theme: PressTheme; loadFonts: boolean }) {
+function ThemeHead({
+    theme,
+    loadFonts,
+    analytics,
+}: {
+    theme: PressTheme;
+    loadFonts: boolean;
+    analytics?: AnalyticsTag | null;
+}) {
     const faces = loadFonts ? fontLinks(theme, allowedFontOrigins()) : null;
     return (
         <head>
@@ -69,6 +81,7 @@ function ThemeHead({ theme, loadFonts }: { theme: PressTheme; loadFonts: boolean
                     ))}
                 </>
             )}
+            {analytics && <script defer src={analytics.src} data-website-id={analytics.websiteId} />}
         </head>
     );
 }
@@ -586,7 +599,7 @@ export function createSiteLayout(config: PressConfig, options: SiteLayoutOptions
 
         return (
             <html lang={cfg.locale}>
-                <ThemeHead theme={t} loadFonts={loadFonts} />
+                <ThemeHead theme={t} loadFonts={loadFonts} analytics={analyticsTag(cfg.site, allowedScriptOrigins())} />
                 <body style={{ margin: 0, background: c.pageBg, color: c.ink, fontFamily: t.fonts.body }}>
                     {headerPage && headerRegion && registry ? (
                         await RegionBand({ cfg, region: headerRegion, page: headerPage, registry, tag: "header" })
