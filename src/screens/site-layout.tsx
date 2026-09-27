@@ -81,9 +81,23 @@ function ThemeHead({
                     ))}
                 </>
             )}
-            {analytics && <script defer src={analytics.src} data-website-id={analytics.websiteId} />}
+            {analytics && <AnalyticsScript tag={analytics} />}
         </head>
     );
+}
+
+function AnalyticsScript({ tag }: { tag: AnalyticsTag }) {
+    return <script defer src={tag.src} data-website-id={tag.websiteId} />;
+}
+
+/**
+ * The site's tracking script, for a site that draws its own root layout instead of `createSiteLayout`'s.
+ * Put it in that layout's `<head>`. It renders what the engine's own head does: the tag when both
+ * settings are valid and the origin is in `PRESS_SCRIPT_ORIGINS`, and nothing otherwise.
+ */
+export function SiteAnalytics({ site }: { site: Pick<SiteIdentity, "analyticsScript" | "analyticsWebsiteId"> }) {
+    const tag = analyticsTag(site, allowedScriptOrigins());
+    return tag ? <AnalyticsScript tag={tag} /> : null;
 }
 
 export interface SiteLayoutOptions {
