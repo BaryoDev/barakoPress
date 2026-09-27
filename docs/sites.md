@@ -239,6 +239,12 @@ The tag is part of the cached page, like every other identity field, so a change
 reaches visitors on the next revalidation: the webhook that follows publishing the settings entry, or
 the backstop.
 
+`PRESS_SCRIPT_ORIGINS` is read when a page renders, not when it is served. A page already cached keeps
+the tag it was rendered with, so removing an origin, or clearing the settings, reaches a cached page
+only when that page renders again: on a purge from the webhook, or the backstop. To stop a script at
+once, deploy with the new list and purge the site's cache tag, or rebuild a build-time site whose
+pages were prerendered. Content routes stay cacheable on purpose; this is the price.
+
 barakocms.com, as the worked example:
 
 1. Register the site in Umami, through the console's Analytics page or
