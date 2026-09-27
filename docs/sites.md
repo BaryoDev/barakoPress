@@ -260,7 +260,11 @@ barakocms.com, as the worked example:
 }
 ```
 
-The id above is a placeholder; use the one Umami gave. A look check that captures a page carrying the
+The id above is a placeholder; use the one Umami gave.
+
+A site that draws its own root layout instead of `createSiteLayout`'s (barakocms.com's theme does)
+gets no tag from the engine's head. Put `<SiteAnalytics site={cfg.site} />` in that layout's
+`<head>`. It applies the same checks and the same allow list, and renders nothing when they fail. A look check that captures a page carrying the
 tag should refuse the script with a `block` glob such as `**/analytics/script.js`, so a capture never
 depends on the tracker answering.
 

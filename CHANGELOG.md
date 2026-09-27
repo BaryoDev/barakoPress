@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.0 (unreleased)
+
+- `SiteAnalytics` draws the Umami tag for a site that renders its own root layout instead of
+  `createSiteLayout`'s, which in 0.9.0 had no way to reach it. It applies the same checks and
+  `PRESS_SCRIPT_ORIGINS` as the engine's head, which now uses the same markup (#179).
+
 ## 0.9.0 (2026-09-27)
 
 - A site can name a Umami tracking script in its settings, `AnalyticsScript` (an https URL) and

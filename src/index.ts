@@ -76,7 +76,7 @@ export {
 } from "./fonts.js";
 export type { FontHead } from "./fonts.js";
 export type { ResolvedTenant } from "./site.js";
-export { createSiteLayout, createSiteMetadata } from "./screens/site-layout.js";
+export { createSiteLayout, createSiteMetadata, SiteAnalytics } from "./screens/site-layout.js";
 export { DEFAULT_THEME, resolveTheme, proseCss, relatedCss, themeVariablesCss } from "./theme.js";
 export type {
     PressTheme,

@@ -35,6 +35,7 @@ const { defineConfig } = await import("./config.js");
 const { forgetCachedReads } = await import("./delivery.js");
 const { createSiteLayout } = await import("./screens/site-layout.js");
 const { allowedScriptOrigins } = await import("./analytics.js");
+const { SiteAnalytics } = await import("./index.js");
 
 const CMS = "http://cms.test";
 const SCRIPT = "https://playground.baryo.dev/analytics/script.js";
@@ -227,5 +228,21 @@ describe("the allow list", () => {
         expect(vi.mocked(console.warn).mock.calls.map((c) => String(c[0]))).toContain(
             "analytics: PRESS_SCRIPT_ORIGINS names 40 origins, and only the first 32 are read",
         );
+    });
+});
+
+describe("SiteAnalytics, for a site that draws its own layout", () => {
+    const site = { analyticsScript: SCRIPT, analyticsWebsiteId: ID };
+
+    it("draws the tag when the origin is allowed", async () => {
+        vi.stubEnv("PRESS_SCRIPT_ORIGINS", "https://playground.baryo.dev");
+        expect(await render(<SiteAnalytics site={site} />)).toBe(TAG);
+    });
+
+    it("draws nothing when the origin is not allowed", async () => {
+        vi.stubEnv("PRESS_SCRIPT_ORIGINS", "https://playground.baryo.dev");
+        expect(await render(<SiteAnalytics site={site} />)).toBe(TAG);
+        vi.stubEnv("PRESS_SCRIPT_ORIGINS", "https://cdn.example");
+        expect(await render(<SiteAnalytics site={site} />)).toBe("");
     });
 });
