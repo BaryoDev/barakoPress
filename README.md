@@ -145,7 +145,7 @@ an unbound scope. It is never anonymous:
 the caller presents the tenant's key as `Authorization: Bearer`, derived from `PRESS_SECRET` and
 printed by `barakopress bindings-key <tenant>`. Answers are never cached.
 
-`Card` and `PostView` are exported too, for a site that wants its own page but the engine's markup.
+`Card` and `PostView` are exported too, for a site that wants its own page but the engine's markup. `SiteAnalytics` is exported too, for a site that draws its own root layout: it goes in that layout's `<head>`.
 
 ## What it renders
 
