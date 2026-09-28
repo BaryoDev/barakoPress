@@ -659,6 +659,43 @@ describe("what a binding may not do", () => {
         }
     });
 
+
+    /*
+     * A URL parameter is typed by whoever sends the link, not by an editor, so where it lands in
+     * markdown it is read as the words it is. The same value in a plain text field is left alone,
+     * since nothing reads marks there.
+     */
+    const PARAMETER = "**Urgent** [log in](https://elsewhere.example/x) [run](javascript:alert(1)) <img src=x onerror=alert(1)>";
+
+    it("draws a URL parameter bound into markdown as text, marks and links included", async () => {
+        const html = await page(
+            "academy.example",
+            [
+                { type: "richText", props: { markdown: "Searched: {{query.q}}" } },
+                text("Inline: {{query.q}}", { format: "inline" }),
+            ],
+            { q: PARAMETER },
+        );
+
+        expect(html).toContain("Searched: **Urgent** [log in](https://elsewhere.example/x)");
+        expect(html).toContain("Inline: **Urgent** [log in](https://elsewhere.example/x)");
+        expect(html).not.toContain("<strong>Urgent");
+        expect(html).not.toContain("elsewhere.example/x\"");
+        expect(html).not.toContain("<img src=x");
+        expect(html).not.toContain("javascript:alert(1)\"");
+    });
+
+    it("keeps an editor's own marks around a URL parameter in markdown", async () => {
+        const html = await page("academy.example", [text("**{{query.q}}**", { format: "inline" })], { q: "a_b*c" });
+
+        expect(html).toContain("<strong>a_b*c</strong>");
+    });
+
+    it("leaves a URL parameter in a plain text field as it was sent", async () => {
+        const html = await page("academy.example", [text("Plain: {{query.q}}")], { q: "**a** [b](c)" });
+
+        expect(html).toContain("Plain: **a** [b](c)");
+    });
     it("bounds what one page may read and how far a repeat may go", async () => {
         const many = Array.from({ length: 12 }, () => ({
             type: "source",

@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.10.1 (unreleased)
+
+- Raw HTML in markdown is turned into text on the tokens, before anything renders, for the body,
+  `renderProse` and a text block's inline marks. After an inline `<script>`, `<pre>`, `<code>` or
+  `<kbd>`, marked flags the text that follows as already escaped without escaping it, so a tag with
+  no closing `>` after one of those reached the page as markup.
+
+- `isSafeHref` drops tabs and line breaks before it checks, as a browser does, so `/<tab>/host` is
+  read as the `//host` it is and refused. It also refuses a destination holding a character
+  reference (`&#47;`, `&sol;`), which decodes to a slash wherever the ampersand is left unescaped.
+  A stored url holding `&amp;` where `&` was meant is now refused too.
+
+- A `{{query.X}}` value bound into a `markdown` field, or into a text block's value in inline mode,
+  is backslash-escaped first, so it renders as the characters that were sent: no link, emphasis or
+  autolinked address. An editor's own marks around the placeholder still apply. A plain text field
+  gets the value unchanged. `escapeMarkdown` is exported from `barakopress/markdown` for this.
+
+- `bySlug` and `bySlugPreview` answer null, which renders as not found, for a slug of `.` or `..`,
+  typed or percent-encoded, without asking the CMS. A URL parser resolves those segments away and
+  the read went to another endpoint.
+
 ## 0.10.0 (2026-09-27)
 
 - `SiteAnalytics` draws the Umami tag for a site that renders its own root layout instead of

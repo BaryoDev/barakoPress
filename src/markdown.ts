@@ -1,4 +1,4 @@
-import { Marked, type Tokens } from "marked";
+import { Marked, type MarkedExtension } from "marked";
 import { LINK_REL, NEW_TAB_TARGET } from "./config.js";
 
 /*
@@ -11,7 +11,8 @@ import { LINK_REL, NEW_TAB_TARGET } from "./config.js";
  *
  * Three rules:
  *   1. Raw HTML in the source is escaped, never passed through. That removes script tags, event
- *      handler attributes and iframes in one move, instead of trying to enumerate them.
+ *      handler attributes and iframes in one move, instead of trying to enumerate them. It is done
+ *      on the tokens, by `RAW_HTML_AS_TEXT`, which every renderer here is built with.
  *   2. A link or image destination must be http, https or mailto. That kills javascript: and
  *      data: URLs, which are the two that execute.
  *   3. Text is escaped on the way into every attribute, so an alt or a title cannot close its own
@@ -28,7 +29,11 @@ import { LINK_REL, NEW_TAB_TARGET } from "./config.js";
 const SAFE_SCHEMES = ["http:", "https:", "mailto:"];
 
 export function isSafeHref(href: string): boolean {
-    const trimmed = href.trim();
+    // A browser drops tabs and line breaks anywhere in a URL, so `/<tab>/host` is `//host` to it.
+    const trimmed = href.replace(/[\t\n\r]/g, "").trim();
+    // A character reference decodes to whatever it names, `&#47;` to a slash, wherever the caller
+    // forgets to escape the ampersand. A link has no need of one.
+    if (/&#|&[a-z][a-z0-9]*;/i.test(trimmed)) return false;
     // `//host` and `/\host` are read by a browser as another site, not a path on this one.
     if (trimmed.startsWith("//") || trimmed.startsWith("/\\")) return false;
     // A relative or anchor link has no scheme and cannot execute.
@@ -50,6 +55,15 @@ function escapeHtml(value: string): string {
         .replace(/'/g, "&#39;");
 }
 
+/**
+ * Text written so markdown reads it as exactly those characters: every ASCII punctuation mark gets
+ * a backslash, which CommonMark reads as that mark taken literally. No link, emphasis, raw HTML or
+ * autolinked address can start inside it.
+ */
+export function escapeMarkdown(text: string): string {
+    return text.replace(/[!-/:-@[-`{-~]/g, "\\$&");
+}
+
 /** Turns a heading into a stable id, so "On this page" links and deep links work. */
 export function anchor(text: string): string {
     return text
@@ -66,15 +80,31 @@ export interface RenderMarkdownOptions {
     newTab?: boolean;
 }
 
+/*
+ * Every piece of raw HTML becomes a text token that marked escapes, before anything renders.
+ *
+ * Overriding the `html` renderer is not enough. After an inline `<script>`, `<pre>`, `<code>` or
+ * `<kbd>` the lexer marks the text that follows as already escaped, without escaping it, and the
+ * text renderer trusts that flag. So `a <script> <img src=x onerror=...` with no closing `>` reached
+ * the page as a live tag. Nothing typed by an author is ever escaped by the lexer here, so no token
+ * is allowed to say it was.
+ */
+const RAW_HTML_AS_TEXT: MarkedExtension = {
+    walkTokens(token) {
+        const t = token as { type: string; text?: string; escaped?: boolean; tokens?: unknown };
+        if (t.type === "html") {
+            t.type = "text";
+            delete t.tokens;
+        }
+        if ("escaped" in t) t.escaped = false;
+    },
+};
+
 function buildRenderer(headingIds: boolean, newTab: boolean) {
-    const marked = new Marked({ gfm: true, breaks: false });
+    const marked = new Marked({ gfm: true, breaks: false }, RAW_HTML_AS_TEXT);
 
     marked.use({
         renderer: {
-            // Raw HTML blocks and inline HTML are emitted as visible text, not as markup.
-            html({ text }: Tokens.HTML | Tokens.Tag) {
-                return escapeHtml(text);
-            },
             link({ href, title, tokens }) {
                 const label = this.parser.parseInline(tokens);
                 if (!isSafeHref(href)) {
@@ -195,7 +225,7 @@ export function markdownHeadings(source: string, depth = 2): MarkdownHeading[] {
  * lose the mark, since none of them is something a line of copy is asked to carry.
  */
 function buildInlineRenderer() {
-    const marked = new Marked({ gfm: true, breaks: false });
+    const marked = new Marked({ gfm: true, breaks: false }, RAW_HTML_AS_TEXT);
     marked.use({
         extensions: [
             {
@@ -217,9 +247,6 @@ function buildInlineRenderer() {
             },
         ],
         renderer: {
-            html({ text }: Tokens.HTML | Tokens.Tag) {
-                return escapeHtml(text);
-            },
             link({ href, title, tokens }) {
                 const label = this.parser.parseInline(tokens);
                 if (!isSafeHref(href)) return label;

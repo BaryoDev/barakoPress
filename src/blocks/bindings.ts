@@ -368,11 +368,14 @@ function plain(value: unknown): string | null {
  *
  * Returns the text and whether every placeholder in it found a value. A caller that cares about the
  * difference between "resolved to nothing" and "had nothing to resolve" reads `bound`.
+ *
+ * `literalQuery`, when given, is applied to each `query` value before it is put in the text.
  */
 export async function bindText(
     template: string,
     source: BindingSource,
     where?: BindingWhere,
+    literalQuery?: (text: string) => string,
 ): Promise<{ text: string; bound: boolean; missing: BindingProblem[] }> {
     const bindings = readBindings(template);
     if (bindings.length === 0) return { text: template, bound: false, missing: [] };
@@ -396,7 +399,10 @@ export async function bindText(
         const { bound, value } = await source.lookup({ ...binding, scope: binding.scope });
         const text = formatValue(value, binding.format, source.options);
         if (text === null) report(binding, bound ? "no value" : "unbound scope");
-        resolved.set(binding.raw, text ?? binding.fallback);
+        // A URL parameter is typed by whoever sent the link. Where the field reads marks, the caller
+        // says how to keep it to the words it is. The fallback is the editor's and is left alone.
+        const literal = text !== null && binding.scope === "query" && literalQuery ? literalQuery(text) : text;
+        resolved.set(binding.raw, literal ?? binding.fallback);
     }
 
     // One pass over the original, and what a placeholder resolved to is never scanned again. A

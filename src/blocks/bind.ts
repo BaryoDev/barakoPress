@@ -28,7 +28,7 @@ import {
     writePagerState,
 } from "./data.js";
 import { writeFilterState } from "./filter.js";
-import { holdsLink } from "../markdown.js";
+import { escapeMarkdown, holdsLink } from "../markdown.js";
 import {
     INVALID,
     MAX_BLOCKS,
@@ -313,7 +313,8 @@ async function bindRecord(
             continue;
         }
         if (typeof value !== "string" || !isBindable(field) || !hasBinding(value)) continue;
-        const { text } = await bindText(value, source, where);
+        const literal = readsMarks(block, field, record) ? escapeMarkdown : undefined;
+        const { text } = await bindText(value, source, where, literal);
         if (text === "") {
             if (options.allowEmpty) {
                 props[field.name] = "";
@@ -327,6 +328,17 @@ async function bindRecord(
         props[field.name] = text;
     }
     return props;
+}
+
+/*
+ * Whether a field's value is read as markdown: a `markdown` field, or a text block's value in inline
+ * mode. A format that is itself bound may come out inline, so it counts as inline here.
+ */
+function readsMarks(block: string, field: BlockField, record: Record<string, unknown>): boolean {
+    if (field.kind === "markdown") return true;
+    if (block !== "text" || field.name !== "value") return false;
+    const format = record.format;
+    return format === "inline" || (typeof format === "string" && hasBinding(format));
 }
 
 /**

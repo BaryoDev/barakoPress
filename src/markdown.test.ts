@@ -158,4 +158,58 @@ describe.each([
         expect(isSafeHref("data:text/html,x")).toBe(false);
         expect(isSafeHref("vbscript:x")).toBe(false);
     });
+
+    it("reads a destination the way a browser does before deciding it stays on this site", async () => {
+        const { isSafeHref } = await load();
+        // A browser drops tabs and line breaks from a URL, so these are `//evil.example`.
+        expect(isSafeHref("/\t/evil.example")).toBe(false);
+        expect(isSafeHref("/\n/evil.example")).toBe(false);
+        expect(isSafeHref("/\r\n/evil.example")).toBe(false);
+        expect(isSafeHref("java\tscript:alert(1)")).toBe(false);
+        // A character reference is not something a link should need, and decoded it can be `//`.
+        expect(isSafeHref("/&#47;evil.example")).toBe(false);
+        expect(isSafeHref("/&#x2F;evil.example")).toBe(false);
+        expect(isSafeHref("/&sol;evil.example")).toBe(false);
+        expect(isSafeHref("/&#47evil.example")).toBe(false);
+        expect(isSafeHref("/a\tb")).toBe(true);
+        expect(isSafeHref("/search?q=a&b=c")).toBe(true);
+    });
+});
+
+/*
+ * Raw HTML the lexer reads in pieces. After an inline `<script>`, `<pre>`, `<code>` or `<kbd>` the
+ * lexer marks the text that follows as already escaped, so a tag with no closing `>` after it used
+ * to reach the page as markup. Each source here is one a closed-tag test would never catch.
+ */
+const RAW_BLOCKS: [string, string][] = [
+    ["an unclosed tag", "<img src=x onerror=alert(1)"],
+    ["an unclosed tag after an inline script tag", "a <script> <img src=x onerror=alert(1)// b"],
+    ["a tag inside a list item", "- one <pre> <b onmouseover=alert(1)// two"],
+    ["a tag after a blank line", "para\n\nx <code> <svg onload=alert(1)"],
+    ["a comment that closes early", "x <!-- <kbd> --> <img src=x onerror=alert(1)//"],
+    ["a less-than inside the raw run", "a <script> 1 < 2 <iframe src=javascript:alert(1)"],
+    ["a tag straight after an inline script tag", "x <script><img src=x onerror=alert(1)"],
+    ["a tag straight after an inline pre tag", "x <pre><img src=x onerror=alert(1)"],
+];
+
+/** Any tag that is not one markdown itself writes for these sources. */
+const LIVE_TAG = /<(?!\/?(?:p|ul|li|em|strong)>)[a-z!/]/i;
+
+describe.each([
+    ["barakopress/markdown", builtEntry],
+    ["src/markdown.ts", async () => source],
+])("raw HTML from %s stays text however it is formed", (_name, load) => {
+    it.each(RAW_BLOCKS)("in the body: %s", async (_case, markdown) => {
+        const { renderMarkdown } = await load();
+        const html = renderMarkdown(markdown);
+        expect(html).toContain("alert(1)");
+        expect(html).not.toMatch(LIVE_TAG);
+    });
+
+    it.each(RAW_BLOCKS)("in a line of inline marks: %s", async (_case, markdown) => {
+        const { renderInlineMarkdown } = await load();
+        const html = renderInlineMarkdown(markdown);
+        expect(html).toContain("alert(1)");
+        expect(html).not.toMatch(LIVE_TAG);
+    });
 });

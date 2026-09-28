@@ -2,7 +2,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defineConfig } from "./config.js";
-import { bySlugPreview, forgetCachedReads, list, pageAtPath, redeemShareLink, semantic, tenantForHost } from "./delivery.js";
+import { bySlug, bySlugPreview, forgetCachedReads, list, pageAtPath, redeemShareLink, semantic, tenantForHost } from "./delivery.js";
 
 const config = defineConfig({
     site: { name: "Test", url: "https://test.example" },
@@ -403,5 +403,37 @@ describe("a redemption sends the renderer key only on a channel that protects it
     it("withholds it from plain http anywhere else, a container name included", async () => {
         expect(await keyOn("http://barakocms-cms-api-1:8080")).toBeNull();
         expect(await keyOn("http://10.0.0.5:5000")).toBeNull();
+    });
+});
+
+/*
+ * A slug is one path segment. `.` and `..`, typed or percent-encoded, are the two a URL parser
+ * resolves away, which would send the read to a different endpoint on the CMS. They name no entry.
+ */
+describe("a slug that is a dot segment", () => {
+    const DOTS = [".", "..", "%2e", "%2E", "%2e%2e", "%2E%2E", ".%2e", "%2E."];
+
+    afterEach(() => forgetCachedReads());
+
+    it.each(DOTS)("reads %s as no entry, without asking the CMS", async (slug) => {
+        const fetch = answer(200, { id: "not-an-entry", data: {} });
+        vi.stubGlobal("fetch", fetch);
+
+        await expect(bySlug(config, "post", slug)).resolves.toBeNull();
+        await expect(bySlugPreview(config, "post", slug, "preview-token")).resolves.toBeNull();
+        expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it("still reads a slug with dots in it, encoded as one segment", async () => {
+        const fetch = answer(200, { id: "e1", data: {} });
+        vi.stubGlobal("fetch", fetch);
+
+        await expect(bySlug(config, "post", "v1.2")).resolves.toMatchObject({ id: "e1" });
+        await bySlug(config, "post", "a/../b");
+
+        expect(fetch).toHaveBeenCalledTimes(2);
+        const urls = fetch.mock.calls.map(([url]) => String(url));
+        expect(urls[0]).toMatch(/\/api\/public\/post\/v1\.2(\?|$)/);
+        expect(urls[1]).toMatch(/\/api\/public\/post\/a%2F\.\.%2Fb(\?|$)/);
     });
 });

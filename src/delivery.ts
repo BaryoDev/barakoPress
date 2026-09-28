@@ -513,11 +513,21 @@ export async function list(
     return get<Paged<PublicContent>>(config, `/api/public/${encodeURIComponent(type)}?${q}`, { type });
 }
 
+/*
+ * `.` and `..` name no entry. Encoding does not keep them in the path: a URL parser resolves them,
+ * typed or as `%2e`, and the read lands on another endpoint. So they are refused before a URL is built.
+ */
+function isDotSegment(slug: string): boolean {
+    const plain = slug.replace(/%2e/gi, ".");
+    return plain === "." || plain === "..";
+}
+
 export async function bySlug(
     config: PressConfig,
     type: string,
     slug: string,
 ): Promise<PublicContent | null> {
+    if (isDotSegment(slug)) return null;
     try {
         return await get<PublicContent>(
             config,
@@ -544,6 +554,7 @@ export async function bySlugPreview(
     slug: string,
     token: string,
 ): Promise<PublicContent | null> {
+    if (isDotSegment(slug)) return null;
     return getFresh<PublicContent>(
         config,
         `/api/public/${encodeURIComponent(type)}/${encodeURIComponent(slug)}?preview=${encodeURIComponent(token)}`,
