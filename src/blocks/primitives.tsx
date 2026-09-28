@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Asset, renderProse } from "../assets.js";
 import type { PressConfig } from "../config.js";
 import { holdsLink, renderInlineMarkdown } from "../markdown.js";
+import { plainLiterals } from "../literal.js";
 import { recipeLook } from "../recipes.js";
 import type { PressTheme } from "../theme.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
@@ -738,7 +739,8 @@ const text = defineBlock<TextProps>({
          * presentational either way and the off-screen one is the figure, so what is read is the
          * same whether the count runs or not.
          */
-        const to = props.motion === "countUp" ? countTarget(props.value) : null;
+        // A bound value is read as markdown only on the inline path; the count reads the characters.
+        const to = props.motion === "countUp" ? countTarget(plainLiterals(props.value)) : null;
         if (to === null && props.format === "inline") {
             return (
                 <>
@@ -763,8 +765,8 @@ const text = defineBlock<TextProps>({
             <>
                 <style dangerouslySetInnerHTML={{ __html: countUpCss(cls, to) }} />
                 <Tag {...hidden} {...look(theme, props.recipe, style, {}, cls)}>
-                    <span className={HIDDEN_CLASS}>{props.value}</span>
-                    <span data-bp-counted aria-hidden="true">{props.value}</span>
+                    <span className={HIDDEN_CLASS}>{plainLiterals(props.value)}</span>
+                    <span data-bp-counted aria-hidden="true">{plainLiterals(props.value)}</span>
                 </Tag>
             </>
         );

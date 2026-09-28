@@ -1,5 +1,6 @@
-import { Marked, type Tokens } from "marked";
+import { Marked, type MarkedExtension } from "marked";
 import { LINK_REL, NEW_TAB_TARGET } from "./config.js";
+import { hasLiteral, htmlLiterals, plainLiterals } from "./literal.js";
 
 /*
  * Markdown to HTML, treating the markdown as untrusted.
@@ -11,7 +12,8 @@ import { LINK_REL, NEW_TAB_TARGET } from "./config.js";
  *
  * Three rules:
  *   1. Raw HTML in the source is escaped, never passed through. That removes script tags, event
- *      handler attributes and iframes in one move, instead of trying to enumerate them.
+ *      handler attributes and iframes in one move, instead of trying to enumerate them. It is done
+ *      on the tokens, by `RAW_HTML_AS_TEXT`, which every renderer here is built with.
  *   2. A link or image destination must be http, https or mailto. That kills javascript: and
  *      data: URLs, which are the two that execute.
  *   3. Text is escaped on the way into every attribute, so an alt or a title cannot close its own
@@ -29,6 +31,13 @@ const SAFE_SCHEMES = ["http:", "https:", "mailto:"];
 
 export function isSafeHref(href: string): boolean {
     const trimmed = href.trim();
+    // A real URL carries whitespace and control characters percent-encoded. A browser drops a tab
+    // or a line break inside one, so `/<tab>/host` is `//host` to it, and a space lets a valid
+    // address carry words after it wherever the value is also read as text.
+    if (/[\s\x00-\x1f\x7f]/.test(trimmed)) return false;
+    // A character reference decodes to whatever it names, `&#47;` to a slash, wherever the caller
+    // forgets to escape the ampersand. A link has no need of one.
+    if (/&#|&[a-z][a-z0-9]*;/i.test(trimmed)) return false;
     // `//host` and `/\host` are read by a browser as another site, not a path on this one.
     if (trimmed.startsWith("//") || trimmed.startsWith("/\\")) return false;
     // A relative or anchor link has no scheme and cannot execute.
@@ -39,6 +48,11 @@ export function isSafeHref(href: string): boolean {
         // Unparseable means it is not a URL this should emit.
         return false;
     }
+}
+
+/** A destination this renderer draws: a safe one, and never one a bound value supplied. */
+function isLinkable(href: string): boolean {
+    return !hasLiteral(href) && isSafeHref(href);
 }
 
 function escapeHtml(value: string): string {
@@ -66,18 +80,34 @@ export interface RenderMarkdownOptions {
     newTab?: boolean;
 }
 
+/*
+ * Every piece of raw HTML becomes a text token that marked escapes, before anything renders.
+ *
+ * Overriding the `html` renderer is not enough. After an inline `<script>`, `<pre>`, `<code>` or
+ * `<kbd>` the lexer marks the text that follows as already escaped, without escaping it, and the
+ * text renderer trusts that flag. So `a <script> <img src=x onerror=...` with no closing `>` reached
+ * the page as a live tag. Nothing typed by an author is ever escaped by the lexer here, so no token
+ * is allowed to say it was.
+ */
+const RAW_HTML_AS_TEXT: MarkedExtension = {
+    walkTokens(token) {
+        const t = token as { type: string; text?: string; escaped?: boolean; tokens?: unknown };
+        if (t.type === "html") {
+            t.type = "text";
+            delete t.tokens;
+        }
+        if ("escaped" in t) t.escaped = false;
+    },
+};
+
 function buildRenderer(headingIds: boolean, newTab: boolean) {
-    const marked = new Marked({ gfm: true, breaks: false });
+    const marked = new Marked({ gfm: true, breaks: false }, RAW_HTML_AS_TEXT);
 
     marked.use({
         renderer: {
-            // Raw HTML blocks and inline HTML are emitted as visible text, not as markup.
-            html({ text }: Tokens.HTML | Tokens.Tag) {
-                return escapeHtml(text);
-            },
             link({ href, title, tokens }) {
                 const label = this.parser.parseInline(tokens);
-                if (!isSafeHref(href)) {
+                if (!isLinkable(href)) {
                     // Keep the words, drop the destination. A reader still sees what was written.
                     return label;
                 }
@@ -88,14 +118,14 @@ function buildRenderer(headingIds: boolean, newTab: boolean) {
                 return `<a href="${escapeHtml(href.trim())}"${t}${target}${rel}>${label}</a>`;
             },
             image({ href, title, text }) {
-                if (!isSafeHref(href)) return escapeHtml(text ?? "");
+                if (!isLinkable(href)) return escapeHtml(text ?? "");
                 const t = title ? ` title="${escapeHtml(title)}"` : "";
                 return `<img src="${escapeHtml(href.trim())}" alt="${escapeHtml(text ?? "")}"${t} loading="lazy">`;
             },
             heading({ tokens, depth }) {
                 const label = this.parser.parseInline(tokens);
                 if (!headingIds) return `<h${depth}>${label}</h${depth}>`;
-                const plain = tokens.map((t) => ("raw" in t ? t.raw : "")).join("");
+                const plain = plainLiterals(tokens.map((t) => ("raw" in t ? t.raw : "")).join(""));
                 return `<h${depth} id="${escapeHtml(anchor(plain))}">${label}</h${depth}>`;
             },
         },
@@ -117,7 +147,7 @@ export function renderMarkdown(source: string, options: RenderMarkdownOptions = 
         renderer = buildRenderer(headingIds, newTab);
         renderers.set(key, renderer);
     }
-    return renderer.parse(source, { async: false }) as string;
+    return htmlLiterals(renderer.parse(source, { async: false }) as string, escapeHtml);
 }
 
 export interface MarkdownHeading {
@@ -195,7 +225,7 @@ export function markdownHeadings(source: string, depth = 2): MarkdownHeading[] {
  * lose the mark, since none of them is something a line of copy is asked to carry.
  */
 function buildInlineRenderer() {
-    const marked = new Marked({ gfm: true, breaks: false });
+    const marked = new Marked({ gfm: true, breaks: false }, RAW_HTML_AS_TEXT);
     marked.use({
         extensions: [
             {
@@ -217,12 +247,9 @@ function buildInlineRenderer() {
             },
         ],
         renderer: {
-            html({ text }: Tokens.HTML | Tokens.Tag) {
-                return escapeHtml(text);
-            },
             link({ href, title, tokens }) {
                 const label = this.parser.parseInline(tokens);
-                if (!isSafeHref(href)) return label;
+                if (!isLinkable(href)) return label;
                 const t = title ? ` title="${escapeHtml(title)}"` : "";
                 const rel = /^https?:/.test(href.trim()) ? ` rel="${LINK_REL}"` : "";
                 return `<a href="${escapeHtml(href.trim())}"${t}${rel}>${label}</a>`;
@@ -253,9 +280,10 @@ export const MAX_INLINE = 2000;
 /** A line of text with inline marks, as HTML. Block syntax is left as the text it is. */
 export function renderInlineMarkdown(source: string): string {
     if (!source) return "";
-    if (source.length > MAX_INLINE) return escapeHtml(source);
+    // Measured as it will read, since a bound value is carried as a longer token (see literal.ts).
+    if (plainLiterals(source).length > MAX_INLINE) return escapeHtml(plainLiterals(source));
     inlineRenderer ??= buildInlineRenderer();
-    return inlineRenderer.parseInline(source, { async: false }) as string;
+    return htmlLiterals(inlineRenderer.parseInline(source, { async: false }) as string, escapeHtml);
 }
 
 /**

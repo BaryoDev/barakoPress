@@ -29,6 +29,7 @@ import {
 } from "./data.js";
 import { writeFilterState } from "./filter.js";
 import { holdsLink } from "../markdown.js";
+import { plainLiterals } from "../literal.js";
 import {
     INVALID,
     MAX_BLOCKS,
@@ -242,7 +243,7 @@ async function bindBlock(block: ResolvedBlock, frame: Frame, ctx: BindContext): 
             return bindFilterBar(block, frame);
     }
 
-    const bound = await bindProps(block, frame.source, {});
+    const bound = await bindProps(block, frame.source, { preset: Boolean(block.definition.preset) });
     if (!bound) return [];
     if (block.definition.preset) return expandPreset(block, bound, frame, ctx);
     return [{ ...block, props: bound, slots: await bindSlots(block, frame, ctx) }];
@@ -266,6 +267,12 @@ async function bindSlots(
 interface BindPropsOptions {
     /** Keep a prop whose bound value is empty, instead of treating it as absent. */
     allowEmpty?: boolean;
+    /**
+     * The props are a preset's, read only by the blocks inside it through `{{props.X}}`. A URL
+     * parameter in a text prop stays a literal token until the field it lands in says how it reads,
+     * since a preset's plain text prop can be handed to markdown.
+     */
+    preset?: boolean;
 }
 
 /**
@@ -302,7 +309,7 @@ async function bindRecord(
         const where = { block, field: path + field.name };
         if (field.kind === "list" || field.kind === "group") {
             if (value === undefined) continue;
-            const bound = await bindStructured(field, value, source, where);
+            const bound = await bindStructured(field, value, source, where, options);
             if (bound === INVALID) return null;
             if (bound === undefined) {
                 if (field.required) return null;
@@ -313,7 +320,8 @@ async function bindRecord(
             continue;
         }
         if (typeof value !== "string" || !isBindable(field) || !hasBinding(value)) continue;
-        const { text } = await bindText(value, source, where);
+        const keep = options.preset === true || readsMarks(block, field, record);
+        const { text } = await bindText(value, source, where, keep);
         if (text === "") {
             if (options.allowEmpty) {
                 props[field.name] = "";
@@ -323,10 +331,31 @@ async function bindRecord(
             delete props[field.name];
             continue;
         }
-        if (!accepts(field, text)) return null;
+        // Checked as what it stands for: a url prop a preset carries a token in is still a url.
+        if (!accepts(field, plainLiterals(text))) return null;
         props[field.name] = text;
     }
+    // A token stays only where it is read as markdown, now the props it depends on are bound. A
+    // preset's props are read only through `{{props.X}}`, which decides again where they land.
+    if (!options.preset) {
+        for (const field of fields) {
+            const value = props[field.name];
+            if (typeof value === "string" && !readsMarks(block, field, props)) props[field.name] = plainLiterals(value);
+        }
+    }
     return props;
+}
+
+/*
+ * Whether a field's value is read as markdown: a `markdown` field, or a text block's value in inline
+ * mode. While binding, a format that is itself bound may come out inline, so it counts as inline;
+ * once it is bound, the pass at the end of `bindRecord` reads it again.
+ */
+function readsMarks(block: string, field: BlockField, record: Record<string, unknown>): boolean {
+    if (field.kind === "markdown") return true;
+    if (block !== "text" || field.name !== "value") return false;
+    const format = record.format;
+    return format === "inline" || (typeof format === "string" && hasBinding(format));
 }
 
 /**
@@ -342,6 +371,7 @@ async function bindStructured(
     value: unknown,
     source: BindingSource,
     where: BindingWhere,
+    options: BindPropsOptions,
 ): Promise<unknown> {
     if (typeof value === "string") {
         const resolved = await bindValue(value, source, where);
@@ -349,7 +379,7 @@ async function bindStructured(
         const read = readValue(field, resolved, "data");
         return Array.isArray(read) && read.length === 0 ? undefined : read;
     }
-    if (field.kind === "group") return bindGroup(field, value, source, where);
+    if (field.kind === "group") return bindGroup(field, value, source, where, options);
 
     const entry = itemField(field);
     const out: unknown[] = [];
@@ -364,9 +394,15 @@ async function bindStructured(
     return field.min === undefined || out.length >= field.min ? out : INVALID;
 }
 
-async function bindGroup(field: BlockField, value: unknown, source: BindingSource, where: BindingWhere) {
+async function bindGroup(
+    field: BlockField,
+    value: unknown,
+    source: BindingSource,
+    where: BindingWhere,
+    options: BindPropsOptions = {},
+) {
     const record = value as Record<string, unknown>;
-    const bound = await bindRecord(field.fields ?? [], record, source, where.block, `${where.field}.`, {});
+    const bound = await bindRecord(field.fields ?? [], record, source, where.block, `${where.field}.`, { preset: options.preset });
     return bound ?? INVALID;
 }
 

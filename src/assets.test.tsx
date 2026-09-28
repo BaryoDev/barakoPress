@@ -279,6 +279,22 @@ describe("every path an image is drawn through", () => {
         expectAsSupplied(renderToStaticMarkup(<ItemView config={config} item={item(markdown)} />));
     });
 
+    it("keeps raw HTML as text when it styles a supplied asset in the same markdown", () => {
+        const payloads = [
+            "a <script> <img src=x onerror=alert(1)// b",
+            "- one <pre> <img src=x onerror=alert(1)// two",
+            "<img src=x onerror=alert(1)",
+        ];
+        for (const payload of payloads) {
+            const html = renderProse(`${markdown}\n${payload}\n`, config.theme);
+            expect(html).toContain("alert(1)");
+            // The supplied asset is the one image drawn, and it was styled.
+            expect(html.match(/<img\b/g)).toHaveLength(1);
+            expect(html).toContain(`<img style=`);
+            expect(html).not.toMatch(/<(?!\/?(?:p|ul|li)>|img style=)[a-z!/]/i);
+        }
+    });
+
     it("draws every image through the one component that keeps the rule", () => {
         const files: string[] = [];
         const walk = (dir: string) => {

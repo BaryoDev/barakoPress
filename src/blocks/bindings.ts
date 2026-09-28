@@ -21,6 +21,8 @@
  * page down.
  */
 
+import { literalToken, plainLiterals } from "../literal.js";
+
 /**
  * The scopes a page may read. `viewer` arrives with barakoPress #7.
  *
@@ -368,11 +370,16 @@ function plain(value: unknown): string | null {
  *
  * Returns the text and whether every placeholder in it found a value. A caller that cares about the
  * difference between "resolved to nothing" and "had nothing to resolve" reads `bound`.
+ *
+ * With `keepLiterals`, a `query` value goes in as a literal token (see literal.ts) and a token
+ * already in a value, one a preset's props carried here, is kept. Without it, every token is put
+ * back as the value it stands for, so a field that is not markdown gets the characters sent.
  */
 export async function bindText(
     template: string,
     source: BindingSource,
     where?: BindingWhere,
+    keepLiterals = false,
 ): Promise<{ text: string; bound: boolean; missing: BindingProblem[] }> {
     const bindings = readBindings(template);
     if (bindings.length === 0) return { text: template, bound: false, missing: [] };
@@ -396,7 +403,11 @@ export async function bindText(
         const { bound, value } = await source.lookup({ ...binding, scope: binding.scope });
         const text = formatValue(value, binding.format, source.options);
         if (text === null) report(binding, bound ? "no value" : "unbound scope");
-        resolved.set(binding.raw, text ?? binding.fallback);
+        // A URL parameter is typed by whoever sent the link, so where the field reads marks it goes
+        // in as a token the renderer draws as plain characters. The fallback is the editor's.
+        const literal =
+            text === null ? null : !keepLiterals ? plainLiterals(text) : binding.scope === "query" ? literalToken(text) : text;
+        resolved.set(binding.raw, literal ?? binding.fallback);
     }
 
     // One pass over the original, and what a placeholder resolved to is never scanned again. A
@@ -425,5 +436,5 @@ export async function bindValue(template: string, source: BindingSource, where?:
     const { bound, value } = await source.lookup({ ...binding, scope: binding.scope });
     if (!bound) return report("unbound scope");
     if (value === undefined || value === null || value === "") return report("no value");
-    return value;
+    return typeof value === "string" ? plainLiterals(value) : value;
 }

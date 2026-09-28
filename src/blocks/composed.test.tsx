@@ -659,6 +659,173 @@ describe("what a binding may not do", () => {
         }
     });
 
+
+    /*
+     * A URL parameter is typed by whoever sends the link, not by an editor, so where it lands in
+     * markdown it is drawn as exactly the characters that were sent: no mark, link or image of its
+     * own, and nothing added to it either. The same value in a plain text field is left alone.
+     */
+    const PARAMETER = "**Urgent** [log in](https://elsewhere.example/x) ![p](https://elsewhere.example/t.png) [run](javascript:alert(1)) <img src=x onerror=alert(1)>";
+    const SHOWN = "**Urgent** [log in](https://elsewhere.example/x) ![p](https://elsewhere.example/t.png) [run](javascript:alert(1)) &lt;img src=x onerror=alert(1)&gt;";
+
+    function expectInert(html: string): void {
+        expect(html).not.toContain("<strong>Urgent");
+        expect(html).not.toContain('href="https://elsewhere.example');
+        expect(html).not.toContain('src="https://elsewhere.example');
+        expect(html).not.toContain("<img src=x");
+        expect(html).not.toContain("\\*");
+        expect(html).not.toContain("bpqlit");
+    }
+
+    it("draws a URL parameter bound into markdown as the characters sent", async () => {
+        const html = await page(
+            "academy.example",
+            [
+                { type: "richText", props: { markdown: "Searched: {{query.q}}" } },
+                text("Inline: {{query.q}}", { format: "inline" }),
+            ],
+            { q: PARAMETER },
+        );
+
+        expect(html).toContain(`Searched: ${SHOWN}`);
+        expect(html).toContain(`Inline: ${SHOWN}`);
+        expectInert(html);
+    });
+
+    it("draws a URL parameter inside code as the characters sent, backticks included", async () => {
+        const q = "a.b-c (d) ` <b>x</b> `";
+        const html = await page(
+            "academy.example",
+            [
+                text("You searched `{{query.q}}`", { format: "inline" }),
+                { type: "richText", props: { markdown: "```\n{{query.q}}\n```" } },
+            ],
+            { q },
+        );
+
+        expect(html).toContain("You searched <code>a.b-c (d) ` &lt;b&gt;x&lt;/b&gt; `</code>");
+        expect(html).toContain("<pre><code>a.b-c (d) ` &lt;b&gt;x&lt;/b&gt; `\n</code></pre>");
+    });
+
+    it("never lets a URL parameter be a link's destination", async () => {
+        const html = await page(
+            "academy.example",
+            [{ type: "richText", props: { markdown: "[go]({{query.q}}) and <{{query.q}}>" } }],
+            { q: "https://elsewhere.example/x" },
+        );
+
+        expect(html).toContain("go and &lt;https://elsewhere.example/x&gt;");
+        expect(html).not.toContain('href="https://elsewhere.example');
+    });
+
+    it("measures a URL parameter by what was sent against the inline limit", async () => {
+        const html = await page("academy.example", [text("**{{query.q}}**", { format: "inline" })], {
+            q: ".".repeat(1500),
+        });
+
+        expect(html).toContain(`<strong>${".".repeat(1500)}</strong>`);
+    });
+
+    it("keeps an editor's own marks around a URL parameter in markdown", async () => {
+        const html = await page("academy.example", [text("**{{query.q}}**", { format: "inline" })], { q: "a_b*c" });
+
+        expect(html).toContain("<strong>a_b*c</strong>");
+    });
+
+    // A guard rather than a regression test: master draws this the same way.
+    it("leaves a URL parameter in a plain text field as it was sent", async () => {
+        const html = await page("academy.example", [text("Plain: {{query.q}}")], { q: "**a** [b](c)" });
+
+        expect(html).toContain("Plain: **a** [b](c)");
+    });
+
+    it("keeps a URL parameter literal through a built-in preset that hands it to markdown", async () => {
+        const html = await page("academy.example", [{ type: "faqItem", props: { question: "Q?", answer: "{{query.q}}" } }], {
+            q: PARAMETER,
+        });
+
+        expect(html).toContain(SHOWN);
+        expectInert(html);
+    });
+
+    it("keeps a URL parameter literal through a site's preset, and plain where the preset shows it plain", async () => {
+        const note = {
+            type: "note",
+            label: "Note",
+            fields: [{ name: "body", kind: "text", label: "Body", required: true }],
+            blocks: [
+                { type: "richText", props: { markdown: "Note: {{props.body}}" } },
+                { type: "text", props: { value: "Said: {{props.body}}" } },
+                { type: "showIf", props: { value: "{{props.body}}", equals: "**x**", content: [[text("matched as sent")]] } },
+            ],
+        };
+        TENANTS.academy.settings.Presets = [BAND_PRESET, note];
+        try {
+            const html = await page("academy.example", [{ type: "note", props: { body: "{{query.q}}" } }], { q: PARAMETER });
+            expect(html).toContain(`Note: ${SHOWN}`);
+            expect(html).toContain(`Said: ${SHOWN}`);
+            expectInert(html);
+
+            const matched = await page("academy.example", [{ type: "note", props: { body: "{{query.q}}" } }], { q: "**x**" });
+            expect(matched).toContain("matched as sent");
+            expect(matched).toContain("Said: **x**");
+        } finally {
+            TENANTS.academy.settings.Presets = [BAND_PRESET];
+        }
+    });
+
+    it("draws a URL parameter as sent when a bound format comes out plain", async () => {
+        const bound = await page("academy.example", [text("Hi {{query.q}}", { format: "{{query.f}}" })], { q: "Ana", f: "plain" });
+        const fallen = await page("academy.example", [text("Hi {{query.q}}", { format: "{{query.f ?? plain}}" })], { q: "Ana" });
+        const inline = await page("academy.example", [text("Hi **{{query.q}}**", { format: "{{query.f}}" })], { q: "Ana", f: "inline" });
+
+        expect(bound).toContain("Hi Ana");
+        expect(fallen).toContain("Hi Ana");
+        expect(inline).toContain("Hi <strong>Ana</strong>");
+    });
+
+    it("counts up to a URL parameter in a line of inline marks", async () => {
+        const html = await page("academy.example", [text("{{query.n}}", { motion: "countUp", format: "inline" })], { n: "42" });
+
+        expect(html).toContain("data-bp-counted");
+        expect(html).toMatch(/data-bp-counted[^>]*>42</);
+    });
+
+    it("keeps a URL parameter literal through a preset's url prop, and refuses it as a link", async () => {
+        const PHISH = "https://academy.example/ **Session expired** [Log in again](https://evil.example/login)";
+        const linked = {
+            type: "linked",
+            label: "Linked",
+            fields: [{ name: "u", kind: "url", label: "Link" }],
+            blocks: [
+                { type: "richText", props: { markdown: "See {{props.u}}" } },
+                { type: "button", props: { label: "Open it", href: "{{props.u}}" } },
+            ],
+        };
+        TENANTS.academy.settings.Presets = [BAND_PRESET, linked];
+        try {
+            // With spaces in it the value is no url at all, so the preset does not render.
+            const spaced = await page("academy.example", [{ type: "linked", props: { u: "{{query.u}}" } }, text("rest")], { u: PHISH });
+            expect(spaced).toContain("rest");
+            expect(spaced).not.toContain('href="https://evil.example');
+            expect(spaced).not.toContain("<strong>Session");
+            expect(spaced).not.toContain("Open it");
+
+            // Without spaces it is a url on this site, and in markdown it is still only the characters sent.
+            const packed = "https://academy.example/x**Session**[Log](https://evil.example/login)";
+            const html = await page("academy.example", [{ type: "linked", props: { u: "{{query.u}}" } }], { u: packed });
+            expect(html).toContain(`See ${packed}`);
+            expect(html).not.toContain('href="https://evil.example');
+            expect(html).not.toContain("<strong>Session");
+
+            const plain = await page("academy.example", [{ type: "linked", props: { u: "{{query.u}}" } }], { u: "https://academy.example/x" });
+            expect(plain).toContain('href="https://academy.example/x"');
+            expect(plain).toContain("Open it");
+        } finally {
+            TENANTS.academy.settings.Presets = [BAND_PRESET];
+        }
+    });
+
     it("bounds what one page may read and how far a repeat may go", async () => {
         const many = Array.from({ length: 12 }, () => ({
             type: "source",
