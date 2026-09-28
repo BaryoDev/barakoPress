@@ -9,13 +9,22 @@
  * A link or an image whose destination holds a token is dropped, so a sent value is never a URL.
  *
  * Anything that is not rendered as markdown gets the value back as it was, through `plainLiterals`.
- * A token someone types by hand decodes to text they chose, escaped, so it can only ever be words.
+ *
+ * The prefix is random per process, so text in stored content cannot be read as a token. That holds
+ * because a token lives only between binding and rendering, inside one request: bound props are
+ * never stored or handed to another process, and what is cached is the HTML after decoding.
  */
 
-const PREFIX = "bpqlit";
-const END = "x";
-const TOKENS = /bpqlit([0-9a-f]*)x/g;
-const ANY = /bpqlit[0-9a-f]*x/;
+function randomPrefix(): string {
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    return "bp" + Array.from(bytes, (b) => String.fromCharCode(103 + (b % 20))).join("");
+}
+
+// Letters from g to z only, so the prefix can never be read as part of the hex after it.
+const PREFIX = randomPrefix();
+const END = "z";
+const TOKENS = new RegExp(`${PREFIX}([0-9a-f]*)${END}`, "g");
+const ANY = new RegExp(`${PREFIX}[0-9a-f]*${END}`);
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();

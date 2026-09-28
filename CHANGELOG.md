@@ -7,15 +7,17 @@
   `<kbd>`, marked flags the text that follows as already escaped without escaping it, so a tag with
   no closing `>` after one of those reached the page as markup.
 
-- `isSafeHref` drops tabs and line breaks before it checks, as a browser does, so `/<tab>/host` is
-  read as the `//host` it is and refused. It also refuses a destination holding a character
-  reference (`&#47;`, `&sol;`), which decodes to a slash wherever the ampersand is left unescaped.
-  A stored url holding `&amp;` where `&` was meant is now refused too.
+- `isSafeHref` refuses a destination with whitespace or a control character inside it, since a real
+  URL carries those percent-encoded. A browser drops a tab or a line break inside a URL, so
+  `/<tab>/host` was `//host` to it, and a space let a valid address carry words after it. It also
+  refuses a character reference (`&#47;`, `&sol;`), which decodes to a slash wherever the ampersand
+  is left unescaped. A stored url with a literal space, or `&amp;` where `&` was meant, is now
+  refused, and the block holding it does not render.
 
 - A `{{query.X}}` value bound into a `markdown` field, or into a text block's value in inline mode,
   is drawn as exactly the characters that were sent, including inside a code span or a code block:
   no link, image, emphasis or raw HTML of its own, and never a link's destination. This holds when
-  a preset's text prop carries the value into markdown, as `faqItem` does with its answer. An
+  a preset's prop of any kind carries the value into markdown, as `faqItem` does with its answer. An
   editor's own marks around the placeholder still apply, and a plain text field gets the value
   unchanged.
 

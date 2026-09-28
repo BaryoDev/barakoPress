@@ -29,6 +29,7 @@ import {
 } from "./data.js";
 import { writeFilterState } from "./filter.js";
 import { holdsLink } from "../markdown.js";
+import { plainLiterals } from "../literal.js";
 import {
     INVALID,
     MAX_BLOCKS,
@@ -319,7 +320,7 @@ async function bindRecord(
             continue;
         }
         if (typeof value !== "string" || !isBindable(field) || !hasBinding(value)) continue;
-        const keep = readsMarks(block, field, record) || (options.preset === true && (field.kind === "text" || field.kind === "markdown"));
+        const keep = options.preset === true || readsMarks(block, field, record);
         const { text } = await bindText(value, source, where, keep);
         if (text === "") {
             if (options.allowEmpty) {
@@ -330,15 +331,25 @@ async function bindRecord(
             delete props[field.name];
             continue;
         }
-        if (!accepts(field, text)) return null;
+        // Checked as what it stands for: a url prop a preset carries a token in is still a url.
+        if (!accepts(field, plainLiterals(text))) return null;
         props[field.name] = text;
+    }
+    // A token stays only where it is read as markdown, now the props it depends on are bound. A
+    // preset's props are read only through `{{props.X}}`, which decides again where they land.
+    if (!options.preset) {
+        for (const field of fields) {
+            const value = props[field.name];
+            if (typeof value === "string" && !readsMarks(block, field, props)) props[field.name] = plainLiterals(value);
+        }
     }
     return props;
 }
 
 /*
  * Whether a field's value is read as markdown: a `markdown` field, or a text block's value in inline
- * mode. A format that is itself bound may come out inline, so it counts as inline here.
+ * mode. While binding, a format that is itself bound may come out inline, so it counts as inline;
+ * once it is bound, the pass at the end of `bindRecord` reads it again.
  */
 function readsMarks(block: string, field: BlockField, record: Record<string, unknown>): boolean {
     if (field.kind === "markdown") return true;

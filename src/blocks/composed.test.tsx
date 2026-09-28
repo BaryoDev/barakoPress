@@ -732,6 +732,7 @@ describe("what a binding may not do", () => {
         expect(html).toContain("<strong>a_b*c</strong>");
     });
 
+    // A guard rather than a regression test: master draws this the same way.
     it("leaves a URL parameter in a plain text field as it was sent", async () => {
         const html = await page("academy.example", [text("Plain: {{query.q}}")], { q: "**a** [b](c)" });
 
@@ -768,6 +769,58 @@ describe("what a binding may not do", () => {
             const matched = await page("academy.example", [{ type: "note", props: { body: "{{query.q}}" } }], { q: "**x**" });
             expect(matched).toContain("matched as sent");
             expect(matched).toContain("Said: **x**");
+        } finally {
+            TENANTS.academy.settings.Presets = [BAND_PRESET];
+        }
+    });
+
+    it("draws a URL parameter as sent when a bound format comes out plain", async () => {
+        const bound = await page("academy.example", [text("Hi {{query.q}}", { format: "{{query.f}}" })], { q: "Ana", f: "plain" });
+        const fallen = await page("academy.example", [text("Hi {{query.q}}", { format: "{{query.f ?? plain}}" })], { q: "Ana" });
+        const inline = await page("academy.example", [text("Hi **{{query.q}}**", { format: "{{query.f}}" })], { q: "Ana", f: "inline" });
+
+        expect(bound).toContain("Hi Ana");
+        expect(fallen).toContain("Hi Ana");
+        expect(inline).toContain("Hi <strong>Ana</strong>");
+    });
+
+    it("counts up to a URL parameter in a line of inline marks", async () => {
+        const html = await page("academy.example", [text("{{query.n}}", { motion: "countUp", format: "inline" })], { n: "42" });
+
+        expect(html).toContain("data-bp-counted");
+        expect(html).toMatch(/data-bp-counted[^>]*>42</);
+    });
+
+    it("keeps a URL parameter literal through a preset's url prop, and refuses it as a link", async () => {
+        const PHISH = "https://academy.example/ **Session expired** [Log in again](https://evil.example/login)";
+        const linked = {
+            type: "linked",
+            label: "Linked",
+            fields: [{ name: "u", kind: "url", label: "Link" }],
+            blocks: [
+                { type: "richText", props: { markdown: "See {{props.u}}" } },
+                { type: "button", props: { label: "Open it", href: "{{props.u}}" } },
+            ],
+        };
+        TENANTS.academy.settings.Presets = [BAND_PRESET, linked];
+        try {
+            // With spaces in it the value is no url at all, so the preset does not render.
+            const spaced = await page("academy.example", [{ type: "linked", props: { u: "{{query.u}}" } }, text("rest")], { u: PHISH });
+            expect(spaced).toContain("rest");
+            expect(spaced).not.toContain('href="https://evil.example');
+            expect(spaced).not.toContain("<strong>Session");
+            expect(spaced).not.toContain("Open it");
+
+            // Without spaces it is a url on this site, and in markdown it is still only the characters sent.
+            const packed = "https://academy.example/x**Session**[Log](https://evil.example/login)";
+            const html = await page("academy.example", [{ type: "linked", props: { u: "{{query.u}}" } }], { u: packed });
+            expect(html).toContain(`See ${packed}`);
+            expect(html).not.toContain('href="https://evil.example');
+            expect(html).not.toContain("<strong>Session");
+
+            const plain = await page("academy.example", [{ type: "linked", props: { u: "{{query.u}}" } }], { u: "https://academy.example/x" });
+            expect(plain).toContain('href="https://academy.example/x"');
+            expect(plain).toContain("Open it");
         } finally {
             TENANTS.academy.settings.Presets = [BAND_PRESET];
         }

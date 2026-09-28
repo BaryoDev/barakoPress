@@ -30,8 +30,11 @@ import { hasLiteral, htmlLiterals, plainLiterals } from "./literal.js";
 const SAFE_SCHEMES = ["http:", "https:", "mailto:"];
 
 export function isSafeHref(href: string): boolean {
-    // A browser drops tabs and line breaks anywhere in a URL, so `/<tab>/host` is `//host` to it.
-    const trimmed = href.replace(/[\t\n\r]/g, "").trim();
+    const trimmed = href.trim();
+    // A real URL carries whitespace and control characters percent-encoded. A browser drops a tab
+    // or a line break inside one, so `/<tab>/host` is `//host` to it, and a space lets a valid
+    // address carry words after it wherever the value is also read as text.
+    if (/[\s\x00-\x1f\x7f]/.test(trimmed)) return false;
     // A character reference decodes to whatever it names, `&#47;` to a slash, wherever the caller
     // forgets to escape the ampersand. A link has no need of one.
     if (/&#|&[a-z][a-z0-9]*;/i.test(trimmed)) return false;

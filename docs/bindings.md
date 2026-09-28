@@ -29,7 +29,7 @@ A `query` value is typed by whoever sent the link, so where it lands in markdown
 characters that were sent, in running text, a code span or a code block alike:
 `[x](https://elsewhere.example)` stays those words, not a link, and a value is never used as a
 link's or an image's destination. Marks the editor wrote around the placeholder still apply. This
-holds through a preset too: a value a preset's text prop carries into markdown inside it, as
+holds through a preset too: a value any of a preset's props carries into markdown inside it, as
 `faqItem` does with its answer, is drawn the same way. A plain text field gets the value as it was
 sent, since nothing there reads marks.
 

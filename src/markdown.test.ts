@@ -171,7 +171,12 @@ describe.each([
         expect(isSafeHref("/&#x2F;evil.example")).toBe(false);
         expect(isSafeHref("/&sol;evil.example")).toBe(false);
         expect(isSafeHref("/&#47evil.example")).toBe(false);
-        expect(isSafeHref("/a\tb")).toBe(true);
+        // A real URL carries whitespace and control characters percent-encoded.
+        expect(isSafeHref("/a\tb")).toBe(false);
+        expect(isSafeHref("/a b")).toBe(false);
+        expect(isSafeHref("/a\u0001b")).toBe(false);
+        expect(isSafeHref("https://academy.example/ **x** [y](https://evil.example)")).toBe(false);
+        expect(isSafeHref("  https://academy.example/a%20b  ")).toBe(true);
         expect(isSafeHref("/search?q=a&b=c")).toBe(true);
     });
 });
@@ -211,5 +216,17 @@ describe.each([
         const html = renderInlineMarkdown(markdown);
         expect(html).toContain("alert(1)");
         expect(html).not.toMatch(LIVE_TAG);
+    });
+});
+
+describe("text shaped like a bound value", () => {
+    it("is drawn as written, and its heading keeps the id the heading list gives it", () => {
+        const body = "## Hi bpqlit41x\n\nSee bpqlit416e61x.";
+        const html = source.renderMarkdown(body);
+        const [heading] = source.markdownHeadings(body);
+
+        expect(heading).toEqual({ id: "hi-bpqlit41x", text: "Hi bpqlit41x" });
+        expect(html).toContain('<h2 id="hi-bpqlit41x">Hi bpqlit41x</h2>');
+        expect(html).toContain("See bpqlit416e61x.");
     });
 });
