@@ -24,11 +24,14 @@ server log, never a crash. What a binding resolves to is checked against the fie
 whose stored field holds `javascript:` drops the block; and a resolved value is never rescanned, so
 one field cannot reach another through its own contents.
 
-A `query` value is typed by whoever sent the link, so where the field reads markdown (a `richText`'s
-`markdown`, or a `text` block's `value` with `format: "inline"`) it is backslash-escaped first and
-renders as the characters that were sent: `[x](https://elsewhere.example)` stays those words, not a
-link. Marks the editor wrote around the placeholder still apply. A plain text field gets the value
-as it was sent, since nothing there reads marks.
+A `query` value is typed by whoever sent the link, so where it lands in markdown (a `richText`'s
+`markdown`, or a `text` block's `value` with `format: "inline"`) it is drawn as exactly the
+characters that were sent, in running text, a code span or a code block alike:
+`[x](https://elsewhere.example)` stays those words, not a link, and a value is never used as a
+link's or an image's destination. Marks the editor wrote around the placeholder still apply. This
+holds through a preset too: a value a preset's text prop carries into markdown inside it, as
+`faqItem` does with its answer, is drawn the same way. A plain text field gets the value as it was
+sent, since nothing there reads marks.
 
 A `list` or a `group` takes its whole value from one placeholder with nothing around it, no format
 and no fallback: `"tags": "{{item.Tags}}"` fills the list with the array itself, and

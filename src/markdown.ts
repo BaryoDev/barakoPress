@@ -1,5 +1,6 @@
 import { Marked, type MarkedExtension } from "marked";
 import { LINK_REL, NEW_TAB_TARGET } from "./config.js";
+import { hasLiteral, htmlLiterals, plainLiterals } from "./literal.js";
 
 /*
  * Markdown to HTML, treating the markdown as untrusted.
@@ -46,6 +47,11 @@ export function isSafeHref(href: string): boolean {
     }
 }
 
+/** A destination this renderer draws: a safe one, and never one a bound value supplied. */
+function isLinkable(href: string): boolean {
+    return !hasLiteral(href) && isSafeHref(href);
+}
+
 function escapeHtml(value: string): string {
     return value
         .replace(/&/g, "&amp;")
@@ -53,15 +59,6 @@ function escapeHtml(value: string): string {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
-}
-
-/**
- * Text written so markdown reads it as exactly those characters: every ASCII punctuation mark gets
- * a backslash, which CommonMark reads as that mark taken literally. No link, emphasis, raw HTML or
- * autolinked address can start inside it.
- */
-export function escapeMarkdown(text: string): string {
-    return text.replace(/[!-/:-@[-`{-~]/g, "\\$&");
 }
 
 /** Turns a heading into a stable id, so "On this page" links and deep links work. */
@@ -107,7 +104,7 @@ function buildRenderer(headingIds: boolean, newTab: boolean) {
         renderer: {
             link({ href, title, tokens }) {
                 const label = this.parser.parseInline(tokens);
-                if (!isSafeHref(href)) {
+                if (!isLinkable(href)) {
                     // Keep the words, drop the destination. A reader still sees what was written.
                     return label;
                 }
@@ -118,14 +115,14 @@ function buildRenderer(headingIds: boolean, newTab: boolean) {
                 return `<a href="${escapeHtml(href.trim())}"${t}${target}${rel}>${label}</a>`;
             },
             image({ href, title, text }) {
-                if (!isSafeHref(href)) return escapeHtml(text ?? "");
+                if (!isLinkable(href)) return escapeHtml(text ?? "");
                 const t = title ? ` title="${escapeHtml(title)}"` : "";
                 return `<img src="${escapeHtml(href.trim())}" alt="${escapeHtml(text ?? "")}"${t} loading="lazy">`;
             },
             heading({ tokens, depth }) {
                 const label = this.parser.parseInline(tokens);
                 if (!headingIds) return `<h${depth}>${label}</h${depth}>`;
-                const plain = tokens.map((t) => ("raw" in t ? t.raw : "")).join("");
+                const plain = plainLiterals(tokens.map((t) => ("raw" in t ? t.raw : "")).join(""));
                 return `<h${depth} id="${escapeHtml(anchor(plain))}">${label}</h${depth}>`;
             },
         },
@@ -147,7 +144,7 @@ export function renderMarkdown(source: string, options: RenderMarkdownOptions = 
         renderer = buildRenderer(headingIds, newTab);
         renderers.set(key, renderer);
     }
-    return renderer.parse(source, { async: false }) as string;
+    return htmlLiterals(renderer.parse(source, { async: false }) as string, escapeHtml);
 }
 
 export interface MarkdownHeading {
@@ -249,7 +246,7 @@ function buildInlineRenderer() {
         renderer: {
             link({ href, title, tokens }) {
                 const label = this.parser.parseInline(tokens);
-                if (!isSafeHref(href)) return label;
+                if (!isLinkable(href)) return label;
                 const t = title ? ` title="${escapeHtml(title)}"` : "";
                 const rel = /^https?:/.test(href.trim()) ? ` rel="${LINK_REL}"` : "";
                 return `<a href="${escapeHtml(href.trim())}"${t}${rel}>${label}</a>`;
@@ -280,9 +277,10 @@ export const MAX_INLINE = 2000;
 /** A line of text with inline marks, as HTML. Block syntax is left as the text it is. */
 export function renderInlineMarkdown(source: string): string {
     if (!source) return "";
-    if (source.length > MAX_INLINE) return escapeHtml(source);
+    // Measured as it will read, since a bound value is carried as a longer token (see literal.ts).
+    if (plainLiterals(source).length > MAX_INLINE) return escapeHtml(plainLiterals(source));
     inlineRenderer ??= buildInlineRenderer();
-    return inlineRenderer.parseInline(source, { async: false }) as string;
+    return htmlLiterals(inlineRenderer.parseInline(source, { async: false }) as string, escapeHtml);
 }
 
 /**

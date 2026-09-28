@@ -13,9 +13,11 @@
   A stored url holding `&amp;` where `&` was meant is now refused too.
 
 - A `{{query.X}}` value bound into a `markdown` field, or into a text block's value in inline mode,
-  is backslash-escaped first, so it renders as the characters that were sent: no link, emphasis or
-  autolinked address. An editor's own marks around the placeholder still apply. A plain text field
-  gets the value unchanged. `escapeMarkdown` is exported from `barakopress/markdown` for this.
+  is drawn as exactly the characters that were sent, including inside a code span or a code block:
+  no link, image, emphasis or raw HTML of its own, and never a link's destination. This holds when
+  a preset's text prop carries the value into markdown, as `faqItem` does with its answer. An
+  editor's own marks around the placeholder still apply, and a plain text field gets the value
+  unchanged.
 
 - `bySlug` and `bySlugPreview` answer null, which renders as not found, for a slug of `.` or `..`,
   typed or percent-encoded, without asking the CMS. A URL parser resolves those segments away and
