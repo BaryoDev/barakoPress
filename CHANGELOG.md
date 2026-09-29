@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.10.1 (unreleased)
+## 0.10.1 (2026-09-29)
 
 - Raw HTML in markdown is turned into text on the tokens, before anything renders, for the body,
   `renderProse` and a text block's inline marks. After an inline `<script>`, `<pre>`, `<code>` or
