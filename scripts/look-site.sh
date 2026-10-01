@@ -13,6 +13,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+. scripts/look-site-lib.sh
 
 SITE=${1:-}
 HOST=${2:-}
@@ -40,8 +41,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# A data cache from an earlier run would answer with that run's settings before this CMS is asked.
+# A data cache from an earlier run would answer with that run's settings before this CMS is asked,
+# and a page rendered by an earlier run would be served as it was then, before the fixture changed.
 rm -rf .next/cache/fetch-cache
+clear_site_renders .next "$SITE" || exit 2
 
 node scripts/look-cms.mjs "$CMS_PORT" "$DIR" "$HOST" > "$TMP/cms.log" 2>&1 &
 CMS_PID=$!
@@ -70,17 +73,13 @@ APP_PID=$!
 # that is taken, and something else answering 200 on it looks exactly like success: the run would
 # then measure a stale server and report a number that reads as authoritative and is not. So the
 # process has to still be alive, and the page has to be the one this CMS is serving.
-NAME=$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).Name ?? ""))' "$DIR/site.json")
-# The name is the whole of the check, so an empty one is refused rather than run with. `grep -qF ""`
-# matches any response at all, which would put the hole straight back.
-if [ -z "$NAME" ]; then
-  echo "$DIR/site.json names no \"Name\", so there is nothing to tell this site's pages apart from whatever else is on port $APP_PORT"
-  exit 2
-fi
-up() { curl -s "http://127.0.0.1:$APP_PORT/"; }
+# The name is the whole of the check, so a fixture that gives none is refused rather than run with.
+# Every response carries the empty string, which would put the hole straight back.
+NAME=$(site_name "$DIR") || exit $?
+up() { page_says "http://127.0.0.1:$APP_PORT/" "$NAME"; }
 for _ in $(seq 1 60); do
   kill -0 "$APP_PID" 2>/dev/null || break
-  up | grep -qF "$NAME" && break
+  up && break
   sleep 1
 done
 if ! kill -0 "$APP_PID" 2>/dev/null; then
@@ -88,7 +87,7 @@ if ! kill -0 "$APP_PID" 2>/dev/null; then
   tail -40 "$TMP/app.log"
   exit 1
 fi
-if ! up | grep -qF "$NAME"; then
+if ! up; then
   echo "whatever is answering on port $APP_PORT is not this fixture's site: it does not say \"$NAME\""
   tail -40 "$TMP/app.log"
   tail -10 "$TMP/cms.log"

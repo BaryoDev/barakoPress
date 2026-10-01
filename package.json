@@ -45,7 +45,7 @@
     "look": "playwright test --config look/playwright.look.config.ts",
     "look:capture": "node look/capture-fixture.ts",
     "look:site": "scripts/look-site.sh",
-    "look:selftest": "scripts/look-check-selftest.sh",
+    "look:selftest": "scripts/look-site-selftest.sh && scripts/look-check-selftest.sh",
     "look:components": "npm run build:package && NODE_OPTIONS=--import=./look/next-stub-register.mjs node look/build-tab-strip-fixture.mjs && NODE_OPTIONS=--import=./look/next-stub-register.mjs node look/build-viewport-fixtures.mjs && NODE_OPTIONS=--import=./look/next-stub-register.mjs node look/build-filter-bar-fixture.mjs && NODE_OPTIONS=--import=./look/next-stub-register.mjs node look/build-tree-fixtures.mjs && playwright test --config look/component.pw.config.ts",
     "prepare": "npm run build:package"
   },

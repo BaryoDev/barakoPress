@@ -37,6 +37,10 @@ done
 fail() { echo "FAIL: $1"; cat "$TMP/two-hosts-app.log" | tail -40; exit 1; }
 page() { curl -s -H "Host: $1" "$APP$2"; }
 status() { curl -s -o /dev/null -w '%{http_code}' -H "Host: $1" "$APP$2"; }
+# `grep -q` on what it is piped, read whole first. grep stops reading at its first match, and under
+# pipefail a curl still writing then fails the pipeline that found what it looked for. A check that
+# something is absent would pass on the very answer that carries it.
+has() { local body; body=$(cat); grep -q "$@" <<< "$body"; }
 
 page rckoronadal.org / > "$TMP/rotary.html"
 page baryo.dev / > "$TMP/baryo.html"
@@ -50,9 +54,9 @@ if grep -q -e "BaryoDev" -e "shipping-notes" "$TMP/rotary.html"; then fail "rcko
 if grep -q -e "Koronadal" -e "club-news" "$TMP/baryo.html"; then fail "baryo.dev shows rckoronadal.org content"; fi
 echo "ok: two hosts, two names, palettes, faces"
 
-page baryo.dev /feed.xml | grep -q "https://baryo.dev/blog/shipping-notes" || fail "feed is not baryo.dev's"
-page rckoronadal.org /sitemap.xml | grep -q "https://rckoronadal.org/blog/club-news" || fail "sitemap is not rckoronadal.org's"
-page baryo.dev /robots.txt | grep -q "https://baryo.dev/sitemap.xml" || fail "robots is not baryo.dev's"
+page baryo.dev /feed.xml | has "https://baryo.dev/blog/shipping-notes" || fail "feed is not baryo.dev's"
+page rckoronadal.org /sitemap.xml | has "https://rckoronadal.org/blog/club-news" || fail "sitemap is not rckoronadal.org's"
+page baryo.dev /robots.txt | has "https://baryo.dev/sitemap.xml" || fail "robots is not baryo.dev's"
 echo "ok: feed, sitemap and robots per tenant"
 
 grep -q 'data-press="navigation"' "$TMP/baryo.html" || fail "baryo.dev does not draw its page menu"
@@ -69,7 +73,7 @@ echo "ok: each tenant draws its own menu in the CMS order, and renders only its 
 
 [ "$(status baryo.dev /blog/shipping-notes)" = "200" ] || fail "a page slugged blog shadows the post route"
 [ "$(status baryo.dev /blog)" = "200" ] || fail "/blog does not answer the post collection's index"
-if page baryo.dev /blog | grep -q "must never render"; then fail "a page under a reserved slug renders"; fi
+if page baryo.dev /blog | has "must never render"; then fail "a page under a reserved slug renders"; fi
 page baryo.dev /sitemap.xml > "$TMP/baryo-sitemap.xml"
 grep -q "<loc>https://baryo.dev/about/team</loc>" "$TMP/baryo-sitemap.xml" || fail "the sitemap does not list baryo.dev's pages"
 if grep -q "<loc>https://baryo.dev/blog</loc>" "$TMP/baryo-sitemap.xml"; then fail "the sitemap lists a page under a reserved slug"; fi
@@ -153,8 +157,8 @@ echo "ok: a second view of an index and a page is served from the render cache, 
 # A {{query.X}} binding on a kept route renders as an unbound scope rather than failing the page.
 # A site that wants the query passes { query: true } and leaves generateStaticParams out.
 [ "$(status baryo.dev '/search?q=wells')" = "200" ] || fail "a page binding the query fails on a kept route"
-page baryo.dev '/search?q=wells' | grep -q "Looking for" || fail "a page binding the query did not render"
-if page baryo.dev '/search?q=wells' | grep -q "Looking for wells"; then fail "a kept route read the query"; fi
+page baryo.dev '/search?q=wells' | has "Looking for" || fail "a page binding the query did not render"
+if page baryo.dev '/search?q=wells' | has "Looking for wells"; then fail "a kept route read the query"; fi
 echo "ok: a page binding {{query.X}} renders on a kept route, with the binding unresolved"
 
 # Both are cached now, so a shared entry would show here and nowhere else.
@@ -178,11 +182,11 @@ echo "ok: two hosts never share a cached render, and neither can be asked for by
 echo "ok: a host with no tenant is a 404"
 
 cors() { curl -s -o /dev/null -D - -X "$1" -H "Host: baryo.dev" -H "Origin: $2" "$APP/api/blocks" | tr -d '\r'; }
-cors GET https://brew.example | grep -qi '^access-control-allow-origin: https://brew.example$' || fail "the console origin cannot read /api/blocks"
-cors OPTIONS https://brew.example | grep -qi '^access-control-allow-methods: GET, OPTIONS$' || fail "the preflight from the console origin is not answered"
-cors GET https://brew.example | grep -qi '^vary:.*origin' || fail "/api/blocks does not vary on Origin"
-if cors GET https://evil.example | grep -qi '^access-control-allow-origin'; then fail "an unlisted origin can read /api/blocks"; fi
-if cors GET https://brew.example | grep -qi '^access-control-allow-credentials'; then fail "/api/blocks allows credentials"; fi
+cors GET https://brew.example | has -i '^access-control-allow-origin: https://brew.example$' || fail "the console origin cannot read /api/blocks"
+cors OPTIONS https://brew.example | has -i '^access-control-allow-methods: GET, OPTIONS$' || fail "the preflight from the console origin is not answered"
+cors GET https://brew.example | has -i '^vary:.*origin' || fail "/api/blocks does not vary on Origin"
+if cors GET https://evil.example | has -i '^access-control-allow-origin'; then fail "an unlisted origin can read /api/blocks"; fi
+if cors GET https://brew.example | has -i '^access-control-allow-credentials'; then fail "/api/blocks allows credentials"; fi
 echo "ok: /api/blocks answers the console origin only"
 
 # The binding report names field paths, so the one thing that must hold here is that nobody reads it
@@ -214,7 +218,7 @@ held "$TMP/soon-post.html" || fail "a post on soon.example does not answer the h
 grep -q "Soon Club post" "$TMP/soon-post.html" && fail "the holding page carries the post's title"
 [ "$(status soon.example /feed.xml)" = "404" ] || fail "soon.example serves its feed while holding"
 [ "$(status soon.example /sitemap.xml)" = "404" ] || fail "soon.example serves its sitemap while holding"
-page soon.example /robots.txt | grep -q "Disallow: /" || fail "soon.example robots does not disallow while holding"
+page soon.example /robots.txt | has "Disallow: /" || fail "soon.example robots does not disallow while holding"
 asset=$(grep -o '/_next/static/[^"]*\.js' "$TMP/soon.html" | head -1)
 [ -n "$asset" ] && [ "$(status soon.example "$asset")" = "200" ] || fail "static assets are not reachable while holding"
 [ "$(status soon.example /api/revalidate)" != "404" ] || fail "the revalidate endpoint is not reachable while holding"
@@ -286,7 +290,7 @@ page baryo.dev / > "$TMP/baryo-beside-soon.html"
 grep -q "shipping-notes" "$TMP/baryo-beside-soon.html" || fail "baryo.dev is not its real site beside a holding tenant"
 grep -q 'data-press="holding"' "$TMP/baryo-beside-soon.html" && fail "baryo.dev got a holding page"
 [ "$(status baryo.dev /feed.xml)" = "200" ] || fail "baryo.dev lost its feed beside a holding tenant"
-curl -s -o /dev/null -D - -X POST -H "Host: baryo.dev" --data-urlencode "key=$KEY" "$APP/api/share/redeem" | grep -qi '^set-cookie:' && fail "baryo.dev handed out a share cookie"
+curl -s -o /dev/null -D - -X POST -H "Host: baryo.dev" --data-urlencode "key=$KEY" "$APP/api/share/redeem" | has -i '^set-cookie:' && fail "baryo.dev handed out a share cookie"
 grep -q "$KEY" "$TMP/two-hosts-app.log" && fail "the share key reached the log"
 echo "ok: expired, forged, other-tenant and raw-key cookies are held back, and baryo.dev is unaffected"
 
@@ -304,7 +308,7 @@ purge() {
 before=$(curl -s "http://127.0.0.1:$CMS_PORT/__reads")
 [ "$(purge baryo.dev "$SECRET" | grep -c '"revalidated":true')" = "0" ] || fail "the shared secret still purges a tenant"
 [ "$(purge baryo.dev "$(tenant_key rckoronadal)" | grep -c '"revalidated":true')" = "0" ] || fail "rckoronadal's key purges baryo.dev"
-purge baryo.dev "$(tenant_key baryo)" | grep -q '"tag":"cms:baryo"' || fail "the purge with baryo's key did not name baryo's tag"
+purge baryo.dev "$(tenant_key baryo)" | has '"tag":"cms:baryo"' || fail "the purge with baryo's key did not name baryo's tag"
 [ "$(cached baryo.dev /)" != "HIT" ] || fail "baryo.dev's cached render survived its own purge"
 [ "$(cached rckoronadal.org /)" = "HIT" ] || fail "rckoronadal.org's cached render went with baryo.dev's purge"
 page rckoronadal.org / > /dev/null
@@ -331,7 +335,7 @@ settles rckoronadal.org /projects/clean-water || fail "a project page is never s
 settles rckoronadal.org /projects || fail "the projects index is never served from the render cache"
 settles rckoronadal.org / || fail "rckoronadal.org's index is not back in the render cache"
 published='{"contentId":"pw","contentType":"project","status":"Published","data":{"Title":"Clean water","Slug":"clean-water"}}'
-deliver "$published" | grep -q '"tags":\["cms:rckoronadal:type:project","cms:rckoronadal:entry:project:clean-water"\]' ||
+deliver "$published" | has '"tags":\["cms:rckoronadal:type:project","cms:rckoronadal:entry:project:clean-water"\]' ||
   fail "a delivery naming one project did not drop that project's tags ($(deliver "$published"))"
 [ "$(cached rckoronadal.org /projects/clean-water)" != "HIT" ] || fail "the published project's page survived its own purge"
 [ "$(cached rckoronadal.org /projects)" != "HIT" ] || fail "the projects index survived a purge of one of its entries"
