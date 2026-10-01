@@ -143,6 +143,52 @@ test("the theme's fonts replace the stylesheet's defaults under the old names to
     expect(got["old-mono"]).toContain("Engine Mono");
 });
 
+/*
+ * A theme font may be built from a variable, which is how a face from next/font is named. A
+ * registered initial value cannot hold a `var()`: the browser drops the whole registration, and the
+ * old name then has no value at all. So the old name gets the default stack for that role, and the
+ * real value is under `--bp-font-*` only.
+ */
+test("a theme font built from a variable leaves the old name a real face, and a site still wins", async ({ browser }) => {
+    const fromVariable = themeVariablesCss(
+        resolveTheme({ fonts: { body: "var(--font-inter), sans-serif", heading: "'Engine Heading', serif !important" } }),
+    );
+    const siteFace = `:root{--font-inter:"Inter"}`;
+
+    const alone = await families(browser, doc([siteFace, fromVariable]));
+    expect(alone["bp-sans"]).toContain("Inter");
+    expect(alone["old-sans"]).toContain("Manrope");
+    expect(alone["old-display"]).toContain("Sora");
+    expect(alone["old-mono"]).toContain("JetBrains Mono");
+
+    const withSite = await families(browser, doc([siteFace, SITES["a Tailwind @theme block"], fromVariable]));
+    expect(withSite["bp-sans"]).toContain("Inter");
+    expect(withSite["old-sans"]).toContain("Site Sans");
+    expect(withSite["old-display"]).toContain("Site Display");
+});
+
+/*
+ * The stylesheet's rules read `--bp-font-*` and nothing else. A site that used to restyle them by
+ * setting `--font-sans` sets `--bp-font-sans` instead: on the root when it draws its own head, and
+ * further in (the head style is on the root and comes later) when it uses the site layout.
+ */
+test("a site restyles the shipped stylesheet through the engine's names, not the old ones", async ({ browser }) => {
+    const oldName = await families(browser, doc([stylesCss, `:root{--font-sans:"Inter"}`]));
+    expect(oldName["body-text"]).toContain("Manrope");
+    expect(oldName["body-text"]).not.toContain("Inter");
+
+    const ownHead = await families(
+        browser,
+        doc([stylesCss, `:root{--bp-font-sans:"Inter";--bp-font-display:"Lora";--bp-font-mono:"Fira Code"}`]),
+    );
+    expect(ownHead["body-text"]).toContain("Inter");
+    expect(ownHead["heading"]).toContain("Lora");
+    expect(ownHead["code"]).toContain("Fira Code");
+
+    const withLayout = await families(browser, doc([stylesCss, `body{--bp-font-sans:"Inter"}`, engineCss]));
+    expect(withLayout["body-text"]).toContain("Inter");
+});
+
 test("a font name cannot close the style element or the rule it is written into", async ({ browser }) => {
     const hostile = themeVariablesCss(
         resolveTheme({

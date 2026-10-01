@@ -92,10 +92,23 @@ What that means for a site:
 - It defines `--font-sans` itself and reads it (a copy of the old `styles.css` does): its own value
   now applies, not the theme's. To keep following `theme.fonts` or the `Fonts` setting, read
   `--bp-font-sans`, `--bp-font-display` and `--bp-font-mono` instead.
-- It reads the old names and defines nothing: nothing changes in 0.11.x. Rename to `--bp-font-*`
-  before 0.12.0, which drops the registrations.
+- It reads the old names and defines nothing: nothing changes in 0.11.x when the theme's fonts are
+  stacks of family names. Rename to `--bp-font-*` before 0.12.0, which drops the registrations.
+- Its theme names a font through a variable or a function (`var(--font-inter), sans-serif`, the
+  next/font pattern): that value is under `--bp-font-*` only. A registered initial value cannot hold
+  a `var()`, so the old name for that role resolves to the default stack (Manrope, Sora or JetBrains
+  Mono), not to the theme's font. Read `--bp-font-*` now.
+- It set the old names to restyle `barakopress/styles.css` (`:root { --font-sans: "Inter" }`): the
+  stylesheet's rules no longer read them, so they draw in the defaults or the theme's faces. Set
+  `--bp-font-sans`, `--bp-font-display` and `--bp-font-mono` instead: on the root for a site that
+  draws its own head, and on `body` or further in for a site that uses `createSiteLayout`, whose head
+  style sets the root after the stylesheet. With `createSiteLayout`, `theme.fonts` is the usual way.
 - A browser without `@property` (Firefox before 128, Safari before 16.4) gets no value for the old
   names. The `--bp-font-*` names are plain declarations and work everywhere.
+
+One smaller difference: the old `--font-display` was `"Sora", var(--font-sans)`, so its fallback
+followed whatever a site set `--font-sans` to. The registered value is a fixed stack, Sora and then
+the default sans stack.
 
 ## Tokens and tones
 

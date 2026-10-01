@@ -529,6 +529,11 @@ export function relatedCss(theme: PressTheme, scope: string): string {
  * unlayered, so it beats Tailwind's `@layer theme`, and a layer of our own orders after the site's
  * because it is seen later. Measured in look/font-variables.component.pw.ts. The value is written out
  * because an initial value cannot be a `var()`.
+ *
+ * For the same reason a theme font that is not a stack of names (`var(--font-inter), sans-serif`,
+ * the next/font pattern) cannot be registered: the browser drops the whole rule and the old name
+ * has no value. That role's old name gets the default stack, and the real value is under
+ * `--bp-font-*` only.
  */
 export function themeVariablesCss(theme: PressTheme): string {
     const c = theme.colors;
@@ -551,17 +556,28 @@ export function themeVariablesCss(theme: PressTheme): string {
         ["--bp-font-mono", f.mono],
         ...Object.entries(theme.tokens ?? {}).map(([name, value]): [string, string] => [`--t-${name}`, value]),
     ];
-    const legacy: [string, string][] = [
-        ["--font-sans", f.body],
-        ["--font-display", f.heading],
-        ["--font-mono", f.mono],
+    const legacy: [string, FontRole][] = [
+        ["--font-sans", "body"],
+        ["--font-display", "heading"],
+        ["--font-mono", "mono"],
     ];
     const root = `:root{${vars.map(([name, value]) => `${name}:${declarationValue(value)}`).join(";")}}`;
-    const registered = legacy.map(
-        ([name, value]) => `@property ${name}{syntax:"*";inherits:true;initial-value:${declarationValue(value)}}`,
-    );
+    const registered = legacy.map(([name, role]) => {
+        const value = declarationValue(f[role]);
+        const initial = PLAIN_FONT_STACK.test(value) ? value : DEFAULT_THEME.fonts[role];
+        return `@property ${name}{syntax:"*";inherits:true;initial-value:${initial}}`;
+    });
     return root + registered.join("");
 }
+
+/*
+ * What a registered initial value can hold: family names, quoted or bare, between commas. Measured
+ * in Chromium, a function (`var()`, `env()`) or `!important` makes the browser drop the
+ * registration, and an unclosed quote or a trailing backslash runs on into the rule after it. Loose
+ * about what a bare name is, since a generated one (`__Inter_5a1b2c`) is not a word.
+ */
+const FAMILY_NAME = String.raw`(?:'[^'"\\\n]*'|"[^'"\\\n]*"|[^'"\\()!,\s](?:[^'"\\()!,]*[^'"\\()!,\s])?)`;
+const PLAIN_FONT_STACK = new RegExp(String.raw`^\s*${FAMILY_NAME}(?:\s*,\s*${FAMILY_NAME})*\s*$`);
 
 /** A value for one declaration in the inline style: nothing that ends the declaration, the rule or the element. */
 function declarationValue(value: string): string {

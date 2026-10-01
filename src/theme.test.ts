@@ -110,16 +110,45 @@ describe("themeVariablesCss", () => {
         expect(css).toContain(`@property --font-mono{syntax:"*";inherits:true;initial-value:${DEFAULT_THEME.fonts.mono}}`);
     });
 
+    /*
+     * A browser drops a registration whose initial value holds a function or `!important`, and an
+     * unclosed quote or a trailing backslash runs on into the next rule. So only a stack of plain
+     * and quoted names is registered as written, and anything else registers the default stack.
+     */
+    it("registers the default stack under the old name when the theme's font is not a plain stack", () => {
+        const registered = (name: string, fonts: Parameters<typeof resolveTheme>[0]) =>
+            themeVariablesCss(resolveTheme(fonts)).match(new RegExp(`@property ${name}\\{[^}]*initial-value:([^}]*)\\}`))?.[1];
+
+        for (const body of [
+            "var(--font-inter), sans-serif",
+            "env(x), sans-serif",
+            "'Inter', sans-serif !important",
+            "'Inter, sans-serif",
+            "Inter\\",
+            "",
+        ]) {
+            const css = themeVariablesCss(resolveTheme({ fonts: { body } }));
+            expect(css).toContain(`--bp-font-sans:${body}`);
+            expect(registered("--font-sans", { fonts: { body } })).toBe(DEFAULT_THEME.fonts.body);
+        }
+
+        for (const body of ["Inter", "'Inter', sans-serif", `"Noto Sans JP", '__Inter_5a1b2c', system-ui`, `"Q (x), y", serif`]) {
+            expect(registered("--font-sans", { fonts: { body } })).toBe(body);
+        }
+        expect(registered("--font-mono", { fonts: { mono: "var(--m)" } })).toBe(DEFAULT_THEME.fonts.mono);
+        expect(registered("--font-display", { fonts: { heading: "var(--h)" } })).toBe(DEFAULT_THEME.fonts.heading);
+    });
+
     it("strips a font name of what would close the rule or the style element, under both names", () => {
         const css = themeVariablesCss(
-            resolveTheme({ fonts: { body: "x;}</style><script>x()", heading: "y;} body{color:red} :root{--z:", mono: "z" } }),
+            resolveTheme({ fonts: { body: "x;}</style><script>x", heading: "y;} body{color:red} :root{--z:", mono: "z" } }),
         );
 
         expect(css).not.toContain("<");
         expect(css).not.toContain(">");
         expect(css.match(/[{}]/g)).toEqual(BRACES);
         expect(css.match(/;/g)).toHaveLength(themeVariablesCss(DEFAULT_THEME).match(/;/g)!.length);
-        expect(css).toContain("--bp-font-sans:x/stylescriptx()");
-        expect(css).toContain("initial-value:x/stylescriptx()}");
+        expect(css).toContain("--bp-font-sans:x/stylescriptx;");
+        expect(css).toContain("initial-value:x/stylescriptx}");
     });
 });
