@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.0 (unreleased)
+
+- Security: the `next` peer range is `>=16.3.8`, up from `>=16`. Next 16.2.0 to 16.3.5 carry
+  GHSA-vcvr-r3jv-pc5j, fixed in 16.3.6, and 16.3.8 adds the fixes for GHSA-cjq9-62q9-8jv4,
+  GHSA-f87g-xv8r-7p7x, GHSA-4jqv-mc3x-m676, GHSA-mcj8-r9mp-w47p, GHSA-3w37-wq28-93x7,
+  GHSA-h694-7cp9-m8p3 and GHSA-39w2-rjm5-chcv. A site on an older Next gets a peer conflict from
+  npm when it installs this version, and moves to 16.3.8 or later to clear it. The engine does not
+  import `next/og` or `ImageResponse`. The reference app and the image build on 16.3.8.
+
 ## 0.10.1 (2026-09-29)
 
 - Raw HTML in markdown is turned into text on the tokens, before anything renders, for the body,
