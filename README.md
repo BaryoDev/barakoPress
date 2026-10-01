@@ -23,7 +23,7 @@ Part of BaryoDev, alongside [barakoCMS](https://github.com/BaryoDev/barakoCMS) (
 npm install barakopress
 ```
 
-Needs Next 16 or later, React 19 or later, and Node 20.9 or later. Next and React are peer
+Needs Next 16.3.8 or later, React 19 or later, and Node 20.9 or later. Next and React are peer
 dependencies, so your app's copies are the ones that run.
 
 **No consumer build configuration.** The package ships compiled JavaScript and type declarations, so
