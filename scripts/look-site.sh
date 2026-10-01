@@ -13,6 +13,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+. scripts/look-site-lib.sh
 
 SITE=${1:-}
 HOST=${2:-}
@@ -40,8 +41,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# A data cache from an earlier run would answer with that run's settings before this CMS is asked.
+# A data cache from an earlier run would answer with that run's settings before this CMS is asked,
+# and a page rendered by an earlier run would be served as it was then, before the fixture changed.
 rm -rf .next/cache/fetch-cache
+clear_site_renders .next "$SITE" || exit 2
 
 node scripts/look-cms.mjs "$CMS_PORT" "$DIR" "$HOST" > "$TMP/cms.log" 2>&1 &
 CMS_PID=$!
@@ -68,19 +71,20 @@ APP_PID=$!
 
 # Checked the same way and for the same reason as the CMS above. `next start` exits 1 on a port
 # that is taken, and something else answering 200 on it looks exactly like success: the run would
-# then measure a stale server and report a number that reads as authoritative and is not. So the
-# process has to still be alive, and the page has to be the one this CMS is serving.
-NAME=$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).Name ?? ""))' "$DIR/site.json")
-# The name is the whole of the check, so an empty one is refused rather than run with. `grep -qF ""`
-# matches any response at all, which would put the hole straight back.
-if [ -z "$NAME" ]; then
-  echo "$DIR/site.json names no \"Name\", so there is nothing to tell this site's pages apart from whatever else is on port $APP_PORT"
-  exit 2
-fi
-up() { curl -s "http://127.0.0.1:$APP_PORT/"; }
+# then measure a stale server and report a number that reads as authoritative and is not.
+#
+# Three things have to hold, and no two of them are enough. The process is still alive. Its own log
+# says it took the port, because a start that is about to fail on a taken port is alive for most of
+# a second, and in that second an earlier run's server answers with this same site's name. And the
+# page carries the name, which is what this CMS is serving.
+#
+# The name is the whole of that last part, so a fixture that gives none is refused rather than run
+# with. Every response carries the empty string, which would put the hole straight back.
+NAME=$(site_name "$DIR") || exit $?
+up() { site_is_up "$TMP/app.log" "http://127.0.0.1:$APP_PORT/" "$NAME"; }
 for _ in $(seq 1 60); do
   kill -0 "$APP_PID" 2>/dev/null || break
-  up | grep -qF "$NAME" && break
+  up && break
   sleep 1
 done
 if ! kill -0 "$APP_PID" 2>/dev/null; then
@@ -88,8 +92,8 @@ if ! kill -0 "$APP_PID" 2>/dev/null; then
   tail -40 "$TMP/app.log"
   exit 1
 fi
-if ! up | grep -qF "$NAME"; then
-  echo "whatever is answering on port $APP_PORT is not this fixture's site: it does not say \"$NAME\""
+if ! up; then
+  echo "whatever is answering on port $APP_PORT is not this run's site: either next start never said it was ready, or the page does not say \"$NAME\""
   tail -40 "$TMP/app.log"
   tail -10 "$TMP/cms.log"
   exit 1

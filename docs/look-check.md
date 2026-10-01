@@ -175,6 +175,13 @@ That starts the reference app against a stand-in CMS holding the fixture's `site
 `*.blocks.json`, so the rebuilt side is the real renderer with the real theme, and runs the pair
 list beside them. It is the conversion rehearsed end to end on one machine.
 
+Each run first removes the pages an earlier run rendered for the fixture's tenant, the
+`.next/server/app/_press/<fixture>~public~-*` files `next start` wrote, so an edited fixture is
+rendered again and not served as it was. Nothing else under `.next` is touched but the data cache.
+A fixture directory whose name is not a tenant handle (a letter or digit, then letters, digits, `_`
+or `-`) exits 2 before anything is removed. The run also exits 1 when its own `next start` never
+took the port, so a server left on the port by an earlier run is not measured in its place.
+
 `LOOK_OUTPUT` moves the output, which defaults to `look-results`: `summary.md`, `summary.json` and
 `pages/<id>/<width>/{reference,rebuilt,diff}.png`.
 
@@ -218,3 +225,8 @@ Two runs over one pair list of fixture pages. The first serves pages that match 
 disk and has to come back green at both widths. The second serves the same pages with the hero
 heading in a different colour and has to fail the home pair, pass the about pair, and leave the
 three images behind. CI runs it on every push. A check nobody has watched fail is not yet a gate.
+
+Before those two runs it checks `look:site` itself, with no build and no browser: the fixture's name
+is found in a page of a megabyte and not in a page without it, a fixture that names no site exits 2,
+and the pages an earlier run rendered for the fixture's tenant are removed while the build and every
+other tenant's renders stay.
