@@ -38,6 +38,7 @@ LOOK_NAME="$NAME" node --input-type=module -e '
   };
   const server = createServer((request, response) => {
     const page = pages[request.url];
+    if (request.url === "/hang") return;
     if (!page) { response.writeHead(404).end("not found"); return; }
     response.writeHead(200, { "content-type": "text/html" });
     response.write(page[0]);
@@ -65,11 +66,33 @@ if page_says "$BASE/missing" "$NAME"; then fail "a 404 was taken for this site";
 CODE=0; page_says "$BASE/first" "" || CODE=$?
 [ "$CODE" = "2" ] || fail "an empty name was matched against a page (exit $CODE), and every page carries it"
 
+# A server that was already on the port when this run began says the same name, and is not this
+# run's. The log of a start that found its port taken is what tells them apart.
+printf '%s\n' "⨯ Failed to start server" "Error: listen EADDRINUSE: address already in use :::$PORT" > "$TMP/taken.log"
+printf '%s\n' "▲ Next.js" "- Local:         http://localhost:$PORT" "✓ Ready in 365ms" > "$TMP/ready.log"
+if site_is_up "$TMP/taken.log" "$BASE/first" "$NAME"; then fail "a page with the name was accepted from a port this run's server never took"; fi
+if site_is_up "$TMP/not-written-yet.log" "$BASE/first" "$NAME"; then fail "a page with the name was accepted before this run's server logged anything"; fi
+site_is_up "$TMP/ready.log" "$BASE/first" "$NAME" || fail "this run's own server, ready and saying the name, was not accepted"
+if site_is_up "$TMP/ready.log" "$BASE/without" "$NAME"; then fail "a ready server whose page lacks the name was accepted"; fi
+
+# A listener that accepts and never answers has to cost one try, not the run.
+( page_says "$BASE/hang" "$NAME" ) &
+READ_PID=$!
+for _ in $(seq 1 40); do
+  kill -0 "$READ_PID" 2>/dev/null || break
+  sleep 0.25
+done
+if kill -0 "$READ_PID" 2>/dev/null; then
+  kill "$READ_PID" 2>/dev/null || true
+  fail "a read of a page that never answers was still waiting after 10 seconds"
+fi
+if wait "$READ_PID"; then fail "a page that never answered was taken for this site"; fi
+
 kill "$SERVER_PID" 2>/dev/null || true
 wait "$SERVER_PID" 2>/dev/null || true
 SERVER_PID=
 if page_says "$BASE/first" "$NAME"; then fail "a port nothing answers on was taken for this site"; fi
-echo "found at either end of a ${BYTES} byte page, and not found where it is not"
+echo "found at either end of a ${BYTES} byte page, not found where it is not, and not trusted from a server this run did not start"
 
 echo
 echo "== a fixture that names no site is refused =="
@@ -111,7 +134,7 @@ done
 # A second call with nothing left to remove is the first run after a build, and has to pass.
 clear_site_renders "$TMP/next" mine || fail "clearing a build with no earlier render fails"
 
-for tenant in "" "../.." "mine/../other" "*" "[site]" "mine~public~-" ".hidden"; do
+for tenant in "" "../.." "mine/../other" "*" "[site]" "mine~public~-" ".hidden" "é" "café"; do
   CODE=0; clear_site_renders "$TMP/next" "$tenant" 2> /dev/null || CODE=$?
   [ "$CODE" = "2" ] || fail "\"$tenant\" is not a tenant handle and was not refused (exit $CODE)"
 done

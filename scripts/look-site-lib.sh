@@ -19,11 +19,23 @@ site_name() {
 # `pipefail` the pipeline that had just found the name reported that it had not.
 #
 # An empty name is refused here as well as by the caller, since every page carries the empty string.
+# The read has a deadline, so a listener that accepts and never answers costs one try and not the run.
 page_says() {
   local body
   [ -n "$2" ] || return 2
-  body=$(curl -s "$1") || return 1
+  body=$(curl -s --max-time 5 "$1") || return 1
   [[ $body == *"$2"* ]]
+}
+
+# True when the `next start` whose log is $1 took its port, and the page at $2 carries the name $3.
+#
+# The name alone does not say whose server answered. A run that was killed leaves its server on the
+# port, serving this same fixture under this same name, and the new `next start` is still alive for
+# most of a second before it fails on the taken port. `Ready in` is the line Next prints once it is
+# listening, and a start that could not take the port never prints it.
+site_is_up() {
+  grep -q "Ready in" "$1" 2> /dev/null || return 1
+  page_says "$2" "$3"
 }
 
 # Removes the pages `next start` rendered for tenant $2 on an earlier run, under the build in $1.
@@ -36,9 +48,10 @@ page_says() {
 #
 # Only that one name goes. The build's own app/_press/[site] is left alone, and so is any other
 # tenant's render. A tenant that is not a handle is refused, because it is about to be part of a
-# path handed to `rm -rf`, and the rule is the one in src/delivery.ts.
+# path handed to `rm -rf`, and the rule is the one in src/delivery.ts. The C locale keeps it that
+# rule: under a UTF-8 one `[A-Za-z]` takes in accented letters, which a handle cannot hold.
 clear_site_renders() {
-  local renders="$1/server/app/_press" tenant="$2"
+  local renders="$1/server/app/_press" tenant="$2" LC_ALL=C
   if [[ ! $tenant =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$ ]]; then
     echo "\"$tenant\" is not a tenant handle, so no render of it is removed" >&2
     return 2

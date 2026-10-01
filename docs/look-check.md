@@ -178,6 +178,9 @@ list beside them. It is the conversion rehearsed end to end on one machine.
 Each run first removes the pages an earlier run rendered for the fixture's tenant, the
 `.next/server/app/_press/<fixture>~public~-*` files `next start` wrote, so an edited fixture is
 rendered again and not served as it was. Nothing else under `.next` is touched but the data cache.
+A fixture directory whose name is not a tenant handle (a letter or digit, then letters, digits, `_`
+or `-`) exits 2 before anything is removed. The run also exits 1 when its own `next start` never
+took the port, so a server left on the port by an earlier run is not measured in its place.
 
 `LOOK_OUTPUT` moves the output, which defaults to `look-results`: `summary.md`, `summary.json` and
 `pages/<id>/<width>/{reference,rebuilt,diff}.png`.

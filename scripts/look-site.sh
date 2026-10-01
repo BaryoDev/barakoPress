@@ -71,12 +71,17 @@ APP_PID=$!
 
 # Checked the same way and for the same reason as the CMS above. `next start` exits 1 on a port
 # that is taken, and something else answering 200 on it looks exactly like success: the run would
-# then measure a stale server and report a number that reads as authoritative and is not. So the
-# process has to still be alive, and the page has to be the one this CMS is serving.
-# The name is the whole of the check, so a fixture that gives none is refused rather than run with.
-# Every response carries the empty string, which would put the hole straight back.
+# then measure a stale server and report a number that reads as authoritative and is not.
+#
+# Three things have to hold, and no two of them are enough. The process is still alive. Its own log
+# says it took the port, because a start that is about to fail on a taken port is alive for most of
+# a second, and in that second an earlier run's server answers with this same site's name. And the
+# page carries the name, which is what this CMS is serving.
+#
+# The name is the whole of that last part, so a fixture that gives none is refused rather than run
+# with. Every response carries the empty string, which would put the hole straight back.
 NAME=$(site_name "$DIR") || exit $?
-up() { page_says "http://127.0.0.1:$APP_PORT/" "$NAME"; }
+up() { site_is_up "$TMP/app.log" "http://127.0.0.1:$APP_PORT/" "$NAME"; }
 for _ in $(seq 1 60); do
   kill -0 "$APP_PID" 2>/dev/null || break
   up && break
@@ -88,7 +93,7 @@ if ! kill -0 "$APP_PID" 2>/dev/null; then
   exit 1
 fi
 if ! up; then
-  echo "whatever is answering on port $APP_PORT is not this fixture's site: it does not say \"$NAME\""
+  echo "whatever is answering on port $APP_PORT is not this run's site: either next start never said it was ready, or the page does not say \"$NAME\""
   tail -40 "$TMP/app.log"
   tail -10 "$TMP/cms.log"
   exit 1
