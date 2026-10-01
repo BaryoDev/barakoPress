@@ -27,9 +27,34 @@
   --radius-control: 0.6875rem;
   --radius-card: 0.875rem;
 
-  --font-sans: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-display: "Sora", var(--font-sans);
-  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --bp-font-sans: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --bp-font-display: "Sora", var(--bp-font-sans);
+  --bp-font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+/*
+ * The names the three faces had before 0.11.0, kept until 0.12.0 for a stylesheet that still reads
+ * them. Registered and not declared: an initial value applies only where nothing sets the property,
+ * so a site whose own tokens use these names (a Tailwind @theme block does) keeps its values. The
+ * site layout registers them again with the theme's faces, and the later registration is the one
+ * that counts.
+ */
+@property --font-sans {
+  syntax: "*";
+  inherits: true;
+  initial-value: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@property --font-display {
+  syntax: "*";
+  inherits: true;
+  initial-value: "Sora", "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@property --font-mono {
+  syntax: "*";
+  inherits: true;
+  initial-value: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
 
 * {
@@ -45,7 +70,7 @@ body {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans);
+  font-family: var(--bp-font-sans);
   font-size: 17px;
   line-height: 1.65;
   -webkit-font-smoothing: antialiased;
@@ -54,7 +79,7 @@ body {
 h1,
 h2,
 h3 {
-  font-family: var(--font-display);
+  font-family: var(--bp-font-display);
   letter-spacing: -0.02em;
   line-height: 1.15;
   margin: 0 0 0.6rem;
@@ -82,7 +107,7 @@ a:hover {
 code,
 .mono,
 time {
-  font-family: var(--font-mono);
+  font-family: var(--bp-font-mono);
   font-variant-numeric: tabular-nums;
   font-size: 0.88em;
 }
@@ -104,7 +129,7 @@ time {
 }
 
 .topbar .brand {
-  font-family: var(--font-display);
+  font-family: var(--bp-font-display);
   font-weight: 700;
   color: var(--foreground);
   letter-spacing: -0.01em;
@@ -205,7 +230,7 @@ time {
 }
 
 .eyebrow {
-  font-family: var(--font-mono);
+  font-family: var(--bp-font-mono);
   font-size: 0.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -219,7 +244,7 @@ time {
 
 .chip {
   display: inline-block;
-  font-family: var(--font-mono);
+  font-family: var(--bp-font-mono);
   font-size: 0.7rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -239,7 +264,7 @@ time {
 }
 
 .tag {
-  font-family: var(--font-mono);
+  font-family: var(--bp-font-mono);
   font-size: 0.78rem;
   color: var(--muted-foreground);
   background: var(--muted);

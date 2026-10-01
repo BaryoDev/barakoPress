@@ -72,6 +72,9 @@ describe("proseCss", () => {
     });
 });
 
+// One rule for the root and one registration for each of the three old font names.
+const BRACES = ["{", "}", "{", "}", "{", "}", "{", "}"];
+
 describe("themeVariablesCss", () => {
     it("sets the stylesheet's variables from the theme", () => {
         const css = themeVariablesCss(resolveTheme({ colors: { accent: "#17458F" } }));
@@ -85,6 +88,38 @@ describe("themeVariablesCss", () => {
         const css = themeVariablesCss(resolveTheme({ colors: { accent: "red;}</style><script>x()" } }));
 
         expect(css).not.toContain("<");
-        expect(css.match(/[{}]/g)).toEqual(["{", "}"]);
+        expect(css.match(/[{}]/g)).toEqual(BRACES);
+    });
+
+    /*
+     * barakoPress #115. The engine's faces are `--bp-font-*`, and `--font-sans`, `--font-display`
+     * and `--font-mono` are never declared on the root, because a site's stylesheet owns those
+     * names. They are registered with the same value as an initial value instead. Who wins in a
+     * browser is look/font-variables.component.pw.ts; this holds the emitted form steady.
+     */
+    it("declares the faces under the engine's prefix and registers the old names without declaring them", () => {
+        const css = themeVariablesCss(resolveTheme({ fonts: { body: "'Inter', sans-serif" } }));
+        const root = css.slice(0, css.indexOf("}") + 1);
+
+        expect(root).toContain("--bp-font-sans:'Inter', sans-serif");
+        expect(root).toContain(`--bp-font-display:${DEFAULT_THEME.fonts.heading}`);
+        expect(root).toContain(`--bp-font-mono:${DEFAULT_THEME.fonts.mono}`);
+        expect(root).not.toMatch(/[{;]--font-(sans|display|mono):/);
+        expect(css).toContain(`@property --font-sans{syntax:"*";inherits:true;initial-value:'Inter', sans-serif}`);
+        expect(css).toContain(`@property --font-display{syntax:"*";inherits:true;initial-value:${DEFAULT_THEME.fonts.heading}}`);
+        expect(css).toContain(`@property --font-mono{syntax:"*";inherits:true;initial-value:${DEFAULT_THEME.fonts.mono}}`);
+    });
+
+    it("strips a font name of what would close the rule or the style element, under both names", () => {
+        const css = themeVariablesCss(
+            resolveTheme({ fonts: { body: "x;}</style><script>x()", heading: "y;} body{color:red} :root{--z:", mono: "z" } }),
+        );
+
+        expect(css).not.toContain("<");
+        expect(css).not.toContain(">");
+        expect(css.match(/[{}]/g)).toEqual(BRACES);
+        expect(css.match(/;/g)).toHaveLength(themeVariablesCss(DEFAULT_THEME).match(/;/g)!.length);
+        expect(css).toContain("--bp-font-sans:x/stylescriptx()");
+        expect(css).toContain("initial-value:x/stylescriptx()}");
     });
 });

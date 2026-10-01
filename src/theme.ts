@@ -517,6 +517,18 @@ export function relatedCss(theme: PressTheme, scope: string): string {
  *
  * A site's own tokens follow as `--t-<name>`, so a site's stylesheet and its blocks can read
  * `var(--t-accent)`. The prefix keeps them out of the way of the engine's names above.
+ *
+ * The faces are `--bp-font-sans`, `--bp-font-display` and `--bp-font-mono`. They were `--font-sans`,
+ * `--font-display` and `--font-mono`, which are the names a Tailwind `@theme` block defines, and this
+ * style comes after the site's stylesheet, so the site's own tokens lost to it (#115).
+ *
+ * The old names are kept until 0.12.0 for a stylesheet that reads them and defines nothing, and they
+ * are registered rather than declared. A registered initial value applies only where no declaration
+ * sets the property, so any definition a site has wins, in a layer or out of one, before this style
+ * or after it. No declaration can promise that from here: `:where(:root)` weighs nothing but is
+ * unlayered, so it beats Tailwind's `@layer theme`, and a layer of our own orders after the site's
+ * because it is seen later. Measured in look/font-variables.component.pw.ts. The value is written out
+ * because an initial value cannot be a `var()`.
  */
 export function themeVariablesCss(theme: PressTheme): string {
     const c = theme.colors;
@@ -534,10 +546,24 @@ export function themeVariablesCss(theme: PressTheme): string {
         ["--radius-chip", r.control],
         ["--radius-control", r.control],
         ["--radius-card", r.panel],
+        ["--bp-font-sans", f.body],
+        ["--bp-font-display", f.heading],
+        ["--bp-font-mono", f.mono],
+        ...Object.entries(theme.tokens ?? {}).map(([name, value]): [string, string] => [`--t-${name}`, value]),
+    ];
+    const legacy: [string, string][] = [
         ["--font-sans", f.body],
         ["--font-display", f.heading],
         ["--font-mono", f.mono],
-        ...Object.entries(theme.tokens ?? {}).map(([name, value]): [string, string] => [`--t-${name}`, value]),
     ];
-    return `:root{${vars.map(([name, value]) => `${name}:${css(value).replace(/[;{}]/g, "")}`).join(";")}}`;
+    const root = `:root{${vars.map(([name, value]) => `${name}:${declarationValue(value)}`).join(";")}}`;
+    const registered = legacy.map(
+        ([name, value]) => `@property ${name}{syntax:"*";inherits:true;initial-value:${declarationValue(value)}}`,
+    );
+    return root + registered.join("");
+}
+
+/** A value for one declaration in the inline style: nothing that ends the declaration, the rule or the element. */
+function declarationValue(value: string): string {
+    return css(value).replace(/[;{}]/g, "");
 }
