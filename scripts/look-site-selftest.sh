@@ -39,6 +39,8 @@ LOOK_NAME="$NAME" node --input-type=module -e '
   const server = createServer((request, response) => {
     const page = pages[request.url];
     if (request.url === "/hang") return;
+    const failed = { "/gone": 404, "/broken": 500 }[request.url];
+    if (failed) { response.writeHead(failed, { "content-type": "text/html" }).end(`<title>${name}</title>\n<h1>This page could not be loaded</h1>\n`); return; }
     if (!page) { response.writeHead(404).end("not found"); return; }
     response.writeHead(200, { "content-type": "text/html" });
     response.write(page[0]);
@@ -63,6 +65,11 @@ page_says "$BASE/last" "$NAME" || fail "a large page that ends with the name was
 page_says "$BASE/small" "$NAME" || fail "a small page with the name was read as another site"
 if page_says "$BASE/without" "$NAME"; then fail "a page without the name was taken for this site"; fi
 if page_says "$BASE/missing" "$NAME"; then fail "a 404 was taken for this site"; fi
+# The site's own error page says its name, so the status has to be what refuses it.
+[[ $(curl -s "$BASE/gone") == *"$NAME"* ]] || fail "the 404 page of this check does not carry the name, so it proves nothing about the status"
+[[ $(curl -s "$BASE/broken") == *"$NAME"* ]] || fail "the 500 page of this check does not carry the name, so it proves nothing about the status"
+if page_says "$BASE/gone" "$NAME"; then fail "a 404 page that carries the name was taken for this site"; fi
+if page_says "$BASE/broken" "$NAME"; then fail "a 500 page that carries the name was taken for this site"; fi
 CODE=0; page_says "$BASE/first" "" || CODE=$?
 [ "$CODE" = "2" ] || fail "an empty name was matched against a page (exit $CODE), and every page carries it"
 
@@ -74,6 +81,7 @@ if site_is_up "$TMP/taken.log" "$BASE/first" "$NAME"; then fail "a page with the
 if site_is_up "$TMP/not-written-yet.log" "$BASE/first" "$NAME"; then fail "a page with the name was accepted before this run's server logged anything"; fi
 site_is_up "$TMP/ready.log" "$BASE/first" "$NAME" || fail "this run's own server, ready and saying the name, was not accepted"
 if site_is_up "$TMP/ready.log" "$BASE/without" "$NAME"; then fail "a ready server whose page lacks the name was accepted"; fi
+if site_is_up "$TMP/ready.log" "$BASE/broken" "$NAME"; then fail "a ready server answering 500 with the name was accepted"; fi
 
 # A listener that accepts and never answers has to cost one try, not the run.
 ( page_says "$BASE/hang" "$NAME" ) &

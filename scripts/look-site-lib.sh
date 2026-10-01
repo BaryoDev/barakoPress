@@ -20,10 +20,12 @@ site_name() {
 #
 # An empty name is refused here as well as by the caller, since every page carries the empty string.
 # The read has a deadline, so a listener that accepts and never answers costs one try and not the run.
+# An error status fails the read whatever its body says: a site's own 404 or 500 page carries the
+# site's name in its title, and is not the page the check is about to measure.
 page_says() {
   local body
   [ -n "$2" ] || return 2
-  body=$(curl -s --max-time 5 "$1") || return 1
+  body=$(curl -sf --max-time 5 "$1") || return 1
   [[ $body == *"$2"* ]]
 }
 
