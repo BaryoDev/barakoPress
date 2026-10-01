@@ -63,6 +63,53 @@ body { --bp-gap: 0; }   /* every block list, at every level */
 `bare` is also taken by `createHome` and `createViewerPage`. `--bp-gap` falls back to
 `theme.space.lg`, so a site that sets neither renders as it did.
 
+## The faces as custom properties
+
+`createSiteLayout` writes the theme's three faces on the root, inline in the head (through
+`themeVariablesCss`), and `barakopress/styles.css` reads them:
+
+| Property | From |
+| --- | --- |
+| `--bp-font-sans` | `theme.fonts.body` |
+| `--bp-font-display` | `theme.fonts.heading` |
+| `--bp-font-mono` | `theme.fonts.mono` |
+
+A site's stylesheet reads the same names to follow the theme: `font-family: var(--bp-font-sans)`.
+
+Until 0.11.0 these were `--font-sans`, `--font-display` and `--font-mono`. Those are names a
+Tailwind `@theme` block defines, and the head style comes after the site's stylesheet, so the
+engine's values replaced the site's own tokens. The engine no longer declares them.
+
+The old names still resolve in 0.11.x, for a stylesheet that reads them and does not define them.
+They are registered with `@property`, with the theme's face as the initial value, in the head style
+and in `barakopress/styles.css`. An initial value applies only where no declaration sets the
+property, so any definition the site has wins: a `:root` rule, a Tailwind `@theme` block, a layer of
+its own, before the head style or after it. `look/font-variables.component.pw.ts` measures each of
+those in Chromium.
+
+What that means for a site:
+
+- It defines `--font-sans` itself and reads it (a copy of the old `styles.css` does): its own value
+  now applies, not the theme's. To keep following `theme.fonts` or the `Fonts` setting, read
+  `--bp-font-sans`, `--bp-font-display` and `--bp-font-mono` instead.
+- It reads the old names and defines nothing: nothing changes in 0.11.x when the theme's fonts are
+  stacks of family names. Rename to `--bp-font-*` before 0.12.0, which drops the registrations.
+- Its theme names a font through a variable or a function (`var(--font-inter), sans-serif`, the
+  next/font pattern): that value is under `--bp-font-*` only. A registered initial value cannot hold
+  a `var()`, so the old name for that role resolves to the default stack (Manrope, Sora or JetBrains
+  Mono), not to the theme's font. Read `--bp-font-*` now.
+- It set the old names to restyle `barakopress/styles.css` (`:root { --font-sans: "Inter" }`): the
+  stylesheet's rules no longer read them, so they draw in the defaults or the theme's faces. Set
+  `--bp-font-sans`, `--bp-font-display` and `--bp-font-mono` instead: on the root for a site that
+  draws its own head, and on `body` or further in for a site that uses `createSiteLayout`, whose head
+  style sets the root after the stylesheet. With `createSiteLayout`, `theme.fonts` is the usual way.
+- A browser without `@property` (Firefox before 128, Safari before 16.4) gets no value for the old
+  names. The `--bp-font-*` names are plain declarations and work everywhere.
+
+One smaller difference: the old `--font-display` was `"Sora", var(--font-sans)`, so its fallback
+followed whatever a site set `--font-sans` to. The registered value is a fixed stack, Sora and then
+the default sans stack.
+
 ## Tokens and tones
 
 The theme's slots are the engine's roles. A design has its own palette on top of them: a colour per

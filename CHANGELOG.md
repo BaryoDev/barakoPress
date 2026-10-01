@@ -9,6 +9,22 @@
   npm when it installs this version, and moves to 16.3.8 or later to clear it. The engine does not
   import `next/og` or `ImageResponse`. The reference app and the image build on 16.3.8.
 
+- The engine's font variables are `--bp-font-sans`, `--bp-font-display` and `--bp-font-mono`. The
+  head style no longer declares `--font-sans`, `--font-display` or `--font-mono` on the root, and
+  `barakopress/styles.css` no longer defines or reads them. Those are names a Tailwind `@theme` block
+  defines, and the head style comes after the site's stylesheet, so the engine's values replaced the
+  site's own tokens. The old names are registered with `@property` instead, with the theme's face
+  as the initial value, so they still resolve where a site defines nothing and any definition a site
+  has wins. That needs a browser with `@property`: Firefox before 128 and Safari before 16.4 get no
+  value for the old names. A site that reads the old names renames them to `--bp-font-*` before
+  0.12.0, which removes the registrations. A site that defines the old names itself and relied on
+  `theme.fonts` or the `Fonts` setting replacing them (a stylesheet copied from the old `styles.css`
+  does) now gets its own values, and reads `--bp-font-*` to follow the theme again. A site that set
+  the old names to restyle `barakopress/styles.css` sets `--bp-font-*` instead, since the
+  stylesheet's rules no longer read the old names. A theme font built from a variable or a function
+  (`var(--font-inter), sans-serif`) is carried under `--bp-font-*` only, and the old name for that
+  role resolves to the default stack (#115).
+
 ## 0.10.1 (2026-09-29)
 
 - Raw HTML in markdown is turned into text on the tokens, before anything renders, for the body,
