@@ -102,7 +102,7 @@ holding `/` is never holding one visitor's gate for the next visitor.
 
 `PRESS_SECRET` keys everything this renderer signs: each tenant's webhook key, each tenant's binding
 report key and each share session cookie. A key derived from it puts its purpose first in what it
-signs (`revalidate.`, `bindings.` or `press-share.`), so one derived for one purpose never verifies as
+signs (`revalidate.`, `bindings.`, `press-share.` or `press-link.`), so one derived for one purpose never verifies as
 another. Webhook keys are derived per tenant on a request-time site, binding report keys when the
 tenant is pinned or resolved per request. Elsewhere `PRESS_SECRET` itself is the key, so a
 build-time site with no pinned tenant verifies its webhook and its binding report with the same

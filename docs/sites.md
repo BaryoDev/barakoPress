@@ -20,6 +20,7 @@ app/
     page.tsx
     [...path]/page.tsx
     blog/[slug]/page.tsx
+    %5Flink/[[...path]]/page.tsx      what a link to one entry or one page opens; never kept
   feed.xml/route.ts                   these resolve their own tenant and stay where they are
   robots.ts
   sitemap.ts
@@ -413,6 +414,29 @@ again starts a new one while the link is valid. **A revoked link can keep workin
 hours** for someone who already opened it, because the session is checked here, not in barakoCMS. To
 end every session now, change `PRESS_SECRET`, which does it for every tenant on that
 deployment, and changes every tenant's webhook key with it.
+
+**Links to one entry or one page.** barakoCMS 4.6 also makes links that open one entry, whatever its
+status, or one page (barakoCMS #1089), in the same `{site Url}/_share#{key}` form. `/api/share/redeem`
+asks `POST /api/public/site/share-links/open` what the key opens, and an API older than 4.6, which
+has no such route, is asked `redeem` as before:
+
+- a link to the site starts the session above, on a holding tenant;
+- a link to an entry or a page sets `__Host-press-link` and answers a `no-store` 303 to where it
+  opens: the item page of the collection that renders the entry's type, or the path the page link
+  was made for. The cookie holds the key sealed with AES-256-GCM under a key derived from
+  `PRESS_SECRET`, with the tenant and that path, so the browser cannot read it and it opens nothing
+  on another tenant or another path. It lasts until the link expires or 24 hours, whichever is
+  sooner, and opening another such link replaces it.
+
+The proxy sends a request for that path, from a visitor holding that cookie, to
+`/_press/<tenant>~link~<host>/_link/<path>`, with `X-Robots-Tag: noindex, nofollow` and
+`Referrer-Policy: no-referrer`. That route is `createSharedLinkPage(config, blocks)`, mounted at
+`app/%5Fpress/[site]/%5Flink/[[...path]]/page.tsx` with `export const metadata = sharedLinkMetadata`
+and no `generateStaticParams`. It asks barakoCMS again on every request and draws the entry with
+the collection's item view, or the page with its blocks; a holding tenant shows it too. A revoked
+or expired link is a 404 on the next request, unlike a site session. An entry of a type no
+collection with a route renders opens nothing. The key is never logged and is in no URL the
+renderer writes. A build-time site has no proxy and opens none of these.
 
 Whether a request gets the holding page is decided by the proxy, from the cookie, once per request,
 and the answer is a segment of the path the render is kept under. A render made for a visitor with a

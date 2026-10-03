@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
 import {
@@ -38,7 +38,7 @@ import {
 } from "./config.js";
 import { ACTIVE_ON_MAX } from "./current-path.js";
 import { readEnv } from "./env.js";
-import { CmsError, isTenantHandle, list, tenantForHost } from "./delivery.js";
+import { CmsError, isLinkPath, isTenantHandle, list, tenantForHost } from "./delivery.js";
 import { readSecret } from "./secret.js";
 import { parseSiteSegment, type SiteRoute } from "./site-route.js";
 import { isPluginName } from "./blocks/plugins.js";
@@ -266,6 +266,82 @@ export function shareCookieValid(
     return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
+/*
+ * Links to one entry or one page (barakoCMS #1089).
+ *
+ * Such a link opens one entry whatever its status, so unlike a site link its answer cannot be
+ * checked once and remembered as a signature: each render asks barakoCMS again, and a revoked link
+ * stops at once. That needs the key on every request, so the cookie carries it, sealed with
+ * AES-256-GCM under a key derived from PRESS_SECRET for this purpose alone. The visitor's browser
+ * holds a value it cannot read or change; the tenant and the path the link opens are sealed in with
+ * it, so it opens nothing on another tenant and no other path. It lasts as long as a site session:
+ * until the link expires or for 24 hours, whichever is sooner. One at a time: opening another link
+ * replaces it.
+ */
+
+/** Host-only by its prefix, like the share session. */
+export const LINK_COOKIE = "__Host-press-link";
+
+export interface LinkSession {
+    tenant: string;
+    /** The share link's key. Never logged, never in a URL. */
+    key: string;
+    /** The site path the link opens at. */
+    path: string;
+    /** Unix seconds. */
+    expires: number;
+}
+
+const LINK_KEY = /^[\x21-\x7e]{16,512}$/;
+/** A browser keeps about 4 KB a cookie. A path long enough to pass that is refused when sealed. */
+const LINK_COOKIE_MAX = 3800;
+
+function linkKey(secret: string): Buffer {
+    return createHmac("sha256", secret).update("press-link.").digest();
+}
+
+/** The cookie value for a link session, or null when it would not fit in a cookie. */
+export function sealLinkCookie(session: LinkSession, secret: string): string | null {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv("aes-256-gcm", linkKey(secret), iv);
+    const plain = JSON.stringify({ t: session.tenant, k: session.key, p: session.path, e: session.expires });
+    const sealed = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
+    const value = Buffer.concat([iv, cipher.getAuthTag(), sealed]).toString("base64url");
+    return value.length <= LINK_COOKIE_MAX ? value : null;
+}
+
+/** The session a cookie holds, when it was sealed with this secret for this tenant and has not expired. */
+export function openLinkCookie(
+    value: string | null | undefined,
+    tenant: string | undefined,
+    secret: string | null,
+    now: number = Date.now(),
+): LinkSession | null {
+    if (!secret || !tenant || typeof value !== "string" || value.length > LINK_COOKIE_MAX) return null;
+    if (!/^[A-Za-z0-9_-]+$/.test(value)) return null;
+    const raw = Buffer.from(value, "base64url");
+    if (raw.length < 12 + 16 + 1) return null;
+    let plain: string;
+    try {
+        const decipher = createDecipheriv("aes-256-gcm", linkKey(secret), raw.subarray(0, 12));
+        decipher.setAuthTag(raw.subarray(12, 28));
+        plain = Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString("utf8");
+    } catch {
+        return null;
+    }
+    let parsed: { t?: unknown; k?: unknown; p?: unknown; e?: unknown };
+    try {
+        parsed = JSON.parse(plain) as typeof parsed;
+    } catch {
+        return null;
+    }
+    const { t, k, p, e } = parsed;
+    if (t !== tenant || typeof k !== "string" || !LINK_KEY.test(k) || !isLinkPath(p)) return null;
+    if (typeof e !== "number" || !Number.isInteger(e) || e * 1000 <= now) return null;
+    if (e * 1000 > now + SHARE_SESSION_MAX_SECONDS * 1000 + 60_000) return null;
+    return { tenant, key: k, path: p, expires: e };
+}
+
 /**
  * True when this request gets the holding page: the tenant is holding and the request has no valid
  * session.
@@ -276,7 +352,8 @@ export function shareCookieValid(
 export async function showsHoldingPage(config: PressConfig, params?: SiteParams): Promise<boolean> {
     if (!config.holding) return false;
     const route = await routeFromParams(params);
-    if (route) return route.gate !== "shared";
+    // A link gate is the one page a link to an entry or a page opens, which a holding site shows too.
+    if (route) return route.gate === "public";
     const jar = await cookies();
     return !shareCookieValid(jar.get(SHARE_COOKIE)?.value, pinnedTenant(config), shareSecret());
 }

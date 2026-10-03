@@ -2,6 +2,17 @@
 
 ## 0.11.0 (unreleased)
 
+- `/_share` opens links to one entry or one page as well as links to the site (barakoCMS #1089).
+  The redeem route asks barakoCMS 4.6 `share-links/open` what a key opens, and an older API
+  `redeem` as before. A link to an entry or a page sets `__Host-press-link`, the key sealed with
+  AES-256-GCM, and sends the visitor to where it opens; the proxy sends that one path to a new route
+  that asks barakoCMS again on every request and draws the entry or the page, unpublished content
+  included, unindexed and never kept. A request-time site mounts it at
+  `app/%5Fpress/[site]/%5Flink/[[...path]]/page.tsx` with `createSharedLinkPage(config, blocks)` and
+  `sharedLinkMetadata`; without that file the link lands on a 404. New exports: `openShareLink`,
+  `isLinkPath`, `LINK_COOKIE`, `sealLinkCookie`, `openLinkCookie`, `createSharedLinkPage`,
+  `sharedLinkMetadata`. The `link` gate joins `public` and `shared` in the rewritten segment.
+
 - The revalidate endpoint binds a delivery to its tenant. barakoCMS 4.6 names the tenant in the
   signed body; after the signature verifies as before, a body naming another tenant than the one
   the host resolved to, or the one a build-time site pins, purges nothing and answers 200 with
