@@ -140,6 +140,8 @@ export {
     CmsError,
     PAGES_CONTRACT,
     speaksPagesContract,
+    DELIVERY_CONTRACT,
+    classifyDeliveryContract,
 } from "./delivery.js";
 export type {
     PublicContent,
@@ -151,7 +153,11 @@ export type {
     SemanticResponse,
     ShareRedeemAnswer,
     ShareRedeemCaller,
+    DeliveryContract,
 } from "./delivery.js";
+
+export { isImageSrc, isInlineImage, readFile, readFileLink, readImage, shareImageUrl } from "./media.js";
+export type { DeliveredFile, DeliveredImage, FileLink } from "./media.js";
 
 export { listRelated, listRelatedItems, pickRelated } from "./related.js";
 export type { RelatedPost } from "./related.js";
@@ -207,6 +213,8 @@ export {
     toItem,
     collectionOf,
     referencedBy,
+    refsOf,
+    slugOf,
 } from "./collections.js";
 export {
     collectionTree,
