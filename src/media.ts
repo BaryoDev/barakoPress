@@ -9,7 +9,7 @@
  *   inlineimage   { url: "data:image/png;base64,...", alt }, a small image kept in the entry.
  *
  * Everything that draws an image or links a file reads it through here, so the rule about what may
- * reach an `<img src>` is kept once: an http or https URL, a path on this site, or an inline image
+ * reach an image src is kept once: an http or https URL, a path on this site, or an inline image
  * whose prefix is one the API allows. The API already refuses anything else on write and leaves it
  * out on delivery; this is the second check, for a value that came from somewhere else.
  *
@@ -39,7 +39,7 @@ function webHref(value: string): string | undefined {
     }
 }
 
-/** True for a value an `<img src>` may carry. */
+/** True for a value an image src may carry. */
 export function isImageSrc(value: unknown): value is string {
     if (typeof value !== "string") return false;
     return isInlineImage(value) || webHref(value) !== undefined;
