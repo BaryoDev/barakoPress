@@ -34,7 +34,7 @@ merged over the configured collections by key. A build-time site passes `collect
 | `type` | The content type. Required |
 | `route` | The index is served at the route and an item at `route/slug`. Absent, items are listed and never linked |
 | `fields` | `title` (required), `slug`, `summary`, `body` (markdown), `date`, `image`, `imageAlt`, `featured`, `tags`, `url`, `photo`, `progress`, `progressCount`, `progressTotal`, `href`. Each is a field name or a list tried in order; `@createdAt` and `@updatedAt` read the entry itself. `photo` is a portrait drawn above the title, `image` the wide one, and `progress` is a number from 0 to 100 that `progressList` draws. `progressCount` and `progressTotal` draw the same bar from two counts instead, for a source that gives those rather than a figure already worked out; `progress` wins when both are set. `href` is where a card links when that is not the item's own route: a collection filled by a sync usually carries the source's own URL and has no route on this site |
-| `references` | Reference fields, each naming the collection it points into and the word a card puts before the link. Resolved in the same request |
+| `references` | Reference fields, each naming the collection it points into and the word a card puts before the link. Resolved in the same request. A field holding a list of references (barakoCMS `multiple`) links every one of them, in order |
 | `sort` | Sent to the API, for example `-PublishedAt` |
 | `feed` | Whether `createFeed(config, key)` serves it |
 | `sitemap` | On unless `false`. A collection is paged to `pageSizes.sitemap` entries; the file stops at the standard's 50,000 URLs and says so in the log |
@@ -47,6 +47,16 @@ merged over the configured collections by key. A build-time site passes `collect
 | `readingTime` | Whether an item page shows a read time worked out from its body. Off unless `true` |
 | `layout` | How an item page is drawn: `"list"`, the shell markup every collection has had, or `"article"`, the reading column the blog's posts are drawn in. See below |
 | `tree` | Set when the collection is a manual rather than a flat list: sections, an order, nesting, products. See below |
+
+`image` and `photo` read a URL held as text, a file field (barakoCMS 4.6) or an inline image field.
+A file field gives the alt text written on the file, which `imageAlt` overrides when the entry has
+one; a private file is left out by the API, and the item then has no image. A file that is not an
+image is not drawn. `url` reads a link held as text or a file field, and a file's link reads as its
+name. Only an http or https URL, a site path, or a `data:image/png`, `jpeg`, `gif` or `webp` base64
+URI is drawn as an image, and a share card never carries an inline image.
+
+An entry the API sends with `slug: null` (a type whose slug field is not Public, barakoCMS 4.6) has
+no page: its card draws the title with no link, and it is left out of the sitemap and the feed.
 
 A settings entry that does not read as a collection is left out whole: a type or field that is not a
 plain identifier, a route that is not a plain site path, or no title field. `post`, `author` and

@@ -17,6 +17,7 @@ import {
     type Page,
 } from "../cms.js";
 import { renderProse } from "../assets.js";
+import { shareImageUrl } from "../media.js";
 import { proseCss } from "../theme.js";
 import { BLOCK_PROSE_CLASS } from "../blocks/built-in.js";
 import { BlockList } from "../blocks/render.js";
@@ -390,9 +391,15 @@ export function createHomeMetadata(base: PressConfig) {
             description,
             alternates: seo?.canonicalUrl ? { canonical: seo.canonicalUrl } : undefined,
             robots: seo?.noIndex ? { index: false, follow: false } : undefined,
-            openGraph: { title, description, images: seo?.imageUrl ? [seo.imageUrl] : undefined },
+            openGraph: { title, description, images: shareImages(seo?.imageUrl) },
         };
     };
+}
+
+/** A share card's image, when the API's address is one a crawler can fetch. */
+function shareImages(url: string | undefined): string[] | undefined {
+    const image = shareImageUrl(url);
+    return image ? [image] : undefined;
 }
 
 export function createPageMetadata(base: PressConfig) {
@@ -413,7 +420,7 @@ export function createPageMetadata(base: PressConfig) {
             description,
             alternates: seo?.canonicalUrl ? { canonical: seo.canonicalUrl } : undefined,
             robots: seo?.noIndex ? { index: false, follow: false } : undefined,
-            openGraph: { title, description, images: seo?.imageUrl ? [seo.imageUrl] : undefined },
+            openGraph: { title, description, images: shareImages(seo?.imageUrl) },
         };
     };
 }

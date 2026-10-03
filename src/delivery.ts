@@ -28,7 +28,8 @@ import { forgetInProcessStore, storeFor, type PressStore } from "./store.js";
 
 export interface PublicContent {
     id: string;
-    slug?: string;
+    /** Null when the entry has no slug the API serves (barakoCMS #1100); left out by an older API. */
+    slug?: string | null;
     contentType?: string;
     createdAt?: string;
     updatedAt?: string;

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Asset, renderProse } from "../assets.js";
 import type { PressConfig } from "../config.js";
 import { formatDate } from "../cms.js";
-import { collectionOf, defaultByline, type Item } from "../collections.js";
+import { collectionOf, defaultByline, refsOf, type Item } from "../collections.js";
 import { initials, readingMinutes } from "../reading-time.js";
 import { proseCss, relatedCss } from "../theme.js";
 
@@ -118,9 +118,13 @@ export function ArticleView({
      * whose first reference is `Photographer` gets a byline without configuring a second thing.
      */
     const shown = Object.entries(col?.references ?? {}).flatMap(([field, ref]) => {
-        const target = item.refs[field];
         const to = collectionOf(config, ref.collection)?.route;
-        return target ? [{ field, name: target.name, href: to ? `${to}/${target.slug}` : undefined }] : [];
+        // A field holding a list draws each of them; a target with no slug is named and not linked.
+        return refsOf(item, field).map((target, at) => ({
+            field: at === 0 ? field : `${field}.${at}`,
+            name: target.name,
+            href: to && target.slug ? `${to}/${target.slug}` : undefined,
+        }));
     });
     const unsigned = defaultByline(config, col, item);
     if (unsigned) shown.unshift({ field: "", name: unsigned.name, href: undefined });
@@ -324,6 +328,8 @@ export function ArticleView({
                         <Asset
                             src={item.image}
                             alt={item.imageAlt ?? ""}
+                            width={item.imageWidth}
+                            height={item.imageHeight}
                             theme={t}
                             style={{
                                 width: "100%",
@@ -342,7 +348,7 @@ export function ArticleView({
                     {item.url && (
                         <p style={{ margin: "28px 0 0", fontSize: "14px" }}>
                             <a href={item.url} rel="noopener noreferrer" style={{ color: c.accent }}>
-                                {item.url}
+                                {item.urlLabel ?? item.url}
                             </a>
                         </p>
                     )}

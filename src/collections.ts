@@ -1,6 +1,7 @@
 import { REFERENCE_FIELDS, type CollectionConfig, type FieldNames, type OptionStyle, type PressConfig } from "./config.js";
 import { bySlug, bySlugPreview, list, search, type PublicContent, type Seo } from "./delivery.js";
 import type { Ref } from "./cms.js";
+import { readFileLink, readImage, type DeliveredImage } from "./media.js";
 import { siteHref } from "./site.js";
 
 /*
@@ -23,10 +24,16 @@ export interface Item {
     /** Markdown. */
     body: string;
     date?: string;
+    /** An http or https URL, a site path, or an inline image the API allows. See media.ts. */
     image?: string;
     imageAlt?: string;
-    /** A checked http or https link, or a site path. */
+    /** The image's size in pixels, only when the field says so. */
+    imageWidth?: number;
+    imageHeight?: number;
+    /** A checked http or https link, or a site path. A file field in this role links to the file. */
     url?: string;
+    /** What the `url` link reads as when it is a file: the file's name. */
+    urlLabel?: string;
     /** Where a card for this item links, from the collection's `href` field. Falls back to its route. */
     href?: string;
     /** A portrait, from the collection's `photo` field role. */
@@ -39,8 +46,17 @@ export interface Item {
     progressTotal?: string;
     featured: boolean;
     tags: string[];
-    /** Resolved references, by field name. Undefined for one that did not come back resolved. */
+    /**
+     * Resolved references, by field name. Undefined for one that did not come back resolved. For a
+     * field holding a list of references, the first of them, so a byline still has one name.
+     */
     refs: Record<string, Ref | undefined>;
+    /**
+     * Every resolved reference of a field holding a list of them (barakoCMS `multiple`), in the order
+     * the entry holds them. A field holding one reference is not here. Optional, since `Item` is a
+     * package export and one built by hand keeps compiling without it.
+     */
+    refLists?: Record<string, Ref[]>;
     /** The heading this item is grouped under, from the collection's `tree.section`. */
     section?: string;
     /** Where it comes in its section, from `tree.order`. Items with no order sort after those with one. */
@@ -63,6 +79,17 @@ export interface Item {
 }
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
+
+/**
+ * The references an item holds in one field, in order: every one of a list, or the one a single
+ * reference resolved to. Empty when nothing came back resolved.
+ */
+export function refsOf(item: Item, field: string): Ref[] {
+    const many = item.refLists && Object.hasOwn(item.refLists, field) ? item.refLists[field] : undefined;
+    if (many) return many;
+    const one = item.refs[field];
+    return one ? [one] : [];
+}
 
 /** A configured collection by key. Own keys only, so a name taken from input cannot reach the prototype. */
 export function collectionOf(config: PressConfig, key: string): CollectionConfig | undefined {
@@ -89,6 +116,39 @@ function text(c: PublicContent, n: FieldNames | undefined): string {
     return "";
 }
 
+/** The first of the names holding an image: text naming one, an inline image, or an image file. */
+function image(c: PublicContent, n: FieldNames | undefined): DeliveredImage | undefined {
+    for (const name of names(n)) {
+        const found = readImage(read(c, name));
+        if (found) return found;
+    }
+    return undefined;
+}
+
+/** The first of the names holding a link: checked text, or a delivered file. */
+function link(c: PublicContent, n: FieldNames | undefined): { href: string; label?: string } | undefined {
+    for (const name of names(n)) {
+        const v = read(c, name);
+        const href = typeof v === "string" ? siteHref(v) : undefined;
+        if (href) return { href };
+        const file = readFileLink(v);
+        if (file) return file;
+    }
+    return undefined;
+}
+
+/*
+ * A many-valued reference (barakoCMS `multiple`). With `include` each element is the whole target
+ * entry; without it each is a bare id, which names nothing a page can show and is left out.
+ */
+function toRefs(config: PressConfig, target: string, v: unknown): Ref[] | undefined {
+    if (!Array.isArray(v)) return undefined;
+    return v.slice(0, MAX_REFS).flatMap((one) => toRef(config, target, one) ?? []);
+}
+
+/** The most entries of one list reference an item carries. The API caps a list at a hundred. */
+const MAX_REFS = 100;
+
 /** The first of the names holding any value. */
 function value(c: PublicContent, n: FieldNames | undefined): unknown {
     for (const name of names(n)) {
@@ -110,7 +170,7 @@ function toRef(config: PressConfig, target: string, v: unknown): Ref | undefined
     const entry: PublicContent = { id: str(d.id), data };
     const fields = collectionOf(config, target)?.fields;
     const name = text(entry, fields?.title ?? REFERENCE_FIELDS.title);
-    const slug = str(d.slug) || text(entry, fields?.slug ?? REFERENCE_FIELDS.slug);
+    const slug = d.slug === null ? "" : str(d.slug) || text(entry, fields?.slug ?? REFERENCE_FIELDS.slug);
     if (!name && !slug) return undefined;
     return { id: str(d.id), slug, name: name || slug };
 }
@@ -175,6 +235,29 @@ export function defaultByline(
     return { label: first?.[1].label || config.labels.by, name: col.defaultAuthor };
 }
 
+/*
+ * The slug a by-slug read answers to.
+ *
+ * barakoCMS sends the top-level `slug` from a slug field, or a Public text field named Slug, and
+ * nothing else (barakoCMS #1100). An explicit null is the API saying this entry has no slug: reading
+ * a field instead would build a link the API answers 404 for. An older API that leaves the member
+ * out still falls back to the configured field, as it always did.
+ */
+export function slugOf(c: PublicContent, n: FieldNames | undefined): string {
+    if (c.slug === null) return "";
+    return (typeof c.slug === "string" ? c.slug : "") || text(c, n);
+}
+
+/*
+ * The API's SEO title, as the last thing a title is read from before "Untitled". barakoCMS fills it
+ * from `MetaTitle`, then the field a type gives the `title` role, then the names it always guessed
+ * (barakoCMS #1092), so a type whose title field this site's map does not name still gets one.
+ */
+function seoTitle(c: PublicContent): string {
+    const t = c.seo?.title;
+    return typeof t === "string" ? t.trim() : "";
+}
+
 export function toItem(config: PressConfig, key: string, c: PublicContent): Item {
     const col = collectionOf(config, key);
     if (!col) throw new Error(`no collection "${key}" is configured`);
@@ -183,22 +266,35 @@ export function toItem(config: PressConfig, key: string, c: PublicContent): Item
     const option = optionOf(c, col);
     const style = styleOf(config, col, option);
     const refs: Record<string, Ref | undefined> = {};
+    const refLists: Record<string, Ref[]> = {};
     for (const [field, ref] of Object.entries(col.references ?? {})) {
-        refs[field] = toRef(config, ref.collection, read(c, field));
+        const held = read(c, field);
+        const many = toRefs(config, ref.collection, held);
+        if (many) {
+            refLists[field] = many;
+            refs[field] = many[0];
+        } else {
+            refs[field] = toRef(config, ref.collection, held);
+        }
     }
+    const img = image(c, f.image);
+    const url = link(c, f.url);
     return {
         id: c.id,
         collection: key,
-        slug: c.slug ?? text(c, f.slug),
-        title: text(c, f.title) || config.labels.untitled,
+        slug: slugOf(c, f.slug),
+        title: text(c, f.title) || seoTitle(c) || config.labels.untitled,
         summary: text(c, f.summary) || undefined,
         body: text(c, f.body),
         date: text(c, f.date) || undefined,
-        image: text(c, f.image) || undefined,
-        imageAlt: text(c, f.imageAlt) || undefined,
-        url: siteHref(text(c, f.url)),
+        image: img?.src,
+        imageAlt: text(c, f.imageAlt) || img?.alt,
+        ...(img?.width !== undefined ? { imageWidth: img.width } : {}),
+        ...(img?.height !== undefined ? { imageHeight: img.height } : {}),
+        url: url?.href,
+        ...(url?.label ? { urlLabel: url.label } : {}),
         href: siteHref(text(c, f.href)),
-        photo: text(c, f.photo) || undefined,
+        photo: image(c, f.photo)?.src,
         progress: text(c, f.progress) || undefined,
         progressCount: text(c, f.progressCount) || undefined,
         progressTotal: text(c, f.progressTotal) || undefined,
@@ -206,6 +302,7 @@ export function toItem(config: PressConfig, key: string, c: PublicContent): Item
         featured: value(c, f.featured) === true,
         tags: Array.isArray(tags) ? tags.filter((t): t is string => typeof t === "string") : [],
         refs,
+        ...(Object.keys(refLists).length > 0 ? { refLists } : {}),
         option,
         ...(style ? { style } : {}),
         ...(style?.tone ? { color: style.tone } : {}),

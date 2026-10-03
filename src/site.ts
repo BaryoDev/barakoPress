@@ -59,6 +59,7 @@ import type {
 } from "./theme.js";
 import { FONT_FAMILY, FONT_ROLES, fontStylesheetHref } from "./fonts.js";
 import { analyticsScriptUrl, analyticsWebsiteId } from "./analytics.js";
+import { readFile, readImage } from "./media.js";
 
 /*
  * Request-time sites: one build, many domains (barakoCMS D22, barakoPress #20).
@@ -1132,11 +1133,12 @@ export function applySiteSettings(
         tagline: str(d.Tagline) ?? base.tagline,
         // A host is only a fallback origin when the CMS said it belongs to this tenant.
         url: origin(d.Url) ?? (base.url || (host ? `https://${host}` : "")),
-        logo: siteHref(d.Logo) ?? base.logo,
-        logoAlt: str(d.LogoAlt) ?? base.logoAlt,
-        footerLogo: siteHref(d.FooterLogo) ?? base.footerLogo,
-        favicon: siteHref(d.Favicon) ?? base.favicon,
-        shareImage: siteHref(d.ShareImage) ?? base.shareImage,
+        // An image setting may be a URL, a file field or an inline image (barakoCMS #1099, #1105).
+        logo: readImage(d.Logo)?.src ?? base.logo,
+        logoAlt: str(d.LogoAlt) ?? readImage(d.Logo)?.alt ?? base.logoAlt,
+        footerLogo: readImage(d.FooterLogo)?.src ?? base.footerLogo,
+        favicon: readImage(d.Favicon)?.src ?? base.favicon,
+        shareImage: siteHref(d.ShareImage) ?? readFile(d.ShareImage)?.url ?? base.shareImage,
         copyright: str(d.Copyright) ?? base.copyright,
         topBar: topBar(d.TopBar) ?? base.topBar,
         // A list saved empty clears the configured one. A field that is not a list keeps it.

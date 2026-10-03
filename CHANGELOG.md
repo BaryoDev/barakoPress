@@ -2,6 +2,33 @@
 
 ## 0.11.0 (unreleased)
 
+- barakoCMS 4.6 delivery shapes. An item's `image` and `photo` read a file field
+  (`{ id, url, fileName, contentType, size, alt, caption }`) and an inline image field
+  (`{ url: "data:image/...;base64,...", alt }`) as well as a URL held as text, and `imageAlt` falls
+  back to the alt the value carries. A file that is not an image is not drawn; in the `url` role it
+  is linked, and the link reads as the file's name (`Item.urlLabel`). A field the API left out, a
+  private file for one, is absent. `Item.imageWidth` and `Item.imageHeight` are set only when the
+  value carries a size, which barakoCMS does not send today. A reference field holding a list
+  (`multiple`) is read into `Item.refLists`, in order, with the first in `Item.refs` as before;
+  cards and article pages link each one, and `{{item.Speakers}}` binds the list. The site settings
+  `Logo`, `FooterLogo` and `Favicon` take either shape too, and `ShareImage` a file field.
+
+- Every `<img>` the engine draws, through `Asset`, takes only an http or https URL, a site path, or
+  a `data:image/png`, `jpeg`, `gif` or `webp` base64 URI; anything else draws nothing. A share card
+  (`og:image`) and the favicon are held to the same rule, and a share card never carries an inline
+  image. The image block's `src` and the `image` and `photo` props of `hero`, `card` and the
+  person preset take an inline image (`inlineImage: true` on the field, published in the block
+  schema). A markdown image whose destination is `mailto:` is drawn as its alt text.
+
+- An entry the API delivers with `slug: null` has no slug, rather than one read from the configured
+  field, since barakoCMS 4.6 answers 404 by slug for such a type. Its card draws the title without
+  a link, and it is left out of the sitemap, the feed and the related band. An older API that leaves
+  `slug` out is read as before.
+
+- An item or page whose title field is empty takes the API's `seo.title` before `Untitled`. barakoCMS
+  4.6 fills that from the field holding the `title` role, so a type whose title field the site's map
+  does not name still gets a title.
+
 - Security: the `next` peer range is `>=16.3.8`, up from `>=16`. Next 16.2.0 to 16.3.5 carry
   GHSA-vcvr-r3jv-pc5j, fixed in 16.3.6, and 16.3.8 adds the fixes for GHSA-cjq9-62q9-8jv4,
   GHSA-f87g-xv8r-7p7x, GHSA-4jqv-mc3x-m676, GHSA-mcj8-r9mp-w47p, GHSA-3w37-wq28-93x7,

@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Asset } from "../assets.js";
+import { isImageSrc, shareImageUrl } from "../media.js";
 import { hasFeed, type HeaderActionVariant, type PressConfig, type Region, type SiteIdentity } from "../config.js";
 import { showsHoldingPage, siteConfigOrNull, type SiteParams } from "../site.js";
 import {
@@ -647,12 +648,13 @@ export function createSiteMetadata(config: PressConfig) {
             metadataBase = undefined;
         }
 
+        const shareImage = shareImageUrl(s.shareImage);
         return {
             metadataBase,
             title: { default: s.name, template: `%s | ${s.name}` },
             description: s.tagline,
-            icons: s.favicon ? { icon: s.favicon } : undefined,
-            openGraph: { siteName: s.name, images: s.shareImage ? [s.shareImage] : undefined },
+            icons: isImageSrc(s.favicon) ? { icon: s.favicon } : undefined,
+            openGraph: { siteName: s.name, images: shareImage ? [shareImage] : undefined },
             // While holding nothing is indexed, session or not, and there is no feed to point at.
             // No feed link for a site with no feed: a tenant whose collections are all `feed: false`
             // has nothing at /feed.xml, and pointing a reader at it is a 404 with a promise on it.

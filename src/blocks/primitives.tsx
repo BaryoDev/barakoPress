@@ -831,7 +831,7 @@ const image = defineBlock<ImageProps>({
     label: "Image",
     layer: "primitive",
     fields: [
-        { name: "src", kind: "url", label: "Image URL", required: true },
+        { name: "src", kind: "url", label: "Image URL", required: true, inlineImage: true },
         { name: "alt", kind: "text", label: "Alternative text" },
         { name: "caption", kind: "text", label: "Caption" },
         { name: "radius", kind: "select", label: "Corners", options: [...RADII] },

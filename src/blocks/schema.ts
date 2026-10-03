@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { isSafeHref } from "../markdown.js";
+import { isInlineImage } from "../media.js";
 import type { PressTheme } from "../theme.js";
 import { BINDING_FORMATS, BINDING_SCOPES, hasBinding, readBindings, wholeBinding } from "./bindings.js";
 
@@ -59,6 +60,11 @@ export interface BlockField {
      */
     min?: number;
     max?: number;
+    /**
+     * On a `url` field that names an image: it may also hold an inline image, a `data:image/...`
+     * base64 URI of a type barakoCMS allows (#1105). Nothing else of `data:` is taken.
+     */
+    inlineImage?: boolean;
     /** What each entry of a `list` is. */
     item?: ListItem;
     /** A `group`'s own fields. */
@@ -378,7 +384,7 @@ function acceptsValue(field: BlockField, value: unknown): boolean {
         case "markdown":
             return typeof value === "string";
         case "url":
-            return typeof value === "string" && isSafeHref(value);
+            return typeof value === "string" && (isSafeHref(value) || (field.inlineImage === true && isInlineImage(value)));
         case "boolean":
             return typeof value === "boolean";
         case "number":
