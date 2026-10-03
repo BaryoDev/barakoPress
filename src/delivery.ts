@@ -326,6 +326,57 @@ const retrying = new Set<string>();
 export function forgetCachedReads() {
     forgetInProcessStore();
     retrying.clear();
+    contractSaid.clear();
+}
+
+/*
+ * The delivery contract (barakoCMS #902).
+ *
+ * barakoCMS numbers what its delivery routes promise, separately from what the console drives, and
+ * sends it on every response in `X-Delivery-Contract-Version`. An API from before that split sends
+ * only `X-Api-Contract-Version`, which then meant both, so that is read in its place. An API older
+ * still sends neither, and that is read as it always was: nothing to check.
+ *
+ * Outside the range a page still renders. A public site that refuses to draw because the API moved
+ * helps nobody; the server log saying so plainly, once, is what tells the operator to upgrade. The
+ * range is typed as numbers rather than `as const`, because it is the ends of a range that moves.
+ */
+export const DELIVERY_CONTRACT: { readonly min: number; readonly max: number } = { min: 1, max: 6 };
+
+export type DeliveryContract =
+    | { kind: "absent" }
+    | { kind: "ok"; version: number }
+    | { kind: "api-older"; version: number }
+    | { kind: "api-newer"; version: number };
+
+/** What a response's headers say about the contract. Anything unreadable counts as absent. */
+export function classifyDeliveryContract(headers: Headers): DeliveryContract {
+    const raw = headers.get("x-delivery-contract-version") ?? headers.get("x-api-contract-version");
+    if (raw === null || raw.trim() === "") return { kind: "absent" };
+    const version = Number(raw.trim());
+    if (!Number.isInteger(version)) return { kind: "absent" };
+    if (version < DELIVERY_CONTRACT.min) return { kind: "api-older", version };
+    if (version > DELIVERY_CONTRACT.max) return { kind: "api-newer", version };
+    return { kind: "ok", version };
+}
+
+/** Said once per tenant and version, from a set kept bounded, so a log is not one line per read. */
+const contractSaid = new Set<string>();
+
+function noteDeliveryContract(config: PressConfig, res: Response) {
+    const state = classifyDeliveryContract(res.headers);
+    if (state.kind === "absent" || state.kind === "ok") return;
+    const tenant = pinnedTenant(config) ?? "";
+    const key = `${tenant}|${state.version}`;
+    if (contractSaid.has(key)) return;
+    if (contractSaid.size >= 200) contractSaid.clear();
+    contractSaid.add(key);
+    const range = `${DELIVERY_CONTRACT.min} to ${DELIVERY_CONTRACT.max}`;
+    console.warn(
+        state.kind === "api-newer"
+            ? `cms: the API for tenant "${tenant}" speaks delivery contract ${state.version}, newer than the ${range} this barakoPress reads. Pages still render; upgrade barakoPress to read what changed.`
+            : `cms: the API for tenant "${tenant}" speaks delivery contract ${state.version}, older than the ${range} this barakoPress reads. Pages still render; upgrade barakoCMS.`,
+    );
 }
 
 /** A failure the last good answer may stand in for. A 404 or a 400 is an answer, not an outage. */
@@ -381,6 +432,7 @@ async function read<T>(config: PressConfig, path: string, opts: ReadOptions): Pr
                       },
                   }),
         });
+        noteDeliveryContract(config, res);
         if (!res.ok) throw new CmsError(path, res.status);
         const text = await res.text();
         const value = JSON.parse(text) as T;
@@ -429,6 +481,7 @@ async function getFresh<T>(config: PressConfig, path: string): Promise<T | null>
         // rather than followed.
         redirect: "error",
     });
+    noteDeliveryContract(config, res);
     if (res.status === 404) return null;
     if (!res.ok) throw new CmsError(path, res.status);
     return (await res.json()) as T;

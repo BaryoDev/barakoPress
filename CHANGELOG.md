@@ -2,6 +2,11 @@
 
 ## 0.11.0 (unreleased)
 
+- Every read checks the delivery contract barakoCMS sends in `X-Delivery-Contract-Version`, or
+  `X-Api-Contract-Version` from an API older than the split. This build reads contracts 1 to 6
+  (`DELIVERY_CONTRACT`). A number outside that is said in the server log once per tenant and
+  version, and pages still render. An API that sends neither header is read as before.
+
 - barakoCMS 4.6 delivery shapes. An item's `image` and `photo` read a file field
   (`{ id, url, fileName, contentType, size, alt, caption }`) and an inline image field
   (`{ url: "data:image/...;base64,...", alt }`) as well as a URL held as text, and `imageAlt` falls
