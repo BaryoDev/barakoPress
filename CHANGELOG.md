@@ -2,6 +2,11 @@
 
 ## 0.11.0 (unreleased)
 
+- The revalidate endpoint binds a delivery to its tenant. barakoCMS 4.6 names the tenant in the
+  signed body; after the signature verifies as before, a body naming another tenant than the one
+  the host resolved to, or the one a build-time site pins, purges nothing and answers 200 with
+  `revalidated: false`. A body with no `tenant` is read as before.
+
 - Every read checks the delivery contract barakoCMS sends in `X-Delivery-Contract-Version`, or
   `X-Api-Contract-Version` from an API older than the split. This build reads contracts 1 to 6
   (`DELIVERY_CONTRACT`). A number outside that is said in the server log once per tenant and

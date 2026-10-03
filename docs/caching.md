@@ -120,6 +120,11 @@ the keys derive byte for byte as before, so a key already pasted into a tenant's
 verifying. A `REVALIDATE_SECRET` shorter than 32 characters still verifies and logs a warning once,
 until 1.0.0. A `PRESS_PREVIEW_SECRET` shorter than 32 characters opens no session, as before.
 
+A delivery from barakoCMS 4.6 names its tenant in the signed body. After the signature verifies, a
+body naming another tenant than the one the host resolved to (or the one a build-time site pins) is
+answered 200 with `revalidated: false` and purges nothing. A body naming no tenant, from an older
+API, is read as before. A build-time site that pins no tenant has nothing to compare it with.
+
 Moving to the new name is copying the value: `PRESS_SECRET` set to what `REVALIDATE_SECRET` held
 derives the same tenant keys, provided it is 32 characters or more. A shorter one has to be replaced,
 and each tenant given its new key.
