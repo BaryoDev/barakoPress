@@ -121,7 +121,8 @@ const cookie = (name: string, value: string, maxAge: number) =>
  * here, and the log says why without the key.
  */
 function entryPath(config: PressConfig, entry: PublicContent): string | null {
-    const slug = typeof entry.slug === "string" ? entry.slug : "";
+    // One segment only: a slug holding a slash would make a path the item route does not match.
+    const slug = typeof entry.slug === "string" && !entry.slug.includes("/") ? entry.slug : "";
     const col = Object.keys(config.collections)
         .map((key) => collectionOf(config, key))
         .find((c) => c !== undefined && c.type === entry.contentType && c.route !== undefined);

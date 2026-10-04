@@ -198,6 +198,14 @@ describe("redeeming a key at /api/share/redeem", () => {
         expect(openLinkCookie(cookieOf(res, LINK_COOKIE), "baryo", SECRET)).toMatchObject({ key: ENTRY_KEY, path: "/blog/draft-notes" });
     });
 
+    it("opens nothing for an entry whose slug holds a slash, since no item route matches it", async () => {
+        links.baryo[ENTRY_KEY] = { scope: "entry", expiresAt: inAnHour(), path: null, entry: { ...DRAFT, slug: "notes/draft" } };
+        const res = await redeem("baryo.dev", ENTRY_KEY);
+
+        expect(res.headers.get("location")).toBe("/#share-invalid");
+        expect(res.headers.get("set-cookie")).toBeNull();
+    });
+
     it("sends a page key to the path it was made for, on a holding tenant too", async () => {
         const res = await redeem("soon.example", PAGE_KEY);
 
