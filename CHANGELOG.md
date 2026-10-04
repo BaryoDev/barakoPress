@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.11.0 (unreleased)
+## 0.11.0 (2026-10-04)
 
 - `/_share` opens links to one entry or one page as well as links to the site (barakoCMS #1089).
   The redeem route asks barakoCMS 4.6 `share-links/open` what a key opens, and an older API
