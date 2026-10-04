@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { renderMarkdown, type RenderMarkdownOptions } from "./markdown.js";
+import { isImageSrc } from "./media.js";
 import { spaceOf, SPACES } from "./blocks/tokens.js";
 import type { PressTheme, SuppliedAsset } from "./theme.js";
 
@@ -150,16 +151,24 @@ export interface AssetProps {
     loading?: "lazy" | "eager";
     /** A block's own marking, when it has one. The site's list is read either way. */
     supplied?: SuppliedProps;
+    /** The image's own size in pixels, only when the data says so. Lets a browser hold the space. */
+    width?: number;
+    height?: number;
 }
 
 /**
  * Every image the engine draws. An asset the site has not marked renders exactly as the caller
  * asked, which is why nothing about an existing site changes.
+ *
+ * A src that is not an http or https URL, a path on the site, or an inline image the API allows is
+ * drawn as nothing. Every image goes through here, so this is the one place that rule is kept.
  */
-export function Asset({ src, alt, theme, style, loading, supplied }: AssetProps): ReactNode {
+export function Asset({ src, alt, theme, style, loading, supplied, width, height }: AssetProps): ReactNode {
+    if (!isImageSrc(src)) return null;
+    const size = { width, height };
     const asset = suppliedAssetOn(theme, src, supplied);
     if (!asset) {
-        return <img src={src} alt={alt ?? ""} loading={loading} style={style} />;
+        return <img src={src} alt={alt ?? ""} {...size} loading={loading} style={style} />;
     }
 
     return (
@@ -182,6 +191,7 @@ export function Asset({ src, alt, theme, style, loading, supplied }: AssetProps)
             <img
                 src={src}
                 alt={alt ?? ""}
+                {...size}
                 loading={loading}
                 style={{ display: "block", maxWidth: "100%", ...only(style, INNER), ...NO_TREATMENT }}
             />

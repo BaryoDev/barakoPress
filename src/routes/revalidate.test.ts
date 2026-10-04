@@ -279,3 +279,65 @@ describe("one PRESS_SECRET", () => {
         expect(short.err).not.toContain("short-press-secret");
     });
 });
+
+/*
+ * barakoCMS 4.6 names the tenant in the signed body (#868). The signature is checked first, exactly
+ * as before, and a delivery naming another tenant then purges nothing.
+ */
+describe("a delivery that names its tenant", () => {
+    function named(host: string, key: string, body: string): NextRequest {
+        const timestamp = String(Math.floor(Date.now() / 1000));
+        const signature = "sha256=" + createHmac("sha256", key).update(`${timestamp}.${body}`).digest("hex");
+        return new Request("http://internal:3000/api/revalidate", {
+            method: "POST",
+            headers: { host, "content-type": "application/json", "x-barako-timestamp": timestamp, "x-barako-signature": signature },
+            body,
+        }) as unknown as NextRequest;
+    }
+
+    const pinned = () =>
+        createRevalidateRoute(
+            defineConfig({ site: { name: "Test", url: "https://example.com" }, cmsUrl: "http://cms.test", tenant: "baryo" }),
+            { secret: SECRET },
+        );
+
+    it("purges for its own tenant", async () => {
+        const res = await pinned().POST(named("example.com", SECRET, '{"event":"Published","tenant":"baryo"}'));
+
+        expect(await res.json()).toMatchObject({ revalidated: true });
+        expect(revalidateTag).toHaveBeenCalled();
+    });
+
+    it("purges nothing for another tenant, though the signature verifies", async () => {
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        const res = await pinned().POST(named("example.com", SECRET, '{"event":"Published","tenant":"rckoronadal"}'));
+
+        expect(res.status).toBe(200);
+        expect(await res.json()).toMatchObject({ revalidated: false, ignored: "another tenant" });
+        expect(revalidateTag).not.toHaveBeenCalled();
+    });
+
+    it("still checks the signature first, so a forged body naming the right tenant is refused", async () => {
+        const res = await pinned().POST(named("example.com", "not-the-secret", '{"event":"Published","tenant":"baryo"}'));
+
+        expect(res.status).toBe(401);
+        expect(revalidateTag).not.toHaveBeenCalled();
+    });
+
+    it("purges as before for a body from an older API that names no tenant", async () => {
+        const res = await pinned().POST(named("example.com", SECRET, '{"event":"Published"}'));
+
+        expect(await res.json()).toMatchObject({ revalidated: true });
+    });
+
+    it("on a request-time site, compares with the tenant the host resolved to", async () => {
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        cmsWithTwoTenants();
+        const key = revalidateKeyFor(SECRET, "baryo");
+
+        const res = await requestTime().POST(named("baryo.dev", key, '{"event":"Published","tenant":"rckoronadal"}'));
+
+        expect(await res.json()).toMatchObject({ revalidated: false });
+        expect(revalidateTag).not.toHaveBeenCalled();
+    });
+});

@@ -67,7 +67,9 @@ export function createSitemap(base: PressConfig) {
                     // A tree's item is read where the tree links it. Any other collection's `href` is
                     // where its card sends a reader, not where the item is served.
                     const at = col.tree ? pagePart(treeItemHref(item, col.route)) : undefined;
-                    const path = at ?? `${col.route}/${item.slug}`;
+                    // An entry with no slug has no page of its own (barakoCMS #1100), so it is not listed.
+                    const path = at ?? (item.slug ? `${col.route}/${item.slug}` : undefined);
+                    if (path === undefined) continue;
                     const url = path === "/" ? home : `${home}${path}`;
                     if (listedUrls.has(url)) continue;
                     listedUrls.add(url);

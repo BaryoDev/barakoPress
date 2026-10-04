@@ -33,6 +33,13 @@ holds through a preset too: a value any of a preset's props carries into markdow
 `faqItem` does with its answer, is drawn the same way. A plain text field gets the value as it was
 sent, since nothing there reads marks.
 
+A file field or an inline image field (barakoCMS 4.6) is an object, so a placeholder names its
+member: `{{item.Cover.url}}` and `{{item.Cover.alt}}`. An image block's `src`, and the `image` and
+`photo` props of the presets that draw one, take an inline image's `data:image/...` URI; no other
+url prop does. A reference field holding a list reads as the list of resolved entries, each with
+`name` and `slug`, and `{{item.Image}}` and `{{item.ImageAlt}}` give the mapped image whichever
+shape it was stored in.
+
 A `list` or a `group` takes its whole value from one placeholder with nothing around it, no format
 and no fallback: `"tags": "{{item.Tags}}"` fills the list with the array itself, and
 `"cta": "{{item.Link}}"` a group with the object. What it resolves to is data. Each entry is checked

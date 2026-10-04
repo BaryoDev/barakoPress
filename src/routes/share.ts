@@ -1,7 +1,17 @@
 import type { Labels, PressConfig } from "../config.js";
 import { readEnv } from "../env.js";
-import { redeemShareLink } from "../delivery.js";
-import { normaliseHost, resolveSite, SHARE_COOKIE, SHARE_SESSION_MAX_SECONDS, shareSecret, signShareCookie } from "../site.js";
+import { isLinkPath, openShareLink, redeemShareLink, type PublicContent, type ShareRedeemCaller } from "../delivery.js";
+import { collectionOf } from "../collections.js";
+import {
+    LINK_COOKIE,
+    normaliseHost,
+    resolveSite,
+    sealLinkCookie,
+    SHARE_COOKIE,
+    SHARE_SESSION_MAX_SECONDS,
+    shareSecret,
+    signShareCookie,
+} from "../site.js";
 
 /*
  * Site share links (barakoPress #28).
@@ -11,11 +21,15 @@ import { normaliseHost, resolveSite, SHARE_COOKIE, SHARE_SESSION_MAX_SECONDS, sh
  *
  *   GET  /_share             a tiny page whose script moves the fragment into a form, drops it
  *                            from history and posts it. No key in any URL.
- *   POST /api/share/redeem   asks barakoCMS once. A valid link becomes a signed session cookie and
- *                            a 303 to `/`. Anything else sets nothing and lands on the holding page
- *                            at `/#share-invalid`, which shows a short notice.
+ *   POST /api/share/redeem   asks barakoCMS once what the key opens. A link to the site becomes a
+ *                            signed session cookie and a 303 to `/`. A link to one entry or one page
+ *                            becomes a sealed cookie holding the key and a 303 to where it opens,
+ *                            which the proxy then serves from the link route (barakoCMS #1089).
+ *                            Anything else sets nothing and lands on `/#share-invalid`, which the
+ *                            holding page shows a short notice for.
  *
- * The key is read from the body only, never the query string, and never logged.
+ * The key is read from the body only, never the query string, and never logged. It is in no URL the
+ * renderer writes: the redirect names the path, and the key stays in the sealed cookie.
  */
 
 /** The fragment the holding page shows its "not valid or has expired" notice for. */
@@ -91,14 +105,43 @@ async function readKey(request: Request): Promise<string | null> {
     return typeof key === "string" && KEY.test(key) ? key : null;
 }
 
+/** When a session ends: the link's own expiry or the 24 hour cap, whichever is sooner. Null when already past. */
+function sessionEnd(expiresAt: number, now: number): { expires: number; maxAge: number } | null {
+    const expires = Math.floor(Math.min(expiresAt, now + SHARE_SESSION_MAX_SECONDS * 1000) / 1000);
+    const maxAge = expires - Math.floor(now / 1000);
+    return maxAge > 0 ? { expires, maxAge } : null;
+}
+
+const cookie = (name: string, value: string, maxAge: number) =>
+    `${name}=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Lax`;
+
+/*
+ * Where an entry link opens: the item page of the collection that renders the entry's type. An entry
+ * of a type no collection with a route renders has nowhere to be drawn, so the link opens nothing
+ * here, and the log says why without the key.
+ */
+function entryPath(config: PressConfig, entry: PublicContent): string | null {
+    // One segment only: a slug holding a slash would make a path the item route does not match.
+    const slug = typeof entry.slug === "string" && !entry.slug.includes("/") ? entry.slug : "";
+    const col = Object.keys(config.collections)
+        .map((key) => collectionOf(config, key))
+        .find((c) => c !== undefined && c.type === entry.contentType && c.route !== undefined);
+    const path = col?.route && slug ? `${col.route}/${slug}` : "";
+    if (!isLinkPath(path)) {
+        console.warn(`share links: a link opened a ${JSON.stringify(entry.contentType ?? "")} entry that no collection with a route renders here`);
+        return null;
+    }
+    return path;
+}
+
 export function createShareRedeemRoute(base: PressConfig) {
     return async function POST(request: Request): Promise<Response> {
         const config = await resolveSite(base, request.headers);
         if (!config) return new Response("Not found", { status: 404, headers: NO_STORE });
         if (!sameOrigin(request, config.sites?.hostHeader ?? "host")) return refused();
 
-        // A live site has nothing to open, so the link is not spent on it.
-        if (!config.holding || !config.tenant) return redirect("/");
+        // A build-time site has no tenant to bind a session to, and nothing a link could open.
+        if (!config.tenant) return redirect("/");
 
         const key = await readKey(request);
         if (!key) return refused();
@@ -110,19 +153,37 @@ export function createShareRedeemRoute(base: PressConfig) {
         }
 
         const now = Date.now();
-        const answer = await redeemShareLink(config, key, now, {
+        const caller: ShareRedeemCaller = {
             rendererKey: readEnv().rendererKey?.trim() || undefined,
             visitorIp: visitorIp(config, request),
-        });
-        if (answer.kind !== "valid") return refused();
+        };
+        const opened = await openShareLink(config, key, now, caller);
 
-        const expires = Math.floor(Math.min(answer.expiresAt, now + SHARE_SESSION_MAX_SECONDS * 1000) / 1000);
-        const maxAge = expires - Math.floor(now / 1000);
-        if (maxAge <= 0) return refused();
-        return redirect(
-            "/",
-            `${SHARE_COOKIE}=${signShareCookie(config.tenant, expires, secret)}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Lax`,
-        );
+        // A link to the whole site. An API from before links to one entry has no open route, and
+        // redeems a site link the way it always did.
+        let siteExpiry: number | null = opened.kind === "site" ? opened.expiresAt : null;
+        if (opened.kind === "invalid" && opened.older) {
+            // Such an API has only site links, which a live site has no use for, so none is spent.
+            if (!config.holding) return redirect("/");
+            const answer = await redeemShareLink(config, key, now, caller);
+            if (answer.kind === "valid") siteExpiry = answer.expiresAt;
+        }
+        if (siteExpiry !== null) {
+            // A live site has nothing for a site link to open.
+            if (!config.holding) return redirect("/");
+            const end = sessionEnd(siteExpiry, now);
+            if (!end) return refused();
+            return redirect("/", cookie(SHARE_COOKIE, signShareCookie(config.tenant, end.expires, secret), end.maxAge));
+        }
+
+        if (opened.kind !== "entry" && opened.kind !== "page") return refused();
+        const path = opened.kind === "page" ? opened.path : entryPath(config, opened.entry);
+        const end = sessionEnd(opened.expiresAt, now);
+        if (!path || !end) return refused();
+        const sealed = sealLinkCookie({ tenant: config.tenant, key, path, expires: end.expires }, secret);
+        if (!sealed) return refused();
+        // Each segment encoded, since a Location header carries ASCII only. The key is not in it.
+        return redirect(path.split("/").map(encodeURIComponent).join("/"), cookie(LINK_COOKIE, sealed, end.maxAge));
     };
 }
 

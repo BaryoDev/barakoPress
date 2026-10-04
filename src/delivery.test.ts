@@ -2,7 +2,17 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defineConfig } from "./config.js";
-import { bySlug, bySlugPreview, forgetCachedReads, list, pageAtPath, redeemShareLink, semantic, tenantForHost } from "./delivery.js";
+import {
+    bySlug,
+    bySlugPreview,
+    classifyDeliveryContract,
+    forgetCachedReads,
+    list,
+    pageAtPath,
+    redeemShareLink,
+    semantic,
+    tenantForHost,
+} from "./delivery.js";
 
 const config = defineConfig({
     site: { name: "Test", url: "https://test.example" },
@@ -435,5 +445,58 @@ describe("a slug that is a dot segment", () => {
         const urls = fetch.mock.calls.map(([url]) => String(url));
         expect(urls[0]).toMatch(/\/api\/public\/post\/v1\.2(\?|$)/);
         expect(urls[1]).toMatch(/\/api\/public\/post\/a%2F\.\.%2Fb(\?|$)/);
+    });
+});
+
+/*
+ * The delivery contract (barakoCMS #902). A page renders whatever the number says; a number outside
+ * the range this build reads is said in the log, once, and an API that sends none is read as before.
+ */
+describe("the delivery contract", () => {
+    const page = { items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 0, hasNextPage: false };
+
+    function answering(headers: Record<string, string>) {
+        vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(page), { status: 200, headers })));
+    }
+
+    afterEach(() => {
+        forgetCachedReads();
+        vi.restoreAllMocks();
+    });
+
+    it("reads the delivery header, and the admin header from an API that predates the split", () => {
+        expect(classifyDeliveryContract(new Headers({ "X-Delivery-Contract-Version": "6" }))).toEqual({ kind: "ok", version: 6 });
+        expect(classifyDeliveryContract(new Headers({ "X-Api-Contract-Version": "5" }))).toEqual({ kind: "ok", version: 5 });
+        expect(classifyDeliveryContract(new Headers({ "X-Api-Contract-Version": "6", "X-Delivery-Contract-Version": "7" }))).toEqual({
+            kind: "api-newer",
+            version: 7,
+        });
+    });
+
+    it("counts a missing or unreadable header as absent", () => {
+        expect(classifyDeliveryContract(new Headers())).toEqual({ kind: "absent" });
+        expect(classifyDeliveryContract(new Headers({ "X-Delivery-Contract-Version": "six" }))).toEqual({ kind: "absent" });
+    });
+
+    it("says once, plainly, that the API is newer, and still answers the read", async () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        answering({ "X-Delivery-Contract-Version": "7" });
+
+        await expect(list(config, "post")).resolves.toMatchObject({ items: [] });
+        await list(config, "post", { page: 2 });
+
+        const said = warn.mock.calls.filter(([m]) => String(m).includes("delivery contract 7"));
+        expect(said).toHaveLength(1);
+        expect(String(said[0][0])).toContain("upgrade barakoPress");
+    });
+
+    it("says nothing for a number in range, or for an API that sends none", async () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        answering({ "X-Delivery-Contract-Version": "6" });
+        await list(config, "post");
+        answering({});
+        await list(config, "post", { page: 3 });
+
+        expect(warn.mock.calls.filter(([m]) => String(m).includes("delivery contract"))).toEqual([]);
     });
 });

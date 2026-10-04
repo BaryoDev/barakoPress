@@ -914,6 +914,11 @@ export function itemScope(config: PressConfig, item: Item): Record<string, unkno
         ...role("Date", mapped("date"), item.date),
         ...role("Image", mapped("image"), item.image),
         ...role("ImageAlt", mapped("imageAlt"), item.imageAlt),
+        // The alt an image file or an inline image carries, when no alt field is mapped. Only when
+        // there is one, and never over a field of the tenant's own by that name.
+        ...(!mapped("imageAlt") && item.imageAlt !== undefined && !Object.hasOwn(item.content.data, "ImageAlt")
+            ? { ImageAlt: item.imageAlt }
+            : {}),
         ...role("Url", mapped("url"), item.url),
         ...role("Tags", mapped("tags"), item.tags),
         ...role("Option", col?.colorBy !== undefined, item.option),
@@ -946,6 +951,9 @@ export function itemScope(config: PressConfig, item: Item): Record<string, unkno
               ? { Href: `${route}/${item.slug}` }
               : {}),
         ...Object.fromEntries(Object.entries(item.refs).map(([field, ref]) => [field, ref ? { ...ref } : undefined])),
+        // A field holding a list of references reads as the list, so a repeat or `{{item.Speakers}}`
+        // gets every one of them and not only the first the byline uses.
+        ...Object.fromEntries(Object.entries(item.refLists ?? {}).map(([field, refs]) => [field, refs.map((ref) => ({ ...ref }))])),
     };
 }
 

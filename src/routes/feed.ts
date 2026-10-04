@@ -53,6 +53,8 @@ export function createFeed(base: PressConfig, collection: string = POST_COLLECTI
             .map(([field]) => field);
 
         const entries = items
+            // An entry with no slug has no page to link to (barakoCMS #1100).
+            .filter((item) => item.slug)
             .map((item) => {
                 const url = `${config.site.url}${col.route}/${item.slug}`;
                 const date = item.date ? new Date(item.date) : null;

@@ -28,7 +28,8 @@ import { forgetInProcessStore, storeFor, type PressStore } from "./store.js";
 
 export interface PublicContent {
     id: string;
-    slug?: string;
+    /** Null when the entry has no slug the API serves (barakoCMS #1100); left out by an older API. */
+    slug?: string | null;
     contentType?: string;
     createdAt?: string;
     updatedAt?: string;
@@ -325,6 +326,57 @@ const retrying = new Set<string>();
 export function forgetCachedReads() {
     forgetInProcessStore();
     retrying.clear();
+    contractSaid.clear();
+}
+
+/*
+ * The delivery contract (barakoCMS #902).
+ *
+ * barakoCMS numbers what its delivery routes promise, separately from what the console drives, and
+ * sends it on every response in `X-Delivery-Contract-Version`. An API from before that split sends
+ * only `X-Api-Contract-Version`, which then meant both, so that is read in its place. An API older
+ * still sends neither, and that is read as it always was: nothing to check.
+ *
+ * Outside the range a page still renders. A public site that refuses to draw because the API moved
+ * helps nobody; the server log saying so plainly, once, is what tells the operator to upgrade. The
+ * range is typed as numbers rather than `as const`, because it is the ends of a range that moves.
+ */
+export const DELIVERY_CONTRACT: { readonly min: number; readonly max: number } = { min: 1, max: 6 };
+
+export type DeliveryContract =
+    | { kind: "absent" }
+    | { kind: "ok"; version: number }
+    | { kind: "api-older"; version: number }
+    | { kind: "api-newer"; version: number };
+
+/** What a response's headers say about the contract. Anything unreadable counts as absent. */
+export function classifyDeliveryContract(headers: Headers): DeliveryContract {
+    const raw = headers.get("x-delivery-contract-version") ?? headers.get("x-api-contract-version");
+    if (raw === null || raw.trim() === "") return { kind: "absent" };
+    const version = Number(raw.trim());
+    if (!Number.isInteger(version)) return { kind: "absent" };
+    if (version < DELIVERY_CONTRACT.min) return { kind: "api-older", version };
+    if (version > DELIVERY_CONTRACT.max) return { kind: "api-newer", version };
+    return { kind: "ok", version };
+}
+
+/** Said once per tenant and version, from a set kept bounded, so a log is not one line per read. */
+const contractSaid = new Set<string>();
+
+function noteDeliveryContract(config: PressConfig, res: Response) {
+    const state = classifyDeliveryContract(res.headers);
+    if (state.kind === "absent" || state.kind === "ok") return;
+    const tenant = pinnedTenant(config) ?? "";
+    const key = `${tenant}|${state.version}`;
+    if (contractSaid.has(key)) return;
+    if (contractSaid.size >= 200) contractSaid.clear();
+    contractSaid.add(key);
+    const range = `${DELIVERY_CONTRACT.min} to ${DELIVERY_CONTRACT.max}`;
+    console.warn(
+        state.kind === "api-newer"
+            ? `cms: the API for tenant "${tenant}" speaks delivery contract ${state.version}, newer than the ${range} this barakoPress reads. Pages still render; upgrade barakoPress to read what changed.`
+            : `cms: the API for tenant "${tenant}" speaks delivery contract ${state.version}, older than the ${range} this barakoPress reads. Pages still render; upgrade barakoCMS.`,
+    );
 }
 
 /** A failure the last good answer may stand in for. A 404 or a 400 is an answer, not an outage. */
@@ -380,6 +432,7 @@ async function read<T>(config: PressConfig, path: string, opts: ReadOptions): Pr
                       },
                   }),
         });
+        noteDeliveryContract(config, res);
         if (!res.ok) throw new CmsError(path, res.status);
         const text = await res.text();
         const value = JSON.parse(text) as T;
@@ -428,6 +481,7 @@ async function getFresh<T>(config: PressConfig, path: string): Promise<T | null>
         // rather than followed.
         redirect: "error",
     });
+    noteDeliveryContract(config, res);
     if (res.status === 404) return null;
     if (!res.ok) throw new CmsError(path, res.status);
     return (await res.json()) as T;
@@ -683,6 +737,16 @@ export function singleIp(raw: string | null | undefined): string | null {
  * safe to sign. A redirect is refused rather than followed, because a 307 or 308 would send the key
  * on to wherever it points. The renderer key goes only over https or loopback, and is never logged.
  */
+/** The headers a share link request carries: the tenant, and who is asking, on a channel that protects the key. */
+function shareHeaders(config: PressConfig, cmsUrl: string, caller: ShareRedeemCaller): Record<string, string> {
+    const sent: Record<string, string> = { ...(headers(config) as Record<string, string>), "content-type": "application/json" };
+    // The caller's key keeps the rule `headers` applies to every read: only over https or loopback.
+    if (caller.rendererKey && carriesSecretsSafely(cmsUrl)) sent["X-Barako-Renderer-Key"] = caller.rendererKey;
+    const visitorIp = singleIp(caller.visitorIp);
+    if (visitorIp) sent["X-Barako-Visitor-IP"] = visitorIp;
+    return sent;
+}
+
 export async function redeemShareLink(
     config: PressConfig,
     key: string,
@@ -690,11 +754,7 @@ export async function redeemShareLink(
     caller: ShareRedeemCaller = {},
 ): Promise<ShareRedeemAnswer> {
     const cmsUrl = cmsUrlFor(config);
-    const sent: Record<string, string> = { ...(headers(config) as Record<string, string>), "content-type": "application/json" };
-    // The caller's key keeps the rule `headers` applies to every read: only over https or loopback.
-    if (caller.rendererKey && carriesSecretsSafely(cmsUrl)) sent["X-Barako-Renderer-Key"] = caller.rendererKey;
-    const visitorIp = singleIp(caller.visitorIp);
-    if (visitorIp) sent["X-Barako-Visitor-IP"] = visitorIp;
+    const sent = shareHeaders(config, cmsUrl, caller);
     try {
         const res = await fetch(`${cmsUrl}/api/public/site/share-links/redeem`, {
             method: "POST",
@@ -710,6 +770,80 @@ export async function redeemShareLink(
         const body = (await res.json()) as { expiresAt?: unknown };
         const expiresAt = typeof body?.expiresAt === "string" ? Date.parse(body.expiresAt) : Number.NaN;
         return Number.isFinite(expiresAt) && expiresAt > now ? { kind: "valid", expiresAt } : { kind: "failed" };
+    } catch {
+        return { kind: "failed" };
+    }
+}
+
+export type ShareOpenAnswer =
+    | { kind: "site"; expiresAt: number }
+    | { kind: "entry"; expiresAt: number; entry: PublicContent }
+    | { kind: "page"; expiresAt: number; path: string; entry: PublicContent }
+    /** `older` when the API answered without a delivery contract: one from before this route. */
+    | { kind: "invalid"; older: boolean }
+    | { kind: "throttled" }
+    | { kind: "failed" };
+
+/**
+ * A path on the site, by the rule barakoCMS holds a page link's path to: a leading slash, and no
+ * empty, `.` or `..` segment, backslash, `?`, `#`, `%`, whitespace, control or format character. Checked
+ * again here because the visitor is sent there.
+ */
+export function isLinkPath(value: unknown): value is string {
+    if (typeof value !== "string" || value.length === 0 || value.length > 2048 || !value.startsWith("/")) return false;
+    if (value.includes("//")) return false;
+    if (value.split("/").some((segment) => segment === "." || segment === "..")) return false;
+    return !/[\\?#%\s\p{Cc}\p{Cf}]/u.test(value);
+}
+
+function deliveredEntry(v: unknown): PublicContent | null {
+    if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+    const e = v as Partial<PublicContent>;
+    if (typeof e.id !== "string" || !e.data || typeof e.data !== "object" || Array.isArray(e.data)) return null;
+    return e as PublicContent;
+}
+
+/**
+ * Opens a share link with barakoCMS 4.6: `POST /api/public/site/share-links/open`, 200 with
+ * `{ scope, expiresAt, path, entry }` for a live link, 404 otherwise, 429 when throttled (#1089). A
+ * link to the whole site answers `site`; a link to one entry answers it with the entry, whatever its
+ * status; a link to a page answers the entry and the path it was made for.
+ *
+ * The same rules as `redeemShareLink`: one uncached request, never retried, bounded by
+ * `cmsTimeoutMs`, the key in the body and never logged, a redirect refused. An API from before this
+ * route answers 404 with no delivery contract header, which is told apart so the caller can redeem
+ * the key the older way.
+ */
+export async function openShareLink(
+    config: PressConfig,
+    key: string,
+    now: number = Date.now(),
+    caller: ShareRedeemCaller = {},
+): Promise<ShareOpenAnswer> {
+    const cmsUrl = cmsUrlFor(config);
+    try {
+        const res = await fetch(`${cmsUrl}/api/public/site/share-links/open`, {
+            method: "POST",
+            headers: shareHeaders(config, cmsUrl, caller),
+            body: JSON.stringify({ key }),
+            cache: "no-store",
+            redirect: "error",
+            signal: AbortSignal.timeout(config.cmsTimeoutMs),
+        });
+        if (res.status === 404 || res.status === 405) {
+            return { kind: "invalid", older: res.headers.get("x-delivery-contract-version") === null };
+        }
+        if (res.status === 429) return { kind: "throttled" };
+        if (res.status !== 200) return { kind: "failed" };
+        const body = (await res.json()) as { scope?: unknown; expiresAt?: unknown; path?: unknown; entry?: unknown };
+        const expiresAt = typeof body?.expiresAt === "string" ? Date.parse(body.expiresAt) : Number.NaN;
+        if (!Number.isFinite(expiresAt) || expiresAt <= now) return { kind: "failed" };
+        if (body.scope === "site") return { kind: "site", expiresAt };
+        const entry = deliveredEntry(body.entry);
+        if (!entry) return { kind: "failed" };
+        if (body.scope === "entry") return { kind: "entry", expiresAt, entry };
+        if (body.scope === "page" && isLinkPath(body.path)) return { kind: "page", expiresAt, path: body.path, entry };
+        return { kind: "failed" };
     } catch {
         return { kind: "failed" };
     }

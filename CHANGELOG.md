@@ -2,6 +2,54 @@
 
 ## 0.11.0 (unreleased)
 
+- `/_share` opens links to one entry or one page as well as links to the site (barakoCMS #1089).
+  The redeem route asks barakoCMS 4.6 `share-links/open` what a key opens, and an older API
+  `redeem` as before. A link to an entry or a page sets `__Host-press-link`, the key sealed with
+  AES-256-GCM, and sends the visitor to where it opens; the proxy sends that one path to a new route
+  that asks barakoCMS again on every request and draws the entry or the page, unpublished content
+  included, unindexed and never kept. A request-time site mounts it at
+  `app/%5Fpress/[site]/%5Flink/[[...path]]/page.tsx` with `createSharedLinkPage(config, blocks)` and
+  `sharedLinkMetadata`; without that file the link lands on a 404. New exports: `openShareLink`,
+  `isLinkPath`, `LINK_COOKIE`, `sealLinkCookie`, `openLinkCookie`, `createSharedLinkPage`,
+  `sharedLinkMetadata`. The `link` gate joins `public` and `shared` in the rewritten segment.
+
+- The revalidate endpoint binds a delivery to its tenant. barakoCMS 4.6 names the tenant in the
+  signed body; after the signature verifies as before, a body naming another tenant than the one
+  the host resolved to, or the one a build-time site pins, purges nothing and answers 200 with
+  `revalidated: false`. A body with no `tenant` is read as before.
+
+- Every read checks the delivery contract barakoCMS sends in `X-Delivery-Contract-Version`, or
+  `X-Api-Contract-Version` from an API older than the split. This build reads contracts 1 to 6
+  (`DELIVERY_CONTRACT`). A number outside that is said in the server log once per tenant and
+  version, and pages still render. An API that sends neither header is read as before.
+
+- barakoCMS 4.6 delivery shapes. An item's `image` and `photo` read a file field
+  (`{ id, url, fileName, contentType, size, alt, caption }`) and an inline image field
+  (`{ url: "data:image/...;base64,...", alt }`) as well as a URL held as text, and `imageAlt` falls
+  back to the alt the value carries. A file that is not an image is not drawn; in the `url` role it
+  is linked, and the link reads as the file's name (`Item.urlLabel`). A field the API left out, a
+  private file for one, is absent. `Item.imageWidth` and `Item.imageHeight` are set only when the
+  value carries a size, which barakoCMS does not send today. A reference field holding a list
+  (`multiple`) is read into `Item.refLists`, in order, with the first in `Item.refs` as before;
+  cards and article pages link each one, and `{{item.Speakers}}` binds the list. The site settings
+  `Logo`, `FooterLogo` and `Favicon` take either shape too, and `ShareImage` a file field.
+
+- Every `<img>` the engine draws, through `Asset`, takes only an http or https URL, a site path, or
+  a `data:image/png`, `jpeg`, `gif` or `webp` base64 URI; anything else draws nothing. A share card
+  (`og:image`) and the favicon are held to the same rule, and a share card never carries an inline
+  image. The image block's `src` and the `image` and `photo` props of `hero`, `card` and the
+  person preset take an inline image (`inlineImage: true` on the field, published in the block
+  schema). A markdown image whose destination is `mailto:` is drawn as its alt text.
+
+- An entry the API delivers with `slug: null` has no slug, rather than one read from the configured
+  field, since barakoCMS 4.6 answers 404 by slug for such a type. Its card draws the title without
+  a link, and it is left out of the sitemap, the feed and the related band. An older API that leaves
+  `slug` out is read as before.
+
+- An item or page whose title field is empty takes the API's `seo.title` before `Untitled`. barakoCMS
+  4.6 fills that from the field holding the `title` role, so a type whose title field the site's map
+  does not name still gets a title.
+
 - Security: the `next` peer range is `>=16.3.8`, up from `>=16`. Next 16.2.0 to 16.3.5 carry
   GHSA-vcvr-r3jv-pc5j, fixed in 16.3.6, and 16.3.8 adds the fixes for GHSA-cjq9-62q9-8jv4,
   GHSA-f87g-xv8r-7p7x, GHSA-4jqv-mc3x-m676, GHSA-mcj8-r9mp-w47p, GHSA-3w37-wq28-93x7,

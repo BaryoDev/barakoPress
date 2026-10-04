@@ -118,7 +118,8 @@ function buildRenderer(headingIds: boolean, newTab: boolean) {
                 return `<a href="${escapeHtml(href.trim())}"${t}${target}${rel}>${label}</a>`;
             },
             image({ href, title, text }) {
-                if (!isLinkable(href)) return escapeHtml(text ?? "");
+                // An image is fetched, not followed, so mailto is a link destination and not an image one.
+                if (!isLinkable(href) || /^mailto:/i.test(href.trim())) return escapeHtml(text ?? "");
                 const t = title ? ` title="${escapeHtml(title)}"` : "";
                 return `<img src="${escapeHtml(href.trim())}" alt="${escapeHtml(text ?? "")}"${t} loading="lazy">`;
             },

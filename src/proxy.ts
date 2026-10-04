@@ -3,12 +3,13 @@ import type { PressConfig } from "./config.js";
 import {
     isPressPath,
     isRewritten,
+    pressLinkPath,
     pressPath,
     PRESS_PREFIX,
     type Gate,
     type SiteRoute,
 } from "./site-route.js";
-import { SHARE_COOKIE, shareCookieValid, shareSecret, tenantFromHeaders } from "./site.js";
+import { LINK_COOKIE, openLinkCookie, samePath, SHARE_COOKIE, shareCookieValid, shareSecret, tenantFromHeaders } from "./site.js";
 
 /*
  * The one place a request-time site reads the request (barakoPress #55).
@@ -33,6 +34,25 @@ import { SHARE_COOKIE, shareCookieValid, shareSecret, tenantFromHeaders } from "
 function gateFor(request: NextRequest, tenant: string): Gate {
     const cookie = request.cookies.get(SHARE_COOKIE)?.value;
     return shareCookieValid(cookie, tenant, shareSecret()) ? "shared" : "public";
+}
+
+/** The path as the visitor asked for it, decoded the way a link's path is written. */
+function decodedPath(pathname: string): string {
+    try {
+        return decodeURIComponent(pathname);
+    } catch {
+        return pathname;
+    }
+}
+
+/*
+ * True when the visitor holds a link to one entry or one page, for this tenant, and is on the path it
+ * opens at. Only that path goes to the link route; every other path is the site as this visitor
+ * would otherwise see it.
+ */
+function opensLink(request: NextRequest, tenant: string, pathname: string): boolean {
+    const link = openLinkCookie(request.cookies.get(LINK_COOKIE)?.value, tenant, shareSecret());
+    return link !== null && samePath(link.path, decodedPath(pathname));
 }
 
 /**
@@ -85,8 +105,16 @@ export function createPressProxy(config: PressConfig) {
         }
         if (!found) return noTenant(request);
 
-        const route: SiteRoute = { tenant: found.tenant, gate: gateFor(request, found.tenant), host: found.host };
         const url = request.nextUrl.clone();
+        if (opensLink(request, found.tenant, pathname)) {
+            url.pathname = pressLinkPath({ tenant: found.tenant, gate: "link", host: found.host }, pathname);
+            const res = withHeaders(NextResponse.rewrite(url));
+            // What a link opens may be a draft: no index, and no address handed on to another site.
+            res.headers.set("x-robots-tag", "noindex, nofollow");
+            res.headers.set("referrer-policy", "no-referrer");
+            return res;
+        }
+        const route: SiteRoute = { tenant: found.tenant, gate: gateFor(request, found.tenant), host: found.host };
         url.pathname = pressPath(route, pathname);
         return withHeaders(NextResponse.rewrite(url));
     };

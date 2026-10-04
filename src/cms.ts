@@ -1,7 +1,7 @@
 import type { PressConfig } from "./config.js";
 import { AUTHOR_COLLECTION, CATEGORY_COLLECTION, POST_COLLECTION, RESERVED_AT_ROOT } from "./config.js";
 import { bySlug, list, navigationTree, pageAtPath, redirectAt, type PublicContent, type Seo } from "./delivery.js";
-import { collectionOf, getItem, getItemPreview, listCollection, toItem, type Item } from "./collections.js";
+import { collectionOf, getItem, getItemPreview, listCollection, slugOf, toItem, type Item } from "./collections.js";
 import { samePath, siteHref } from "./site.js";
 
 export type { Seo };
@@ -262,8 +262,8 @@ export function toPage(config: PressConfig, c: PublicContent): Page {
     const f = config.pageFields;
     return {
         id: c.id,
-        slug: c.slug ?? str(field(d, f.slug)),
-        title: str(field(d, f.title)) || config.labels.untitled,
+        slug: slugOf(c, f.slug),
+        title: str(field(d, f.title)) || (typeof c.seo?.title === "string" ? c.seo.title.trim() : "") || config.labels.untitled,
         summary: str(field(d, f.summary)) || undefined,
         body: str(field(d, f.body)),
         blocks: field(d, f.blocks),

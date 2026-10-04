@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { revalidateTag } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
-import type { CollectionConfig, FieldNames, PressConfig } from "../config.js";
+import { pinnedTenant, type CollectionConfig, type FieldNames, type PressConfig } from "../config.js";
 import { markPurged, purgeTagsFor, type ReadTarget } from "../delivery.js";
 import { revalidateKeyFor } from "../revalidate-key.js";
 import { MIN_SECRET_LENGTH, readSecret, type PressSecret } from "../secret.js";
@@ -114,13 +114,15 @@ function slugFrom(data: unknown, field: FieldNames | undefined): string | undefi
     return undefined;
 }
 
-function changedBy(config: PressConfig, raw: Buffer): ReadTarget {
-    let body: unknown;
+function parsed(raw: Buffer): unknown {
     try {
-        body = JSON.parse(raw.toString("utf8"));
+        return JSON.parse(raw.toString("utf8"));
     } catch {
-        return {};
+        return undefined;
     }
+}
+
+function changedBy(config: PressConfig, body: unknown): ReadTarget {
     if (!body || typeof body !== "object") return {};
     const type = (body as { contentType?: unknown }).contentType;
     if (typeof type !== "string" || !TYPE_NAME.test(type)) return {};
@@ -130,6 +132,29 @@ function changedBy(config: PressConfig, raw: Buffer): ReadTarget {
         Object.values(config.collections).some((c: CollectionConfig) => c.type === type);
     if (!known) return {};
     return { type, slug: slugFrom((body as { data?: unknown }).data, slugField(config, type)) };
+}
+
+/*
+ * The tenant a delivery names (barakoCMS #868). barakoCMS 4.6 puts `tenant` in the signed body, so a
+ * delivery captured for one tenant and replayed at another's URL names the wrong one. An older API
+ * names none, and that delivery is read as every delivery was before.
+ */
+function tenantNamed(body: unknown): string | undefined {
+    if (!body || typeof body !== "object") return undefined;
+    const tenant = (body as { tenant?: unknown }).tenant;
+    return typeof tenant === "string" && tenant.trim() !== "" ? tenant.trim() : undefined;
+}
+
+/*
+ * The tenant this delivery has to be about: the one the host resolved to on a request-time site, or
+ * the one a build-time site pins. A build-time site that pins none reads whatever tenant the API
+ * resolves for it, which this side cannot name, so there is nothing to compare. Handles are compared
+ * without case, since the API resolves them that way.
+ */
+function forAnotherTenant(site: PressConfig, body: unknown): boolean {
+    const named = tenantNamed(body);
+    const expected = pinnedTenant(site);
+    return named !== undefined && expected !== undefined && named.toLowerCase() !== expected.toLowerCase();
 }
 
 function configuredSecret(option: string | undefined): PressSecret | null {
@@ -237,7 +262,14 @@ export function createRevalidateRoute(config: PressConfig, options: RevalidateOp
          */
         // Read only after the signature verified: until then the body is whatever an anonymous
         // caller sent, and what it says would decide which tags get dropped.
-        const tags = purgeTagsFor(site, changedBy(site, raw));
+        const body = parsed(raw);
+        if (forAnotherTenant(site, body)) {
+            // Purges nothing. A 200 rather than a 4xx: a delivery the API made is not a failure to
+            // retry, and a replayed one learns nothing either way.
+            console.warn(`revalidate: a delivery for tenant ${JSON.stringify(tenantNamed(body))} reached tenant ${JSON.stringify(pinnedTenant(site) ?? "")}, ignored`);
+            return NextResponse.json({ revalidated: false, ignored: "another tenant" });
+        }
+        const tags = purgeTagsFor(site, changedBy(site, body));
 
         // After the tenant resolved, so a lookup that failed with the CMS down leaves the retry free to purge.
         const claim = claimKey(tags, signature);

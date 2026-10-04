@@ -54,6 +54,8 @@ const p = (name: string, fallback?: string): string =>
 
 const text = (name: string, label: string, required = false): BlockField => ({ name, kind: "text", label, required });
 const url = (name: string, label: string, required = false): BlockField => ({ name, kind: "url", label, required });
+/** A url prop that names an image, so an inline image is taken too (barakoCMS #1105). */
+const imageUrl = (name: string, label: string): BlockField => ({ ...url(name, label), inlineImage: true });
 const choice = (name: string, label: string, options: readonly string[]): BlockField => ({
     name,
     kind: "select",
@@ -84,7 +86,7 @@ const hero: BlockPreset = {
     fields: [
         text("heading", "Heading", true),
         text("body", "Body"),
-        url("image", "Image"),
+        imageUrl("image", "Image"),
         text("imageAlt", "Image alternative text"),
         text("primaryLabel", "Button label"),
         url("primaryHref", "Button link"),
@@ -284,7 +286,7 @@ const person: BlockPreset = {
     fields: [
         text("name", "Name", true),
         text("role", "Role"),
-        url("photo", "Photo"),
+        imageUrl("photo", "Photo"),
         url("href", "Link"),
         text("linkLabel", "Link label"),
         align,
@@ -443,7 +445,7 @@ const card: BlockPreset = {
         text("tint", "Colour from the entry, over the tone"),
         text("linkLabel", "Link label"),
         url("href", "Link"),
-        url("image", "Image"),
+        imageUrl("image", "Image"),
         text("imageAlt", "Image alternative text"),
     ],
     blocks: [

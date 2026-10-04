@@ -34,14 +34,16 @@ export { PRESS_PREFIX };
 
 /**
  * What the visitor may see: everyone, or someone carrying a valid share session, for whom a holding
- * tenant shows the real site instead of the holding page.
+ * tenant shows the real site instead of the holding page. `link` is a visitor carrying a link to one
+ * entry or one page, on the path it opens at: the proxy sends that request to `LINK_SEGMENT`, which
+ * reads the link and is never kept.
  *
  * A draft is not a gate. `?preview=` is read from the query, and a route that reads the query is a
  * route Next will not keep, so a preview route leaves `generateStaticParams` out of its own file
  * and stays dynamic. Putting the token in the path instead would cache a draft, which is the one
  * thing a preview must never be.
  */
-export const GATES = ["public", "shared"] as const;
+export const GATES = ["public", "shared", "link"] as const;
 export type Gate = (typeof GATES)[number];
 
 export interface SiteRoute {
@@ -77,6 +79,19 @@ export function parseSiteSegment(value: unknown): SiteRoute | null {
 export function pressPath(route: SiteRoute, pathname: string): string {
     const rest = pathname === "/" ? "" : pathname;
     return `/${PRESS_PREFIX}/${siteSegment(route)}${rest}`;
+}
+
+/**
+ * The segment, under the tenant segment, that renders what a link to one entry or one page opens.
+ * `%5Flink` in the app tree, for the reason `%5Fpress` is. A route file of its own, because it reads
+ * a cookie on every request and a route Next keeps must not.
+ */
+export const LINK_SEGMENT = "_link";
+
+/** Where a request a link opens is served from: the link route, with the path it was asked for. */
+export function pressLinkPath(route: SiteRoute, pathname: string): string {
+    const rest = pathname === "/" ? "" : pathname;
+    return `/${PRESS_PREFIX}/${siteSegment(route)}/${LINK_SEGMENT}${rest}`;
 }
 
 /** True for a path only a rewrite may produce. One that arrives from outside is a 404. */

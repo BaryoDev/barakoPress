@@ -102,7 +102,7 @@ holding `/` is never holding one visitor's gate for the next visitor.
 
 `PRESS_SECRET` keys everything this renderer signs: each tenant's webhook key, each tenant's binding
 report key and each share session cookie. A key derived from it puts its purpose first in what it
-signs (`revalidate.`, `bindings.` or `press-share.`), so one derived for one purpose never verifies as
+signs (`revalidate.`, `bindings.`, `press-share.` or `press-link.`), so one derived for one purpose never verifies as
 another. Webhook keys are derived per tenant on a request-time site, binding report keys when the
 tenant is pinned or resolved per request. Elsewhere `PRESS_SECRET` itself is the key, so a
 build-time site with no pinned tenant verifies its webhook and its binding report with the same
@@ -119,6 +119,11 @@ The older names are read only when `PRESS_SECRET` is unset, so a site that set t
 the keys derive byte for byte as before, so a key already pasted into a tenant's workflow keeps
 verifying. A `REVALIDATE_SECRET` shorter than 32 characters still verifies and logs a warning once,
 until 1.0.0. A `PRESS_PREVIEW_SECRET` shorter than 32 characters opens no session, as before.
+
+A delivery from barakoCMS 4.6 names its tenant in the signed body. After the signature verifies, a
+body naming another tenant than the one the host resolved to (or the one a build-time site pins) is
+answered 200 with `revalidated: false` and purges nothing. A body naming no tenant, from an older
+API, is read as before. A build-time site that pins no tenant has nothing to compare it with.
 
 Moving to the new name is copying the value: `PRESS_SECRET` set to what `REVALIDATE_SECRET` held
 derives the same tenant keys, provided it is 32 characters or more. A shorter one has to be replaced,

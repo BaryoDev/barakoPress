@@ -19,6 +19,7 @@ import {
     listReferencing,
     referencedBy,
     defaultByline,
+    refsOf,
     searchCollection,
     type Item,
 } from "../collections.js";
@@ -29,6 +30,7 @@ import { CmsError } from "../delivery.js";
 import { listRelatedItems } from "../related.js";
 import { readingMinutes } from "../reading-time.js";
 import { Asset, renderProse } from "../assets.js";
+import { shareImageUrl } from "../media.js";
 import { IconGlyph } from "../blocks/primitives.js";
 import { siteConfig, type SiteParams } from "../site.js";
 import { BLOCK_PROSE_CLASS } from "../blocks/built-in.js";
@@ -118,10 +120,15 @@ export function Card(props: CardProps) {
     const item = props.item ?? itemFromPost(config, props.post);
     const col = collectionOf(config, item.collection);
     const byline = defaultByline(config, col, item);
+    // Every reference of a field that holds a list, and a target with no slug has no page to link.
     const links = Object.entries(col?.references ?? {}).flatMap(([field, ref]) => {
-        const target = item.refs[field];
         const route = collectionOf(config, ref.collection)?.route;
-        return target && route ? [{ field, label: ref.label, href: `${route}/${target.slug}`, name: target.name }] : [];
+        if (!route) return [];
+        return refsOf(item, field).flatMap((target, at) =>
+            target.slug
+                ? [{ field: at === 0 ? field : `${field}.${at}`, label: at === 0 ? ref.label : undefined, href: `${route}/${target.slug}`, name: target.name }]
+                : [],
+        );
     });
 
     return (
@@ -130,7 +137,7 @@ export function Card(props: CardProps) {
             style={item.color ? { borderLeft: `4px solid ${item.color}` } : undefined}
         >
             {featured && <span className="chip">{config.labels.featured}</span>}
-            <h2>{col?.route !== undefined ? <Link href={`${col.route}/${item.slug}`}>{item.title}</Link> : item.title}</h2>
+            <h2>{col?.route !== undefined && item.slug ? <Link href={`${col.route}/${item.slug}`}>{item.title}</Link> : item.title}</h2>
             <p className="meta">
                 {item.date && <time dateTime={item.date}>{formatDate(config, item.date)}</time>}
                 {byline && ` ${byline.label} ${byline.name}`}
@@ -231,7 +238,7 @@ function asBandCard(config: PressConfig, item: Item): ArticleRelated {
     return {
         slug: item.slug,
         title: item.title,
-        ...(route !== undefined ? { href: `${route}/${item.slug}` } : {}),
+        ...(route !== undefined && item.slug ? { href: `${route}/${item.slug}` } : {}),
         ...(item.date ? { date: item.date } : {}),
         ...(item.summary ? { summary: item.summary } : {}),
     };
@@ -243,7 +250,7 @@ function ItemArticle({ config, item, related, preview }: ItemViewProps) {
             config={config}
             item={item}
             preview={preview}
-            related={(related?.items ?? []).map((i) => asBandCard(config, i))}
+            related={(related?.items ?? []).filter((i) => i.slug).map((i) => asBandCard(config, i))}
         />
     );
 }
@@ -278,6 +285,8 @@ function ItemList({ config, item, related, backHref = "/" }: ItemViewProps) {
                 <Asset
                     src={item.image}
                     alt={item.imageAlt ?? ""}
+                    width={item.imageWidth}
+                    height={item.imageHeight}
                     theme={config.theme}
                     style={{ width: "100%", borderRadius: config.theme.radii.panel }}
                 />
@@ -291,7 +300,7 @@ function ItemList({ config, item, related, backHref = "/" }: ItemViewProps) {
             {item.url && (
                 <p className="meta">
                     <a href={item.url} rel="noopener noreferrer">
-                        {item.url}
+                        {item.urlLabel ?? item.url}
                     </a>
                 </p>
             )}
@@ -618,7 +627,8 @@ export function itemMetadata(item: Item): Metadata {
     const seo = item.seo;
     const title = seo?.title ?? item.title;
     const description = seo?.description ?? item.summary;
-    const image = seo?.imageUrl ?? item.image;
+    // An inline image is not an address a crawler can fetch, so a share card never carries one.
+    const image = shareImageUrl(seo?.imageUrl) ?? shareImageUrl(item.image);
 
     return {
         title,
