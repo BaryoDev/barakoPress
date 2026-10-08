@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.12.0 (unreleased)
+
+- barakoCMS 4.7 (BaryoDev/barakoCMS 4.7.0). This build reads delivery contracts 1 to 7
+  (`DELIVERY_CONTRACT`) and Pages contracts 1 to 2 (`PAGES_CONTRACT`). barakoCMS 4.7 answers with
+  delivery contract 7 and Pages contract 2, and 0.11.0 reads that Pages body as absent: no menu and
+  no page from the Pages module. Deploy this release before the API.
+
+- A reference barakoCMS 4.7 leaves out of `data`, because its target is a draft, not Public,
+  deleted or in another tenant, reads as no reference. A single one is undefined in `Item.refs`, a
+  list holds only the entries that were served, and a card, an item page, a blog post and a binding
+  draw without it. A type whose slug field is not Public has no slug, as with a `slug: null` from
+  4.6, so its entries have no page, no sitemap line and no feed item. Both are covered by
+  `src/delivered-references.test.tsx`; neither needed a change to the renderer.
+
 ## 0.11.0 (2026-10-04)
 
 - `/_share` opens links to one entry or one page as well as links to the site (barakoCMS #1089).
