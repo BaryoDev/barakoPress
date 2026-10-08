@@ -121,10 +121,10 @@ function cms() {
             const path = url.searchParams.get("path") ?? "";
             const found = pages[path];
             return found
-                ? Response.json({ contract: 1, path, entry: found, breadcrumbs: [] })
+                ? Response.json({ contract: 2, path, entry: found, breadcrumbs: [] })
                 : new Response("", { status: 404 });
         }
-        if (url.pathname === "/api/public/pages/navigation") return Response.json({ contract: 1, items: [] });
+        if (url.pathname === "/api/public/pages/navigation") return Response.json({ contract: 2, items: [] });
 
         const [type] = url.pathname.replace(/^\/api\/public\//, "").split("/");
         if (type === failing) return new Response("", { status: 500 });

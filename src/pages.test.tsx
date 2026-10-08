@@ -68,7 +68,7 @@ const TENANTS: Record<string, Tenant> = {
         host: "baryo.dev",
         settings: { Name: "BaryoDev", Url: "https://baryo.dev" },
         navigation: {
-            contract: 1,
+            contract: 2,
             // The CMS order, which is not the order of `order`: drawn as given, never re-sorted.
             items: [
                 {
@@ -108,8 +108,8 @@ const TENANTS: Record<string, Tenant> = {
     future: {
         host: "future.example",
         settings: { Name: "Future Club", Url: "https://future.example" },
-        navigation: { contract: 2, items: [{ id: "a", title: "About", slug: "about", path: "/about", order: 1, children: [] }] },
-        pages: { "/about": { ...pageEntry("About", "From a newer module"), contract: 2 } },
+        navigation: { contract: 3, items: [{ id: "a", title: "About", slug: "about", path: "/about", order: 1, children: [] }] },
+        pages: { "/about": { ...pageEntry("About", "From a newer module"), contract: 3 } },
     },
     plain: {
         host: "plain.example",
@@ -119,7 +119,7 @@ const TENANTS: Record<string, Tenant> = {
         host: "soon.example",
         settings: { Name: "Soon Club", Url: "https://soon.example", Mode: "Holding", HoldingPath: "/coming-soon" },
         navigation: {
-            contract: 1,
+            contract: 2,
             items: [
                 { id: "c", title: "Opening", slug: "coming-soon", path: "/coming-soon", order: 1, children: [] },
                 { id: "a", title: "About Soon", slug: "about", path: "/about", order: 2, children: [] },
@@ -162,7 +162,7 @@ function cms() {
                 const page = t.pages?.[path];
                 if (!page) return new Response("", { status: 404 });
                 return Response.json({
-                    contract: page.contract ?? 1,
+                    contract: page.contract ?? 2,
                     path,
                     entry: { contentType: "page", ...page.entry },
                     breadcrumbs: page.breadcrumbs ?? [],
@@ -298,7 +298,7 @@ describe("navigation", () => {
         expect(html).toContain("child");
         expect(html).not.toContain('data-press="navigation"');
         expect(html).not.toContain('href="/about"');
-        expect(warn).toHaveBeenCalledWith(expect.stringContaining("contract 2"));
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining("contract 3"));
     });
 
     it("shows no menu when the Pages module is not installed, or the navigation cannot be read", async () => {

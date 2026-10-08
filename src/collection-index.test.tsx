@@ -79,7 +79,7 @@ const INDEX_COPY = {
 const INDEX_PAGE_BLOCKS = [{ type: "text", props: { value: "Subscribe for the Friday notes", variant: "heading" } }];
 
 const NAVIGATION = {
-    contract: 1,
+    contract: 2,
     items: [
         { id: "a", title: "About", slug: "about", path: "/about", order: 1, children: [] },
         { id: "d", title: "Notes index", slug: "site-notes", path: "/site-notes", order: 2, children: [] },
@@ -178,7 +178,7 @@ function cms() {
             const path = url.searchParams.get("path") ?? "/";
             const entry = t.pages?.[path];
             return entry
-                ? Response.json({ contract: 1, path, entry: { contentType: "page", ...entry }, breadcrumbs: [] })
+                ? Response.json({ contract: 2, path, entry: { contentType: "page", ...entry }, breadcrumbs: [] })
                 : new Response("", { status: 404 });
         }
         if (url.pathname.startsWith("/api/public/redirects")) return new Response("", { status: 404 });

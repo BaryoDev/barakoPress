@@ -248,14 +248,14 @@ createServer((req, res) => {
     if (url.pathname === "/api/public/post") return send(res, 200, page([post]));
     if (url.pathname === `/api/public/post/${tenant.post}`) return send(res, 200, post);
     if (url.pathname === "/api/public/pages/navigation") {
-        return tenant.navigation ? send(res, 200, { contract: 1, items: tenant.navigation }) : send(res, 404);
+        return tenant.navigation ? send(res, 200, { contract: 2, items: tenant.navigation }) : send(res, 404);
     }
     if (url.pathname === "/api/public/pages/resolve") {
         const path = url.searchParams.get("path") ?? "/";
         const found = tenant.pages?.[path];
         if (!found) return send(res, 404);
         const { breadcrumbs = [], ...entry } = found;
-        return send(res, 200, { contract: 1, path, entry: { contentType: "page", ...entry }, breadcrumbs });
+        return send(res, 200, { contract: 2, path, entry: { contentType: "page", ...entry }, breadcrumbs });
     }
     if (url.pathname === "/api/public/redirects/resolve") {
         const moved = tenant.redirects?.[url.searchParams.get("path") ?? ""];

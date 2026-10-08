@@ -127,7 +127,7 @@ function cms() {
             const path = url.searchParams.get("path") ?? "/";
             const entry = t.pages?.[path];
             return entry
-                ? Response.json({ contract: 1, path, entry: { contentType: "page", ...entry }, breadcrumbs: [] })
+                ? Response.json({ contract: 2, path, entry: { contentType: "page", ...entry }, breadcrumbs: [] })
                 : new Response("", { status: 404 });
         }
         const [type, slug] = url.pathname.replace(/^\/api\/public\//, "").split("/");
