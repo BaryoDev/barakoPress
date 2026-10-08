@@ -11,6 +11,7 @@ import {
     pageAtPath,
     redeemShareLink,
     semantic,
+    speaksPagesContract,
     tenantForHost,
 } from "./delivery.js";
 
@@ -334,6 +335,14 @@ describe("reading from a CMS that stops answering", () => {
         vi.stubGlobal("fetch", hanging());
         await expect(tenantForHost(tenantConfig, "stalls.example")).rejects.toThrow();
     }, 2_000);
+});
+
+describe("speaksPagesContract", () => {
+    it("reads Pages contracts 1 and 2, and nothing else", () => {
+        expect(speaksPagesContract(1)).toBe(true);
+        expect(speaksPagesContract(2)).toBe(true);
+        for (const other of [0, 3, 1.5, "2", null, undefined, Number.NaN]) expect(speaksPagesContract(other)).toBe(false);
+    });
 });
 
 describe("pageAtPath", () => {

@@ -103,7 +103,7 @@ const TENANTS: Record<string, Tenant> = {
         host: "rckoronadal.org",
         settings: { Name: "Rotary Club of Koronadal", Url: "https://rckoronadal.org" },
         navigation: { contract: 1, items: [{ id: "p", title: "Projects", slug: "projects", path: "/projects", order: 1, children: [] }] },
-        pages: { "/projects": pageEntry("Projects", "Club projects") },
+        pages: { "/projects": { ...pageEntry("Projects", "Club projects"), contract: 1 } },
     },
     future: {
         host: "future.example",
