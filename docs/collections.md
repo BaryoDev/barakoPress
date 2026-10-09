@@ -82,7 +82,8 @@ From barakoCMS 4.8 a read by slug of a type that declares a `structuredDataType`
 `<script type="application/ld+json">`, with every `<` written as `\u003c` and U+2028 and U+2029
 escaped, so a value holding `</script>` cannot end the element. It goes at the top of the page rather
 than in the head, since Next's metadata has no field for it. A value that is not an object, or is over
-64 KiB, is not drawn. `structuredData: false` in `defineConfig` leaves it out, for a theme that writes
+64 KiB, is not drawn. An entry share link draws it too, and reads the entry through the type's roles
+like the live page. `structuredData: false` in `defineConfig` leaves it out, for a theme that writes
 its own; `StructuredData` is exported for a route file that draws the page itself.
 
 A settings entry that does not read as a collection is left out whole: a type or field that is not a

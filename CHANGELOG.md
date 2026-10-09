@@ -32,7 +32,8 @@
   `<script type="application/ld+json">`, at the top of the page since Next's metadata has no field
   for it. `<` is written as `\u003c` and U+2028 and U+2029 are escaped, so a value holding
   `</script>` stays inside the element and parses back unchanged. Only an object of at most 64 KiB is
-  drawn. `structuredData: false` in `defineConfig` turns it off; `StructuredData` and
+  drawn. An entry share link draws it too, and reads the entry through the type's roles, so a shared
+  draft looks as its published page will. `structuredData: false` in `defineConfig` turns it off; `StructuredData` and
   `structuredDataJson` are exported. An API that sends no block draws nothing, as before.
 
 - Delivery reads honour `X-Barako-Cache-Class` from barakoCMS 4.8 (#973). `no-store` there is

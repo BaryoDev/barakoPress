@@ -57,6 +57,8 @@ const TENANTS: Record<string, { host: string; settings: Record<string, unknown> 
 
 /** What each key opens, by tenant. A key missing here is a wrong, expired or revoked one: a 404. */
 let links: Record<string, Record<string, unknown>> = {};
+/** What the post type's description answers. Unset, a 404, as from an API older than 4.7. */
+let postDescription: unknown;
 let opens: string[] = [];
 let redeems = 0;
 
@@ -82,6 +84,9 @@ function cms() {
             redeems++;
             return new Response("", { status: 404, headers: contract });
         }
+        if (url.pathname === "/api/public/types/post/description" && postDescription) {
+            return Response.json(postDescription, { headers: contract });
+        }
         if (url.pathname === "/api/public/site" && TENANTS[tenant]) {
             return Response.json(
                 { items: [{ id: "s", data: TENANTS[tenant].settings }], page: 1, pageSize: 20, totalItems: 1, totalPages: 1, hasNextPage: false },
@@ -99,6 +104,7 @@ beforeEach(() => {
     requestCookies = {};
     opens = [];
     redeems = 0;
+    postDescription = undefined;
     const live = () => ({
         [SITE_KEY]: { scope: "site", expiresAt: inAnHour(), path: null, entry: null },
         [ENTRY_KEY]: { scope: "entry", expiresAt: inAnHour(), path: null, entry: DRAFT },
@@ -285,6 +291,29 @@ describe("the link route", () => {
         expect(out).toContain("Draft notes");
         expect(out).toContain("Not yet published.");
         expect(opens).toEqual([ENTRY_KEY]);
+    });
+
+    it("reads the entry through the type's roles and draws its structured data, as the live page does", async () => {
+        postDescription = { name: "post", routeTemplate: "/blog/{slug}", fields: [{ name: "Headline", type: "string", role: "title" }] };
+        links.baryo[ENTRY_KEY] = {
+            scope: "entry",
+            expiresAt: inAnHour(),
+            path: null,
+            entry: {
+                ...DRAFT,
+                data: { ...DRAFT.data, Headline: "The draft headline" },
+                structuredData: { "@type": "NewsArticle", headline: "The draft headline </script>" },
+            },
+        };
+        holding("/blog/draft-notes", ENTRY_KEY);
+
+        const out = await html(Page({ params: params("link", ["blog", "draft-notes"]) }));
+
+        expect(out).toContain("The draft headline");
+        expect(out).not.toContain(">Draft notes<");
+        const ld = [...out.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+        expect(ld).toHaveLength(1);
+        expect(JSON.parse(ld[0])).toEqual({ "@type": "NewsArticle", headline: "The draft headline </script>" });
     });
 
     it("draws the unpublished page a page link opens", async () => {
