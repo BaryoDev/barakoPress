@@ -69,7 +69,7 @@ createServer((request, response) => {
         if (!Object.hasOwn(pages, path)) return send(response, 404);
         const found = pages[path];
         return send(response, 200, {
-            contract: 1,
+            contract: 2,
             path: url.searchParams.get("path"),
             entry: { contentType: "page", ...found },
             breadcrumbs: [],

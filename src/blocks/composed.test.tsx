@@ -164,10 +164,10 @@ function cms() {
             const path = url.searchParams.get("path") ?? "";
             const found = pages[path];
             return found
-                ? Response.json({ contract: 1, path, entry: found, breadcrumbs: [] })
+                ? Response.json({ contract: 2, path, entry: found, breadcrumbs: [] })
                 : new Response("", { status: 404 });
         }
-        if (url.pathname === "/api/public/pages/navigation") return Response.json({ contract: 1, items: [] });
+        if (url.pathname === "/api/public/pages/navigation") return Response.json({ contract: 2, items: [] });
 
         const [type, slug] = url.pathname.replace(/^\/api\/public\//, "").split("/");
         const entries = t.content[type];

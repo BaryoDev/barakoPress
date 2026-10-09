@@ -57,6 +57,12 @@ URI is drawn as an image, and a share card never carries an inline image.
 
 An entry the API sends with `slug: null` (a type whose slug field is not Public, barakoCMS 4.6) has
 no page: its card draws the title with no link, and it is left out of the sitemap and the feed.
+From barakoCMS 4.7 such a slug also no longer addresses the entry: the API answers 404 for it by slug.
+
+From barakoCMS 4.7 a reference to an entry the API would not deliver (a draft, one that is not
+Public, one deleted, one in another tenant) is left out of `data`: a single reference loses its key,
+and a list keeps only the entries that are served. The item then has no such reference, a card and
+an item page draw no link for it, and a placeholder bound to it takes its fallback.
 
 A settings entry that does not read as a collection is left out whole: a type or field that is not a
 plain identifier, a route that is not a plain site path, or no title field. `post`, `author` and

@@ -11,6 +11,7 @@ import {
     pageAtPath,
     redeemShareLink,
     semantic,
+    speaksPagesContract,
     tenantForHost,
 } from "./delivery.js";
 
@@ -336,9 +337,17 @@ describe("reading from a CMS that stops answering", () => {
     }, 2_000);
 });
 
+describe("speaksPagesContract", () => {
+    it("reads Pages contracts 1 and 2, and nothing else", () => {
+        expect(speaksPagesContract(1)).toBe(true);
+        expect(speaksPagesContract(2)).toBe(true);
+        for (const other of [0, 3, 1.5, "2", null, undefined, Number.NaN]) expect(speaksPagesContract(other)).toBe(false);
+    });
+});
+
 describe("pageAtPath", () => {
     it("reads a resolve body whose entry has no data as no page, rather than failing the render", async () => {
-        vi.stubGlobal("fetch", answer(200, { contract: 1, path: "/x", entry: { contentType: "page" } }));
+        vi.stubGlobal("fetch", answer(200, { contract: 2, path: "/x", entry: { contentType: "page" } }));
         await expect(pageAtPath(config, "/x")).resolves.toBeNull();
     });
 });
@@ -465,11 +474,12 @@ describe("the delivery contract", () => {
     });
 
     it("reads the delivery header, and the admin header from an API that predates the split", () => {
+        expect(classifyDeliveryContract(new Headers({ "X-Delivery-Contract-Version": "7" }))).toEqual({ kind: "ok", version: 7 });
         expect(classifyDeliveryContract(new Headers({ "X-Delivery-Contract-Version": "6" }))).toEqual({ kind: "ok", version: 6 });
         expect(classifyDeliveryContract(new Headers({ "X-Api-Contract-Version": "5" }))).toEqual({ kind: "ok", version: 5 });
-        expect(classifyDeliveryContract(new Headers({ "X-Api-Contract-Version": "6", "X-Delivery-Contract-Version": "7" }))).toEqual({
+        expect(classifyDeliveryContract(new Headers({ "X-Api-Contract-Version": "7", "X-Delivery-Contract-Version": "8" }))).toEqual({
             kind: "api-newer",
-            version: 7,
+            version: 8,
         });
     });
 
@@ -480,19 +490,19 @@ describe("the delivery contract", () => {
 
     it("says once, plainly, that the API is newer, and still answers the read", async () => {
         const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-        answering({ "X-Delivery-Contract-Version": "7" });
+        answering({ "X-Delivery-Contract-Version": "8" });
 
         await expect(list(config, "post")).resolves.toMatchObject({ items: [] });
         await list(config, "post", { page: 2 });
 
-        const said = warn.mock.calls.filter(([m]) => String(m).includes("delivery contract 7"));
+        const said = warn.mock.calls.filter(([m]) => String(m).includes("delivery contract 8"));
         expect(said).toHaveLength(1);
         expect(String(said[0][0])).toContain("upgrade barakoPress");
     });
 
     it("says nothing for a number in range, or for an API that sends none", async () => {
         const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-        answering({ "X-Delivery-Contract-Version": "6" });
+        answering({ "X-Delivery-Contract-Version": "7" });
         await list(config, "post");
         answering({});
         await list(config, "post", { page: 3 });

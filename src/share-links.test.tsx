@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 /*
  * Share links to the site, to one entry and to one page (barakoCMS #1089), from `/_share#key` to what
  * the visitor sees. barakoCMS 4.6 answers all three on one route, `share-links/open`, and the API here
- * is that one: every answer carries its delivery contract, as 4.6 sends it.
+ * is that one: every answer carries its delivery contract, as 4.7 sends it.
  */
 
 let requestCookies: Record<string, string> = {};
@@ -60,7 +60,7 @@ let links: Record<string, Record<string, unknown>> = {};
 let opens: string[] = [];
 let redeems = 0;
 
-const contract = { "X-Delivery-Contract-Version": "6" };
+const contract = { "X-Delivery-Contract-Version": "7" };
 const inAnHour = () => new Date(Date.now() + HOUR * 1000).toISOString();
 
 function cms() {

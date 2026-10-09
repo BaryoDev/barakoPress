@@ -148,9 +148,9 @@ function cms(settings: Record<string, unknown> = SETTINGS) {
         }
         if (url.pathname === "/api/public/pages/resolve") {
             const found = PAGES.find((p) => `/${p.slug}` === url.searchParams.get("path"));
-            return found ? Response.json({ contract: 1, path: `/${found.slug}`, entry: found, breadcrumbs: [] }) : new Response("", { status: 404 });
+            return found ? Response.json({ contract: 2, path: `/${found.slug}`, entry: found, breadcrumbs: [] }) : new Response("", { status: 404 });
         }
-        if (url.pathname === "/api/public/pages/navigation") return Response.json({ contract: 1, items: [] });
+        if (url.pathname === "/api/public/pages/navigation") return Response.json({ contract: 2, items: [] });
         if (url.pathname.startsWith("/api/public/redirects/")) return new Response("", { status: 404 });
 
         const [type, slug] = url.pathname.replace(/^\/api\/public\//, "").split("/");

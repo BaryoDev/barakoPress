@@ -120,7 +120,7 @@ const TENANTS: Record<string, Tenant> = {
         host: "campus.example",
         settings: { Name: "Campus", Url: "https://campus.example", FooterPath: "/site/footer" },
         navigation: {
-            contract: 1,
+            contract: 2,
             items: [
                 { id: "a", title: "About", slug: "about", path: "/about", order: 1, children: [] },
                 {
@@ -180,7 +180,7 @@ function cms() {
             const path = url.searchParams.get("path") ?? "/";
             const entry = t.pages?.[path];
             return entry
-                ? Response.json({ contract: 1, path, entry: { contentType: "page", ...entry }, breadcrumbs: [] })
+                ? Response.json({ contract: 2, path, entry: { contentType: "page", ...entry }, breadcrumbs: [] })
                 : new Response("", { status: 404 });
         }
         return new Response("", { status: 404 });

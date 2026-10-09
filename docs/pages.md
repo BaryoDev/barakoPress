@@ -44,7 +44,7 @@ export const revalidate = 300;
   The resolved config lists those as `heldSlugs`. Give barakoCMS the same list as
   `Modules:Pages:ReservedSlugs` and an editor is refused the slug on save.
 - **Contract.** Both bodies carry `contract`, and this renderer reads the range in `PAGES_CONTRACT`
-  (1 to 1). A body outside it logs a warning and reads as absent: no menu, no page. A public site does
+  (1 to 2). A body outside it logs a warning and reads as absent: no menu, no page. A public site does
   not stop rendering because a menu shape moved.
 - The sitemap lists the pages in the menu, and `createPageStaticParams` returns their path segments on
   a build-time site, because the module publishes no other public list of paths. A page outside the

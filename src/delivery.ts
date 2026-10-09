@@ -341,7 +341,7 @@ export function forgetCachedReads() {
  * helps nobody; the server log saying so plainly, once, is what tells the operator to upgrade. The
  * range is typed as numbers rather than `as const`, because it is the ends of a range that moves.
  */
-export const DELIVERY_CONTRACT: { readonly min: number; readonly max: number } = { min: 1, max: 6 };
+export const DELIVERY_CONTRACT: { readonly min: number; readonly max: number } = { min: 1, max: 7 };
 
 export type DeliveryContract =
     | { kind: "absent" }
@@ -620,7 +620,7 @@ export async function bySlugPreview(
  * moves it only on a breaking change, so a body outside this range is read as absent: no menu, no
  * page. A public site should not refuse to render because a menu shape moved.
  */
-export const PAGES_CONTRACT = { min: 1, max: 1 } as const;
+export const PAGES_CONTRACT = { min: 1, max: 2 } as const;
 
 export function speaksPagesContract(contract: unknown): boolean {
     return (
