@@ -35,7 +35,10 @@
 - Delivery reads honour `X-Barako-Cache-Class` from barakoCMS 4.8 (#973). `no-store` there is
   never served from a cache, as `Cache-Control: no-store` already was; `short`, `long` and `swr`
   keep the configured backstop and tags; a path remembered as `no-store` is cached again from the
-  read after the API calls it anything else, instead of an hour later. An API without the header is
+  read after the API calls it anything else, instead of an hour later. Marking a path moves an epoch
+  in the URL its cached reads ask (`_class`), so the stored first answer, with its `no-store`
+  headers, is never served back to re-mark it, after the API changes the class or after the hour
+  runs out. An API without the header is
   read as before. The first `no-store` answer is still written once, since Next stores a 200 before
   its class can be read; #85 stays open for that, with the reason in `src/delivery.ts`.
 

@@ -68,7 +68,7 @@ async function startContainer(store?: PressStore) {
     const { list, bySlug } = await import("./delivery.js");
     const { createRevalidateRoute } = await import("./routes/revalidate.js");
 
-    const held = new Map<string, { body: string; tags: string[] }>();
+    const held = new Map<string, { body: string; tags: string[]; headers: [string, string][] }>();
     const requests: RequestInit[] = [];
 
     const fetchMock = async (input: string | URL | Request, init?: RequestInit & { next?: { tags?: string[] } }) => {
@@ -78,12 +78,13 @@ async function startContainer(store?: PressStore) {
         const key = url.toString();
         if (tags) {
             const stored = held.get(key);
-            if (stored) return new Response(stored.body, { headers: { "content-type": "application/json" } });
+            // Next hands back the stored response with the headers it was stored with.
+            if (stored) return new Response(stored.body, { headers: stored.headers });
         }
         const res = cmsAnswer(url);
         if (!res.ok) return res;
         const body = await res.text();
-        if (tags) held.set(key, { body, tags });
+        if (tags) held.set(key, { body, tags, headers: [...res.headers] });
         return new Response(body, { headers: res.headers });
     };
 
@@ -252,9 +253,10 @@ describe("the cache class barakoCMS 4.8 names in X-Barako-Cache-Class", () => {
             liveCacheControl = "no-store";
             await app.live();
             await app.live();
-            app.held.clear();
             liveClass = "short";
             liveCacheControl = "public, max-age=60";
+            // The first answer is still in the data cache, with the no-store headers it came with.
+            expect([...app.held.keys()].filter((key) => key.includes("/api/public/live"))).toHaveLength(1);
 
             // Asked uncached once more, since that is what the path was; that answer says short.
             expect(await app.live()).toBe("Alpha");

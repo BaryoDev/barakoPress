@@ -18,7 +18,9 @@ has to be fresh to the minute lives beside pages cached for hours.
 
 barakoCMS 4.8 also names the class in `X-Barako-Cache-Class`. `no-store` there is read the same way.
 `short`, `long` and `swr` are cached as every read is, under the configured backstop, and a path that
-was remembered as `no-store` is cached again from the read after the API stops saying so. The first
+was remembered as `no-store` is cached again from the read after the API stops saying so. Marking a
+path moves an epoch carried in the URL of its cached reads, so the copy that taught the class is never
+handed back and read as `no-store` again. The first
 `no-store` answer for a path is still written to Next's data cache once and never read back: Next
 takes the cache options before the response exists, and asking uncached until the class is known
 would make every route dynamic (#85).

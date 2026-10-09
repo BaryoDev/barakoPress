@@ -282,6 +282,23 @@ const CACHE_CLASSES = new Set(["short", "long", "no-store", "swr"]);
 
 const classKey = (key: string) => `class:${key}`;
 
+/*
+ * The epoch a path was last marked `no-store` at, carried in the URL of every cached read of it.
+ *
+ * The answer that taught this side the class was written to Next's data cache under the URL it was
+ * asked by, and Next would hand it back, `no-store` header and all, to the first cached read after
+ * the path leaves the class: the class would be learned again from a stale copy, and the path would
+ * never be cached again. Marking moves the epoch, so no cached read after it asks that URL. It lives
+ * as long as a generation does, which is as long as anything in the data cache can.
+ */
+const EPOCH_PARAM = "_class";
+const epochKey = (key: string) => `epoch:${key}`;
+
+function withEpoch(path: string, epoch: string | null): string {
+    if (!epoch) return path;
+    return `${path}${path.includes("?") ? "&" : "?"}${EPOCH_PARAM}=${epoch}`;
+}
+
 /** The class barakoCMS 4.8 names, or null for an older API or a value it does not send. */
 function declaredCacheClass(res: Response): "short" | "long" | "no-store" | "swr" | null {
     const value = res.headers.get("x-barako-cache-class")?.trim().toLowerCase();
@@ -442,7 +459,9 @@ async function read<T>(config: PressConfig, path: string, opts: ReadOptions): Pr
         }
     }
     const uncached = (await store.get(classKey(opts.readKey))) !== null;
-    const asked = uncached ? path : withGeneration(path, await newestGeneration(store, opts.tags));
+    const asked = uncached
+        ? path
+        : withEpoch(withGeneration(path, await newestGeneration(store, opts.tags)), await store.get(epochKey(opts.readKey)));
     try {
         const res = await fetch(`${cmsUrlFor(config)}${asked}`, {
             headers: opts.headers,
@@ -468,6 +487,11 @@ async function read<T>(config: PressConfig, path: string, opts: ReadOptions): Pr
             // Nothing is kept either: an answer the API refuses to have stored is not one to hand
             // somebody during an outage.
             await store.set(classKey(opts.readKey), "no-store", CLASS_TTL_SECONDS);
+            if (!uncached) {
+                const last = Number(await store.get(epochKey(opts.readKey)));
+                const epoch = Math.max(Date.now(), (Number.isFinite(last) ? last : 0) + 1);
+                await store.set(epochKey(opts.readKey), String(epoch), generationTtl(config));
+            }
             return value;
         }
         if (uncached && declaredCacheClass(res) !== null) await store.delete(classKey(opts.readKey));
