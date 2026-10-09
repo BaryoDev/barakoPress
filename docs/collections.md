@@ -64,6 +64,14 @@ Public, one deleted, one in another tenant) is left out of `data`: a single refe
 and a list keeps only the entries that are served. The item then has no such reference, a card and
 an item page draw no link for it, and a placeholder bound to it takes its fallback.
 
+From barakoCMS 4.8 a read by slug of a type that declares a `structuredDataType` carries
+`structuredData`, the entry as schema.org JSON-LD. An item page draws it as
+`<script type="application/ld+json">`, with every `<` written as `\u003c` and U+2028 and U+2029
+escaped, so a value holding `</script>` cannot end the element. It goes at the top of the page rather
+than in the head, since Next's metadata has no field for it. A value that is not an object, or is over
+64 KiB, is not drawn. `structuredData: false` in `defineConfig` leaves it out, for a theme that writes
+its own; `StructuredData` is exported for a route file that draws the page itself.
+
 A settings entry that does not read as a collection is left out whole: a type or field that is not a
 plain identifier, a route that is not a plain site path, or no title field. `post`, `author` and
 `category` are replaceable by key like any other collection, since every read goes through the

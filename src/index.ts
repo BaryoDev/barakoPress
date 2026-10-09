@@ -200,6 +200,7 @@ export type { RenderMarkdownOptions, MarkdownHeading } from "./markdown.js";
 
 export { Asset, renderProse, suppliedAssetFor, suppliedAssetOn, clearSpaceOf } from "./assets.js";
 export type { AssetProps, SuppliedProps } from "./assets.js";
+export { StructuredData, structuredDataJson } from "./structured-data.js";
 
 export { createBlogIndex, Card } from "./screens/blog-index.js";
 export {

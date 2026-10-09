@@ -801,6 +801,11 @@ export interface PressConfig {
     store?: PressStore;
     /** What `createHome` serves at the root. A request-time site reads `HomePath` and `HomeCollection`. */
     home?: Home;
+    /**
+     * False leaves out the schema.org JSON-LD block barakoCMS 4.8 sends with an entry, for a theme
+     * that writes its own. Unset, an item page draws the block whenever the API sent one.
+     */
+    structuredData?: boolean;
 }
 
 export type PressConfigInput = {
@@ -1022,6 +1027,7 @@ export function defineConfig(
         labels: { ...DEFAULT_LABELS, ...input.labels },
         ...(input.store ? { store: input.store } : {}),
         ...(input.home ? { home: input.home } : {}),
+        ...(input.structuredData === false ? { structuredData: false } : {}),
         reservedSlugs: reservedSlugs(
             [routes.post, routes.author, routes.category, ...Object.values(collections).map((c) => c.route)],
             input.reservedSlugs,

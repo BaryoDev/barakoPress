@@ -35,6 +35,11 @@ export interface PublicContent {
     updatedAt?: string;
     data: Record<string, unknown>;
     seo?: Seo;
+    /**
+     * The entry as schema.org JSON-LD, on a read by slug of a type that declares one (barakoCMS 4.8,
+     * #567). Absent otherwise, and from an older API. Unchecked here; `StructuredData` draws it.
+     */
+    structuredData?: Record<string, unknown>;
 }
 
 export interface Seo {

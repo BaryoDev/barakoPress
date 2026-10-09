@@ -39,6 +39,7 @@ import { createBlockRegistry, registryFor } from "../blocks/registry.js";
 import type { BlockRegistry } from "../blocks/schema.js";
 import { proseCss } from "../theme.js";
 import { pageBlocks } from "./page-blocks.js";
+import { StructuredData } from "../structured-data.js";
 
 /*
  * The collection screens: an index, a detail page, their metadata and static params, and the card and
@@ -599,7 +600,12 @@ export async function renderCollectionDetail(
     const tree = col.tree ? await collectionTree(config, collection, { product: item.product }) : undefined;
 
     const view = options.view ?? ItemView;
-    return view({ config, item, related, tree, preview: Boolean(previewToken), backHref: options.backHref });
+    return (
+        <>
+            <StructuredData config={config} content={item.content} />
+            {await view({ config, item, related, tree, preview: Boolean(previewToken), backHref: options.backHref })}
+        </>
+    );
 }
 
 type DetailParams = { params: Promise<{ slug: string; site?: string }>; searchParams?: Promise<{ preview?: string }> };
