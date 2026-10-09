@@ -14,6 +14,16 @@
   4.6, so its entries have no page, no sitemap line and no feed item. Both are covered by
   `src/delivered-references.test.tsx`; neither needed a change to the renderer.
 
+- The lockfile moves `sharp` to 0.35.5 (GHSA-wq5f-xc86-pv6w, through `next`) and `source-map-js` to
+  1.2.2 (GHSA-68fv-2mgg-jv7q, through `postcss`), both inside the ranges their parents ask for, so
+  no override. sharp stays Apache-2.0 with its LGPL libvips, and 0.35.5 ships the linux x64 and
+  arm64 binaries for glibc and musl.
+
+- The CI dependency audit runs `scripts/audit.sh`: a pinned npm 11.19.1, which asks the bulk
+  advisory endpoint instead of the quick one npm is retiring. It exits 1 on a high or critical
+  advisory and 2 when the registry could not be asked, so an outage no longer reads as a finding,
+  and `--self-test` proves both against a seeded `source-map-js` 1.2.1 and a dead registry (#70).
+
 ## 0.11.0 (2026-10-04)
 
 - `/_share` opens links to one entry or one page as well as links to the site (barakoCMS #1089).
