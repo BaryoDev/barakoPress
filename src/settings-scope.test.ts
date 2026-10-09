@@ -84,8 +84,9 @@ describe("PageSizes", () => {
         const { items } = await listCollection(withSettings({ PageSizes: { index: 50 } }), "post");
 
         expect(items).toHaveLength(50);
-        expect(calls).toHaveLength(1);
-        expect(calls[0]).toContain("pageSize=50");
+        const lists = calls.filter((c) => !c.includes("/api/public/types/"));
+        expect(lists).toHaveLength(1);
+        expect(lists[0]).toContain("pageSize=50");
     });
 
     it("keeps the configured sizes for the keys the tenant left out", () => {

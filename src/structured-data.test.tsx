@@ -20,6 +20,7 @@ const { createCollectionDetail } = await import("./screens/collection.js");
 const { structuredDataJson } = await import("./structured-data.js");
 
 const CMS = "http://cms.test";
+const SITE = { name: "Riverside", url: "https://riverside.example" };
 
 /** What a value holding a script end tag, quotes and both line separators looks like in the API's JSON. */
 const HOSTILE = {
@@ -69,7 +70,7 @@ afterEach(() => {
 describe("structured data on an item page", () => {
     it("draws the block the API sent, escaped so nothing in it can end the script element", async () => {
         structuredData = HOSTILE;
-        const html = await render(defineConfig({ cmsUrl: CMS }));
+        const html = await render(defineConfig({ site: SITE, cmsUrl: CMS }));
 
         const found = blocks(html);
         expect(found).toHaveLength(1);
@@ -84,14 +85,14 @@ describe("structured data on an item page", () => {
     });
 
     it("draws nothing when the API sent no block, as an older API does", async () => {
-        const html = await render(defineConfig({ cmsUrl: CMS }));
+        const html = await render(defineConfig({ site: SITE, cmsUrl: CMS }));
         expect(html).toContain("Flood waters recede");
         expect(html).not.toContain("application/ld+json");
     });
 
     it("draws nothing when the site turns it off", async () => {
         structuredData = HOSTILE;
-        const html = await render(defineConfig({ cmsUrl: CMS, structuredData: false }));
+        const html = await render(defineConfig({ site: SITE, cmsUrl: CMS, structuredData: false }));
         expect(html).toContain("Flood waters recede");
         expect(html).not.toContain("application/ld+json");
     });
@@ -100,7 +101,7 @@ describe("structured data on an item page", () => {
         for (const value of ["</script>", ["a"], null, 3, {}]) {
             forgetCachedReads();
             structuredData = value;
-            const html = await render(defineConfig({ cmsUrl: CMS }));
+            const html = await render(defineConfig({ site: SITE, cmsUrl: CMS }));
             expect(html).not.toContain("application/ld+json");
         }
     });

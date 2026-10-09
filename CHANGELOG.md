@@ -14,6 +14,17 @@
   4.6, so its entries have no page, no sitemap line and no feed item. Both are covered by
   `src/delivered-references.test.tsx`; neither needed a change to the renderer.
 
+- Collections read field roles from barakoCMS 4.7's `GET /api/public/types/{type}/description`
+  (#1108, barakoPress #192). It is read once per type beside the read it serves, cached and tagged
+  with the type. The fields holding the `title`, `summary`, `date` and `image` roles are read before
+  the names in the collection's `fields`, so the item page, cards, the feed and the sitemap take
+  them, and an entry that leaves a role field empty falls back to the configured names. The
+  `routeTemplate` is held against the collection's `route`: links, the sitemap and the feed stay on
+  the route this site serves, and a template naming another path is said once in the log, since
+  linking there would be a 404 on this site. An API without the route (404) reads by the field map
+  as before, and is asked again only after the backstop. New exports: `describeType`,
+  `TypeDescription`, `FieldRole`; `toItem` takes the description as an optional fourth argument.
+
 - An item page draws the `structuredData` barakoCMS 4.8 sends with a read by slug (#567) as
   `<script type="application/ld+json">`, at the top of the page since Next's metadata has no field
   for it. `<` is written as `\u003c` and U+2028 and U+2029 are escaped, so a value holding

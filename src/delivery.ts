@@ -571,6 +571,73 @@ export async function tenantForHost(config: PressConfig, host: string): Promise<
     return tenant;
 }
 
+/*
+ * What a type says about itself (barakoCMS 4.7, #1108): `GET /api/public/types/{type}/description`
+ * answers its route template and, for each Public field, the role it holds.
+ *
+ * Read like every other delivery read, so it is cached and tagged with the type and dropped by the
+ * same purge. An API from before the route answers 404, and so does a type that is not publicly
+ * deliverable. Next keeps only a 200, so that answer is remembered in the store for a backstop's
+ * length: without it, every render against an older API would ask again and be told the same. Any
+ * other failure is no description either, and the page reads by its field map as it did before.
+ */
+export type FieldRole = "title" | "summary" | "date" | "image";
+
+export interface TypeDescription {
+    /** Where an entry lives on the site, holding `{slug}` once, or null when the type declares none. */
+    routeTemplate: string | null;
+    /** The Public field holding each role this renderer reads. */
+    roles: Partial<Record<FieldRole, string>>;
+}
+
+const READ_ROLES: readonly FieldRole[] = ["title", "summary", "date", "image"];
+const FIELD_NAME = /^[A-Za-z][A-Za-z0-9_]{0,62}$/;
+const ROUTE_TEMPLATE = /^\/[A-Za-z0-9/_.~{}-]{0,199}$/;
+
+/** barakoCMS's own rule for a template: a site path holding `{slug}` once, no empty or dot segment. */
+function routeTemplateOf(v: unknown): string | null {
+    if (typeof v !== "string" || !ROUTE_TEMPLATE.test(v)) return null;
+    const at = v.indexOf("{slug}");
+    if (at < 0 || v.indexOf("{slug}", at + 6) >= 0) return null;
+    const rest = v.slice(0, at) + v.slice(at + 6);
+    if (/[{}]/.test(rest) || v.includes("//")) return null;
+    return v.split("/").some((segment) => segment === "." || segment === "..") ? null : v;
+}
+
+function descriptionOf(body: unknown): TypeDescription | null {
+    if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+    const d = body as { routeTemplate?: unknown; fields?: unknown };
+    const roles: Partial<Record<FieldRole, string>> = {};
+    for (const field of Array.isArray(d.fields) ? d.fields.slice(0, 500) : []) {
+        if (!field || typeof field !== "object") continue;
+        const { name, role } = field as { name?: unknown; role?: unknown };
+        if (typeof name !== "string" || !FIELD_NAME.test(name) || typeof role !== "string") continue;
+        const which = role.toLowerCase() as FieldRole;
+        if (READ_ROLES.includes(which) && roles[which] === undefined) roles[which] = name;
+    }
+    return { routeTemplate: routeTemplateOf(d.routeTemplate), roles };
+}
+
+const undescribedKey = (key: string) => `undescribed:${key}`;
+
+export async function describeType(config: PressConfig, type: string): Promise<TypeDescription | null> {
+    const path = `/api/public/types/${encodeURIComponent(type)}/description`;
+    const env = readEnv();
+    const key = `${cmsUrlFor(config, env)}|t:${pinnedTenant(config, env) ?? ""}|${path}`;
+    const store = storeFor(config);
+    if ((await store.get(undescribedKey(key))) !== null) return null;
+    try {
+        return descriptionOf(await get<unknown>(config, path, { type }));
+    } catch (e) {
+        // Next's own control flow (a dynamic read, a not-found) keeps travelling, as everywhere else.
+        if (e && typeof e === "object" && "digest" in e) throw e;
+        if (e instanceof CmsError && e.status === 404) {
+            await store.set(undescribedKey(key), "404", config.backstopSeconds > 0 ? config.backstopSeconds : 300);
+        }
+        return null;
+    }
+}
+
 export interface ListOptions {
     page?: number;
     pageSize?: number;

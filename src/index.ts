@@ -147,6 +147,7 @@ export {
     classifyDeliveryContract,
     isLinkPath,
     openShareLink,
+    describeType,
 } from "./delivery.js";
 export type {
     PublicContent,
@@ -160,6 +161,8 @@ export type {
     ShareRedeemCaller,
     DeliveryContract,
     ShareOpenAnswer,
+    TypeDescription,
+    FieldRole,
 } from "./delivery.js";
 export { createSharedLinkPage, sharedLinkMetadata } from "./screens/shared-link.js";
 

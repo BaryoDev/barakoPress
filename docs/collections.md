@@ -64,6 +64,16 @@ Public, one deleted, one in another tenant) is left out of `data`: a single refe
 and a list keeps only the entries that are served. The item then has no such reference, a card and
 an item page draw no link for it, and a placeholder bound to it takes its fallback.
 
+From barakoCMS 4.7 the engine reads each collection's type description,
+`GET /api/public/types/{type}/description`, once per type alongside the read it serves, cached and
+tagged with the type like every other read. The fields holding the `title`, `summary`, `date` and
+`image` roles are read first, and the names in `fields` after them, so an entry that leaves a role
+field empty still falls back. The `routeTemplate` it names is checked against `route`: links, the
+sitemap and the feed stay on the route this site serves, since a link to a path the site does not
+answer is a 404, and a template that names another path is said once in the log. An API without the
+route answers 404, which is remembered for the backstop's length, and the collection reads by its
+field map exactly as before. Any other failure reads by the field map too.
+
 From barakoCMS 4.8 a read by slug of a type that declares a `structuredDataType` carries
 `structuredData`, the entry as schema.org JSON-LD. An item page draws it as
 `<script type="application/ld+json">`, with every `<` written as `\u003c` and U+2028 and U+2029
