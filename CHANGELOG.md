@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.12.0 (unreleased)
+## 0.12.0 (2026-10-09)
 
 - barakoCMS 4.7 (BaryoDev/barakoCMS 4.7.0). This build reads delivery contracts 1 to 7
   (`DELIVERY_CONTRACT`) and Pages contracts 1 to 2 (`PAGES_CONTRACT`). barakoCMS 4.7 answers with

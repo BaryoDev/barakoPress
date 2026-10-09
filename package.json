@@ -1,6 +1,6 @@
 {
   "name": "barakopress",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "The renderer for barakoCMS sites: pages from blocks, collections and docs trees, cached until the CMS says otherwise.",
   "license": "MIT",
   "author": "Arnel Robles",
