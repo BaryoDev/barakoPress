@@ -35,6 +35,11 @@ export interface PublicContent {
     updatedAt?: string;
     data: Record<string, unknown>;
     seo?: Seo;
+    /**
+     * The entry as schema.org JSON-LD, on a read by slug of a type that declares one (barakoCMS 4.8,
+     * #567). Absent otherwise, and from an older API. Unchecked here; `StructuredData` draws it.
+     */
+    structuredData?: Record<string, unknown>;
 }
 
 export interface Seo {
@@ -253,15 +258,55 @@ function withGeneration(path: string, generation: string | null): string {
  * A positive `max-age` is deliberately not read as a lifetime. barakoCMS answers every public read
  * with a flat `public, max-age=60` today, which is a hint for a CDN in front of it rather than a
  * statement about this entry, and taking it as one would quietly cut every site's window from the
- * backstop it configured to sixty seconds. A per-read class the API means as one is the API change
- * barakoPress #56 asks for.
+ * backstop it configured to sixty seconds.
+ *
+ * barakoCMS 4.8 says the class it means in `X-Barako-Cache-Class` (barakoCMS #973): `short`, `long`,
+ * `no-store` or `swr`. `no-store` there is read the same as in `Cache-Control`, and either one is
+ * enough. Any other class is cacheable, and ends a `no-store` this path was remembered under, so a
+ * read the API stops marking is cached again from the next read instead of an hour later. `short`,
+ * `long` and `swr` all keep the configured backstop: a purge is what ends an entry here, the
+ * backstop is the operator's ceiling for a missed webhook, and Next's data cache already serves the
+ * old copy while it refreshes one past it. An API without the header is read as before.
+ *
+ * What the header cannot do is decide before the first write (barakoPress #85). Next takes the cache
+ * options with the request and writes any 200 it gets back, whatever the response says, so the class
+ * of a path never read before is only known after Next has stored it. Asking uncached until the class
+ * is known would avoid that write, but an uncached fetch makes Next render the whole route dynamic,
+ * which turns every prerendered page into a per-request one and refuses `output: "export"`. Learning
+ * the class first costs a second request per path. So the first `no-store` answer is still written
+ * once and never read back, as before.
  */
 const CLASS_TTL_SECONDS = 60 * 60;
 const NEVER_STORE = new Set(["no-store", "no-cache", "private", "max-age=0", "s-maxage=0"]);
+const CACHE_CLASSES = new Set(["short", "long", "no-store", "swr"]);
 
 const classKey = (key: string) => `class:${key}`;
 
+/*
+ * The epoch a path was last marked `no-store` at, carried in the URL of every cached read of it.
+ *
+ * The answer that taught this side the class was written to Next's data cache under the URL it was
+ * asked by, and Next would hand it back, `no-store` header and all, to the first cached read after
+ * the path leaves the class: the class would be learned again from a stale copy, and the path would
+ * never be cached again. Marking moves the epoch, so no cached read after it asks that URL. It lives
+ * as long as a generation does, which is as long as anything in the data cache can.
+ */
+const EPOCH_PARAM = "_class";
+const epochKey = (key: string) => `epoch:${key}`;
+
+function withEpoch(path: string, epoch: string | null): string {
+    if (!epoch) return path;
+    return `${path}${path.includes("?") ? "&" : "?"}${EPOCH_PARAM}=${epoch}`;
+}
+
+/** The class barakoCMS 4.8 names, or null for an older API or a value it does not send. */
+function declaredCacheClass(res: Response): "short" | "long" | "no-store" | "swr" | null {
+    const value = res.headers.get("x-barako-cache-class")?.trim().toLowerCase();
+    return value && CACHE_CLASSES.has(value) ? (value as "short" | "long" | "no-store" | "swr") : null;
+}
+
 function declaredNoStore(res: Response): boolean {
+    if (declaredCacheClass(res) === "no-store") return true;
     const header = res.headers.get("cache-control");
     if (!header) return false;
     return header
@@ -414,7 +459,9 @@ async function read<T>(config: PressConfig, path: string, opts: ReadOptions): Pr
         }
     }
     const uncached = (await store.get(classKey(opts.readKey))) !== null;
-    const asked = uncached ? path : withGeneration(path, await newestGeneration(store, opts.tags));
+    const asked = uncached
+        ? path
+        : withEpoch(withGeneration(path, await newestGeneration(store, opts.tags)), await store.get(epochKey(opts.readKey)));
     try {
         const res = await fetch(`${cmsUrlFor(config)}${asked}`, {
             headers: opts.headers,
@@ -438,10 +485,20 @@ async function read<T>(config: PressConfig, path: string, opts: ReadOptions): Pr
         const value = JSON.parse(text) as T;
         if (declaredNoStore(res)) {
             // Nothing is kept either: an answer the API refuses to have stored is not one to hand
-            // somebody during an outage.
+            // somebody during an outage. That includes one kept before the path became no-store.
             await store.set(classKey(opts.readKey), "no-store", CLASS_TTL_SECONDS);
+            if (opts.staleKey) {
+                await store.delete(staleStoreKey(opts.staleKey));
+                await store.delete(failedKey(opts.staleKey));
+            }
+            if (!uncached) {
+                const last = Number(await store.get(epochKey(opts.readKey)));
+                const epoch = Math.max(Date.now(), (Number.isFinite(last) ? last : 0) + 1);
+                await store.set(epochKey(opts.readKey), String(epoch), generationTtl(config));
+            }
             return value;
         }
+        if (uncached && declaredCacheClass(res) !== null) await store.delete(classKey(opts.readKey));
         if (opts.staleKey) {
             await remember(store, opts.staleKey, text);
             await store.delete(failedKey(opts.staleKey));
@@ -540,6 +597,73 @@ export async function tenantForHost(config: PressConfig, host: string): Promise<
     await store.set(hostKey(host), tenant ?? "", HOST_TTL_SECONDS);
     if (tenant) await store.set(hostLastKey(host), tenant, HOST_LAST_TTL_SECONDS);
     return tenant;
+}
+
+/*
+ * What a type says about itself (barakoCMS 4.7, #1108): `GET /api/public/types/{type}/description`
+ * answers its route template and, for each Public field, the role it holds.
+ *
+ * Read like every other delivery read, so it is cached and tagged with the type and dropped by the
+ * same purge. An API from before the route answers 404, and so does a type that is not publicly
+ * deliverable. Next keeps only a 200, so that answer is remembered in the store for a backstop's
+ * length: without it, every render against an older API would ask again and be told the same. Any
+ * other failure is no description either, and the page reads by its field map as it did before.
+ */
+export type FieldRole = "title" | "summary" | "date" | "image";
+
+export interface TypeDescription {
+    /** Where an entry lives on the site, holding `{slug}` once, or null when the type declares none. */
+    routeTemplate: string | null;
+    /** The Public field holding each role this renderer reads. */
+    roles: Partial<Record<FieldRole, string>>;
+}
+
+const READ_ROLES: readonly FieldRole[] = ["title", "summary", "date", "image"];
+const FIELD_NAME = /^[A-Za-z][A-Za-z0-9_]{0,62}$/;
+const ROUTE_TEMPLATE = /^\/[A-Za-z0-9/_.~{}-]{0,199}$/;
+
+/** barakoCMS's own rule for a template: a site path holding `{slug}` once, no empty or dot segment. */
+function routeTemplateOf(v: unknown): string | null {
+    if (typeof v !== "string" || !ROUTE_TEMPLATE.test(v)) return null;
+    const at = v.indexOf("{slug}");
+    if (at < 0 || v.indexOf("{slug}", at + 6) >= 0) return null;
+    const rest = v.slice(0, at) + v.slice(at + 6);
+    if (/[{}]/.test(rest) || v.includes("//")) return null;
+    return v.split("/").some((segment) => segment === "." || segment === "..") ? null : v;
+}
+
+function descriptionOf(body: unknown): TypeDescription | null {
+    if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+    const d = body as { routeTemplate?: unknown; fields?: unknown };
+    const roles: Partial<Record<FieldRole, string>> = {};
+    for (const field of Array.isArray(d.fields) ? d.fields.slice(0, 500) : []) {
+        if (!field || typeof field !== "object") continue;
+        const { name, role } = field as { name?: unknown; role?: unknown };
+        if (typeof name !== "string" || !FIELD_NAME.test(name) || typeof role !== "string") continue;
+        const which = role.toLowerCase() as FieldRole;
+        if (READ_ROLES.includes(which) && roles[which] === undefined) roles[which] = name;
+    }
+    return { routeTemplate: routeTemplateOf(d.routeTemplate), roles };
+}
+
+const undescribedKey = (key: string) => `undescribed:${key}`;
+
+export async function describeType(config: PressConfig, type: string): Promise<TypeDescription | null> {
+    const path = `/api/public/types/${encodeURIComponent(type)}/description`;
+    const env = readEnv();
+    const key = `${cmsUrlFor(config, env)}|t:${pinnedTenant(config, env) ?? ""}|${path}`;
+    const store = storeFor(config);
+    if ((await store.get(undescribedKey(key))) !== null) return null;
+    try {
+        return descriptionOf(await get<unknown>(config, path, { type }));
+    } catch (e) {
+        // Next's own control flow (a dynamic read, a not-found) keeps travelling, as everywhere else.
+        if (e && typeof e === "object" && "digest" in e) throw e;
+        if (e instanceof CmsError && e.status === 404) {
+            await store.set(undescribedKey(key), "404", config.backstopSeconds > 0 ? config.backstopSeconds : 300);
+        }
+        return null;
+    }
 }
 
 export interface ListOptions {

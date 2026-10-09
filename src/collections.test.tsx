@@ -398,6 +398,7 @@ describe("collections from a tenant's settings", () => {
         expect(water.items.map((i) => i.title)).toEqual(["Clean water"]);
         expect(calls.map((c) => c.path)).toEqual([
             "/api/public/project?page=1&pageSize=20&sort=Title&filter%5BAreaOfFocus%5D%5Beq%5D=Providing+clean+water",
+            "/api/public/types/project/description",
         ]);
 
         const hospital = await site("hospital.example");
@@ -408,6 +409,7 @@ describe("collections from a tenant's settings", () => {
         expect(calls.map((c) => c.path)).toEqual([
             "/api/public/department/pediatrics",
             "/api/public/doctor?page=1&pageSize=20&include=Department&filter%5BDepartment%5D%5Beq%5D=d2",
+            "/api/public/types/doctor/description",
         ]);
 
         calls = [];

@@ -137,9 +137,10 @@ describe("a build-time site", () => {
         expect(sitemap[0].url).toBe("https://barakocms.com");
         expect(robots.sitemap).toBe("https://barakocms.com/sitemap.xml");
 
-        expect(calls).toHaveLength(2);
+        // The two list reads, and the post type's description, asked once: this CMS answers 404 for it.
+        expect(calls).toHaveLength(3);
         for (const call of calls) {
-            expect(call.url.startsWith("/api/public/post")).toBe(true);
+            expect(call.url.startsWith("/api/public/post") || call.url === "/api/public/types/post/description").toBe(true);
             // The configured tag, and the type's, which is what a purge naming the type drops (#56).
             expect(call.tags).toEqual(["cms", "cms:type:post"]);
         }
@@ -316,8 +317,9 @@ describe("one build serving two sites", () => {
         await listPosts(a!);
         await listPosts(b!);
 
+        // For each tenant its settings, a list and the type description, each carrying the tenant.
         const reads = calls.filter((c) => c.url.startsWith("/api/public/"));
-        expect(reads).toHaveLength(4);
+        expect(reads).toHaveLength(6);
         for (const read of reads) {
             expect(read.tenant).not.toBeNull();
             // The tenant's tag on every read, whatever narrower tag it carries beside it.

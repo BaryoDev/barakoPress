@@ -72,7 +72,12 @@ jobs:
         run: npm test
 
       - name: Dependency audit
-        run: npm audit --audit-level=high
+        # A pinned npm 11, which asks the bulk advisory endpoint rather than the one npm is retiring.
+        # Exit 1 is a finding and exit 2 is a registry that could not be asked (#70). The self-test
+        # runs first, so a step that can no longer go red is caught the day it stops.
+        run: |
+          scripts/audit.sh --self-test
+          scripts/audit.sh
 
       - name: Relative imports carry a file extension
         # The package is type: module, so `./config.js` is the specifier ESM asks for and `./config`

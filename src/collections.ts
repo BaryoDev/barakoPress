@@ -1,5 +1,5 @@
 import { REFERENCE_FIELDS, type CollectionConfig, type FieldNames, type OptionStyle, type PressConfig } from "./config.js";
-import { bySlug, bySlugPreview, list, search, type PublicContent, type Seo } from "./delivery.js";
+import { bySlug, bySlugPreview, describeType, list, search, type PublicContent, type Seo, type TypeDescription } from "./delivery.js";
 import type { Ref } from "./cms.js";
 import { readFileLink, readImage, type DeliveredImage } from "./media.js";
 import { siteHref } from "./site.js";
@@ -258,10 +258,60 @@ function seoTitle(c: PublicContent): string {
     return typeof t === "string" ? t.trim() : "";
 }
 
-export function toItem(config: PressConfig, key: string, c: PublicContent): Item {
+/*
+ * The field a type gives a role (barakoPress #192).
+ *
+ * barakoCMS 4.7 says which Public field holds the title, summary, date and image. What a site named
+ * itself wins: a role only fills in a field the collection left unset, or one whose names are the
+ * engine's defaults (`defaultedFields`), where it is read ahead of them so an entry that leaves the
+ * role field empty still falls back. With no description, from an older API or a failed read, the
+ * field map is all there is, as before.
+ */
+const ROLE_FIELDS = ["title", "summary", "date", "image"] as const;
+
+function fieldsWithRoles(col: CollectionConfig, described: TypeDescription | null | undefined): CollectionConfig["fields"] {
+    const roles = described?.roles;
+    if (!roles) return col.fields;
+    const fields = { ...col.fields };
+    for (const role of ROLE_FIELDS) {
+        const field = roles[role];
+        if (!field) continue;
+        const held = names(fields[role]);
+        if (held.length === 0) fields[role] = field;
+        else if (col.defaultedFields?.includes(role)) fields[role] = [field, ...held.filter((name) => name !== field)];
+    }
+    return fields;
+}
+
+/*
+ * The route template a type declares, held against the route this site serves the collection at.
+ *
+ * Links, the sitemap and the feed are built from the route, because that is the path this site
+ * answers: the root catch-all and a consumer's route files both match on it, and a link built from a
+ * template that names another path would be a 404 here. So a template is used to check, not to link.
+ * Where it names the route this site serves, nothing is said. Where it names another, the log says
+ * so once, since barakoCMS's own feed and sitemap then point somewhere this site does not serve.
+ */
+function checkTemplate(key: string, col: CollectionConfig, described: TypeDescription | null): void {
+    const template = described?.routeTemplate;
+    if (!template || col.route === undefined) return;
+    if (template.toLowerCase() === `${col.route}/{slug}`.toLowerCase()) return;
+    sayOnce(
+        `collections: "${key}" is served at ${col.route}/{slug}, and barakoCMS says ${col.type} lives at ${template}; links follow the route this site serves`,
+    );
+}
+
+/** What the type says about itself, read once per type alongside the read it serves. */
+async function described(config: PressConfig, key: string, col: CollectionConfig): Promise<TypeDescription | null> {
+    const found = await describeType(config, col.type);
+    checkTemplate(key, col, found);
+    return found;
+}
+
+export function toItem(config: PressConfig, key: string, c: PublicContent, description?: TypeDescription | null): Item {
     const col = collectionOf(config, key);
     if (!col) throw new Error(`no collection "${key}" is configured`);
-    const f = col.fields;
+    const f = fieldsWithRoles(col, description);
     const tags = value(c, f.tags);
     const option = optionOf(c, col);
     const style = styleOf(config, col, option);
@@ -354,15 +404,18 @@ async function listWith(
     col: CollectionConfig,
     opts: { page?: number; pageSize?: number; filter: Triple[] },
 ): Promise<CollectionPage> {
-    const res = await list(config, col.type, {
-        page: opts.page ?? 1,
-        pageSize: opts.pageSize ?? col.pageSize ?? config.pageSizes.index,
-        include: includesOf(config, col),
-        filter: opts.filter.length > 0 ? opts.filter : undefined,
-        sort: col.sort,
-    });
+    const [res, description] = await Promise.all([
+        list(config, col.type, {
+            page: opts.page ?? 1,
+            pageSize: opts.pageSize ?? col.pageSize ?? config.pageSizes.index,
+            include: includesOf(config, col),
+            filter: opts.filter.length > 0 ? opts.filter : undefined,
+            sort: col.sort,
+        }),
+        described(config, key, col),
+    ]);
     return {
-        items: res.items.map((c) => toItem(config, key, c)),
+        items: res.items.map((c) => toItem(config, key, c, description)),
         total: res.totalItems,
         pageSize: res.pageSize,
         hasNextPage: res.hasNextPage,
@@ -465,16 +518,16 @@ export async function listAllCollection(
 export async function getItem(config: PressConfig, key: string, slug: string): Promise<Item | null> {
     const col = collectionOf(config, key);
     if (!col) return null;
-    const c = await bySlug(config, col.type, slug);
-    return c ? toItem(config, key, c) : null;
+    const [c, description] = await Promise.all([bySlug(config, col.type, slug), described(config, key, col)]);
+    return c ? toItem(config, key, c, description) : null;
 }
 
 /** A draft, read uncached with a preview token, as `bySlugPreview` does for any type. */
 export async function getItemPreview(config: PressConfig, key: string, slug: string, token: string): Promise<Item | null> {
     const col = collectionOf(config, key);
     if (!col) return null;
-    const c = await bySlugPreview(config, col.type, slug, token);
-    return c ? toItem(config, key, c) : null;
+    const [c, description] = await Promise.all([bySlugPreview(config, col.type, slug, token), described(config, key, col)]);
+    return c ? toItem(config, key, c, description) : null;
 }
 
 /** Items of `key` whose reference field `via` points at the entry `id`. `pageSizes.archive` of them unless told. */
@@ -537,6 +590,6 @@ export function collectionAt(config: PressConfig, path: string): { key: string; 
 export async function searchCollection(config: PressConfig, key: string, query: string, limit = 8): Promise<Item[]> {
     const col = collectionOf(config, key);
     if (!col) return [];
-    const found = await search(config, col.type, query, limit);
-    return found.map((c) => toItem(config, key, c));
+    const [found, description] = await Promise.all([search(config, col.type, query, limit), described(config, key, col)]);
+    return found.map((c) => toItem(config, key, c, description));
 }

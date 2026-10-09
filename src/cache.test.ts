@@ -28,6 +28,7 @@ let cmsReads = 0;
 
 function cmsAnswer(url: URL): Response {
     cmsReads += 1;
+    if (cmsDown) return new Response("", { status: 503 });
     const byHost = url.pathname.match(/^\/api\/tenants\/by-host\/(.+)$/);
     if (byHost) return decodeURIComponent(byHost[1]) === HOST ? Response.json({ handle: "baryo" }) : new Response("", { status: 404 });
 
@@ -44,8 +45,18 @@ function cmsAnswer(url: URL): Response {
             headers: { "content-type": "application/json", "cache-control": "no-store" },
         });
     }
+    // A read barakoCMS 4.8 classes in its own header, with the flat CDN hint it always sent beside it.
+    if (url.pathname === "/api/public/live") {
+        return new Response(JSON.stringify({ items: [{ id: "l", data: { Title: entries.alpha } }], page: 1, pageSize: 20, totalItems: 1, totalPages: 1, hasNextPage: false }), {
+            headers: { "content-type": "application/json", "cache-control": liveCacheControl, "x-barako-cache-class": liveClass },
+        });
+    }
     return new Response("", { status: 404 });
 }
+
+let liveClass = "no-store";
+let liveCacheControl = "public, max-age=60";
+let cmsDown = false;
 
 type Container = Awaited<ReturnType<typeof startContainer>>;
 
@@ -59,7 +70,7 @@ async function startContainer(store?: PressStore) {
     const { list, bySlug } = await import("./delivery.js");
     const { createRevalidateRoute } = await import("./routes/revalidate.js");
 
-    const held = new Map<string, { body: string; tags: string[] }>();
+    const held = new Map<string, { body: string; tags: string[]; headers: [string, string][] }>();
     const requests: RequestInit[] = [];
 
     const fetchMock = async (input: string | URL | Request, init?: RequestInit & { next?: { tags?: string[] } }) => {
@@ -69,12 +80,13 @@ async function startContainer(store?: PressStore) {
         const key = url.toString();
         if (tags) {
             const stored = held.get(key);
-            if (stored) return new Response(stored.body, { headers: { "content-type": "application/json" } });
+            // Next hands back the stored response with the headers it was stored with.
+            if (stored) return new Response(stored.body, { headers: stored.headers });
         }
         const res = cmsAnswer(url);
         if (!res.ok) return res;
         const body = await res.text();
-        if (tags) held.set(key, { body, tags });
+        if (tags) held.set(key, { body, tags, headers: [...res.headers] });
         return new Response(body, { headers: res.headers });
     };
 
@@ -97,6 +109,10 @@ async function startContainer(store?: PressStore) {
         },
         async slots() {
             const res = await list({ ...config, tenant: "baryo" }, "slot");
+            return res.items[0].data.Title;
+        },
+        async live() {
+            const res = await list({ ...config, tenant: "baryo" }, "live");
             return res.items[0].data.Title;
         },
         async tenantFor(host: string) {
@@ -131,6 +147,9 @@ const published = (slug: string) => JSON.stringify({ contentId: slug, contentTyp
 beforeEach(() => {
     entries.alpha = "Alpha";
     entries.beta = "Beta";
+    liveClass = "no-store";
+    liveCacheControl = "public, max-age=60";
+    cmsDown = false;
     cmsReads = 0;
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.stubEnv("PRESS_SECRET", undefined);
@@ -212,6 +231,81 @@ describe("the cache class the API declares", () => {
             const uncached = app.requests.filter((init) => (init as { cache?: string }).cache === "no-store");
             expect(uncached).toHaveLength(2);
         });
+    });
+});
+
+describe("the cache class barakoCMS 4.8 names in X-Barako-Cache-Class", () => {
+    it("reads no-store from the header when Cache-Control carries only the CDN hint", async () => {
+        const app = await startContainer();
+        await on(app, async () => {
+            expect(await app.live()).toBe("Alpha");
+            entries.alpha = "Alpha, a minute later";
+            expect(await app.live()).toBe("Alpha, a minute later");
+            expect(await app.live()).toBe("Alpha, a minute later");
+            expect(cmsReads).toBe(3);
+            // The first answer was still written once, because Next stores a 200 before anyone can
+            // read its class (#85). Nothing reads it back.
+            expect([...app.held.keys()].filter((key) => key.includes("/api/public/live"))).toHaveLength(1);
+        });
+    });
+
+    it("caches a path again from the read after the API stops calling it no-store", async () => {
+        const app = await startContainer();
+        await on(app, async () => {
+            // Both headers say no-store, the way a preview read is answered.
+            liveCacheControl = "no-store";
+            await app.live();
+            await app.live();
+            liveClass = "short";
+            liveCacheControl = "public, max-age=60";
+            // The first answer is still in the data cache, with the no-store headers it came with.
+            expect([...app.held.keys()].filter((key) => key.includes("/api/public/live"))).toHaveLength(1);
+
+            // Asked uncached once more, since that is what the path was; that answer says short.
+            expect(await app.live()).toBe("Alpha");
+            // Cached from here: one read stores it, and an edit behind the cache is not seen.
+            expect(await app.live()).toBe("Alpha");
+            const reads = cmsReads;
+            entries.alpha = "Alpha, edited behind the cache";
+            expect(await app.live()).toBe("Alpha");
+            expect(cmsReads).toBe(reads);
+        });
+    });
+
+    it("drops the last good answer when a path becomes no-store, so an outage cannot serve it", async () => {
+        const app = await startContainer();
+        await on(app, async () => {
+            liveClass = "short";
+            expect(await app.live()).toBe("Alpha");
+
+            // The type is purged and comes back no-store: the answer kept from before is now one
+            // the API says belongs to nobody but its caller.
+            app.held.clear();
+            liveClass = "no-store";
+            entries.alpha = "Alpha, live";
+            expect(await app.live()).toBe("Alpha, live");
+
+            cmsDown = true;
+            vi.spyOn(console, "warn").mockImplementation(() => {});
+            await expect(app.live()).rejects.toThrow("503");
+        });
+    });
+
+    it("keeps a short, long or swr read on the configured backstop and its tags", async () => {
+        for (const cls of ["short", "long", "swr"]) {
+            const app = await startContainer();
+            liveClass = cls;
+            await on(app, async () => {
+                await app.live();
+                await app.live();
+                const asked = app.requests as { next?: { tags?: string[]; revalidate?: number | false } }[];
+                expect(asked).toHaveLength(2);
+                for (const init of asked) {
+                    expect(init.next?.revalidate).toBe(app.config.backstopSeconds);
+                    expect(init.next?.tags).toContain("cms:baryo:type:live");
+                }
+            });
+        }
     });
 });
 

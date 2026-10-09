@@ -9,6 +9,14 @@
           "cms",
           "cms:type:post"
         ]
+      },
+      {
+        "path": "/api/public/types/post/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:post"
+        ]
       }
     ]
   },
@@ -38,6 +46,14 @@
           "cms",
           "cms:type:post"
         ]
+      },
+      {
+        "path": "/api/public/types/post/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:post"
+        ]
       }
     ]
   },
@@ -60,6 +76,14 @@
       },
       {
         "path": "/api/public/post/semantic?q=First+post&limit=5",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:post"
+        ]
+      },
+      {
+        "path": "/api/public/types/post/description",
         "tenant": null,
         "tags": [
           "cms",
@@ -94,6 +118,14 @@
           "cms",
           "cms:type:post"
         ]
+      },
+      {
+        "path": "/api/public/types/post/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:post"
+        ]
       }
     ]
   },
@@ -106,6 +138,14 @@
         "tags": [
           "cms",
           "cms:entry:post:nope"
+        ]
+      },
+      {
+        "path": "/api/public/types/post/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:post"
         ]
       }
     ]
@@ -143,6 +183,14 @@
           "cms",
           "cms:entry:post:first-post"
         ]
+      },
+      {
+        "path": "/api/public/types/post/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:post"
+        ]
       }
     ]
   },
@@ -157,6 +205,14 @@
         "tags": [
           "cms",
           "cms:entry:post:nope"
+        ]
+      },
+      {
+        "path": "/api/public/types/post/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:post"
         ]
       }
     ]
@@ -176,6 +232,14 @@
     "calls": [
       {
         "path": "/api/public/post?page=1&pageSize=100&include=Author%2CCategory&sort=-PublishedAt",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:post"
+        ]
+      },
+      {
+        "path": "/api/public/types/post/description",
         "tenant": null,
         "tags": [
           "cms",
@@ -207,6 +271,14 @@
           "cms",
           "cms:type:post"
         ]
+      },
+      {
+        "path": "/api/public/types/post/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:post"
+        ]
       }
     ]
   },
@@ -233,6 +305,14 @@
     "calls": [
       {
         "path": "/api/public/post?page=1&pageSize=1000&include=Author%2CCategory&sort=-PublishedAt",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:post"
+        ]
+      },
+      {
+        "path": "/api/public/types/post/description",
         "tenant": null,
         "tags": [
           "cms",
@@ -318,6 +398,14 @@
           "cms",
           "cms:type:post"
         ]
+      },
+      {
+        "path": "/api/public/types/post/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:post"
+        ]
       }
     ]
   },
@@ -361,6 +449,14 @@
           "cms",
           "cms:entry:post:first-post"
         ]
+      },
+      {
+        "path": "/api/public/types/post/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:post"
+        ]
       }
     ]
   },
@@ -397,6 +493,14 @@
           "cms",
           "cms:type:post"
         ]
+      },
+      {
+        "path": "/api/public/types/post/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:post"
+        ]
       }
     ]
   },
@@ -427,6 +531,14 @@
           "cms",
           "cms:type:post"
         ]
+      },
+      {
+        "path": "/api/public/types/post/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:post"
+        ]
       }
     ]
   },
@@ -449,6 +561,14 @@
           "cms",
           "cms:type:author"
         ]
+      },
+      {
+        "path": "/api/public/types/author/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:author"
+        ]
       }
     ]
   },
@@ -462,6 +582,14 @@
     "calls": [
       {
         "path": "/api/public/category?page=1&pageSize=3",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:category"
+        ]
+      },
+      {
+        "path": "/api/public/types/category/description",
         "tenant": null,
         "tags": [
           "cms",
@@ -488,6 +616,22 @@
           "cms",
           "cms:type:post"
         ]
+      },
+      {
+        "path": "/api/public/types/author/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:author"
+        ]
+      },
+      {
+        "path": "/api/public/types/post/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:post"
+        ]
       }
     ]
   },
@@ -500,6 +644,14 @@
         "tags": [
           "cms",
           "cms:entry:author:nobody"
+        ]
+      },
+      {
+        "path": "/api/public/types/author/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:author"
         ]
       }
     ]
@@ -516,6 +668,14 @@
     "calls": [
       {
         "path": "/api/public/author?page=1&pageSize=100",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:author"
+        ]
+      },
+      {
+        "path": "/api/public/types/author/description",
         "tenant": null,
         "tags": [
           "cms",
@@ -574,6 +734,14 @@
           "cms",
           "cms:type:post"
         ]
+      },
+      {
+        "path": "/api/public/types/post/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:post"
+        ]
       }
     ]
   },
@@ -592,6 +760,14 @@
         "tags": [
           "cms",
           "cms:entry:author:ada"
+        ]
+      },
+      {
+        "path": "/api/public/types/author/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:author"
         ]
       }
     ]
@@ -619,6 +795,14 @@
           "cms",
           "cms:type:author"
         ]
+      },
+      {
+        "path": "/api/public/types/author/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:author"
+        ]
       }
     ]
   },
@@ -640,6 +824,22 @@
           "cms",
           "cms:type:post"
         ]
+      },
+      {
+        "path": "/api/public/types/category/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:category"
+        ]
+      },
+      {
+        "path": "/api/public/types/post/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:post"
+        ]
       }
     ]
   },
@@ -653,6 +853,14 @@
           "cms",
           "cms:entry:category:nobody"
         ]
+      },
+      {
+        "path": "/api/public/types/category/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:category"
+        ]
       }
     ]
   },
@@ -665,6 +873,14 @@
     "calls": [
       {
         "path": "/api/public/category?page=1&pageSize=100",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:category"
+        ]
+      },
+      {
+        "path": "/api/public/types/category/description",
         "tenant": null,
         "tags": [
           "cms",
@@ -745,6 +961,14 @@
           "cms",
           "cms:type:post"
         ]
+      },
+      {
+        "path": "/api/public/types/post/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:post"
+        ]
       }
     ]
   },
@@ -763,6 +987,14 @@
           "cms",
           "cms:entry:category:notes"
         ]
+      },
+      {
+        "path": "/api/public/types/category/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:category"
+        ]
       }
     ]
   },
@@ -778,6 +1010,14 @@
     "calls": [
       {
         "path": "/api/public/category?page=1&pageSize=5",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:category"
+        ]
+      },
+      {
+        "path": "/api/public/types/category/description",
         "tenant": null,
         "tags": [
           "cms",
@@ -800,6 +1040,14 @@
           "cms",
           "cms:type:post"
         ]
+      },
+      {
+        "path": "/api/public/types/post/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:post"
+        ]
       }
     ]
   },
@@ -808,6 +1056,14 @@
     "calls": [
       {
         "path": "/api/public/article?page=1&pageSize=20&sort=-RunDate",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:article"
+        ]
+      },
+      {
+        "path": "/api/public/types/article/description",
         "tenant": null,
         "tags": [
           "cms",
@@ -850,6 +1106,14 @@
           "cms",
           "cms:type:article"
         ]
+      },
+      {
+        "path": "/api/public/types/article/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:article"
+        ]
       }
     ]
   },
@@ -880,6 +1144,14 @@
       },
       {
         "path": "/api/public/article/semantic?q=An+article%2C+not+a+post&limit=5",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:article"
+        ]
+      },
+      {
+        "path": "/api/public/types/article/description",
         "tenant": null,
         "tags": [
           "cms",
@@ -922,6 +1194,14 @@
           "cms",
           "cms:type:article"
         ]
+      },
+      {
+        "path": "/api/public/types/article/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:article"
+        ]
       }
     ]
   },
@@ -934,6 +1214,14 @@
         "tags": [
           "cms",
           "cms:entry:article:nope"
+        ]
+      },
+      {
+        "path": "/api/public/types/article/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:article"
         ]
       }
     ]
@@ -962,6 +1250,14 @@
           "cms",
           "cms:entry:article:ci-article"
         ]
+      },
+      {
+        "path": "/api/public/types/article/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:article"
+        ]
       }
     ]
   },
@@ -977,6 +1273,14 @@
           "cms",
           "cms:entry:article:nope"
         ]
+      },
+      {
+        "path": "/api/public/types/article/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:article"
+        ]
       }
     ]
   },
@@ -989,6 +1293,14 @@
     "calls": [
       {
         "path": "/api/public/article?page=1&pageSize=100&sort=-RunDate",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:article"
+        ]
+      },
+      {
+        "path": "/api/public/types/article/description",
         "tenant": null,
         "tags": [
           "cms",
@@ -1020,6 +1332,14 @@
           "cms",
           "cms:type:article"
         ]
+      },
+      {
+        "path": "/api/public/types/article/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:article"
+        ]
       }
     ]
   },
@@ -1040,6 +1360,14 @@
     "calls": [
       {
         "path": "/api/public/article?page=1&pageSize=1000&sort=-RunDate",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:article"
+        ]
+      },
+      {
+        "path": "/api/public/types/article/description",
         "tenant": null,
         "tags": [
           "cms",
@@ -1073,6 +1401,14 @@
           "cms",
           "cms:type:article"
         ]
+      },
+      {
+        "path": "/api/public/types/article/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:article"
+        ]
       }
     ]
   },
@@ -1094,6 +1430,14 @@
         "tags": [
           "cms",
           "cms:entry:article:ci-article"
+        ]
+      },
+      {
+        "path": "/api/public/types/article/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:article"
         ]
       }
     ]
@@ -1143,6 +1487,14 @@
           "cms",
           "cms:type:article"
         ]
+      },
+      {
+        "path": "/api/public/types/article/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:article"
+        ]
       }
     ]
   },
@@ -1158,6 +1510,14 @@
     "calls": [
       {
         "path": "/api/public/article?page=1&pageSize=3&sort=-RunDate",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:article"
+        ]
+      },
+      {
+        "path": "/api/public/types/article/description",
         "tenant": null,
         "tags": [
           "cms",
@@ -1234,6 +1594,14 @@
           "cms",
           "cms:type:article"
         ]
+      },
+      {
+        "path": "/api/public/types/article/description",
+        "tenant": null,
+        "tags": [
+          "cms",
+          "cms:type:article"
+        ]
       }
     ]
   },
@@ -1254,6 +1622,14 @@
         "tags": [
           "cms:baryo",
           "cms:baryo:type:site"
+        ]
+      },
+      {
+        "path": "/api/public/types/post/description",
+        "tenant": "baryo",
+        "tags": [
+          "cms:baryo",
+          "cms:baryo:type:post"
         ]
       },
       {
@@ -1281,6 +1657,14 @@
         "tags": [
           "cms:baryo",
           "cms:baryo:type:site"
+        ]
+      },
+      {
+        "path": "/api/public/types/post/description",
+        "tenant": "baryo",
+        "tags": [
+          "cms:baryo",
+          "cms:baryo:type:post"
         ]
       },
       {
@@ -1320,6 +1704,14 @@
         "tags": [
           "cms:baryo",
           "cms:baryo:type:site"
+        ]
+      },
+      {
+        "path": "/api/public/types/post/description",
+        "tenant": "baryo",
+        "tags": [
+          "cms:baryo",
+          "cms:baryo:type:post"
         ]
       },
       {

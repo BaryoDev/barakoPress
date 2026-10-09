@@ -355,6 +355,13 @@ export interface CollectionConfig {
     /** The index is served at the route and an item at `${route}/${slug}`. Absent, items are listed and never linked. */
     route?: string;
     fields: CollectionFields;
+    /**
+     * The roles whose names in `fields` are the engine's defaults rather than the site's own, so the
+     * field a type gives that role (barakoCMS 4.7) is read ahead of them. `defineConfig` sets it on
+     * the blog collections it derives; a collection a site writes out names its own fields, and a
+     * role there fills in only a field it left unset.
+     */
+    defaultedFields?: readonly ("title" | "summary" | "date" | "image")[];
     /** Reference fields on the type, by field name, in the order a card shows them. */
     references?: Record<string, CollectionReference>;
     /** Sent to the API, so ordering covers every row. For example "-PublishedAt". */
@@ -801,6 +808,11 @@ export interface PressConfig {
     store?: PressStore;
     /** What `createHome` serves at the root. A request-time site reads `HomePath` and `HomeCollection`. */
     home?: Home;
+    /**
+     * False leaves out the schema.org JSON-LD block barakoCMS 4.8 sends with an entry, for a theme
+     * that writes its own. Unset, an item page draws the block whenever the API sent one.
+     */
+    structuredData?: boolean;
 }
 
 export type PressConfigInput = {
@@ -866,7 +878,12 @@ function trimSlash(path: string): string {
  * the names the archive always fell back through, and a reference is resolved only when its type exists,
  * because `include` names a field the API answers 400 for otherwise.
  */
-function blogCollections(types: TypeNames, fields: FieldMap, routes: RouteMap): Record<string, CollectionConfig> {
+function blogCollections(
+    types: TypeNames,
+    fields: FieldMap,
+    routes: RouteMap,
+    given: Partial<FieldMap> = {},
+): Record<string, CollectionConfig> {
     const names = (...list: (string | undefined)[]) => list.filter((n): n is string => Boolean(n));
     const references: Record<string, CollectionReference> = {};
     if (types.author && fields.author) references[fields.author] = { collection: AUTHOR_COLLECTION, label: "by" };
@@ -889,6 +906,16 @@ function blogCollections(types: TypeNames, fields: FieldMap, routes: RouteMap): 
                 featured: fields.featured,
                 tags: fields.tags,
             },
+            defaultedFields: (
+                [
+                    ["title", given.title],
+                    ["summary", given.excerpt],
+                    ["date", given.publishedAt],
+                    ["image", given.coverImage],
+                ] as const
+            )
+                .filter(([, named]) => named === undefined)
+                .map(([role]) => role),
             references,
             sort: fields.publishedAt ? `-${fields.publishedAt}` : undefined,
             feed: true,
@@ -906,6 +933,8 @@ function blogCollections(types: TypeNames, fields: FieldMap, routes: RouteMap): 
             photo: "Photo",
             ...(url ? { url } : {}),
         },
+        // The name a term is read by is the engine's guess, never the site's.
+        defaultedFields: ["title"],
         sitemap: false,
         // Never listed at /authors or /categories unless a site mounts that route file itself, since no
         // blog site ever had those pages and a public list of either is a decision, not a default.
@@ -996,7 +1025,7 @@ export function defineConfig(
         author: routes.author ? trimSlash(routes.author) : undefined,
         category: routes.category ? trimSlash(routes.category) : undefined,
     };
-    const collections = { ...blogCollections(types, fields, routeMap), ...ownCollections(input.collections) };
+    const collections = { ...blogCollections(types, fields, routeMap, input.fields), ...ownCollections(input.collections) };
 
     return {
         types,
@@ -1022,6 +1051,7 @@ export function defineConfig(
         labels: { ...DEFAULT_LABELS, ...input.labels },
         ...(input.store ? { store: input.store } : {}),
         ...(input.home ? { home: input.home } : {}),
+        ...(input.structuredData === false ? { structuredData: false } : {}),
         reservedSlugs: reservedSlugs(
             [routes.post, routes.author, routes.category, ...Object.values(collections).map((c) => c.route)],
             input.reservedSlugs,

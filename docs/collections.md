@@ -64,6 +64,28 @@ Public, one deleted, one in another tenant) is left out of `data`: a single refe
 and a list keeps only the entries that are served. The item then has no such reference, a card and
 an item page draw no link for it, and a placeholder bound to it takes its fallback.
 
+From barakoCMS 4.7 the engine reads each collection's type description,
+`GET /api/public/types/{type}/description`, once per type alongside the read it serves, cached and
+tagged with the type like every other read. A name the site wrote in `fields` always wins. The field
+holding the `title`, `summary`, `date` or `image` role fills in a field the collection left unset,
+and on the blog collections `defineConfig` derives, it is read ahead of a name the site left to the
+blueprint's default, so an entry that leaves the role field empty still falls back to it. The `routeTemplate` it names is checked against `route`: links, the
+sitemap and the feed stay on the route this site serves, since a link to a path the site does not
+answer is a 404, and a template that names another path is said once in the log. An API without the
+route answers 404, which is remembered for the backstop's length, and the collection reads by its
+field map exactly as before. Any other failure reads by the field map too. A role moved in the console
+shows once the backstop passes or an entry of the type is published, since a change to a type sends
+no delivery of its own.
+
+From barakoCMS 4.8 a read by slug of a type that declares a `structuredDataType` carries
+`structuredData`, the entry as schema.org JSON-LD. An item page draws it as
+`<script type="application/ld+json">`, with every `<` written as `\u003c` and U+2028 and U+2029
+escaped, so a value holding `</script>` cannot end the element. It goes at the top of the page rather
+than in the head, since Next's metadata has no field for it. A value that is not an object, or is over
+64 KiB, is not drawn. An entry share link draws it too, and reads the entry through the type's roles
+like the live page. `structuredData: false` in `defineConfig` leaves it out, for a theme that writes
+its own; `StructuredData` is exported for a route file that draws the page itself.
+
 A settings entry that does not read as a collection is left out whole: a type or field that is not a
 plain identifier, a route that is not a plain site path, or no title field. `post`, `author` and
 `category` are replaceable by key like any other collection, since every read goes through the

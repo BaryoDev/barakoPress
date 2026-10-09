@@ -14,6 +14,48 @@
   4.6, so its entries have no page, no sitemap line and no feed item. Both are covered by
   `src/delivered-references.test.tsx`; neither needed a change to the renderer.
 
+- Collections read field roles from barakoCMS 4.7's `GET /api/public/types/{type}/description`
+  (#1108, barakoPress #192). It is read once per type beside the read it serves, cached and tagged
+  with the type. A field name the site configured always wins, so an existing site that names its
+  fields reads exactly the fields it did. The field holding the `title`, `summary`, `date` or
+  `image` role fills in a field the collection left unset, and on the blog collections
+  `defineConfig` derives it is read ahead of a name left to the blueprint's default
+  (`CollectionConfig.defaultedFields`), with that default still read when the role field is empty.
+  The item page, cards, the feed and the sitemap all read through this. The
+  `routeTemplate` is held against the collection's `route`: links, the sitemap and the feed stay on
+  the route this site serves, and a template naming another path is said once in the log, since
+  linking there would be a 404 on this site. An API without the route (404) reads by the field map
+  as before, and is asked again only after the backstop. New exports: `describeType`,
+  `TypeDescription`, `FieldRole`; `toItem` takes the description as an optional fourth argument.
+
+- An item page draws the `structuredData` barakoCMS 4.8 sends with a read by slug (#567) as
+  `<script type="application/ld+json">`, at the top of the page since Next's metadata has no field
+  for it. `<` is written as `\u003c` and U+2028 and U+2029 are escaped, so a value holding
+  `</script>` stays inside the element and parses back unchanged. Only an object of at most 64 KiB is
+  drawn. An entry share link draws it too, and reads the entry through the type's roles, so a shared
+  draft looks as its published page will. `structuredData: false` in `defineConfig` turns it off; `StructuredData` and
+  `structuredDataJson` are exported. An API that sends no block draws nothing, as before.
+
+- Delivery reads honour `X-Barako-Cache-Class` from barakoCMS 4.8 (#973). `no-store` there is
+  never served from a cache, as `Cache-Control: no-store` already was; `short`, `long` and `swr`
+  keep the configured backstop and tags; a path remembered as `no-store` is cached again from the
+  read after the API calls it anything else, instead of an hour later. Marking a path moves an epoch
+  in the URL its cached reads ask (`_class`), so the stored first answer, with its `no-store`
+  headers, is never served back to re-mark it, after the API changes the class or after the hour
+  runs out. An API without the header is
+  read as before. The first `no-store` answer is still written once, since Next stores a 200 before
+  its class can be read; #85 stays open for that, with the reason in `src/delivery.ts`.
+
+- The lockfile moves `sharp` to 0.35.5 (GHSA-wq5f-xc86-pv6w, through `next`) and `source-map-js` to
+  1.2.2 (GHSA-68fv-2mgg-jv7q, through `postcss`), both inside the ranges their parents ask for, so
+  no override. sharp stays Apache-2.0 with its LGPL libvips, and 0.35.5 ships the linux x64 and
+  arm64 binaries for glibc and musl.
+
+- The CI dependency audit runs `scripts/audit.sh`: a pinned npm 11.19.1, which asks the bulk
+  advisory endpoint instead of the quick one npm is retiring. It exits 1 on a high or critical
+  advisory and 2 when the registry could not be asked, so an outage no longer reads as a finding,
+  and `--self-test` proves both against a seeded `source-map-js` 1.2.1 and a dead registry (#70).
+
 ## 0.11.0 (2026-10-04)
 
 - `/_share` opens links to one entry or one page as well as links to the site (barakoCMS #1089).

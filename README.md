@@ -219,6 +219,7 @@ for a post type with no such field.
 | `labels` | English | `Labels` | The words the screens print for a visitor. See [Sites](https://github.com/BaryoDev/barakoPress/blob/master/docs/sites.md) |
 | `store` | in process | operator only | Where the state a fleet has to agree on is kept: kept answers, the host map, the replay guard, the generation of each cache tag. Needed only when more than one container serves the site. See [Running more than one container](https://github.com/BaryoDev/barakoPress/blob/master/docs/caching.md#running-more-than-one-container) |
 | `home` | the post index | `HomePath`, `HomeCollection` | What `createHome` serves at `/`. See [Sites](https://github.com/BaryoDev/barakoPress/blob/master/docs/sites.md) |
+| `structuredData` | on | operator only | `false` leaves out the JSON-LD block barakoCMS 4.8 sends with an entry. See [Collections](https://github.com/BaryoDev/barakoPress/blob/master/docs/collections.md) |
 | `theme` | the barakoCMS palette | `Colors`, `Fonts`, `Radii`, `Layout`, `Space`, `Text`, `Tokens`, `Tones`, `StyleRecipes` | Colours, faces, radii, column widths, a site's own named values and tones, and the looks its blocks can name. See [The look](https://github.com/BaryoDev/barakoPress/blob/master/docs/look.md) |
 
 The third column is the whole of the split. A key marked operator only is one the image decides for

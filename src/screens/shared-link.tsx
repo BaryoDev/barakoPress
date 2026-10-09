@@ -3,12 +3,13 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import type { PressConfig } from "../config.js";
 import { readEnv } from "../env.js";
-import { openShareLink } from "../delivery.js";
+import { describeType, openShareLink } from "../delivery.js";
 import { toPage } from "../cms.js";
 import { collectionOf, toItem } from "../collections.js";
 import { LINK_COOKIE, openLinkCookie, routeFromParams, samePath, shareSecret, siteFromRoute } from "../site.js";
 import { createBlockRegistry, registryFor } from "../blocks/registry.js";
 import type { BlockRegistry } from "../blocks/schema.js";
+import { StructuredData } from "../structured-data.js";
 import { ItemView } from "./collection.js";
 import { PageView } from "./page.js";
 
@@ -82,7 +83,14 @@ export function createSharedLinkPage(base: PressConfig, registry?: BlockRegistry
         if (opened.kind === "entry") {
             const key = collectionFor(config, opened.entry.contentType);
             if (!key) notFound();
-            return ItemView({ config, item: toItem(config, key, opened.entry), preview: true });
+            // Read as the live page reads it, so a shared draft shows the fields the published page will.
+            const description = await describeType(config, collectionOf(config, key)!.type);
+            return (
+                <>
+                    <StructuredData config={config} content={opened.entry} />
+                    {ItemView({ config, item: toItem(config, key, opened.entry, description), preview: true })}
+                </>
+            );
         }
         if (opened.kind === "page" && samePath(opened.path, path)) {
             blocks ??= createBlockRegistry(base);

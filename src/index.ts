@@ -147,6 +147,7 @@ export {
     classifyDeliveryContract,
     isLinkPath,
     openShareLink,
+    describeType,
 } from "./delivery.js";
 export type {
     PublicContent,
@@ -160,6 +161,8 @@ export type {
     ShareRedeemCaller,
     DeliveryContract,
     ShareOpenAnswer,
+    TypeDescription,
+    FieldRole,
 } from "./delivery.js";
 export { createSharedLinkPage, sharedLinkMetadata } from "./screens/shared-link.js";
 
@@ -200,6 +203,7 @@ export type { RenderMarkdownOptions, MarkdownHeading } from "./markdown.js";
 
 export { Asset, renderProse, suppliedAssetFor, suppliedAssetOn, clearSpaceOf } from "./assets.js";
 export type { AssetProps, SuppliedProps } from "./assets.js";
+export { StructuredData, structuredDataJson } from "./structured-data.js";
 
 export { createBlogIndex, Card } from "./screens/blog-index.js";
 export {
