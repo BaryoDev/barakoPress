@@ -259,28 +259,28 @@ function seoTitle(c: PublicContent): string {
 }
 
 /*
- * The field a type gives a role, ahead of the names the field map holds (barakoPress #192).
+ * The field a type gives a role (barakoPress #192).
  *
- * barakoCMS 4.7 says which Public field holds the title, summary, date and image. That field is read
- * first, and the configured names after it, the way barakoCMS reads its own feed: a role field left
- * empty on one entry still falls back. With no description, from an older API or a failed read, the
+ * barakoCMS 4.7 says which Public field holds the title, summary, date and image. What a site named
+ * itself wins: a role only fills in a field the collection left unset, or one whose names are the
+ * engine's defaults (`defaultedFields`), where it is read ahead of them so an entry that leaves the
+ * role field empty still falls back. With no description, from an older API or a failed read, the
  * field map is all there is, as before.
  */
-function withRole(n: FieldNames | undefined, role: string | undefined): FieldNames | undefined {
-    if (!role) return n;
-    return [role, ...names(n).filter((name) => name !== role)];
-}
+const ROLE_FIELDS = ["title", "summary", "date", "image"] as const;
 
-function fieldsWithRoles(fields: CollectionConfig["fields"], described: TypeDescription | null | undefined): CollectionConfig["fields"] {
+function fieldsWithRoles(col: CollectionConfig, described: TypeDescription | null | undefined): CollectionConfig["fields"] {
     const roles = described?.roles;
-    if (!roles) return fields;
-    return {
-        ...fields,
-        title: withRole(fields.title, roles.title) ?? fields.title,
-        summary: withRole(fields.summary, roles.summary),
-        date: withRole(fields.date, roles.date),
-        image: withRole(fields.image, roles.image),
-    };
+    if (!roles) return col.fields;
+    const fields = { ...col.fields };
+    for (const role of ROLE_FIELDS) {
+        const field = roles[role];
+        if (!field) continue;
+        const held = names(fields[role]);
+        if (held.length === 0) fields[role] = field;
+        else if (col.defaultedFields?.includes(role)) fields[role] = [field, ...held.filter((name) => name !== field)];
+    }
+    return fields;
 }
 
 /*
@@ -311,7 +311,7 @@ async function described(config: PressConfig, key: string, col: CollectionConfig
 export function toItem(config: PressConfig, key: string, c: PublicContent, description?: TypeDescription | null): Item {
     const col = collectionOf(config, key);
     if (!col) throw new Error(`no collection "${key}" is configured`);
-    const f = fieldsWithRoles(col.fields, description);
+    const f = fieldsWithRoles(col, description);
     const tags = value(c, f.tags);
     const option = optionOf(c, col);
     const style = styleOf(config, col, option);

@@ -16,9 +16,12 @@
 
 - Collections read field roles from barakoCMS 4.7's `GET /api/public/types/{type}/description`
   (#1108, barakoPress #192). It is read once per type beside the read it serves, cached and tagged
-  with the type. The fields holding the `title`, `summary`, `date` and `image` roles are read before
-  the names in the collection's `fields`, so the item page, cards, the feed and the sitemap take
-  them, and an entry that leaves a role field empty falls back to the configured names. The
+  with the type. A field name the site configured always wins, so an existing site that names its
+  fields reads exactly the fields it did. The field holding the `title`, `summary`, `date` or
+  `image` role fills in a field the collection left unset, and on the blog collections
+  `defineConfig` derives it is read ahead of a name left to the blueprint's default
+  (`CollectionConfig.defaultedFields`), with that default still read when the role field is empty.
+  The item page, cards, the feed and the sitemap all read through this. The
   `routeTemplate` is held against the collection's `route`: links, the sitemap and the feed stay on
   the route this site serves, and a template naming another path is said once in the log, since
   linking there would be a 404 on this site. An API without the route (404) reads by the field map

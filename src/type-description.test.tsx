@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * Field roles and the route template, from `GET /api/public/types/{type}/description` (barakoCMS
  * 4.7, #1108; barakoPress #192).
  *
- * The collection's field map names fields this type does not have, the way a site configured for the
- * blueprint and pointed at a school's events would. Only the description says where the title is.
+ * The events collection names its title and nothing else, so the description is what says where the
+ * summary, the date and the image are. A role never replaces a name the site wrote itself.
  */
 vi.mock("next/navigation", () => ({
     notFound: () => {
@@ -35,7 +35,7 @@ const config = defineConfig({
             type: "event",
             route: "/whats-on",
             feed: true,
-            fields: { title: "Title", summary: "Summary", date: "Date", image: "Image" },
+            fields: { title: "Title" },
         },
     },
 });
@@ -45,13 +45,13 @@ const ENTRIES = [
         id: "e1",
         slug: "sports-day",
         data: {
-            EventName: "Sports day",
+            Title: "Sports day",
+            EventName: "Sports day, the role field",
             Teaser: "Races on the field",
             StartsOn: "2026-11-02T08:00:00Z",
             Poster: "https://cdn.example/sports.jpg",
         },
     },
-    // The role field is empty here, so the configured name is read after it.
     { id: "e2", slug: "open-day", data: { EventName: "", Title: "Open day", Teaser: "Come and see" } },
 ];
 
@@ -102,7 +102,7 @@ afterEach(() => {
 });
 
 describe("field roles from the type description", () => {
-    it("reads the title, summary, date and image from the fields holding the roles", async () => {
+    it("fills the summary, date and image the collection left unset from the fields holding the roles", async () => {
         const item = await getItem(config, "events", "sports-day");
         expect(item).toMatchObject({
             title: "Sports day",
@@ -112,16 +112,43 @@ describe("field roles from the type description", () => {
         });
     });
 
-    it("falls back to the configured names when an entry leaves the role field empty", async () => {
+    it("keeps the title the site named over the field holding the title role", async () => {
         const { items } = await listCollection(config, "events");
         expect(items.map((i) => i.title)).toEqual(["Sports day", "Open day"]);
         expect(items[1].summary).toBe("Come and see");
+    });
+
+    it("keeps a blog site's own field name over the role, and reads the role ahead of a default", async () => {
+        const blog = (fields?: { title: string }) =>
+            defineConfig({ site: { name: "News", url: "https://news.example" }, cmsUrl: CMS, types: { post: "event" }, ...(fields ? { fields } : {}) });
+        description = { ...DESCRIPTION, fields: [{ name: "Title", type: "string", role: "title" }] };
+        const entry = { id: "n", slug: "sports-day", data: { Headline: "The headline", Title: "The title" } };
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async (input: string | URL | Request) => {
+                const url = new URL(String(input));
+                if (url.pathname === "/api/public/types/event/description") return Response.json(description);
+                return url.pathname === "/api/public/event/sports-day" ? Response.json(entry) : new Response("", { status: 404 });
+            }),
+        );
+
+        // The site said Headline, so Headline it is, whatever the type's role says.
+        expect((await getItem(blog({ title: "Headline" }), "post", "sports-day"))?.title).toBe("The headline");
+
+        // Left to the blueprint's Title, the role field is read ahead of it.
+        description = { ...DESCRIPTION, fields: [{ name: "Headline", type: "string", role: "title" }] };
+        forgetCachedReads();
+        expect((await getItem(blog(), "post", "sports-day"))?.title).toBe("The headline");
+        entry.data.Headline = "";
+        forgetCachedReads();
+        expect((await getItem(blog(), "post", "sports-day"))?.title).toBe("The title");
     });
 
     it("draws the role fields on the item page and in the feed", async () => {
         const page = createCollectionDetail(config, "events");
         const html = renderToStaticMarkup(await page({ params: Promise.resolve({ slug: "sports-day" }) }));
         expect(html).toContain("<h1>Sports day</h1>");
+        expect(html).not.toContain("the role field");
         expect(html).toContain("Races on the field");
 
         const feed = await (await createFeed(config, "events")()).text();
@@ -156,12 +183,13 @@ describe("an API without the description route", () => {
     it("reads by the field map exactly as before, and asks for the description once", async () => {
         description = 404;
         const item = await getItem(config, "events", "sports-day");
-        expect(item?.title).toBe("Untitled");
+        expect(item?.title).toBe("Sports day");
         expect(item?.summary).toBeUndefined();
         expect(item?.date).toBeUndefined();
+        expect(item?.image).toBeUndefined();
 
         const { items } = await listCollection(config, "events");
-        expect(items.map((i) => i.title)).toEqual(["Untitled", "Open day"]);
+        expect(items.map((i) => i.title)).toEqual(["Sports day", "Open day"]);
         await getItem(config, "events", "open-day");
         expect(descriptionReads()).toHaveLength(1);
     });

@@ -66,9 +66,10 @@ an item page draw no link for it, and a placeholder bound to it takes its fallba
 
 From barakoCMS 4.7 the engine reads each collection's type description,
 `GET /api/public/types/{type}/description`, once per type alongside the read it serves, cached and
-tagged with the type like every other read. The fields holding the `title`, `summary`, `date` and
-`image` roles are read first, and the names in `fields` after them, so an entry that leaves a role
-field empty still falls back. The `routeTemplate` it names is checked against `route`: links, the
+tagged with the type like every other read. A name the site wrote in `fields` always wins. The field
+holding the `title`, `summary`, `date` or `image` role fills in a field the collection left unset,
+and on the blog collections `defineConfig` derives, it is read ahead of a name the site left to the
+blueprint's default, so an entry that leaves the role field empty still falls back to it. The `routeTemplate` it names is checked against `route`: links, the
 sitemap and the feed stay on the route this site serves, since a link to a path the site does not
 answer is a 404, and a template that names another path is said once in the log. An API without the
 route answers 404, which is remembered for the backstop's length, and the collection reads by its
