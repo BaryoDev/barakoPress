@@ -108,6 +108,16 @@ describe("structured data on an item page", () => {
 });
 
 describe("structuredDataJson", () => {
+    it("bounds the text as written, after each < has become six characters", () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        // Twenty thousand characters of JSON, a hundred and twenty thousand once escaped.
+        const angles = { "@type": "WebPage", name: "<".repeat(20_000) };
+        expect(JSON.stringify(angles).length).toBeLessThan(64 * 1024);
+        expect(structuredDataJson(angles)).toBeNull();
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(structuredDataJson({ "@type": "WebPage", name: "<".repeat(100) })).toContain("\\u003c");
+    });
+
     it("leaves out a block over the bound and says so once", () => {
         const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
         const big = { "@type": "WebPage", name: "x".repeat(70 * 1024) };

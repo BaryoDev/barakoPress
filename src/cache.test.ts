@@ -28,6 +28,7 @@ let cmsReads = 0;
 
 function cmsAnswer(url: URL): Response {
     cmsReads += 1;
+    if (cmsDown) return new Response("", { status: 503 });
     const byHost = url.pathname.match(/^\/api\/tenants\/by-host\/(.+)$/);
     if (byHost) return decodeURIComponent(byHost[1]) === HOST ? Response.json({ handle: "baryo" }) : new Response("", { status: 404 });
 
@@ -55,6 +56,7 @@ function cmsAnswer(url: URL): Response {
 
 let liveClass = "no-store";
 let liveCacheControl = "public, max-age=60";
+let cmsDown = false;
 
 type Container = Awaited<ReturnType<typeof startContainer>>;
 
@@ -147,6 +149,7 @@ beforeEach(() => {
     entries.beta = "Beta";
     liveClass = "no-store";
     liveCacheControl = "public, max-age=60";
+    cmsDown = false;
     cmsReads = 0;
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.stubEnv("PRESS_SECRET", undefined);
@@ -266,6 +269,25 @@ describe("the cache class barakoCMS 4.8 names in X-Barako-Cache-Class", () => {
             entries.alpha = "Alpha, edited behind the cache";
             expect(await app.live()).toBe("Alpha");
             expect(cmsReads).toBe(reads);
+        });
+    });
+
+    it("drops the last good answer when a path becomes no-store, so an outage cannot serve it", async () => {
+        const app = await startContainer();
+        await on(app, async () => {
+            liveClass = "short";
+            expect(await app.live()).toBe("Alpha");
+
+            // The type is purged and comes back no-store: the answer kept from before is now one
+            // the API says belongs to nobody but its caller.
+            app.held.clear();
+            liveClass = "no-store";
+            entries.alpha = "Alpha, live";
+            expect(await app.live()).toBe("Alpha, live");
+
+            cmsDown = true;
+            vi.spyOn(console, "warn").mockImplementation(() => {});
+            await expect(app.live()).rejects.toThrow("503");
         });
     });
 

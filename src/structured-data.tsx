@@ -28,8 +28,10 @@ export function structuredDataJson(value: unknown): string | null {
         return null;
     }
     if (json === "{}") return null;
-    if (json.length > MAX_STRUCTURED_DATA_CHARS) {
-        const message = `structured data: a block of ${json.length} characters is over the ${MAX_STRUCTURED_DATA_CHARS} drawn, left out`;
+    // Bounded as written into the page, after escaping, since each `<` becomes six characters.
+    const text = json.replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+    if (text.length > MAX_STRUCTURED_DATA_CHARS) {
+        const message = `structured data: a block of ${text.length} characters is over the ${MAX_STRUCTURED_DATA_CHARS} drawn, left out`;
         if (!said.has(message)) {
             if (said.size >= 200) said.clear();
             said.add(message);
@@ -37,7 +39,7 @@ export function structuredDataJson(value: unknown): string | null {
         }
         return null;
     }
-    return json.replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+    return text;
 }
 
 /**

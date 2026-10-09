@@ -485,8 +485,12 @@ async function read<T>(config: PressConfig, path: string, opts: ReadOptions): Pr
         const value = JSON.parse(text) as T;
         if (declaredNoStore(res)) {
             // Nothing is kept either: an answer the API refuses to have stored is not one to hand
-            // somebody during an outage.
+            // somebody during an outage. That includes one kept before the path became no-store.
             await store.set(classKey(opts.readKey), "no-store", CLASS_TTL_SECONDS);
+            if (opts.staleKey) {
+                await store.delete(staleStoreKey(opts.staleKey));
+                await store.delete(failedKey(opts.staleKey));
+            }
             if (!uncached) {
                 const last = Number(await store.get(epochKey(opts.readKey)));
                 const epoch = Math.max(Date.now(), (Number.isFinite(last) ? last : 0) + 1);
