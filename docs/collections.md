@@ -72,7 +72,9 @@ field empty still falls back. The `routeTemplate` it names is checked against `r
 sitemap and the feed stay on the route this site serves, since a link to a path the site does not
 answer is a 404, and a template that names another path is said once in the log. An API without the
 route answers 404, which is remembered for the backstop's length, and the collection reads by its
-field map exactly as before. Any other failure reads by the field map too.
+field map exactly as before. Any other failure reads by the field map too. A role moved in the console
+shows once the backstop passes or an entry of the type is published, since a change to a type sends
+no delivery of its own.
 
 From barakoCMS 4.8 a read by slug of a type that declares a `structuredDataType` carries
 `structuredData`, the entry as schema.org JSON-LD. An item page draws it as
