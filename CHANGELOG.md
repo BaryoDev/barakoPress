@@ -14,6 +14,13 @@
   4.6, so its entries have no page, no sitemap line and no feed item. Both are covered by
   `src/delivered-references.test.tsx`; neither needed a change to the renderer.
 
+- Delivery reads honour `X-Barako-Cache-Class` from barakoCMS 4.8 (#973). `no-store` there is
+  never served from a cache, as `Cache-Control: no-store` already was; `short`, `long` and `swr`
+  keep the configured backstop and tags; a path remembered as `no-store` is cached again from the
+  read after the API calls it anything else, instead of an hour later. An API without the header is
+  read as before. The first `no-store` answer is still written once, since Next stores a 200 before
+  its class can be read; #85 stays open for that, with the reason in `src/delivery.ts`.
+
 - The lockfile moves `sharp` to 0.35.5 (GHSA-wq5f-xc86-pv6w, through `next`) and `source-map-js` to
   1.2.2 (GHSA-68fv-2mgg-jv7q, through `postcss`), both inside the ranges their parents ask for, so
   no override. sharp stays Apache-2.0 with its LGPL libvips, and 0.35.5 ships the linux x64 and

@@ -253,15 +253,38 @@ function withGeneration(path: string, generation: string | null): string {
  * A positive `max-age` is deliberately not read as a lifetime. barakoCMS answers every public read
  * with a flat `public, max-age=60` today, which is a hint for a CDN in front of it rather than a
  * statement about this entry, and taking it as one would quietly cut every site's window from the
- * backstop it configured to sixty seconds. A per-read class the API means as one is the API change
- * barakoPress #56 asks for.
+ * backstop it configured to sixty seconds.
+ *
+ * barakoCMS 4.8 says the class it means in `X-Barako-Cache-Class` (barakoCMS #973): `short`, `long`,
+ * `no-store` or `swr`. `no-store` there is read the same as in `Cache-Control`, and either one is
+ * enough. Any other class is cacheable, and ends a `no-store` this path was remembered under, so a
+ * read the API stops marking is cached again from the next read instead of an hour later. `short`,
+ * `long` and `swr` all keep the configured backstop: a purge is what ends an entry here, the
+ * backstop is the operator's ceiling for a missed webhook, and Next's data cache already serves the
+ * old copy while it refreshes one past it. An API without the header is read as before.
+ *
+ * What the header cannot do is decide before the first write (barakoPress #85). Next takes the cache
+ * options with the request and writes any 200 it gets back, whatever the response says, so the class
+ * of a path never read before is only known after Next has stored it. Asking uncached until the class
+ * is known would avoid that write, but an uncached fetch makes Next render the whole route dynamic,
+ * which turns every prerendered page into a per-request one and refuses `output: "export"`. Learning
+ * the class first costs a second request per path. So the first `no-store` answer is still written
+ * once and never read back, as before.
  */
 const CLASS_TTL_SECONDS = 60 * 60;
 const NEVER_STORE = new Set(["no-store", "no-cache", "private", "max-age=0", "s-maxage=0"]);
+const CACHE_CLASSES = new Set(["short", "long", "no-store", "swr"]);
 
 const classKey = (key: string) => `class:${key}`;
 
+/** The class barakoCMS 4.8 names, or null for an older API or a value it does not send. */
+function declaredCacheClass(res: Response): "short" | "long" | "no-store" | "swr" | null {
+    const value = res.headers.get("x-barako-cache-class")?.trim().toLowerCase();
+    return value && CACHE_CLASSES.has(value) ? (value as "short" | "long" | "no-store" | "swr") : null;
+}
+
 function declaredNoStore(res: Response): boolean {
+    if (declaredCacheClass(res) === "no-store") return true;
     const header = res.headers.get("cache-control");
     if (!header) return false;
     return header
@@ -442,6 +465,7 @@ async function read<T>(config: PressConfig, path: string, opts: ReadOptions): Pr
             await store.set(classKey(opts.readKey), "no-store", CLASS_TTL_SECONDS);
             return value;
         }
+        if (uncached && declaredCacheClass(res) !== null) await store.delete(classKey(opts.readKey));
         if (opts.staleKey) {
             await remember(store, opts.staleKey, text);
             await store.delete(failedKey(opts.staleKey));

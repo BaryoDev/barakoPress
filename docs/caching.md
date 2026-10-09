@@ -16,6 +16,13 @@ A response barakoCMS marks `Cache-Control: no-store` is not cached: the class is
 that path and every later read of it asks the CMS uncached, carrying no tag. That is how a type that
 has to be fresh to the minute lives beside pages cached for hours.
 
+barakoCMS 4.8 also names the class in `X-Barako-Cache-Class`. `no-store` there is read the same way.
+`short`, `long` and `swr` are cached as every read is, under the configured backstop, and a path that
+was remembered as `no-store` is cached again from the read after the API stops saying so. The first
+`no-store` answer for a path is still written to Next's data cache once and never read back: Next
+takes the cache options before the response exists, and asking uncached until the class is known
+would make every route dynamic (#85).
+
 ## Running more than one container
 
 The kept answers, the host to tenant map, the webhook replay guard and the generation of each cache
