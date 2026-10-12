@@ -245,7 +245,7 @@ delivery can never come back. `createCollectionIndex(config, key, { search: true
 what matched instead of the index; that reads the query, so the route is dynamic and `output: "export"`
 refuses it, which is why it is off unless asked for. The box is a `form`, the results are links, and
 the keyboard handling on top ("/" to focus, the arrow keys to walk the results, escape to clear) is a
-client component, one of three in the package with the filter bar and the header's menu. The root catch-all answers `?q=` on a collection index too, but
+client component, one of four in the package with the filter bar, the header's menu and the code sample's copy button. The root catch-all answers `?q=` on a collection index too, but
 only where the route may be dynamic: a request-time site rewrites to a kept route, and a kept route
 asking for the query fails rather than bailing out, so there the index lists and a page of blocks
 holding the `search` block is where a reader searches.

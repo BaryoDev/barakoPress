@@ -519,6 +519,7 @@ const codeTabs: BlockPreset = {
         text("code", "Code", true),
         text("language", "Language"),
         text("selectLabel", "Say this above it, for copying"),
+        text("copiedLabel", "Say this once it is copied"),
         text("primaryLabel", "Tab label for the code above"),
         text("group", "Only one open in this group"),
         tone,
@@ -532,7 +533,12 @@ const codeTabs: BlockPreset = {
             t(p("body"), "lead"),
             holding("tabGroup", { gap: "xs" }, [
                 holding("tabPanel", { label: p("primaryLabel", "Run it"), open: true, group: p("group", "codeTabs") }, [
-                    b("codeSample", { code: p("code"), language: p("language"), selectLabel: p("selectLabel") }),
+                    b("codeSample", {
+                code: p("code"),
+                language: p("language"),
+                selectLabel: p("selectLabel"),
+                copiedLabel: p("copiedLabel"),
+            }),
                 ]),
                 slot("items"),
             ]),
@@ -549,11 +555,17 @@ const codeTab: BlockPreset = {
         text("code", "Code", true),
         text("language", "Language"),
         text("selectLabel", "Say this above it, for copying"),
+        text("copiedLabel", "Say this once it is copied"),
         text("group", "Only one open in this group"),
     ],
     blocks: [
         holding("tabPanel", { label: p("label"), group: p("group", "codeTabs") }, [
-            b("codeSample", { code: p("code"), language: p("language"), selectLabel: p("selectLabel") }),
+            b("codeSample", {
+                        code: p("code"),
+                        language: p("language"),
+                        selectLabel: p("selectLabel"),
+                        copiedLabel: p("copiedLabel"),
+                    }),
         ]),
     ],
 };

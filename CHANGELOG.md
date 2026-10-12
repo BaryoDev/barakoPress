@@ -25,6 +25,12 @@
   hidden waiting for a script. Off when unset. A build-time site sets `site.revealOnScroll`. The
   `site` type needs a string field named `RevealOnScroll` for a tenant to save it.
 
+- `codeSample` copies to the clipboard (#82). The server's markup is unchanged: `selectLabel` as text
+  over a snippet one click selects. Once a script has hydrated and the browser has a clipboard API,
+  the word becomes a button that copies the snippet, says `copiedLabel` (a new optional prop, also on
+  `codeTabs` and `codeTab`) and announces it, and selects the snippet if the copy is refused. It is
+  the fourth client component, and CLAUDE.md now says when a block may hold one.
+
 ## 0.12.0 (2026-10-09)
 
 - barakoCMS 4.7 (BaryoDev/barakoCMS 4.7.0). This build reads delivery contracts 1 to 7
