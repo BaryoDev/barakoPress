@@ -333,8 +333,15 @@ and it answers 404 at its own route: what it holds is already on every page. A c
 `indexPage` is treated the same way.
 
 A header region replaces the whole band, the site name, the menu and the RSS link along with the top
-bar. There is no navigation or logo block yet, so a header region lists its own links until the block
-library has one.
+bar. Two blocks put the built-in header's parts back in it, drawn from the same settings:
+
+| Block | What |
+| --- | --- |
+| `siteNavigation` | `HeaderLinks`, in a `nav` named by `label` (`menu` in `Labels` when unset). A link's `activeOn` marks it current and its `children` open as the header's dropdown, with the same markup and the same behaviour. `gap` is a spacing step. `recipe`, `linkRecipe`, `currentRecipe` and `badgeRecipe` name style recipes for the row, a link, the current link and a badge; each unset one takes the part named in `HeaderRecipes`. Draws nothing on the holding page |
+| `siteLogo` | The logo, linking home, named by `LogoAlt`. `show` is `logo`, `name` or `both`; unset, the logo when the site has one and the name when it does not. With both, the image is decoration so the name is read once. `recipe` names a style recipe, and unset takes `brand` from `HeaderRecipes` |
+
+There is no phone menu in a region: `siteNavigation` wraps its links onto more lines on a narrow
+screen instead.
 
 A build-time site sets the same thing in its config, and a tenant's settings win over it:
 

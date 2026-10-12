@@ -19,6 +19,7 @@ import type { BlockRegistry } from "../blocks/schema.js";
 import { getNavigation, getPageAtPath, isChromePath, type NavItem, type Page } from "../cms.js";
 import { Navigation } from "./navigation.js";
 import { HeaderLink, PhoneMenu, type HeaderLinkStyles, type PhoneMenuStyles } from "./header-menu.js";
+import { CURRENT_CSS, DROPDOWN_CSS, headerLinkStyles } from "./header-styles.js";
 import { PageView, pageBlocks } from "./page.js";
 import { createBlockRegistry, registryFor } from "../blocks/registry.js";
 import { BlockList } from "../blocks/render.js";
@@ -300,48 +301,12 @@ const HEADER_PHONE = "47.99rem";
  */
 const HEADER_CSS =
     ".bp-header{position:relative}" +
-    ".bp-current{font-weight:700}" +
-    ".bp-dropdown>ul{display:none}" +
-    ".bp-dropdown:not([data-js]):hover>ul,.bp-dropdown:not([data-js]):focus-within>ul,.bp-dropdown[data-open]>ul{display:block}" +
+    CURRENT_CSS +
+    DROPDOWN_CSS +
     ".bp-menu{display:none}" +
     ".bp-menu>summary{list-style:none;cursor:pointer}" +
     ".bp-menu>summary::-webkit-details-marker{display:none}" +
     `@media(max-width:${HEADER_PHONE}){.bp-header-links,.bp-header-actions{display:none!important}.bp-menu{display:block}}`;
-
-function headerLinkStyles(t: PressTheme, link: CSSProperties, badge: CSSProperties): HeaderLinkStyles {
-    const c = t.colors;
-    return {
-        link,
-        badge,
-        dropdown: { position: "relative", display: "inline-flex", alignItems: "center", gap: "2px" },
-        toggle: {
-            display: "inline-flex",
-            alignItems: "center",
-            padding: "4px",
-            margin: 0,
-            border: 0,
-            background: "none",
-            color: "inherit",
-            font: "inherit",
-            cursor: "pointer",
-        },
-        menu: {
-            position: "absolute",
-            top: "100%",
-            left: 0,
-            zIndex: 50,
-            minWidth: "12rem",
-            margin: 0,
-            padding: "6px 0",
-            listStyle: "none",
-            background: c.surface,
-            color: c.ink,
-            border: `1px solid ${c.hairline}`,
-            borderRadius: t.radii.panel,
-        },
-        menuLink: { ...link, display: "block", padding: "8px 14px", whiteSpace: "nowrap" },
-    };
-}
 
 /**
  * The header sits on the surface, so the actions take that tone's colours. An `action` recipe

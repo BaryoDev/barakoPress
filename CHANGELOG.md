@@ -9,6 +9,11 @@
   `site` type needs a json field named `HeaderRecipes` for a tenant to save it. New exported types:
   `HeaderRecipes`, `HeaderRecipePart`.
 
+- Two blocks for a header region (#167). `siteNavigation` draws the site's `HeaderLinks` with the
+  built-in header's current marking and dropdowns, and `siteLogo` draws the logo or the name
+  linking home. Each takes style recipes, falling back to the parts named in `HeaderRecipes`. The
+  names carry `site` so a tenant preset called `logo` or `navigation` is not hidden by a code block.
+
 ## 0.12.0 (2026-10-09)
 
 - barakoCMS 4.7 (BaryoDev/barakoCMS 4.7.0). This build reads delivery contracts 1 to 7
