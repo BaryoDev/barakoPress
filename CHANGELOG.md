@@ -16,7 +16,8 @@
 
 - `IconSprite` puts a tenant's symbols on every page (#167), so a tree's `icons` can name the site's
   own glyphs. Each symbol is a `viewBox` and its path data, drawn as elements with paint held to
-  `currentColor` or `none`; a symbol with anything else in it is left out. A build-time site sets
+  `currentColor` or `none`; a symbol with anything else in it is left out. A symbol id starts with
+  `ic-`, which keeps it off the engine's `bp-` ids and most heading anchors. A build-time site sets
   `site.iconSprite`. New exported type: `IconSymbol`. The `site` type needs a json field named
   `IconSprite` for a tenant to save it.
 

@@ -50,7 +50,7 @@ const TENANTS: Record<string, { host: string; settings: Record<string, unknown> 
         settings: {
             Name: "Icons",
             Url: "https://icons.example",
-            IconSprite: JSON.stringify({ search: SEARCH, chevron: { viewBox: "0 0 12 12", paths: ["M2 4l4 4 4-4"] } }),
+            IconSprite: JSON.stringify({ "ic-search": SEARCH, "ic-chevron": { viewBox: "0 0 12 12", paths: ["M2 4l4 4 4-4"] } }),
         },
     },
     none: { host: "none.example", settings: { Name: "None", Url: "https://none.example" } },
@@ -111,9 +111,10 @@ describe("reading IconSprite", () => {
             base,
             {
                 IconSprite: {
-                    search: SEARCH,
-                    plain: { viewBox: "0 0 16 16", paths: ["M0 0h16v16H0z"] },
+                    "ic-search": SEARCH,
+                    "ic-plain": { viewBox: "0 0 16 16", paths: ["M0 0h16v16H0z"] },
                     "1bad-id": SEARCH,
+                    "ic-": SEARCH,
                     "has space": SEARCH,
                     box: { viewBox: "0 0 24", paths: ["M0 0"] },
                     markup: { viewBox: "0 0 24 24", paths: ['M0 0"/><script>alert(1)</script>'] },
@@ -125,14 +126,23 @@ describe("reading IconSprite", () => {
             },
             null,
         ).site.iconSprite;
-        expect(Object.keys(sprite ?? {})).toEqual(["search", "plain"]);
-        expect(sprite?.search).toEqual(SEARCH);
-        expect(sprite?.plain).toEqual({ viewBox: "0 0 16 16", paths: ["M0 0h16v16H0z"] });
+        expect(Object.keys(sprite ?? {})).toEqual(["ic-search", "ic-plain"]);
+        expect(sprite?.["ic-search"]).toEqual(SEARCH);
+        expect(sprite?.["ic-plain"]).toEqual({ viewBox: "0 0 16 16", paths: ["M0 0h16v16H0z"] });
     });
 
     it("keeps the configured sprite when the setting is not an object", () => {
-        const configured = { ...base, site: { ...base.site, iconSprite: { search: SEARCH } as const } };
-        expect(applySiteSettings(configured, { IconSprite: ["search"] }, null).site.iconSprite).toEqual({ search: SEARCH });
+        const configured = { ...base, site: { ...base.site, iconSprite: { "ic-search": SEARCH } as const } };
+        expect(applySiteSettings(configured, { IconSprite: ["ic-search"] }, null).site.iconSprite).toEqual({ "ic-search": SEARCH });
+    });
+
+    it("leaves out a symbol whose id could take a heading's or the engine's", () => {
+        const sprite = applySiteSettings(
+            base,
+            { IconSprite: { search: SEARCH, "bp-search-docs": SEARCH, chevron: SEARCH, "ic-search": SEARCH } },
+            null,
+        ).site.iconSprite;
+        expect(Object.keys(sprite ?? {})).toEqual(["ic-search"]);
     });
 });
 
@@ -146,14 +156,28 @@ describe("the sprite on the page", () => {
         expect(svg).toContain('aria-hidden="true"');
         const symbols = [...body.matchAll(/<symbol\b[^>]*>/g)].map((m) => m[0]);
         expect(symbols).toHaveLength(2);
-        expect(symbols[0]).toContain('id="search"');
+        expect(symbols[0]).toContain('id="ic-search"');
         expect(symbols[0]).toContain('viewBox="0 0 24 24"');
         expect(symbols[0]).toContain('fill="none"');
         expect(symbols[0]).toContain('stroke="currentColor"');
         expect(symbols[0]).toContain('stroke-width="2"');
-        expect(symbols[1]).toContain('id="chevron"');
+        expect(symbols[1]).toContain('id="ic-chevron"');
         expect(symbols[1]).toContain('fill="currentColor"');
         expect(body).toContain('<path d="M15 15l5 5"></path>');
+    });
+
+    it("does not draw a build-time symbol whose id could take a heading's", async () => {
+        const fixed = defineConfig({
+            cmsUrl: CMS,
+            site: { name: "Fixed", url: "https://fixed.example", iconSprite: { search: SEARCH, "ic-search": SEARCH } },
+        });
+        const Layout = createSiteLayout(fixed, { loadFonts: false });
+        const page = await Layout({ children: <p>the page</p> });
+        const { prelude } = await prerender(page);
+        const html = await new Response(prelude).text();
+        const symbols = [...html.matchAll(/<symbol\b[^>]*>/g)].map((m) => m[0]);
+        expect(symbols).toHaveLength(1);
+        expect(symbols[0]).toContain('id="ic-search"');
     });
 
     it("draws nothing for a site with no sprite", async () => {

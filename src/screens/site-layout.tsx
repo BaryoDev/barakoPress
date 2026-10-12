@@ -11,7 +11,7 @@ import {
     type Region,
     type SiteIdentity,
 } from "../config.js";
-import { showsHoldingPage, siteConfigOrNull, type SiteParams } from "../site.js";
+import { ICON_ID, showsHoldingPage, siteConfigOrNull, type SiteParams } from "../site.js";
 import {
     allowedFontOrigins,
     fontLinks,
@@ -543,7 +543,7 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
  * than `display:none`, which some browsers carry into what a `<use>` draws.
  */
 function IconSprite({ symbols }: { symbols: Readonly<Record<string, IconSymbol>> }) {
-    const entries = Object.entries(symbols);
+    const entries = Object.entries(symbols).filter(([id]) => ICON_ID.test(id));
     if (entries.length === 0) return null;
     return (
         <svg

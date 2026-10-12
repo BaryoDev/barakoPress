@@ -227,7 +227,8 @@ export interface SiteIdentity {
     headerRecipes?: HeaderRecipes;
     /**
      * Symbols drawn once at the top of every page, keyed by id, so `#id` names them wherever the
-     * engine takes a reference to a symbol on the page (a tree's `icons`).
+     * engine takes a reference to a symbol on the page (a tree's `icons`). An id starts with `ic-`;
+     * one that does not is not drawn, so it cannot take a heading's id or the engine's.
      */
     iconSprite?: Readonly<Record<string, IconSymbol>>;
     /**

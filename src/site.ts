@@ -540,8 +540,13 @@ function headerRecipes(v: unknown): HeaderRecipes | undefined {
  * elements, never as markup a tenant wrote, so nothing in it can be a script or load anything: an id
  * is a name, a box is four numbers, a path is path data and nothing else, and a paint is
  * `currentColor` or `none`. A symbol with anything unreadable is left out whole.
+ *
+ * An id must start with `ic-`. The sprite is the first thing in `<body>`, and a browser resolves a
+ * shared id to the first element that has it, so a symbol called `search` would take `#search` from
+ * a `## Search` heading and `bp-search-docs` would take the search box's label. The prefix keeps
+ * symbols out of the engine's `bp-` ids and out of most heading anchors.
  */
-const ICON_ID = /^[A-Za-z][A-Za-z0-9_-]{0,62}$/;
+export const ICON_ID = /^ic-[A-Za-z0-9_-]{1,59}$/;
 const VIEW_BOX = /^-?[0-9]{1,5}(\.[0-9]{1,4})?([ ,]+-?[0-9]{1,5}(\.[0-9]{1,4})?){3}$/;
 const PATH_DATA = /^[MmLlHhVvCcSsQqTtAaZz0-9eE.,\s+-]{1,4000}$/;
 const MAX_SYMBOLS = 64;

@@ -328,14 +328,14 @@ recipe for, draws as it did.
 The dropdown's rows and the phone menu's rows keep their own look. A hover or focus style is a class
 in the recipe, written in the site's own stylesheet, as on any recipe.
 
-**An icon sprite.** `IconSprite` puts symbols on every page, so a tree's `icons` (`#search`,
-`#chevron`) can name the site's own glyphs without an overlay. It is keyed by the symbol's id, each
+**An icon sprite.** `IconSprite` puts symbols on every page, so a tree's `icons` (`#ic-search`,
+`#ic-chevron`) can name the site's own glyphs without an overlay. It is keyed by the symbol's id, each
 entry a box and its paths:
 
 ```json
 {
-  "search": { "viewBox": "0 0 24 24", "paths": ["M10 4a6 6 0 1 0 0 12a6 6 0 1 0 0-12z", "M15 15l5 5"], "fill": "none", "stroke": "currentColor", "strokeWidth": 2 },
-  "chevron": { "viewBox": "0 0 12 12", "paths": ["M2 4l4 4 4-4"] }
+  "ic-search": { "viewBox": "0 0 24 24", "paths": ["M10 4a6 6 0 1 0 0 12a6 6 0 1 0 0-12z", "M15 15l5 5"], "fill": "none", "stroke": "currentColor", "strokeWidth": 2 },
+  "ic-chevron": { "viewBox": "0 0 12 12", "paths": ["M2 4l4 4 4-4"] }
 }
 ```
 
@@ -343,7 +343,12 @@ entry a box and its paths:
 unset), so a glyph takes the colour of the text around it. The sprite is drawn as elements, never as
 SVG markup a tenant wrote: an id is a name, `viewBox` is four numbers and a path is path data, so
 nothing in it can run or load anything. A symbol with anything else in it is left out whole. Up to
-64 symbols of up to 16 paths each. A build-time site sets `site.iconSprite`.
+64 symbols of up to 16 paths each.
+
+A symbol's id starts with `ic-`, and one without the prefix is left out. The sprite is the first thing
+on the page and a browser takes the first element with a given id, so a symbol called `search` would
+take `#search` from a `## Search` heading. Keep the rest of the id clear of the site's headings and
+block anchors too: a `## IC chips` heading is `ic-chips`. A build-time site sets `site.iconSprite`.
 
 **Reveal on scroll.** `RevealOnScroll` set to `rise` or `fade` makes every section band of a page
 lift or fade in as it scrolls into view, the way a `reveal` block does with what it holds, without
