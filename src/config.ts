@@ -230,6 +230,12 @@ export interface SiteIdentity {
      * engine takes a reference to a symbol on the page (a tree's `icons`).
      */
     iconSprite?: Readonly<Record<string, IconSymbol>>;
+    /**
+     * Every section band of a page rises (`rise`) or fades (`fade`) in as it scrolls into view, in
+     * CSS. Off when unset. A visitor who asked for reduced motion, or a browser without view
+     * timelines, sees each band where it is.
+     */
+    revealOnScroll?: "rise" | "fade";
     footerColumns?: FooterColumn[];
     socialLinks?: SocialLink[];
     /** A Umami tracking script, absolute https. Rendered only with `analyticsWebsiteId`, and only from an origin in `PRESS_SCRIPT_ORIGINS`. */

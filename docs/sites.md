@@ -345,6 +345,14 @@ SVG markup a tenant wrote: an id is a name, `viewBox` is four numbers and a path
 nothing in it can run or load anything. A symbol with anything else in it is left out whole. Up to
 64 symbols of up to 16 paths each. A build-time site sets `site.iconSprite`.
 
+**Reveal on scroll.** `RevealOnScroll` set to `rise` or `fade` makes every section band of a page
+lift or fade in as it scrolls into view, the way a `reveal` block does with what it holds, without
+wrapping each band in one. Unset, nothing moves; `off` turns off a reveal the config set. It is CSS
+(`animation-timeline: view()`), with no script: a band is drawn where it ends up and the animation
+only takes it away and puts it back, so a visitor who asked for reduced motion, and a browser
+without view timelines, sees every band in place. Header and footer regions are left alone. A
+build-time site sets `site.revealOnScroll`.
+
 A region page is chrome rather than somewhere to go, so it is left out of the menu and the sitemap,
 and it answers 404 at its own route: what it holds is already on every page. A collection's
 `indexPage` is treated the same way.

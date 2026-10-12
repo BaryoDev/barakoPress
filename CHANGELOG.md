@@ -20,6 +20,11 @@
   `site.iconSprite`. New exported type: `IconSymbol`. The `site` type needs a json field named
   `IconSprite` for a tenant to save it.
 
+- `RevealOnScroll` (`rise` or `fade`) reveals every section band of a page as it scrolls into view
+  (#167), in CSS and only where motion is wanted and view timelines exist, so no band is ever left
+  hidden waiting for a script. Off when unset. A build-time site sets `site.revealOnScroll`. The
+  `site` type needs a string field named `RevealOnScroll` for a tenant to save it.
+
 ## 0.12.0 (2026-10-09)
 
 - barakoCMS 4.7 (BaryoDev/barakoCMS 4.7.0). This build reads delivery contracts 1 to 7

@@ -47,6 +47,7 @@ import { parseSiteSegment, type SiteRoute } from "./site-route.js";
 import { isPluginName } from "./blocks/plugins.js";
 import { presetsFrom } from "./blocks/presets.js";
 import { SPACES, TONES } from "./blocks/tokens.js";
+import { REVEAL_STYLES } from "./blocks/motion.js";
 import { COLOR, FLUID_LENGTH, LENGTH, mergeColors, tokensFrom, tonesFrom } from "./theme.js";
 import { RECIPE_NAME, recipesFrom } from "./recipes.js";
 import type {
@@ -580,6 +581,16 @@ function iconSprite(v: unknown): Record<string, IconSymbol> | undefined {
         if (symbol) out[id] = symbol;
     }
     return out;
+}
+
+/*
+ * `RevealOnScroll`: `rise` or `fade`, any case. `off` turns a configured reveal off; anything else
+ * keeps the configured value, so a typo changes nothing.
+ */
+function revealOnScroll(v: unknown, base: SiteIdentity["revealOnScroll"]): SiteIdentity["revealOnScroll"] {
+    const named = str(v)?.toLowerCase();
+    if (named === "off") return undefined;
+    return REVEAL_STYLES.find((style) => style === named) ?? base;
 }
 
 function footerColumns(v: unknown): FooterColumn[] | undefined {
@@ -1291,6 +1302,7 @@ export function applySiteSettings(
         headerActions: headerActions(d.HeaderActions) ?? base.headerActions,
         headerRecipes: headerRecipes(d.HeaderRecipes) ?? base.headerRecipes,
         iconSprite: iconSprite(d.IconSprite) ?? base.iconSprite,
+        revealOnScroll: revealOnScroll(d.RevealOnScroll, base.revealOnScroll),
         footerColumns: footerColumns(d.FooterColumns) ?? base.footerColumns,
         socialLinks: socialLinks(d.SocialLinks) ?? base.socialLinks,
         analyticsScript: analyticsScriptUrl(d.AnalyticsScript) ?? base.analyticsScript,

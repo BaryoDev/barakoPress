@@ -31,6 +31,7 @@ import { PageView, pageBlocks } from "./page.js";
 import { createBlockRegistry, registryFor } from "../blocks/registry.js";
 import { BlockList } from "../blocks/render.js";
 import { spaceOf, toneOf, widthOf } from "../blocks/tokens.js";
+import { revealOnScrollCss } from "../blocks/motion.js";
 
 /*
  * The root layout and its metadata, from the site's identity and theme.
@@ -655,6 +656,9 @@ export function createSiteLayout(config: PressConfig, options: SiteLayoutOptions
                 <ThemeHead theme={t} loadFonts={loadFonts} analytics={analyticsTag(cfg.site, allowedScriptOrigins())} />
                 <body style={{ margin: 0, background: c.pageBg, color: c.ink, fontFamily: t.fonts.body }}>
                     {cfg.site.iconSprite && <IconSprite symbols={cfg.site.iconSprite} />}
+                    {cfg.site.revealOnScroll && (
+                        <style dangerouslySetInnerHTML={{ __html: revealOnScrollCss(cfg.site.revealOnScroll) }} />
+                    )}
                     {headerPage && headerRegion && registry ? (
                         await RegionBand({ cfg, region: headerRegion, page: headerPage, registry, tag: "header" })
                     ) : (
