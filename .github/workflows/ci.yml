@@ -46,6 +46,18 @@ jobs:
             exit 1
           fi
 
+      - name: The wiki sync cuts the README and refuses a stale list
+        # The sync itself runs after the merge, where a failure blocks nothing, so this is where a
+        # broken script is caught. It also runs the sync against this checkout, so a README heading
+        # renamed without docs/.wikisections fails the pull request rather than the wiki run.
+        run: |
+          bash scripts/test-wiki-sync.sh
+          wiki=$(mktemp -d)
+          git init --quiet --bare "$wiki/check.wiki.git"
+          git clone --quiet "$wiki/check.wiki.git" "$wiki/wiki" 2>/dev/null
+          echo "# Home" > "$wiki/wiki/Home.md"
+          bash scripts/wiki-sync.sh "$wiki/wiki"
+
       - name: The package builds, and has an entry point and types
         # Before the typecheck, not after: app/ imports barakopress by name, so it resolves through
         # dist/index.d.ts like a consumer does, and tsc cannot find it until this has run. The

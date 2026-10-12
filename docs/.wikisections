@@ -1,0 +1,17 @@
+# README sections that scripts/wiki-sync.sh publishes as wiki pages, in sidebar order.
+# One per line: the page name, a space, then the exact text of a level-two heading in README.md.
+# A heading named here that is not in the README fails the sync, so renaming a heading means
+# renaming it here too. A page name must not be a docs/ file name, since that doc is a page too.
+
+install Install
+quick-start Quick start
+what-it-renders What it renders
+configuring-it Configuring it
+caching-design The caching design, which is the whole point
+deploying-in-brief Deploying
+what-it-reads What it reads
+security Security
+measured-behaviours Two behaviours that were measured, not assumed
+look-check-in-brief The look check
+working-on-the-engine Working on the engine
+status Status
