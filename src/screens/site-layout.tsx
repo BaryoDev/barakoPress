@@ -423,7 +423,6 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
         t,
         recipes.links,
         { display: "flex", flexWrap: "wrap", gap: "8px 22px", fontSize: "15px" },
-        {},
         extended ? "bp-header-links" : undefined,
     );
     const action = recipeLook(t, recipes.action);

@@ -62,15 +62,17 @@ export async function copyOrSelect(
 
 export function CopyButton({ label, copiedLabel, style }: CopyButtonProps) {
     const [ready, setReady] = useState(false);
-    const [copied, setCopied] = useState(false);
+    /* Counts successful copies since the word was last cleared, so a second copy restarts the timer. */
+    const [copies, setCopies] = useState(0);
+    const copied = copies > 0;
     const self = useRef<HTMLSpanElement>(null);
 
     useEffect(() => setReady(canCopy(typeof navigator === "undefined" ? undefined : navigator)), []);
     useEffect(() => {
-        if (!copied) return;
-        const timer = setTimeout(() => setCopied(false), SHOWN_MS);
+        if (copies === 0) return;
+        const timer = setTimeout(() => setCopies(0), SHOWN_MS);
         return () => clearTimeout(timer);
-    }, [copied]);
+    }, [copies]);
 
     if (!ready) return <span ref={self}>{label}</span>;
 
@@ -78,7 +80,7 @@ export function CopyButton({ label, copiedLabel, style }: CopyButtonProps) {
         const pre = snippetOf(self.current);
         if (!pre) return;
         const done = await copyOrSelect(pre.textContent ?? "", navigator.clipboard, () => select(pre));
-        setCopied(done === "copied");
+        setCopies((n) => (done === "copied" ? n + 1 : 0));
     };
 
     return (
@@ -88,7 +90,8 @@ export function CopyButton({ label, copiedLabel, style }: CopyButtonProps) {
             </button>
             {copiedLabel && (
                 <span role="status" style={HIDDEN}>
-                    {copied ? copiedLabel : ""}
+                    {/* A status region only speaks when its text changes, so every other copy adds a space. */}
+                    {copied ? copiedLabel + (copies % 2 === 0 ? "\u00a0" : "") : ""}
                 </span>
             )}
         </span>

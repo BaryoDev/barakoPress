@@ -534,11 +534,11 @@ const codeTabs: BlockPreset = {
             holding("tabGroup", { gap: "xs" }, [
                 holding("tabPanel", { label: p("primaryLabel", "Run it"), open: true, group: p("group", "codeTabs") }, [
                     b("codeSample", {
-                code: p("code"),
-                language: p("language"),
-                selectLabel: p("selectLabel"),
-                copiedLabel: p("copiedLabel"),
-            }),
+                        code: p("code"),
+                        language: p("language"),
+                        selectLabel: p("selectLabel"),
+                        copiedLabel: p("copiedLabel"),
+                    }),
                 ]),
                 slot("items"),
             ]),
@@ -561,11 +561,11 @@ const codeTab: BlockPreset = {
     blocks: [
         holding("tabPanel", { label: p("label"), group: p("group", "codeTabs") }, [
             b("codeSample", {
-                        code: p("code"),
-                        language: p("language"),
-                        selectLabel: p("selectLabel"),
-                        copiedLabel: p("copiedLabel"),
-                    }),
+                code: p("code"),
+                language: p("language"),
+                selectLabel: p("selectLabel"),
+                copiedLabel: p("copiedLabel"),
+            }),
         ]),
     ],
 };
