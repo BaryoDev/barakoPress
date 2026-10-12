@@ -199,6 +199,18 @@ delivery that purges it. A build-time site with no plugins gets the same answer 
 registry, the route cannot tell which plugins the site enabled, so it offers no plugin's blocks and
 lists every plugin as off; a site with plugins passes the config.
 
+**Limits and theme names in the schema.** The answer also carries `limits`, the block budget and
+depth below (`{ "maxBlocks": 400, "maxDepth": 10 }`), and `theme`: `colorSlots`, the `Colors` names
+the renderer draws with, `colorAliases`, the older names it still accepts mapped to their slot
+(`darkPanel` to `inverse`), and `fontRoles`, the `Fonts` names. An editor reads these instead of
+keeping its own copy. An older press leaves both out, so a reader keeps a fallback.
+
+`maxBlocks` is not a count of stored entries. The budget is spent on the tree after bands expand
+and the binder walks it (a repeat's rows have a budget of their own), so one stored library band can
+cost eight or ten. A page of forty stored bands runs out around the thirtieth. An editor comparing
+its stored count with `maxBlocks` has a lower bound only, and should warn as a page approaches the
+budget, not only once the stored count passes it.
+
 Field kinds are `text`, `markdown`, `url`, `number`, `boolean`, `select` (with `options`), `slots`
 (lists of nested blocks, handed to the component already rendered), `list` and `group` (below). The list is editor input, so a
 block renders only when its type is registered and every prop passes its field. A present but wrong

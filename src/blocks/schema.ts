@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { isSafeHref } from "../markdown.js";
 import { isInlineImage } from "../media.js";
-import type { PressTheme } from "../theme.js";
+import { COLOR_ALIASES, DEFAULT_THEME, type PressTheme } from "../theme.js";
 import { BINDING_FORMATS, BINDING_SCOPES, hasBinding, readBindings, wholeBinding } from "./bindings.js";
 
 /*
@@ -578,6 +578,22 @@ export interface BlockSchema {
     plugins: { name: string; enabled: boolean }[];
     /** The scopes and formats a binding may name, so an editor offers exactly what renders. */
     bindings: { scopes: string[]; formats: string[] };
+    /**
+     * How much of a block tree this renderer reads: a `maxBlocks` budget for the whole tree and lists
+     * `maxDepth` deep. The budget is spent on the expanded and bound tree, not the stored one: every
+     * entry looked at (dropped ones too), every block a band expands into, and every block the binder
+     * walks through outside a repeat's rows. So a stored count is only a lower bound, and an editor
+     * should warn as a page approaches `maxBlocks`, not only once its stored count passes it. An older
+     * press leaves this out, so a reader keeps its own values as the fallback.
+     */
+    limits?: { maxBlocks: number; maxDepth: number };
+    /**
+     * The theme vocabulary this renderer reads from a site's settings. `colorSlots` are the `Colors`
+     * names it draws with, `colorAliases` the older names it still accepts for one of them (each old
+     * name to its slot), and `fontRoles` the `Fonts` names. Any other colour name is the site's own.
+     * An older press leaves this out too.
+     */
+    theme?: { colorSlots: string[]; colorAliases: Record<string, string>; fontRoles: string[] };
     blocks: {
         type: string;
         label: string;
@@ -617,6 +633,12 @@ export function blockSchema(
         version: 2,
         plugins: plugins.map((p) => ({ ...p })),
         bindings: { scopes: [...BINDING_SCOPES], formats: [...BINDING_FORMATS] },
+        limits: { maxBlocks: MAX_BLOCKS, maxDepth: MAX_DEPTH },
+        theme: {
+            colorSlots: Object.keys(DEFAULT_THEME.colors).filter((name) => !(name in COLOR_ALIASES)),
+            colorAliases: { ...COLOR_ALIASES },
+            fontRoles: Object.keys(DEFAULT_THEME.fonts),
+        },
         blocks: [...registry.values()].map((d) => ({
             type: d.type,
             label: d.label,

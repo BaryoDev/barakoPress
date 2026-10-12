@@ -1,0 +1,6 @@
+# Docs that scripts/wiki-sync.sh must not publish to the public GitHub wiki.
+# One file name per line. A name here that no longer exists in docs/ fails the sync, so a rename
+# cannot quietly re-expose a file.
+
+# Instructions for the review agent, not documentation for someone running the engine.
+review-rules.md
