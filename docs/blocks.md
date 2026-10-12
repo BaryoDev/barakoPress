@@ -68,7 +68,7 @@ one to look different saves its own under the same name and that one wins.
 | `keyValueTable` | A panel of facts | heading, tone, padding, radius, rows |
 | `tabs` | Sections that open | heading, tone, padding, width, items |
 | `announcement` | The one line above everything, and it stays there | message, label, href, tone, edge, align |
-| `codeTabs` | A snippet to run, with the other ways behind it | heading, body, code, language, selectLabel, tone, padding, width, items |
+| `codeTabs` | A snippet to run, with the other ways behind it | heading, body, code, language, selectLabel, copiedLabel, tone, padding, width, items |
 | `progressList` | How far along each entry of a collection is | heading, collection, filterField, filterValue, empty, tone, padding, width |
 | `changelogList` | Release entries, with the word for the kind of release | heading, collection, filterField, filterValue, empty, tone, padding, width |
 | `faq` | Questions, all openable at once | heading, body, tone, padding, width, items |
@@ -79,7 +79,7 @@ one to look different saves its own under the same name and that one wins.
 | `tier` | One tier | name, amount, body, label, href, tone |
 | `person` | One person | name, role, photo, href, linkLabel, align |
 | `keyValueRow` | One fact | label, value |
-| `codeTab` | One more way to run it | label, code, language, selectLabel, group |
+| `codeTab` | One more way to run it | label, code, language, selectLabel, copiedLabel, group |
 | `faqItem` | One question and its answer | question, answer, tone |
 | `card` | One card typed in place | title, tag, body, meta, icon, tint, linkLabel, href, image, imageAlt |
 

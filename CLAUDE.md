@@ -69,9 +69,10 @@ What the build may not do, because of what is exported:
   here: `next/*` and `react` must stay external so the consumer's copies are what run, and the
   export names are what a consumer writes in its own route files. A bundler that inlines or reorders
   that hands Next something it cannot wire up. It also keeps the `"use client"` directive where Next
-  looks for it. Three files in `src` carry one (`src/blocks/search-keys.tsx`,
-  `src/blocks/filter-bar.tsx`, `src/screens/header-menu.tsx`): a directive is a file level marker
-  Next reads off the module it resolves, and a bundler is free to move it.
+  looks for it. Four files in `src` carry one (`src/blocks/search-keys.tsx`,
+  `src/blocks/filter-bar.tsx`, `src/blocks/copy-button.tsx`, `src/screens/header-menu.tsx`): a
+  directive is a file level marker Next reads off the module it resolves, and a bundler is free to
+  move it. When one more may join them is in section 3.
 - **No minifying or mangling.** Same reason. An export name is load-bearing, and so is a directive.
 - **Every relative import carries `.js`, and the reason is narrower than it looks.** The package is
   `type: module`, so `./config.js` is the specifier ESM asks for and `./config` is not, and `tsc`
@@ -123,6 +124,25 @@ one page the "newest" list is newest-of-an-arbitrary-page.
 **Preview forces a route dynamic.** Reading `searchParams` means `output: "export"` refuses the
 build outright. That is why there are two post screens over one `PostView`: a static site takes
 `createBlogPost` and gives up preview.
+
+**A client component is the exception, and it has to earn its place.** Everything else here renders
+on the server, and each client file costs every consumer bundle size and hydration on pages that had
+none. A block or a screen may hold one only when all of these hold, and the copy button on
+`codeSample` (#82) is the case they were written for:
+
+- What it does cannot be done with CSS, a link or a form. A tab strip is a stylesheet; a clipboard
+  write is not.
+- The server's markup is the whole feature without the script, and the script only adds to it. Until
+  it has hydrated it renders exactly what the server sent, so a reader with no script, and a page
+  before hydration, gets the select-all, the open dropdown on hover, every row of the filter.
+- No control is drawn that does nothing without the script. A button appears once the script is
+  there to make it work.
+- Its props are small and hold nothing secret, because they are serialised into the page. Pass the
+  look worked out on the server and the words the tenant typed, never the config, and not content
+  the page already holds.
+- It is its own small file with the directive, and it exports components only to server code. A
+  value a server module imports from a client module arrives as a client reference, not the value
+  (`src/blocks/search-attrs.ts` and `src/screens/header-styles.ts` exist for that reason).
 
 **Measure before you claim.** A cache-warming step lived here for a day with fourteen lines of
 comment explaining behaviour it did not have. An instrumented CMS showed it caused zero reads.

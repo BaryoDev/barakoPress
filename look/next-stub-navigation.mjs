@@ -13,3 +13,9 @@ export function permanentRedirect() {
 export function redirect() {
     throw new Error("redirect() was called by a component test that named no redirect target");
 }
+
+// The header's active-link marker reads it, and a fixture renders outside any request, so every
+// fixture is drawn as if at the site root.
+export function usePathname() {
+    return "/";
+}
