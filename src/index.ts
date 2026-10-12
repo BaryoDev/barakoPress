@@ -114,6 +114,8 @@ export type {
     SiteLink,
     HeaderAction,
     HeaderActionVariant,
+    HeaderRecipePart,
+    HeaderRecipes,
     FooterColumn,
     SocialLink,
     TopBar,

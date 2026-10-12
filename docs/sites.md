@@ -307,6 +307,27 @@ words on the controls are `openMenu`, `closeMenu`, `menu` and `submenu` in `Labe
 
 A site that sets none of them gets the header it had before, byte for byte.
 
+**Recipes on the header's parts.** `HeaderRecipes` names a style recipe from `StyleRecipes` for each
+part of the built-in header, the way a block names one with `recipe`. A part's recipe replaces that
+part's own look, its declarations and its classes; a part with none, or a name the theme has no
+recipe for, draws as it did.
+
+```json
+{ "links": "nav-track", "link": "nav-pill", "current": "nav-pill-on", "badge": "nav-badge", "action": "cta", "brand": "brand" }
+```
+
+| Part | What it reaches |
+| --- | --- |
+| `links` | The row `HeaderLinks` sit in. It keeps the class `bp-header-links`, so the phone breakpoint still hides it |
+| `link` | Each top level header link |
+| `current` | The top level link that is current by its `activeOn`, in place of `link`. It keeps `aria-current` and `bp-current`. Unset, the current link wears `link` |
+| `badge` | Every badge in the header and the phone menu |
+| `action` | Every `HeaderActions` link, whatever its variant, in the header and the phone menu. `data-variant` stays on the element |
+| `brand` | The logo or name that links home |
+
+The dropdown's rows and the phone menu's rows keep their own look. A hover or focus style is a class
+in the recipe, written in the site's own stylesheet, as on any recipe.
+
 A region page is chrome rather than somewhere to go, so it is left out of the menu and the sitemap,
 and it answers 404 at its own route: what it holds is already on every page. A collection's
 `indexPage` is treated the same way.

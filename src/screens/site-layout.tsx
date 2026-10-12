@@ -14,6 +14,7 @@ import {
 import { allowedScriptOrigins, analyticsTag, type AnalyticsTag } from "../analytics.js";
 import { SHARE_INVALID_FRAGMENT } from "../routes/share.js";
 import { themeVariablesCss, type PressTheme } from "../theme.js";
+import { lookOr, recipeLook } from "../recipes.js";
 import type { BlockRegistry } from "../blocks/schema.js";
 import { getNavigation, getPageAtPath, isChromePath, type NavItem, type Page } from "../cms.js";
 import { Navigation } from "./navigation.js";
@@ -342,8 +343,12 @@ function headerLinkStyles(t: PressTheme, link: CSSProperties, badge: CSSProperti
     };
 }
 
-/** The header sits on the surface, so the actions take that tone's colours. */
-function headerActionStyles(t: PressTheme): Record<HeaderActionVariant, CSSProperties> {
+/**
+ * The header sits on the surface, so the actions take that tone's colours. An `action` recipe
+ * replaces every variant's look; the variant is still on the element for a site's own CSS.
+ */
+function headerActionStyles(t: PressTheme, recipe?: CSSProperties): Record<HeaderActionVariant, CSSProperties> {
+    if (recipe) return { primary: recipe, secondary: recipe, plain: recipe };
     const tone = toneOf(t, "surface");
     const base: CSSProperties = {
         display: "inline-flex",
@@ -428,7 +433,37 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
     const extended = usesHeaderSettings(s);
     const feed = !cfg.holding && hasFeed(cfg);
     const actions = s.headerActions ?? [];
-    const actionStyles = extended ? headerActionStyles(t) : undefined;
+    const recipes = s.headerRecipes ?? {};
+    const link = lookOr(t, recipes.link, linkStyle);
+    const badge = lookOr(t, recipes.badge, badgeStyle);
+    const current = recipeLook(t, recipes.current);
+    const brand = lookOr(t, recipes.brand, {
+        ...linkStyle,
+        display: "flex",
+        alignItems: "center",
+        gap: "12px",
+        fontFamily: t.fonts.heading,
+        fontWeight: 700,
+        fontSize: "20px",
+    });
+    const row = lookOr(
+        t,
+        recipes.links,
+        { display: "flex", flexWrap: "wrap", gap: "8px 22px", fontSize: "15px" },
+        {},
+        extended ? "bp-header-links" : undefined,
+    );
+    const action = recipeLook(t, recipes.action);
+    const actionStyles = extended ? headerActionStyles(t, action?.style) : undefined;
+    const linkStyles: HeaderLinkStyles = {
+        ...headerLinkStyles(t, linkStyle, badgeStyle),
+        link: link.style,
+        badge: badge.style,
+        ...(link.className ? { linkClass: link.className } : {}),
+        ...(badge.className ? { badgeClass: badge.className } : {}),
+        ...(current ? { current: current.style } : {}),
+        ...(current?.className ? { currentClass: current.className } : {}),
+    };
 
     return (
         <>
@@ -462,10 +497,7 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
                         paddingBottom: "18px",
                     }}
                 >
-                    <Link
-                        href="/"
-                        style={{ ...linkStyle, display: "flex", alignItems: "center", gap: "12px", fontFamily: t.fonts.heading, fontWeight: 700, fontSize: "20px" }}
-                    >
+                    <Link href="/" className={brand.className} style={brand.style}>
                         {s.logo ? (
                             <Asset src={s.logo} alt={s.logoAlt ?? s.name} theme={t} style={{ height: "36px", width: "auto" }} />
                         ) : (
@@ -473,23 +505,15 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
                         )}
                     </Link>
                     <Navigation config={cfg} items={nav} />
-                    <span
-                        className={extended ? "bp-header-links" : undefined}
-                        style={{ display: "flex", flexWrap: "wrap", gap: "8px 22px", fontSize: "15px" }}
-                    >
+                    <span className={row.className} style={row.style}>
                         {(s.headerLinks ?? []).map((l) =>
                             l.activeOn || l.children?.length ? (
-                                <HeaderLink
-                                    key={l.href}
-                                    link={l}
-                                    styles={headerLinkStyles(t, linkStyle, badgeStyle)}
-                                    submenu={cfg.labels.submenu}
-                                />
+                                <HeaderLink key={l.href} link={l} styles={linkStyles} submenu={cfg.labels.submenu} />
                             ) : (
-                                <a key={l.href} href={l.href} style={linkStyle}>
+                                <a key={l.href} href={l.href} className={link.className} style={link.style}>
                                     {l.label}
                                     {l.badge && (
-                                        <span data-press="badge" style={badgeStyle}>
+                                        <span data-press="badge" className={badge.className} style={badge.style}>
                                             {l.badge}
                                         </span>
                                     )}
@@ -505,10 +529,16 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
                     {actionStyles && actions.length > 0 && (
                         <span className="bp-header-actions" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px" }}>
                             {actions.map((a) => (
-                                <a key={a.href} href={a.href} data-variant={a.variant} style={actionStyles[a.variant]}>
+                                <a
+                                    key={a.href}
+                                    href={a.href}
+                                    data-variant={a.variant}
+                                    className={action?.className}
+                                    style={actionStyles[a.variant]}
+                                >
                                     {a.label}
                                     {a.badge && (
-                                        <span data-press="badge" style={badgeStyle}>
+                                        <span data-press="badge" className={badge.className} style={badge.style}>
                                             {a.badge}
                                         </span>
                                     )}
@@ -522,7 +552,11 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
                             actions={actions}
                             feed={feed ? { label: cfg.labels.feed, href: "/feed.xml" } : undefined}
                             labels={{ openMenu: cfg.labels.openMenu, closeMenu: cfg.labels.closeMenu, menu: cfg.labels.menu }}
-                            styles={phoneMenuStyles(t, badgeStyle, actionStyles)}
+                            styles={{
+                                ...phoneMenuStyles(t, badge.style, actionStyles),
+                                ...(badge.className ? { badgeClass: badge.className } : {}),
+                                ...(action?.className ? { actionClass: action.className } : {}),
+                            }}
                         />
                     )}
                 </nav>

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.0 (unreleased)
+
+- `HeaderRecipes` puts style recipes on the built-in header's parts (#167): the link row, a link,
+  the current link, a badge, an action and the brand, each by the name of a recipe in
+  `StyleRecipes`. A part's recipe replaces that part's own look; a part with none draws as it did, so
+  a site that sets nothing gets the same header. A build-time site sets `site.headerRecipes`. The
+  `site` type needs a json field named `HeaderRecipes` for a tenant to save it. New exported types:
+  `HeaderRecipes`, `HeaderRecipePart`.
+
 ## 0.12.0 (2026-10-09)
 
 - barakoCMS 4.7 (BaryoDev/barakoCMS 4.7.0). This build reads delivery contracts 1 to 7

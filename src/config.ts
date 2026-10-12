@@ -165,6 +165,16 @@ export interface HeaderAction extends Omit<SiteLink, "activeOn" | "children"> {
     variant: HeaderActionVariant;
 }
 
+/**
+ * The parts of the built-in header a style recipe can reach: the row the links sit in, a link, the
+ * link that is current, a badge, an action, and the brand (the logo or name that links home).
+ */
+export const HEADER_RECIPE_PARTS = ["links", "link", "current", "badge", "action", "brand"] as const;
+export type HeaderRecipePart = (typeof HEADER_RECIPE_PARTS)[number];
+
+/** A recipe name from the theme's `recipes` for each header part that wears one. */
+export type HeaderRecipes = Partial<Record<HeaderRecipePart, string>>;
+
 export interface FooterColumn {
     heading: string;
     links: SiteLink[];
@@ -196,6 +206,12 @@ export interface SiteIdentity {
     /** The rows of the header's phone menu. Unset, the phone menu shows `headerLinks`. */
     menuLinks?: SiteLink[];
     headerActions?: HeaderAction[];
+    /**
+     * Style recipes for the built-in header's parts. A part's recipe replaces that part's own look,
+     * as a recipe on a block does. A part with none, or a name the theme has no recipe for, draws as
+     * it always did.
+     */
+    headerRecipes?: HeaderRecipes;
     footerColumns?: FooterColumn[];
     socialLinks?: SocialLink[];
     /** A Umami tracking script, absolute https. Rendered only with `analyticsWebsiteId`, and only from an origin in `PRESS_SCRIPT_ORIGINS`. */

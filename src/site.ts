@@ -12,6 +12,8 @@ import {
     type FooterColumn,
     type HeaderAction,
     HEADER_ACTION_VARIANTS,
+    HEADER_RECIPE_PARTS,
+    type HeaderRecipes,
     type Holding,
     type Home,
     type Labels,
@@ -45,7 +47,7 @@ import { isPluginName } from "./blocks/plugins.js";
 import { presetsFrom } from "./blocks/presets.js";
 import { SPACES, TONES } from "./blocks/tokens.js";
 import { COLOR, FLUID_LENGTH, LENGTH, mergeColors, tokensFrom, tonesFrom } from "./theme.js";
-import { recipesFrom } from "./recipes.js";
+import { RECIPE_NAME, recipesFrom } from "./recipes.js";
 import type {
     PressTheme,
     SuppliedAsset,
@@ -513,6 +515,22 @@ function headerActions(v: unknown): HeaderAction[] | undefined {
         })
         .filter(complete)
         .slice(0, 4);
+}
+
+/*
+ * `HeaderRecipes`: a recipe name per header part. A part it does not know, or a name that is not a
+ * recipe name, is dropped. Whether the theme has that recipe is settled when the header draws, the
+ * way a block's `recipe` is, so the two settings can be saved in either order.
+ */
+function headerRecipes(v: unknown): HeaderRecipes | undefined {
+    const input = record(v);
+    if (!input) return undefined;
+    const out: HeaderRecipes = {};
+    for (const part of HEADER_RECIPE_PARTS) {
+        const name = str(input[part])?.toLowerCase();
+        if (name && RECIPE_NAME.test(name)) out[part] = name;
+    }
+    return out;
 }
 
 function footerColumns(v: unknown): FooterColumn[] | undefined {
@@ -1222,6 +1240,7 @@ export function applySiteSettings(
         headerLinks: links(d.HeaderLinks, 24, true) ?? base.headerLinks,
         menuLinks: links(d.MenuLinks, 24, true) ?? base.menuLinks,
         headerActions: headerActions(d.HeaderActions) ?? base.headerActions,
+        headerRecipes: headerRecipes(d.HeaderRecipes) ?? base.headerRecipes,
         footerColumns: footerColumns(d.FooterColumns) ?? base.footerColumns,
         socialLinks: socialLinks(d.SocialLinks) ?? base.socialLinks,
         analyticsScript: analyticsScriptUrl(d.AnalyticsScript) ?? base.analyticsScript,

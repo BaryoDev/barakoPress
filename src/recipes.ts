@@ -347,3 +347,23 @@ export function recipeLook(theme: PressTheme, name: string | undefined): RecipeL
     cache.set(name, look);
     return look ?? undefined;
 }
+
+/**
+ * What an element that may wear recipe `name` is drawn with. With no such recipe it is `defaults`,
+ * the same object the element always drew, so a site that names none renders byte for byte as it
+ * did. With one, the recipe's declarations replace the defaults outright, and `keep`, what the
+ * element needs to be itself, wins over the recipe. `className` is a class the element always
+ * carries, beside the recipe's.
+ */
+export function lookOr(
+    theme: PressTheme,
+    name: string | undefined,
+    defaults: CSSProperties,
+    keep: CSSProperties = {},
+    className?: string,
+): RecipeLook {
+    const found = recipeLook(theme, name);
+    if (!found) return className ? { style: defaults, className } : { style: defaults };
+    const classes = [className, found.className].filter(Boolean).join(" ");
+    return { style: { ...found.style, ...keep }, ...(classes ? { className: classes } : {}) };
+}
