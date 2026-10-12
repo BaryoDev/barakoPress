@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- `/api/blocks` publishes the renderer's limits and theme vocabulary beside the blocks: `limits`
+  (`maxBlocks` and `maxDepth`, today 400 and 10) and `theme` (`colorSlots`, `colorAliases` and
+  `fontRoles`), so barakoBrew can warn at the real block budget and list the real colour slots
+  instead of keeping copies (barakoBrew #166). Both are new members, the schema stays version 2,
+  and a reader that does not know them ignores them.
+
 ## 0.12.0 (2026-10-09)
 
 - barakoCMS 4.7 (BaryoDev/barakoCMS 4.7.0). This build reads delivery contracts 1 to 7

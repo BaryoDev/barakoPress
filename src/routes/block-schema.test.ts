@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defineConfig } from "../config.js";
 import { createBlockRegistry } from "../blocks/registry.js";
+import { MAX_BLOCKS, MAX_DEPTH } from "../blocks/schema.js";
 import { createBlockSchemaPreflight, createBlockSchemaRoute, parseOrigins } from "./block-schema.js";
 
 const config = defineConfig({ site: { name: "Test", url: "https://test.example" } });
@@ -69,6 +70,34 @@ describe("the block schema route across origins", () => {
         expect(unlisted.headers.get("access-control-allow-origin")).toBeNull();
         expect(unlisted.headers.get("access-control-allow-methods")).toBeNull();
         expect(unlisted.headers.get("vary")).toBe("Origin");
+    });
+});
+
+describe("what the block schema says about the renderer", () => {
+    type Published = {
+        limits?: { maxBlocks: number; maxDepth: number };
+        theme?: { colorSlots: string[]; colorAliases: Record<string, string>; fontRoles: string[] };
+    };
+
+    it("publishes the block budget and depth the renderer reads, not a copy of them", async () => {
+        const body = (await createBlockSchemaRoute(registry)().json()) as Published;
+
+        expect(body.limits).toEqual({ maxBlocks: MAX_BLOCKS, maxDepth: MAX_DEPTH });
+        // The console's copy says 100 and 4. These are what a page is actually cut at.
+        expect(body.limits).toEqual({ maxBlocks: 400, maxDepth: 10 });
+    });
+
+    it("publishes the colour slots by role, the old names beside them, and the font roles", async () => {
+        const res = await createBlockSchemaRoute(config, registry)(from());
+        const { theme } = (await res.json()) as Published;
+
+        expect(theme?.colorSlots).toHaveLength(19);
+        expect(theme?.colorSlots).toEqual(expect.arrayContaining(["pageBg", "inverse", "inverseChrome", "code", "success"]));
+        expect(theme?.colorSlots).not.toContain("darkPanel");
+        expect(theme?.colorSlots).not.toContain("codeGreen");
+        expect(Object.keys(theme?.colorAliases ?? {})).toHaveLength(6);
+        expect(theme?.colorAliases).toMatchObject({ darkPanel: "inverse", codeGreen: "code" });
+        expect(theme?.fontRoles).toEqual(["heading", "body", "mono"]);
     });
 });
 

@@ -199,6 +199,12 @@ delivery that purges it. A build-time site with no plugins gets the same answer 
 registry, the route cannot tell which plugins the site enabled, so it offers no plugin's blocks and
 lists every plugin as off; a site with plugins passes the config.
 
+**Limits and theme names in the schema.** The answer also carries `limits`, the block budget and
+depth below (`{ "maxBlocks": 400, "maxDepth": 10 }`), and `theme`: `colorSlots`, the `Colors` names
+the renderer draws with, `colorAliases`, the older names it still accepts mapped to their slot
+(`darkPanel` to `inverse`), and `fontRoles`, the `Fonts` names. An editor reads these instead of
+keeping its own copy. An older press leaves both out, so a reader keeps a fallback.
+
 Field kinds are `text`, `markdown`, `url`, `number`, `boolean`, `select` (with `options`), `slots`
 (lists of nested blocks, handed to the component already rendered), `list` and `group` (below). The list is editor input, so a
 block renders only when its type is registered and every prop passes its field. A present but wrong
