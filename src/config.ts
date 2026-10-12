@@ -175,6 +175,19 @@ export type HeaderRecipePart = (typeof HEADER_RECIPE_PARTS)[number];
 /** A recipe name from the theme's `recipes` for each header part that wears one. */
 export type HeaderRecipes = Partial<Record<HeaderRecipePart, string>>;
 
+/** One symbol of a site's icon sprite: a box and the paths drawn in it. */
+export interface IconSymbol {
+    /** The SVG `viewBox`, four numbers. */
+    viewBox: string;
+    /** Path data, one `d` per path. */
+    paths: string[];
+    /** `currentColor` or `none`. `currentColor` when unset. */
+    fill?: "currentColor" | "none";
+    /** `currentColor` or `none`. None when unset. */
+    stroke?: "currentColor" | "none";
+    strokeWidth?: number;
+}
+
 export interface FooterColumn {
     heading: string;
     links: SiteLink[];
@@ -212,6 +225,11 @@ export interface SiteIdentity {
      * it always did.
      */
     headerRecipes?: HeaderRecipes;
+    /**
+     * Symbols drawn once at the top of every page, keyed by id, so `#id` names them wherever the
+     * engine takes a reference to a symbol on the page (a tree's `icons`).
+     */
+    iconSprite?: Readonly<Record<string, IconSymbol>>;
     footerColumns?: FooterColumn[];
     socialLinks?: SocialLink[];
     /** A Umami tracking script, absolute https. Rendered only with `analyticsWebsiteId`, and only from an origin in `PRESS_SCRIPT_ORIGINS`. */

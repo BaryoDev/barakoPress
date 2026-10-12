@@ -328,6 +328,23 @@ recipe for, draws as it did.
 The dropdown's rows and the phone menu's rows keep their own look. A hover or focus style is a class
 in the recipe, written in the site's own stylesheet, as on any recipe.
 
+**An icon sprite.** `IconSprite` puts symbols on every page, so a tree's `icons` (`#search`,
+`#chevron`) can name the site's own glyphs without an overlay. It is keyed by the symbol's id, each
+entry a box and its paths:
+
+```json
+{
+  "search": { "viewBox": "0 0 24 24", "paths": ["M10 4a6 6 0 1 0 0 12a6 6 0 1 0 0-12z", "M15 15l5 5"], "fill": "none", "stroke": "currentColor", "strokeWidth": 2 },
+  "chevron": { "viewBox": "0 0 12 12", "paths": ["M2 4l4 4 4-4"] }
+}
+```
+
+`fill` and `stroke` are `currentColor` or `none` (`fill` is `currentColor` and `stroke` is `none` when
+unset), so a glyph takes the colour of the text around it. The sprite is drawn as elements, never as
+SVG markup a tenant wrote: an id is a name, `viewBox` is four numbers and a path is path data, so
+nothing in it can run or load anything. A symbol with anything else in it is left out whole. Up to
+64 symbols of up to 16 paths each. A build-time site sets `site.iconSprite`.
+
 A region page is chrome rather than somewhere to go, so it is left out of the menu and the sitemap,
 and it answers 404 at its own route: what it holds is already on every page. A collection's
 `indexPage` is treated the same way.

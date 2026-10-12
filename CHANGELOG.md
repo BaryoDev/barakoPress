@@ -14,6 +14,12 @@
   linking home. Each takes style recipes, falling back to the parts named in `HeaderRecipes`. The
   names carry `site` so a tenant preset called `logo` or `navigation` is not hidden by a code block.
 
+- `IconSprite` puts a tenant's symbols on every page (#167), so a tree's `icons` can name the site's
+  own glyphs. Each symbol is a `viewBox` and its path data, drawn as elements with paint held to
+  `currentColor` or `none`; a symbol with anything else in it is left out. A build-time site sets
+  `site.iconSprite`. New exported type: `IconSymbol`. The `site` type needs a json field named
+  `IconSprite` for a tenant to save it.
+
 ## 0.12.0 (2026-10-09)
 
 - barakoCMS 4.7 (BaryoDev/barakoCMS 4.7.0). This build reads delivery contracts 1 to 7

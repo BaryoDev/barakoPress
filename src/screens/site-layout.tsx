@@ -3,7 +3,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Asset } from "../assets.js";
 import { isImageSrc, shareImageUrl } from "../media.js";
-import { hasFeed, type HeaderActionVariant, type PressConfig, type Region, type SiteIdentity } from "../config.js";
+import {
+    hasFeed,
+    type HeaderActionVariant,
+    type IconSymbol,
+    type PressConfig,
+    type Region,
+    type SiteIdentity,
+} from "../config.js";
 import { showsHoldingPage, siteConfigOrNull, type SiteParams } from "../site.js";
 import {
     allowedFontOrigins,
@@ -530,6 +537,38 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
     );
 }
 
+/*
+ * The site's icon sprite, once, before anything that names a symbol in it. Sized to nothing rather
+ * than `display:none`, which some browsers carry into what a `<use>` draws.
+ */
+function IconSprite({ symbols }: { symbols: Readonly<Record<string, IconSymbol>> }) {
+    const entries = Object.entries(symbols);
+    if (entries.length === 0) return null;
+    return (
+        <svg
+            data-press="icon-sprite"
+            aria-hidden="true"
+            focusable="false"
+            style={{ position: "absolute", width: 0, height: 0, overflow: "hidden" }}
+        >
+            {entries.map(([id, symbol]) => (
+                <symbol
+                    key={id}
+                    id={id}
+                    viewBox={symbol.viewBox}
+                    fill={symbol.fill ?? "currentColor"}
+                    stroke={symbol.stroke ?? "none"}
+                    strokeWidth={symbol.strokeWidth}
+                >
+                    {symbol.paths.map((d, i) => (
+                        <path key={i} d={d} />
+                    ))}
+                </symbol>
+            ))}
+        </svg>
+    );
+}
+
 function BuiltInFooter({ cfg }: { cfg: PressConfig }) {
     const t = cfg.theme;
     const c = t.colors;
@@ -615,6 +654,7 @@ export function createSiteLayout(config: PressConfig, options: SiteLayoutOptions
             <html lang={cfg.locale}>
                 <ThemeHead theme={t} loadFonts={loadFonts} analytics={analyticsTag(cfg.site, allowedScriptOrigins())} />
                 <body style={{ margin: 0, background: c.pageBg, color: c.ink, fontFamily: t.fonts.body }}>
+                    {cfg.site.iconSprite && <IconSprite symbols={cfg.site.iconSprite} />}
                     {headerPage && headerRegion && registry ? (
                         await RegionBand({ cfg, region: headerRegion, page: headerPage, registry, tag: "header" })
                     ) : (

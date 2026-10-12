@@ -116,6 +116,7 @@ export type {
     HeaderActionVariant,
     HeaderRecipePart,
     HeaderRecipes,
+    IconSymbol,
     FooterColumn,
     SocialLink,
     TopBar,

@@ -14,6 +14,7 @@ import {
     HEADER_ACTION_VARIANTS,
     HEADER_RECIPE_PARTS,
     type HeaderRecipes,
+    type IconSymbol,
     type Holding,
     type Home,
     type Labels,
@@ -529,6 +530,54 @@ function headerRecipes(v: unknown): HeaderRecipes | undefined {
     for (const part of HEADER_RECIPE_PARTS) {
         const name = str(input[part])?.toLowerCase();
         if (name && RECIPE_NAME.test(name)) out[part] = name;
+    }
+    return out;
+}
+
+/*
+ * `IconSprite`: symbols by id, each `{ viewBox, paths, fill, stroke, strokeWidth }`. It is drawn as
+ * elements, never as markup a tenant wrote, so nothing in it can be a script or load anything: an id
+ * is a name, a box is four numbers, a path is path data and nothing else, and a paint is
+ * `currentColor` or `none`. A symbol with anything unreadable is left out whole.
+ */
+const ICON_ID = /^[A-Za-z][A-Za-z0-9_-]{0,62}$/;
+const VIEW_BOX = /^-?[0-9]{1,5}(\.[0-9]{1,4})?([ ,]+-?[0-9]{1,5}(\.[0-9]{1,4})?){3}$/;
+const PATH_DATA = /^[MmLlHhVvCcSsQqTtAaZz0-9eE.,\s+-]{1,4000}$/;
+const MAX_SYMBOLS = 64;
+const MAX_PATHS = 16;
+
+function paint(v: unknown): "currentColor" | "none" | undefined | null {
+    if (v === undefined) return undefined;
+    return v === "currentColor" || v === "none" ? v : null;
+}
+
+function iconSymbol(v: unknown): IconSymbol | undefined {
+    const raw = record(v);
+    const viewBox = str(raw?.viewBox);
+    const paths = array(raw?.paths);
+    if (!raw || !viewBox || !VIEW_BOX.test(viewBox) || !paths || paths.length === 0 || paths.length > MAX_PATHS) return undefined;
+    if (!paths.every((d) => typeof d === "string" && PATH_DATA.test(d))) return undefined;
+    const fill = paint(raw.fill);
+    const stroke = paint(raw.stroke);
+    if (fill === null || stroke === null) return undefined;
+    const width = raw.strokeWidth;
+    if (width !== undefined && !(typeof width === "number" && width > 0 && width <= 32)) return undefined;
+    return {
+        viewBox,
+        paths: paths as string[],
+        ...(fill ? { fill } : {}),
+        ...(stroke ? { stroke } : {}),
+        ...(typeof width === "number" ? { strokeWidth: width } : {}),
+    };
+}
+
+function iconSprite(v: unknown): Record<string, IconSymbol> | undefined {
+    const raw = record(v);
+    if (!raw) return undefined;
+    const out: Record<string, IconSymbol> = {};
+    for (const [id, spec] of Object.entries(raw).slice(0, MAX_SYMBOLS)) {
+        const symbol = ICON_ID.test(id) ? iconSymbol(spec) : undefined;
+        if (symbol) out[id] = symbol;
     }
     return out;
 }
@@ -1241,6 +1290,7 @@ export function applySiteSettings(
         menuLinks: links(d.MenuLinks, 24, true) ?? base.menuLinks,
         headerActions: headerActions(d.HeaderActions) ?? base.headerActions,
         headerRecipes: headerRecipes(d.HeaderRecipes) ?? base.headerRecipes,
+        iconSprite: iconSprite(d.IconSprite) ?? base.iconSprite,
         footerColumns: footerColumns(d.FooterColumns) ?? base.footerColumns,
         socialLinks: socialLinks(d.SocialLinks) ?? base.socialLinks,
         analyticsScript: analyticsScriptUrl(d.AnalyticsScript) ?? base.analyticsScript,
