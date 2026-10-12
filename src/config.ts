@@ -165,6 +165,29 @@ export interface HeaderAction extends Omit<SiteLink, "activeOn" | "children"> {
     variant: HeaderActionVariant;
 }
 
+/**
+ * The parts of the built-in header a style recipe can reach: the row the links sit in, a link, the
+ * link that is current, a badge, an action, and the brand (the logo or name that links home).
+ */
+export const HEADER_RECIPE_PARTS = ["links", "link", "current", "badge", "action", "brand"] as const;
+export type HeaderRecipePart = (typeof HEADER_RECIPE_PARTS)[number];
+
+/** A recipe name from the theme's `recipes` for each header part that wears one. */
+export type HeaderRecipes = Partial<Record<HeaderRecipePart, string>>;
+
+/** One symbol of a site's icon sprite: a box and the paths drawn in it. */
+export interface IconSymbol {
+    /** The SVG `viewBox`, four numbers. */
+    viewBox: string;
+    /** Path data, one `d` per path. */
+    paths: string[];
+    /** `currentColor` or `none`. `currentColor` when unset. */
+    fill?: "currentColor" | "none";
+    /** `currentColor` or `none`. None when unset. */
+    stroke?: "currentColor" | "none";
+    strokeWidth?: number;
+}
+
 export interface FooterColumn {
     heading: string;
     links: SiteLink[];
@@ -196,6 +219,24 @@ export interface SiteIdentity {
     /** The rows of the header's phone menu. Unset, the phone menu shows `headerLinks`. */
     menuLinks?: SiteLink[];
     headerActions?: HeaderAction[];
+    /**
+     * Style recipes for the built-in header's parts. A part's recipe replaces that part's own look,
+     * as a recipe on a block does. A part with none, or a name the theme has no recipe for, draws as
+     * it always did.
+     */
+    headerRecipes?: HeaderRecipes;
+    /**
+     * Symbols drawn once at the top of every page, keyed by id, so `#id` names them wherever the
+     * engine takes a reference to a symbol on the page (a tree's `icons`). An id starts with `ic-`;
+     * one that does not is not drawn, so it cannot take a heading's id or the engine's.
+     */
+    iconSprite?: Readonly<Record<string, IconSymbol>>;
+    /**
+     * Every section band of a page rises (`rise`) or fades (`fade`) in as it scrolls into view, in
+     * CSS. Off when unset. A visitor who asked for reduced motion, or a browser without view
+     * timelines, sees each band where it is.
+     */
+    revealOnScroll?: "rise" | "fade";
     footerColumns?: FooterColumn[];
     socialLinks?: SocialLink[];
     /** A Umami tracking script, absolute https. Rendered only with `analyticsWebsiteId`, and only from an origin in `PRESS_SCRIPT_ORIGINS`. */

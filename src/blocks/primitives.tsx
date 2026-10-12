@@ -7,6 +7,7 @@ import { plainLiterals } from "../literal.js";
 import { recipeLook } from "../recipes.js";
 import type { PressTheme } from "../theme.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
+import { CopyButton } from "./copy-button.js";
 import {
     HIDDEN_CLASS,
     HUE_STEPS,
@@ -1844,16 +1845,16 @@ const typingTerminal = defineBlock<{ lines: string; prompt?: string; seconds?: n
 /*
  * A snippet somebody is meant to take away.
  *
- * `selectLabel` is the whole of the copy affordance, and it says what it does: one click selects the
- * snippet, and the visitor copies it. A copy button is a control that needs the clipboard API, and
- * this package ships no client component, so a <button> here would be a control that does nothing
- * without JavaScript. That is the same trade `disclosure` made against a tab strip. A site that
- * wants the button registers its own block under this name.
+ * `selectLabel` is the copy affordance, in the tenant's word. In the server's markup it is text, and
+ * one click selects the whole snippet. Once a script has hydrated and the clipboard API is there,
+ * `CopyButton` turns that word into a button that copies the snippet, and selects it instead if the
+ * copy fails (#82). `copiedLabel` is what the button says, and a screen reader hears, once it has.
  */
 const codeSample = defineBlock<{
     code: string;
     language?: string;
     selectLabel?: string;
+    copiedLabel?: string;
     radius?: string;
     recipe?: string;
 }>({
@@ -1864,6 +1865,7 @@ const codeSample = defineBlock<{
         { name: "code", kind: "text", label: "Code", required: true },
         { name: "language", kind: "text", label: "Language" },
         { name: "selectLabel", kind: "text", label: "Say this above it, for copying" },
+        { name: "copiedLabel", kind: "text", label: "Say this once it is copied" },
         { name: "radius", kind: "select", label: "Corners", options: [...RADII] },
         recipeField,
     ],
@@ -1893,7 +1895,24 @@ const codeSample = defineBlock<{
                         }}
                     >
                         <span>{props.language}</span>
-                        <span>{props.selectLabel}</span>
+                        {props.selectLabel ? (
+                            <CopyButton
+                                label={props.selectLabel}
+                                copiedLabel={props.copiedLabel}
+                                style={{
+                                    margin: 0,
+                                    padding: `0 ${theme.space.xs}`,
+                                    border: `1px solid ${tone.hairline}`,
+                                    borderRadius: theme.radii.control,
+                                    background: "none",
+                                    color: "inherit",
+                                    font: "inherit",
+                                    cursor: "pointer",
+                                }}
+                            />
+                        ) : (
+                            <span />
+                        )}
                     </div>
                 )}
                 <pre

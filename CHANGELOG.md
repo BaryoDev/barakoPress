@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.13.0 (unreleased)
+
+- `HeaderRecipes` puts style recipes on the built-in header's parts (#167): the link row, a link,
+  the current link, a badge, an action and the brand, each by the name of a recipe in
+  `StyleRecipes`. A part's recipe replaces that part's own look; a part with none draws as it did, so
+  a site that sets nothing gets the same header. A build-time site sets `site.headerRecipes`. The
+  `site` type needs a json field named `HeaderRecipes` for a tenant to save it. New exported types:
+  `HeaderRecipes`, `HeaderRecipePart`.
+
+- Two blocks for a header region (#167). `siteNavigation` draws the site's `HeaderLinks` with the
+  built-in header's current marking and dropdowns, and `siteLogo` draws the logo or the name
+  linking home. Each takes style recipes, falling back to the parts named in `HeaderRecipes`. The
+  names carry `site` so a tenant preset called `logo` or `navigation` is not hidden by a code block.
+
+- `IconSprite` puts a tenant's symbols on every page (#167), so a tree's `icons` can name the site's
+  own glyphs. Each symbol is a `viewBox` and its path data, drawn as elements with paint held to
+  `currentColor` or `none`; a symbol with anything else in it is left out. A symbol id starts with
+  `ic-`, which keeps it off the engine's `bp-` ids and most heading anchors. A build-time site sets
+  `site.iconSprite`. New exported type: `IconSymbol`. The `site` type needs a json field named
+  `IconSprite` for a tenant to save it.
+
+- `RevealOnScroll` (`rise` or `fade`) reveals every section band of a page as it scrolls into view
+  (#167), in CSS and only where motion is wanted and view timelines exist, so no band is ever left
+  hidden waiting for a script. Off when unset. A build-time site sets `site.revealOnScroll`. The
+  `site` type needs a string field named `RevealOnScroll` for a tenant to save it.
+
+- `codeSample` copies to the clipboard (#82). The server's markup is unchanged: `selectLabel` as text
+  over a snippet one click selects. Once a script has hydrated and the browser has a clipboard API,
+  the word becomes a button that copies the snippet, says `copiedLabel` (a new optional prop, also on
+  `codeTabs` and `codeTab`) and announces it, and selects the snippet if the copy is refused. It is
+  the fourth client component, and CLAUDE.md now says when a block may hold one.
+
 ## 0.12.0 (2026-10-09)
 
 - barakoCMS 4.7 (BaryoDev/barakoCMS 4.7.0). This build reads delivery contracts 1 to 7

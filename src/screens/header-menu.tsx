@@ -44,9 +44,19 @@ function marked(on: boolean) {
     return on ? ({ "aria-current": "page", className: "bp-current" } as const) : {};
 }
 
-function Badge({ text, style }: { text?: string; style: CSSProperties }) {
+/*
+ * A top level link's attributes. The current one wears the `current` look when there is one and the
+ * link's own look otherwise, beside the `bp-current` class it always has.
+ */
+function linkLook(on: boolean, styles: HeaderLinkStyles) {
+    const own = on && styles.current ? { style: styles.current, cls: styles.currentClass } : { style: styles.link, cls: styles.linkClass };
+    const className = [on ? "bp-current" : undefined, own.cls].filter(Boolean).join(" ") || undefined;
+    return { ...(on ? ({ "aria-current": "page" } as const) : {}), className, style: own.style };
+}
+
+function Badge({ text, style, className }: { text?: string; style: CSSProperties; className?: string }) {
     return text ? (
-        <span data-press="badge" style={style}>
+        <span data-press="badge" className={className} style={style}>
             {text}
         </span>
     ) : null;
@@ -54,7 +64,12 @@ function Badge({ text, style }: { text?: string; style: CSSProperties }) {
 
 export interface HeaderLinkStyles {
     link: CSSProperties;
+    linkClass?: string;
+    /** The current link's look, from a recipe. Unset, the current link wears `link`. */
+    current?: CSSProperties;
+    currentClass?: string;
     badge: CSSProperties;
+    badgeClass?: string;
     dropdown: CSSProperties;
     toggle: CSSProperties;
     menu: CSSProperties;
@@ -65,9 +80,9 @@ export interface HeaderLinkStyles {
 export function HeaderLink({ link, styles, submenu }: { link: SiteLink; styles: HeaderLinkStyles; submenu: string }) {
     const pathname = usePathname();
     const anchor = (
-        <a href={link.href} {...marked(isCurrentLink(pathname, link))} style={styles.link}>
+        <a href={link.href} {...linkLook(isCurrentLink(pathname, link), styles)}>
             {link.label}
-            <Badge text={link.badge} style={styles.badge} />
+            <Badge text={link.badge} style={styles.badge} className={styles.badgeClass} />
         </a>
     );
     if (!link.children || link.children.length === 0) return anchor;
@@ -148,7 +163,7 @@ function Dropdown({
                     <li key={child.href}>
                         <a href={child.href} {...marked(isCurrentPath(pathname, child.activeOn))} style={styles.menuLink}>
                             {child.label}
-                            <Badge text={child.badge} style={styles.badge} />
+                            <Badge text={child.badge} style={styles.badge} className={styles.badgeClass} />
                         </a>
                     </li>
                 ))}
@@ -164,8 +179,10 @@ export interface PhoneMenuStyles {
     children: CSSProperties;
     row: CSSProperties;
     badge: CSSProperties;
+    badgeClass?: string;
     actions: CSSProperties;
     action: Record<HeaderAction["variant"], CSSProperties>;
+    actionClass?: string;
 }
 
 export interface PhoneMenuLabels {
@@ -203,7 +220,7 @@ export function PhoneMenu({
     const row = (link: SiteLink, on: boolean) => (
         <a data-press="menu-link" href={link.href} {...marked(on)} style={styles.row}>
             {link.label}
-            <Badge text={link.badge} style={styles.badge} />
+            <Badge text={link.badge} style={styles.badge} className={styles.badgeClass} />
         </a>
     );
 
@@ -255,9 +272,15 @@ export function PhoneMenu({
                 {actions.length > 0 && (
                     <p style={styles.actions}>
                         {actions.map((action) => (
-                            <a key={action.href} href={action.href} data-variant={action.variant} style={styles.action[action.variant]}>
+                            <a
+                                key={action.href}
+                                href={action.href}
+                                data-variant={action.variant}
+                                className={styles.actionClass}
+                                style={styles.action[action.variant]}
+                            >
                                 {action.label}
-                                <Badge text={action.badge} style={styles.badge} />
+                                <Badge text={action.badge} style={styles.badge} className={styles.badgeClass} />
                             </a>
                         ))}
                     </p>

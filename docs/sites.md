@@ -307,13 +307,71 @@ words on the controls are `openMenu`, `closeMenu`, `menu` and `submenu` in `Labe
 
 A site that sets none of them gets the header it had before, byte for byte.
 
+**Recipes on the header's parts.** `HeaderRecipes` names a style recipe from `StyleRecipes` for each
+part of the built-in header, the way a block names one with `recipe`. A part's recipe replaces that
+part's own look, its declarations and its classes; a part with none, or a name the theme has no
+recipe for, draws as it did.
+
+```json
+{ "links": "nav-track", "link": "nav-pill", "current": "nav-pill-on", "badge": "nav-badge", "action": "cta", "brand": "brand" }
+```
+
+| Part | What it reaches |
+| --- | --- |
+| `links` | The row `HeaderLinks` sit in. It keeps the class `bp-header-links`, so the phone breakpoint still hides it |
+| `link` | Each top level header link |
+| `current` | The top level link that is current by its `activeOn`, in place of `link`. It keeps `aria-current` and `bp-current`. Unset, the current link wears `link` |
+| `badge` | Every badge in the header and the phone menu |
+| `action` | Every `HeaderActions` link, whatever its variant, in the header and the phone menu. `data-variant` stays on the element |
+| `brand` | The logo or name that links home |
+
+The dropdown's rows and the phone menu's rows keep their own look. A hover or focus style is a class
+in the recipe, written in the site's own stylesheet, as on any recipe.
+
+**An icon sprite.** `IconSprite` puts symbols on every page, so a tree's `icons` (`#ic-search`,
+`#ic-chevron`) can name the site's own glyphs without an overlay. It is keyed by the symbol's id, each
+entry a box and its paths:
+
+```json
+{
+  "ic-search": { "viewBox": "0 0 24 24", "paths": ["M10 4a6 6 0 1 0 0 12a6 6 0 1 0 0-12z", "M15 15l5 5"], "fill": "none", "stroke": "currentColor", "strokeWidth": 2 },
+  "ic-chevron": { "viewBox": "0 0 12 12", "paths": ["M2 4l4 4 4-4"] }
+}
+```
+
+`fill` and `stroke` are `currentColor` or `none` (`fill` is `currentColor` and `stroke` is `none` when
+unset), so a glyph takes the colour of the text around it. The sprite is drawn as elements, never as
+SVG markup a tenant wrote: an id is a name, `viewBox` is four numbers and a path is path data, so
+nothing in it can run or load anything. A symbol with anything else in it is left out whole. Up to
+64 symbols of up to 16 paths each.
+
+A symbol's id starts with `ic-`, and one without the prefix is left out. The sprite is the first thing
+on the page and a browser takes the first element with a given id, so a symbol called `search` would
+take `#search` from a `## Search` heading. Keep the rest of the id clear of the site's headings and
+block anchors too: a `## IC chips` heading is `ic-chips`. A build-time site sets `site.iconSprite`.
+
+**Reveal on scroll.** `RevealOnScroll` set to `rise` or `fade` makes every section band of a page
+lift or fade in as it scrolls into view, the way a `reveal` block does with what it holds, without
+wrapping each band in one. Unset, nothing moves; `off` turns off a reveal the config set. It is CSS
+(`animation-timeline: view()`), with no script: a band is drawn where it ends up and the animation
+only takes it away and puts it back, so a visitor who asked for reduced motion, and a browser
+without view timelines, sees every band in place. Header and footer regions are left alone. A
+build-time site sets `site.revealOnScroll`.
+
 A region page is chrome rather than somewhere to go, so it is left out of the menu and the sitemap,
 and it answers 404 at its own route: what it holds is already on every page. A collection's
 `indexPage` is treated the same way.
 
 A header region replaces the whole band, the site name, the menu and the RSS link along with the top
-bar. There is no navigation or logo block yet, so a header region lists its own links until the block
-library has one.
+bar. Two blocks put the built-in header's parts back in it, drawn from the same settings:
+
+| Block | What |
+| --- | --- |
+| `siteNavigation` | `HeaderLinks`, in a `nav` named by `label` (`menu` in `Labels` when unset). A link's `activeOn` marks it current and its `children` open as the header's dropdown, with the same markup and the same behaviour. `gap` is a spacing step. `recipe`, `linkRecipe`, `currentRecipe` and `badgeRecipe` name style recipes for the row, a link, the current link and a badge; each unset one takes the part named in `HeaderRecipes`. Draws nothing on the holding page |
+| `siteLogo` | The logo, linking home, named by `LogoAlt`. `show` is `logo`, `name` or `both`; unset, the logo when the site has one and the name when it does not. With both, the image is decoration so the name is read once. `recipe` names a style recipe, and unset takes `brand` from `HeaderRecipes` |
+
+There is no phone menu in a region: `siteNavigation` wraps its links onto more lines on a narrow
+screen instead.
 
 A build-time site sets the same thing in its config, and a tenant's settings win over it:
 

@@ -85,6 +85,32 @@ const TENANTS: Record<string, { host: string; settings: Record<string, unknown> 
             ],
         },
     },
+    // Recipes on every part of the header.
+    pills: {
+        host: "pills.example",
+        settings: {
+            Name: "Pills",
+            Url: "https://pills.example",
+            StyleRecipes: {
+                track: { class: "track", style: { background: "#eef", "border-radius": "999px", padding: "4px" } },
+                pill: { class: "pill", style: { padding: "6px 12px", color: "inherit" } },
+                raised: { class: "raised", style: { background: "#fff", "box-shadow": "0 1px 2px #0003" } },
+                tag: { style: { "font-size": "10px", "text-transform": "uppercase" } },
+                cta: { class: "cta", style: { "border-radius": "999px", background: "#123456" } },
+                mark: { class: "mark", style: { display: "flex", gap: "8px" } },
+            },
+            HeaderLinks: [
+                { label: "Docs", href: "/docs", activeOn: "/docs" },
+                { label: "Guides", href: "/guides", activeOn: "/guides" },
+                { label: "Blog", href: "/blog", badge: "NEW" },
+            ],
+            HeaderActions: [
+                { label: "Start", href: "/start", variant: "secondary" },
+                { label: "Buy", href: "/buy", variant: "primary" },
+            ],
+            HeaderRecipes: JSON.stringify({ links: "track", link: "pill", current: "raised", badge: "tag", action: "cta", brand: "mark" }),
+        },
+    },
     // HeaderLinks and nothing new.
     plain: {
         host: "plain.example",
@@ -542,6 +568,92 @@ describe("the built-in header with the new settings", () => {
             expect(header).toContain('aria-label="Mga Products"');
         } finally {
             delete TENANTS.press.settings.Labels;
+        }
+    });
+});
+
+describe("style recipes on the built-in header", () => {
+    it("reads a recipe name per part it knows, and drops the rest", () => {
+        const recipes = applySiteSettings(
+            base,
+            { HeaderRecipes: { links: "Track", link: "pill", current: "has space", badge: 4, extra: "pill", brand: "mark" } },
+            null,
+        ).site.headerRecipes;
+        expect(recipes).toEqual({ links: "track", link: "pill", brand: "mark" });
+    });
+
+    it("keeps the configured recipes when the setting is not an object", () => {
+        const configured = { ...base, site: { ...base.site, headerRecipes: { link: "pill" } } };
+        expect(applySiteSettings(configured, { HeaderRecipes: ["pill"] }, null).site.headerRecipes).toEqual({ link: "pill" });
+    });
+
+    it("draws the link row in the links recipe, keeping the class the phone breakpoint hides", async () => {
+        const header = desktop(await headerAt("pills.example", "/"));
+        const row = tagsWith(header, "bp-header-links");
+        expect(row).toHaveLength(1);
+        expect(row[0]).toContain('class="bp-header-links track"');
+        expect(row[0]).toContain("border-radius:999px");
+        expect(row[0]).not.toContain("gap:8px 22px");
+    });
+
+    it("draws each link in the link recipe and the current one in the current recipe", async () => {
+        const header = desktop(await headerAt("pills.example", "/guides/setup"));
+        const links = ["/docs", "/guides", "/blog"].map((href) => tagsWith(header, `href="${href}"`));
+        for (const found of links) expect(found).toHaveLength(1);
+        const [docs, guides, blog] = links.map((found) => found[0]);
+        expect(docs).toContain('class="pill"');
+        expect(docs).toContain("padding:6px 12px");
+        expect(blog).toContain('class="pill"');
+        expect(guides).toContain('aria-current="page"');
+        expect(guides).toContain('class="bp-current raised"');
+        expect(guides).toContain("box-shadow:0 1px 2px #0003");
+        expect(guides).not.toContain("padding:6px 12px");
+    });
+
+    it("draws badges in the badge recipe", async () => {
+        const badges = tagsWith(desktop(await headerAt("pills.example", "/")), 'data-press="badge"');
+        expect(badges).toHaveLength(1);
+        expect(badges[0]).toContain("text-transform:uppercase");
+        expect(badges[0]).not.toContain("margin-left:6px");
+    });
+
+    it("draws every action in the action recipe, still marked with its variant", async () => {
+        const actions = tagsWith(desktop(await headerAt("pills.example", "/")), "data-variant=");
+        expect(actions).toHaveLength(2);
+        expect(actions[0]).toContain('data-variant="secondary"');
+        expect(actions[1]).toContain('data-variant="primary"');
+        for (const a of actions) {
+            expect(a).toContain('class="cta"');
+            expect(a).toContain("background:#123456");
+            expect(a).not.toContain(config.theme.colors.accent);
+        }
+        const phoneActions = tagsWith(phone(await headerAt("pills.example", "/")), "data-variant=");
+        expect(phoneActions).toHaveLength(2);
+        expect(phoneActions[0]).toContain('class="cta"');
+    });
+
+    it("draws the brand in the brand recipe", async () => {
+        const brand = tagsWith(desktop(await headerAt("pills.example", "/")), 'href="/"');
+        expect(brand).toHaveLength(1);
+        expect(brand[0]).toContain('class="mark"');
+        expect(brand[0]).toContain("gap:8px");
+        expect(brand[0]).not.toContain("font-size:20px");
+    });
+
+    it("draws a part whose recipe the theme does not have as it always did", async () => {
+        const recipes = TENANTS.pills.settings.HeaderRecipes;
+        TENANTS.pills.settings.HeaderRecipes = { link: "missing", brand: "missing" };
+        try {
+            const header = desktop(await headerAt("pills.example", "/"));
+            const blog = tagsWith(header, 'href="/blog"');
+            expect(blog).toHaveLength(1);
+            expect(blog[0]).toBe('<a href="/blog" style="color:inherit;text-decoration:none">');
+            const brand = tagsWith(header, 'href="/"');
+            expect(brand).toHaveLength(1);
+            expect(brand[0]).toContain("font-size:20px");
+            expect(brand[0]).not.toContain("class=");
+        } finally {
+            TENANTS.pills.settings.HeaderRecipes = recipes;
         }
     });
 });

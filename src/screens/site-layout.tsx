@@ -3,8 +3,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Asset } from "../assets.js";
 import { isImageSrc, shareImageUrl } from "../media.js";
-import { hasFeed, type HeaderActionVariant, type PressConfig, type Region, type SiteIdentity } from "../config.js";
-import { showsHoldingPage, siteConfigOrNull, type SiteParams } from "../site.js";
+import {
+    hasFeed,
+    type HeaderActionVariant,
+    type IconSymbol,
+    type PressConfig,
+    type Region,
+    type SiteIdentity,
+} from "../config.js";
+import { ICON_ID, showsHoldingPage, siteConfigOrNull, type SiteParams } from "../site.js";
 import {
     allowedFontOrigins,
     fontLinks,
@@ -14,14 +21,17 @@ import {
 import { allowedScriptOrigins, analyticsTag, type AnalyticsTag } from "../analytics.js";
 import { SHARE_INVALID_FRAGMENT } from "../routes/share.js";
 import { themeVariablesCss, type PressTheme } from "../theme.js";
+import { lookOr, recipeLook } from "../recipes.js";
 import type { BlockRegistry } from "../blocks/schema.js";
 import { getNavigation, getPageAtPath, isChromePath, type NavItem, type Page } from "../cms.js";
 import { Navigation } from "./navigation.js";
 import { HeaderLink, PhoneMenu, type HeaderLinkStyles, type PhoneMenuStyles } from "./header-menu.js";
+import { CURRENT_CSS, DROPDOWN_CSS, headerLinkStyles } from "./header-styles.js";
 import { PageView, pageBlocks } from "./page.js";
 import { createBlockRegistry, registryFor } from "../blocks/registry.js";
 import { BlockList } from "../blocks/render.js";
 import { spaceOf, toneOf, widthOf } from "../blocks/tokens.js";
+import { revealOnScrollCss } from "../blocks/motion.js";
 
 /*
  * The root layout and its metadata, from the site's identity and theme.
@@ -299,51 +309,19 @@ const HEADER_PHONE = "47.99rem";
  */
 const HEADER_CSS =
     ".bp-header{position:relative}" +
-    ".bp-current{font-weight:700}" +
-    ".bp-dropdown>ul{display:none}" +
-    ".bp-dropdown:not([data-js]):hover>ul,.bp-dropdown:not([data-js]):focus-within>ul,.bp-dropdown[data-open]>ul{display:block}" +
+    CURRENT_CSS +
+    DROPDOWN_CSS +
     ".bp-menu{display:none}" +
     ".bp-menu>summary{list-style:none;cursor:pointer}" +
     ".bp-menu>summary::-webkit-details-marker{display:none}" +
     `@media(max-width:${HEADER_PHONE}){.bp-header-links,.bp-header-actions{display:none!important}.bp-menu{display:block}}`;
 
-function headerLinkStyles(t: PressTheme, link: CSSProperties, badge: CSSProperties): HeaderLinkStyles {
-    const c = t.colors;
-    return {
-        link,
-        badge,
-        dropdown: { position: "relative", display: "inline-flex", alignItems: "center", gap: "2px" },
-        toggle: {
-            display: "inline-flex",
-            alignItems: "center",
-            padding: "4px",
-            margin: 0,
-            border: 0,
-            background: "none",
-            color: "inherit",
-            font: "inherit",
-            cursor: "pointer",
-        },
-        menu: {
-            position: "absolute",
-            top: "100%",
-            left: 0,
-            zIndex: 50,
-            minWidth: "12rem",
-            margin: 0,
-            padding: "6px 0",
-            listStyle: "none",
-            background: c.surface,
-            color: c.ink,
-            border: `1px solid ${c.hairline}`,
-            borderRadius: t.radii.panel,
-        },
-        menuLink: { ...link, display: "block", padding: "8px 14px", whiteSpace: "nowrap" },
-    };
-}
-
-/** The header sits on the surface, so the actions take that tone's colours. */
-function headerActionStyles(t: PressTheme): Record<HeaderActionVariant, CSSProperties> {
+/**
+ * The header sits on the surface, so the actions take that tone's colours. An `action` recipe
+ * replaces every variant's look; the variant is still on the element for a site's own CSS.
+ */
+function headerActionStyles(t: PressTheme, recipe?: CSSProperties): Record<HeaderActionVariant, CSSProperties> {
+    if (recipe) return { primary: recipe, secondary: recipe, plain: recipe };
     const tone = toneOf(t, "surface");
     const base: CSSProperties = {
         display: "inline-flex",
@@ -428,7 +406,36 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
     const extended = usesHeaderSettings(s);
     const feed = !cfg.holding && hasFeed(cfg);
     const actions = s.headerActions ?? [];
-    const actionStyles = extended ? headerActionStyles(t) : undefined;
+    const recipes = s.headerRecipes ?? {};
+    const link = lookOr(t, recipes.link, linkStyle);
+    const badge = lookOr(t, recipes.badge, badgeStyle);
+    const current = recipeLook(t, recipes.current);
+    const brand = lookOr(t, recipes.brand, {
+        ...linkStyle,
+        display: "flex",
+        alignItems: "center",
+        gap: "12px",
+        fontFamily: t.fonts.heading,
+        fontWeight: 700,
+        fontSize: "20px",
+    });
+    const row = lookOr(
+        t,
+        recipes.links,
+        { display: "flex", flexWrap: "wrap", gap: "8px 22px", fontSize: "15px" },
+        extended ? "bp-header-links" : undefined,
+    );
+    const action = recipeLook(t, recipes.action);
+    const actionStyles = extended ? headerActionStyles(t, action?.style) : undefined;
+    const linkStyles: HeaderLinkStyles = {
+        ...headerLinkStyles(t, linkStyle, badgeStyle),
+        link: link.style,
+        badge: badge.style,
+        ...(link.className ? { linkClass: link.className } : {}),
+        ...(badge.className ? { badgeClass: badge.className } : {}),
+        ...(current ? { current: current.style } : {}),
+        ...(current?.className ? { currentClass: current.className } : {}),
+    };
 
     return (
         <>
@@ -462,10 +469,7 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
                         paddingBottom: "18px",
                     }}
                 >
-                    <Link
-                        href="/"
-                        style={{ ...linkStyle, display: "flex", alignItems: "center", gap: "12px", fontFamily: t.fonts.heading, fontWeight: 700, fontSize: "20px" }}
-                    >
+                    <Link href="/" className={brand.className} style={brand.style}>
                         {s.logo ? (
                             <Asset src={s.logo} alt={s.logoAlt ?? s.name} theme={t} style={{ height: "36px", width: "auto" }} />
                         ) : (
@@ -473,23 +477,15 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
                         )}
                     </Link>
                     <Navigation config={cfg} items={nav} />
-                    <span
-                        className={extended ? "bp-header-links" : undefined}
-                        style={{ display: "flex", flexWrap: "wrap", gap: "8px 22px", fontSize: "15px" }}
-                    >
+                    <span className={row.className} style={row.style}>
                         {(s.headerLinks ?? []).map((l) =>
                             l.activeOn || l.children?.length ? (
-                                <HeaderLink
-                                    key={l.href}
-                                    link={l}
-                                    styles={headerLinkStyles(t, linkStyle, badgeStyle)}
-                                    submenu={cfg.labels.submenu}
-                                />
+                                <HeaderLink key={l.href} link={l} styles={linkStyles} submenu={cfg.labels.submenu} />
                             ) : (
-                                <a key={l.href} href={l.href} style={linkStyle}>
+                                <a key={l.href} href={l.href} className={link.className} style={link.style}>
                                     {l.label}
                                     {l.badge && (
-                                        <span data-press="badge" style={badgeStyle}>
+                                        <span data-press="badge" className={badge.className} style={badge.style}>
                                             {l.badge}
                                         </span>
                                     )}
@@ -505,10 +501,16 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
                     {actionStyles && actions.length > 0 && (
                         <span className="bp-header-actions" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px" }}>
                             {actions.map((a) => (
-                                <a key={a.href} href={a.href} data-variant={a.variant} style={actionStyles[a.variant]}>
+                                <a
+                                    key={a.href}
+                                    href={a.href}
+                                    data-variant={a.variant}
+                                    className={action?.className}
+                                    style={actionStyles[a.variant]}
+                                >
                                     {a.label}
                                     {a.badge && (
-                                        <span data-press="badge" style={badgeStyle}>
+                                        <span data-press="badge" className={badge.className} style={badge.style}>
                                             {a.badge}
                                         </span>
                                     )}
@@ -522,12 +524,48 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
                             actions={actions}
                             feed={feed ? { label: cfg.labels.feed, href: "/feed.xml" } : undefined}
                             labels={{ openMenu: cfg.labels.openMenu, closeMenu: cfg.labels.closeMenu, menu: cfg.labels.menu }}
-                            styles={phoneMenuStyles(t, badgeStyle, actionStyles)}
+                            styles={{
+                                ...phoneMenuStyles(t, badge.style, actionStyles),
+                                ...(badge.className ? { badgeClass: badge.className } : {}),
+                                ...(action?.className ? { actionClass: action.className } : {}),
+                            }}
                         />
                     )}
                 </nav>
             </header>
         </>
+    );
+}
+
+/*
+ * The site's icon sprite, once, before anything that names a symbol in it. Sized to nothing rather
+ * than `display:none`, which some browsers carry into what a `<use>` draws.
+ */
+function IconSprite({ symbols }: { symbols: Readonly<Record<string, IconSymbol>> }) {
+    const entries = Object.entries(symbols).filter(([id]) => ICON_ID.test(id));
+    if (entries.length === 0) return null;
+    return (
+        <svg
+            data-press="icon-sprite"
+            aria-hidden="true"
+            focusable="false"
+            style={{ position: "absolute", width: 0, height: 0, overflow: "hidden" }}
+        >
+            {entries.map(([id, symbol]) => (
+                <symbol
+                    key={id}
+                    id={id}
+                    viewBox={symbol.viewBox}
+                    fill={symbol.fill ?? "currentColor"}
+                    stroke={symbol.stroke ?? "none"}
+                    strokeWidth={symbol.strokeWidth}
+                >
+                    {symbol.paths.map((d, i) => (
+                        <path key={i} d={d} />
+                    ))}
+                </symbol>
+            ))}
+        </svg>
     );
 }
 
@@ -616,6 +654,10 @@ export function createSiteLayout(config: PressConfig, options: SiteLayoutOptions
             <html lang={cfg.locale}>
                 <ThemeHead theme={t} loadFonts={loadFonts} analytics={analyticsTag(cfg.site, allowedScriptOrigins())} />
                 <body style={{ margin: 0, background: c.pageBg, color: c.ink, fontFamily: t.fonts.body }}>
+                    {cfg.site.iconSprite && <IconSprite symbols={cfg.site.iconSprite} />}
+                    {cfg.site.revealOnScroll && (
+                        <style dangerouslySetInnerHTML={{ __html: revealOnScrollCss(cfg.site.revealOnScroll) }} />
+                    )}
                     {headerPage && headerRegion && registry ? (
                         await RegionBand({ cfg, region: headerRegion, page: headerPage, registry, tag: "header" })
                     ) : (

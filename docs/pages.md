@@ -123,7 +123,7 @@ chosen inside the engine would be one more piece of English in the markup.
 **Motion primitives** are drawn finished and animate only away from that: `reveal` (a wrapper whose
 content lifts and fades in as it scrolls into view), `rotatingText` (a list of words in
 `words`, one shown at a time; the older comma separated `items` still reads), `typingTerminal` (lines typed in sequence, held, then started again) and
-`codeSample` (a snippet with its language and one click to select the whole of it). `text` takes a
+`codeSample` (a snippet with its language and one click to select the whole of it; once a script has loaded and the browser has a clipboard, `selectLabel` becomes a button that copies it, saying `copiedLabel` once it has, and selecting the snippet if the copy is refused). `text` takes a
 `motion` of `countUp`, which counts a plain number up to the figure already written in the markup,
 and `flow` takes a `hueRotate` of `subtle` or `wide`, which turns each cell's hue through the
 theme's own colours in a cycle of three.

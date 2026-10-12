@@ -12,6 +12,9 @@ import {
     type FooterColumn,
     type HeaderAction,
     HEADER_ACTION_VARIANTS,
+    HEADER_RECIPE_PARTS,
+    type HeaderRecipes,
+    type IconSymbol,
     type Holding,
     type Home,
     type Labels,
@@ -44,8 +47,9 @@ import { parseSiteSegment, type SiteRoute } from "./site-route.js";
 import { isPluginName } from "./blocks/plugins.js";
 import { presetsFrom } from "./blocks/presets.js";
 import { SPACES, TONES } from "./blocks/tokens.js";
+import { REVEAL_STYLES } from "./blocks/motion.js";
 import { COLOR, FLUID_LENGTH, LENGTH, mergeColors, tokensFrom, tonesFrom } from "./theme.js";
-import { recipesFrom } from "./recipes.js";
+import { RECIPE_NAME, recipesFrom } from "./recipes.js";
 import type {
     PressTheme,
     SuppliedAsset,
@@ -513,6 +517,85 @@ function headerActions(v: unknown): HeaderAction[] | undefined {
         })
         .filter(complete)
         .slice(0, 4);
+}
+
+/*
+ * `HeaderRecipes`: a recipe name per header part. A part it does not know, or a name that is not a
+ * recipe name, is dropped. Whether the theme has that recipe is settled when the header draws, the
+ * way a block's `recipe` is, so the two settings can be saved in either order.
+ */
+function headerRecipes(v: unknown): HeaderRecipes | undefined {
+    const input = record(v);
+    if (!input) return undefined;
+    const out: HeaderRecipes = {};
+    for (const part of HEADER_RECIPE_PARTS) {
+        const name = str(input[part])?.toLowerCase();
+        if (name && RECIPE_NAME.test(name)) out[part] = name;
+    }
+    return out;
+}
+
+/*
+ * `IconSprite`: symbols by id, each `{ viewBox, paths, fill, stroke, strokeWidth }`. It is drawn as
+ * elements, never as markup a tenant wrote, so nothing in it can be a script or load anything: an id
+ * is a name, a box is four numbers, a path is path data and nothing else, and a paint is
+ * `currentColor` or `none`. A symbol with anything unreadable is left out whole.
+ *
+ * An id must start with `ic-`. The sprite is the first thing in `<body>`, and a browser resolves a
+ * shared id to the first element that has it, so a symbol called `search` would take `#search` from
+ * a `## Search` heading and `bp-search-docs` would take the search box's label. The prefix keeps
+ * symbols out of the engine's `bp-` ids and out of most heading anchors.
+ */
+export const ICON_ID = /^ic-[A-Za-z0-9_-]{1,59}$/;
+const VIEW_BOX = /^-?[0-9]{1,5}(\.[0-9]{1,4})?([ ,]+-?[0-9]{1,5}(\.[0-9]{1,4})?){3}$/;
+const PATH_DATA = /^[MmLlHhVvCcSsQqTtAaZz0-9eE.,\s+-]{1,4000}$/;
+const MAX_SYMBOLS = 64;
+const MAX_PATHS = 16;
+
+function paint(v: unknown): "currentColor" | "none" | undefined | null {
+    if (v === undefined) return undefined;
+    return v === "currentColor" || v === "none" ? v : null;
+}
+
+function iconSymbol(v: unknown): IconSymbol | undefined {
+    const raw = record(v);
+    const viewBox = str(raw?.viewBox);
+    const paths = array(raw?.paths);
+    if (!raw || !viewBox || !VIEW_BOX.test(viewBox) || !paths || paths.length === 0 || paths.length > MAX_PATHS) return undefined;
+    if (!paths.every((d) => typeof d === "string" && PATH_DATA.test(d))) return undefined;
+    const fill = paint(raw.fill);
+    const stroke = paint(raw.stroke);
+    if (fill === null || stroke === null) return undefined;
+    const width = raw.strokeWidth;
+    if (width !== undefined && !(typeof width === "number" && width > 0 && width <= 32)) return undefined;
+    return {
+        viewBox,
+        paths: paths as string[],
+        ...(fill ? { fill } : {}),
+        ...(stroke ? { stroke } : {}),
+        ...(typeof width === "number" ? { strokeWidth: width } : {}),
+    };
+}
+
+function iconSprite(v: unknown): Record<string, IconSymbol> | undefined {
+    const raw = record(v);
+    if (!raw) return undefined;
+    const out: Record<string, IconSymbol> = {};
+    for (const [id, spec] of Object.entries(raw).slice(0, MAX_SYMBOLS)) {
+        const symbol = ICON_ID.test(id) ? iconSymbol(spec) : undefined;
+        if (symbol) out[id] = symbol;
+    }
+    return out;
+}
+
+/*
+ * `RevealOnScroll`: `rise` or `fade`, any case. `off` turns a configured reveal off; anything else
+ * keeps the configured value, so a typo changes nothing.
+ */
+function revealOnScroll(v: unknown, base: SiteIdentity["revealOnScroll"]): SiteIdentity["revealOnScroll"] {
+    const named = str(v)?.toLowerCase();
+    if (named === "off") return undefined;
+    return REVEAL_STYLES.find((style) => style === named) ?? base;
 }
 
 function footerColumns(v: unknown): FooterColumn[] | undefined {
@@ -1222,6 +1305,9 @@ export function applySiteSettings(
         headerLinks: links(d.HeaderLinks, 24, true) ?? base.headerLinks,
         menuLinks: links(d.MenuLinks, 24, true) ?? base.menuLinks,
         headerActions: headerActions(d.HeaderActions) ?? base.headerActions,
+        headerRecipes: headerRecipes(d.HeaderRecipes) ?? base.headerRecipes,
+        iconSprite: iconSprite(d.IconSprite) ?? base.iconSprite,
+        revealOnScroll: revealOnScroll(d.RevealOnScroll, base.revealOnScroll),
         footerColumns: footerColumns(d.FooterColumns) ?? base.footerColumns,
         socialLinks: socialLinks(d.SocialLinks) ?? base.socialLinks,
         analyticsScript: analyticsScriptUrl(d.AnalyticsScript) ?? base.analyticsScript,
