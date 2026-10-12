@@ -579,8 +579,11 @@ export interface BlockSchema {
     /** The scopes and formats a binding may name, so an editor offers exactly what renders. */
     bindings: { scopes: string[]; formats: string[] };
     /**
-     * How much of a stored block tree this renderer reads: `maxBlocks` entries in the whole tree and
-     * lists `maxDepth` deep. An editor warns at these numbers rather than at a copy of them. An older
+     * How much of a block tree this renderer reads: a `maxBlocks` budget for the whole tree and lists
+     * `maxDepth` deep. The budget is spent on the expanded and bound tree, not the stored one: every
+     * entry looked at (dropped ones too), every block a band expands into, and every block the binder
+     * walks through outside a repeat's rows. So a stored count is only a lower bound, and an editor
+     * should warn as a page approaches `maxBlocks`, not only once its stored count passes it. An older
      * press leaves this out, so a reader keeps its own values as the fallback.
      */
     limits?: { maxBlocks: number; maxDepth: number };

@@ -9,7 +9,7 @@ changes it.
 
 There is nothing to sign. Opening a pull request means you agree to what is below.
 
-These terms apply from the commit that added this file and are not retroactive. Before it,
+These terms apply to contributions from 12 October 2026 and are not retroactive. Before that date,
 barakoPress had no written contributor terms, so earlier contributions came in under the
 repository's MIT licence alone, which carries no patent grant.
 
