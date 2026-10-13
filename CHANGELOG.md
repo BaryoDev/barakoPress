@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.13.0 (unreleased)
+## 0.13.0 (2026-10-13)
 
 - Reads barakoCMS 5.0 (#201). `DELIVERY_CONTRACT` is 1 to 8, so an API on delivery contract 8 no
   longer logs that it is newer, and 4.x (7) reads as before. What 5.0 changed for a reader is
