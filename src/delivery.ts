@@ -386,7 +386,7 @@ export function forgetCachedReads() {
  * helps nobody; the server log saying so plainly, once, is what tells the operator to upgrade. The
  * range is typed as numbers rather than `as const`, because it is the ends of a range that moves.
  */
-export const DELIVERY_CONTRACT: { readonly min: number; readonly max: number } = { min: 1, max: 7 };
+export const DELIVERY_CONTRACT: { readonly min: number; readonly max: number } = { min: 1, max: 8 };
 
 export type DeliveryContract =
     | { kind: "absent" }
@@ -505,6 +505,12 @@ async function read<T>(config: PressConfig, path: string, opts: ReadOptions): Pr
         }
         return value;
     } catch (e) {
+        // A 404 is the API saying this read is gone: the entry was removed, or the tenant is no longer
+        // served (barakoCMS 5.0, #894). A kept copy of it is not one to bring back during an outage.
+        if (opts.staleKey && e instanceof CmsError && e.status === 404) {
+            await store.delete(staleStoreKey(opts.staleKey));
+            await store.delete(failedKey(opts.staleKey));
+        }
         const kept = opts.staleKey ? await store.get(staleStoreKey(opts.staleKey)) : null;
         if (kept === null || !worthServingStale(e)) throw e;
         await markFailed(store, opts.staleKey!);
@@ -595,8 +601,34 @@ export async function tenantForHost(config: PressConfig, host: string): Promise<
     }
 
     await store.set(hostKey(host), tenant ?? "", HOST_TTL_SECONDS);
+    // A host that now has no tenant, a paused one included (barakoCMS 5.0, #894), keeps none to fall
+    // back on either, so an outage cannot bring the tenant it used to have back.
     if (tenant) await store.set(hostLastKey(host), tenant, HOST_LAST_TTL_SECONDS);
+    else await store.delete(hostLastKey(host));
     return tenant;
+}
+
+/*
+ * Whether barakoCMS serves a tenant at all.
+ *
+ * From 5.0 a tenant that is not Active answers 404 on every delivery route (barakoCMS #894), with the
+ * body a tenant nobody registered gets, on purpose. A settings read that 404s is therefore either that
+ * or a served tenant with no settings type yet, and only the second renders (#14). The tenant's public
+ * profile tells them apart: it answers for a registered, Active tenant and 404s otherwise, on 4.x too.
+ *
+ * Asked only after the settings read 404s. Read like any other, so a 200 is cached under the tenant's
+ * tag. Anything but a 404 is not an answer about the tenant, and leaves it served, as it was before.
+ */
+export async function tenantServed(config: PressConfig): Promise<boolean> {
+    const tenant = pinnedTenant(config);
+    if (!tenant) return true;
+    try {
+        await get<unknown>(config, `/api/tenants/${encodeURIComponent(tenant)}/public`);
+        return true;
+    } catch (e) {
+        if (e && typeof e === "object" && "digest" in e) throw e;
+        return !(e instanceof CmsError && e.status === 404);
+    }
 }
 
 /*

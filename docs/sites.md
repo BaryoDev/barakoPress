@@ -50,6 +50,16 @@ On each request the engine resolves the tenant, reads that tenant's settings, an
 4. `sites.defaultTenant`, or `CMS_DEFAULT_TENANT`, read at request time.
 5. None of those: a 404. Never another tenant's site.
 
+A tenant barakoCMS no longer serves is no site either. From barakoCMS 5.0 a tenant that is
+`Suspended` or `Archived` answers 404 on every `/api/public/*` route, with the same body as a tenant
+nobody registered, and `by-host` answers its domains with 404. When the settings read 404s, the
+engine asks `GET /api/tenants/{handle}/public`: a 404 there means the tenant is not served, and every
+page, the feed, the sitemap and `robots.txt` answer 404. A 200 means the tenant has no settings type
+yet, and it renders with the configured identity as before. A 404 also drops the last good answer
+kept for that read and the tenant a host last resolved to, so an outage after the tenant was paused
+cannot bring its pages back. A paused tenant's domain is an unknown host to the lookup, so it falls
+to `sites.defaultTenant` when one is set, the same as any host the CMS does not know.
+
 A handle is only ever read from the request through a header the operator named. `X-Tenant` and
 `X-Forwarded-Host` sent by a caller are ignored unless you configure them, and you should configure
 them only behind a proxy that sets the header and strips a caller's value.

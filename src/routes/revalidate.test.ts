@@ -26,13 +26,20 @@ function delivery(host: string, key: string, timestamp = String(Math.floor(Date.
     }) as unknown as NextRequest;
 }
 
+/** Both tenants are served, so their public profiles answer. Neither has a settings type. */
+function profile(pathname: string): Response | null {
+    const match = pathname.match(/^\/api\/tenants\/([^/]+)\/public$/);
+    return match && Object.values(HOSTS).includes(decodeURIComponent(match[1])) ? Response.json({ handle: match[1] }) : null;
+}
+
 function cmsWithTwoTenants() {
     vi.stubGlobal(
         "fetch",
         vi.fn(async (input: string | URL | Request) => {
-            const match = new URL(String(input)).pathname.match(/^\/api\/tenants\/by-host\/(.+)$/);
+            const pathname = new URL(String(input)).pathname;
+            const match = pathname.match(/^\/api\/tenants\/by-host\/(.+)$/);
             const handle = match ? HOSTS[decodeURIComponent(match[1])] : undefined;
-            return handle ? Response.json({ handle }) : new Response("", { status: 404 });
+            return handle ? Response.json({ handle }) : (profile(pathname) ?? new Response("", { status: 404 }));
         }),
     );
 }
@@ -60,9 +67,10 @@ describe("a signed delivery to a request-time site", () => {
             "fetch",
             vi.fn(async (input: string | URL | Request) => {
                 if (!cmsUp) throw new Error("ECONNREFUSED");
-                return new URL(String(input)).pathname === "/api/tenants/by-host/baryo.dev"
+                const pathname = new URL(String(input)).pathname;
+                return pathname === "/api/tenants/by-host/baryo.dev"
                     ? Response.json({ handle: "baryo" })
-                    : new Response("", { status: 404 });
+                    : (profile(pathname) ?? new Response("", { status: 404 }));
             }),
         );
         const key = revalidateKeyFor(SECRET, "baryo");

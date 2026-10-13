@@ -41,7 +41,7 @@ import {
 } from "./config.js";
 import { ACTIVE_ON_MAX } from "./current-path.js";
 import { readEnv } from "./env.js";
-import { CmsError, isLinkPath, isTenantHandle, list, tenantForHost } from "./delivery.js";
+import { CmsError, isLinkPath, isTenantHandle, list, tenantForHost, tenantServed } from "./delivery.js";
 import { readSecret } from "./secret.js";
 import { parseSiteSegment, type SiteRoute } from "./site-route.js";
 import { isPluginName } from "./blocks/plugins.js";
@@ -177,9 +177,10 @@ export async function routeFromParams(params: SiteParams): Promise<SiteRoute | n
  * The config for a route the proxy already resolved. Reads no header and no cookie, which is
  * what leaves the render cacheable.
  */
-export async function siteFromRoute(config: PressConfig, route: SiteRoute): Promise<PressConfig> {
+export async function siteFromRoute(config: PressConfig, route: SiteRoute): Promise<PressConfig | null> {
     const scoped: PressConfig = { ...config, tenant: route.tenant };
-    return applySiteSettings(scoped, await readSettings(scoped), route.host);
+    const settings = await readSiteSettings(scoped);
+    return settings === null ? null : applySiteSettings(scoped, settings, route.host);
 }
 
 /** The config a request renders with, or null when the request belongs to no tenant. */
@@ -193,7 +194,8 @@ export async function resolveSite(
     if (!found) return null;
 
     const scoped: PressConfig = { ...config, tenant: found.tenant };
-    return applySiteSettings(scoped, await readSettings(scoped), found.host);
+    const settings = await readSiteSettings(scoped);
+    return settings === null ? null : applySiteSettings(scoped, settings, found.host);
 }
 
 /**
@@ -380,10 +382,31 @@ export async function getGlobals(config: PressConfig): Promise<Record<string, un
     return (await readSettings(config, config.sites?.settingsType ?? SETTINGS_TYPE)) ?? {};
 }
 
+/**
+ * The settings a resolved request-time site renders with, or null when barakoCMS does not serve its
+ * tenant (#201), which is no site, the same as a host with no tenant.
+ */
+async function readSiteSettings(config: PressConfig): Promise<Record<string, unknown> | undefined | null> {
+    const read = await readSettingsOrMissing(config);
+    if (read !== MISSING) return read;
+    return (await tenantServed(config)) ? undefined : null;
+}
+
 async function readSettings(
     config: PressConfig,
     type: string | undefined = config.sites?.settingsType,
 ): Promise<Record<string, unknown> | undefined> {
+    const read = await readSettingsOrMissing(config, type);
+    return read === MISSING ? undefined : read;
+}
+
+/** A settings read that answered 404, told apart from an outage, which renders without asking again. */
+const MISSING = Symbol("missing");
+
+async function readSettingsOrMissing(
+    config: PressConfig,
+    type: string | undefined = config.sites?.settingsType,
+): Promise<Record<string, unknown> | undefined | typeof MISSING> {
     if (!type) return undefined;
     try {
         const res = await list(config, type, { pageSize: 1 });
@@ -393,10 +416,9 @@ async function readSettings(
         // No settings type in this tenant is a site that has not been set up yet, and a failed read
         // with nothing kept is an outage. Both render with the configured identity and theme rather
         // than failing the page (#14: fall back to the configured theme, not to the defaults).
-        if (!(e instanceof CmsError && e.status === 404)) {
-            const why = e instanceof Error ? e.message : String(e);
-            console.warn(`site: settings for tenant "${pinnedTenant(config) ?? ""}" could not be read (${why})`);
-        }
+        if (e instanceof CmsError && e.status === 404) return MISSING;
+        const why = e instanceof Error ? e.message : String(e);
+        console.warn(`site: settings for tenant "${pinnedTenant(config) ?? ""}" could not be read (${why})`);
         return undefined;
     }
 }
