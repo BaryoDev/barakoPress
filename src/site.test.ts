@@ -57,9 +57,10 @@ const TENANTS: Record<string, { host: string; settings: Record<string, unknown>;
 type Call = { url: string; tenant: string | null; tags: string[] };
 
 /*
- * `paused` is a tenant barakoCMS 5.0 no longer serves (#894): every delivery read, its host and its
- * public profile answer 404, the same as a tenant nobody registered. `unset` is a served tenant with
- * no settings type, which renders with the configured identity (#14).
+ * A CMS in Multi mode. `paused` is a tenant barakoCMS 5.0 no longer serves (#894): its host answers
+ * 404, and every delivery read answers 404 with the plain text body a tenant nobody registered gets.
+ * `unset` is a served tenant with no settings type, whose settings read is an endpoint's empty 404 and
+ * which renders with the configured identity (#14).
  */
 function cms(options: { down?: boolean; paused?: string[]; unset?: string[] } = {}) {
     const calls: Call[] = [];
@@ -74,13 +75,6 @@ function cms(options: { down?: boolean; paused?: string[]; unset?: string[] } = 
             const entry = Object.entries(TENANTS).find(([, t]) => t.host === decodeURIComponent(byHost[1]));
             const live = entry && !options.paused?.includes(entry[0]);
             return live ? Response.json({ handle: entry[0] }) : new Response("", { status: 404 });
-        }
-
-        const profile = url.pathname.match(/^\/api\/tenants\/([^/]+)\/public$/);
-        if (profile) {
-            const handle = decodeURIComponent(profile[1]);
-            const live = Object.hasOwn(TENANTS, handle) && !options.paused?.includes(handle);
-            return live ? Response.json({ handle, name: handle }) : new Response("", { status: 404 });
         }
 
         const t = tenant && !options.paused?.includes(tenant) ? TENANTS[tenant] : undefined;
@@ -383,6 +377,20 @@ describe("a tenant barakoCMS no longer serves", () => {
         const site = await resolveSite(config, new Headers({ host: "baryo.dev" }));
         expect(site?.tenant).toBe("baryo");
         expect(site?.site.name).toBe("Configured");
+    });
+
+    it("keeps rendering the configured identity on a Single-mode CMS, which says nothing about a tenant it refuses", async () => {
+        // Single mode answers a paused tenant, and a tenant with no record and no settings type, with
+        // the same bare 404, and the profile route 404s for both. 0.12.0 rendered the configured identity.
+        vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 404 })));
+        const config = defineConfig({ sites: {}, tenant: "default", cmsUrl: CMS, site: { name: "Configured", tagline: "", url: "https://configured.example" } });
+
+        const site = await resolveSite(config, new Headers({ host: "anything.example" }));
+        expect(site?.tenant).toBe("default");
+        expect(site?.site.name).toBe("Configured");
+        await expect(siteFromRoute(config, { tenant: "default", gate: "public", host: null })).resolves.toMatchObject({
+            site: { name: "Configured" },
+        });
     });
 
     it("does not come back from a kept answer when the CMS goes down after it was paused", async () => {

@@ -31,8 +31,6 @@ function cmsAnswer(url: URL): Response {
     if (cmsDown) return new Response("", { status: 503 });
     const byHost = url.pathname.match(/^\/api\/tenants\/by-host\/(.+)$/);
     if (byHost) return decodeURIComponent(byHost[1]) === HOST ? Response.json({ handle: "baryo" }) : new Response("", { status: 404 });
-    // The tenant is served: barakoCMS answers its public profile. This site has no settings type.
-    if (url.pathname === "/api/tenants/baryo/public") return Response.json({ handle: "baryo", name: "BaryoDev" });
 
     const paged = (items: unknown[]) =>
         Response.json({ items, page: 1, pageSize: 20, totalItems: items.length, totalPages: 1, hasNextPage: false });

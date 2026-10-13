@@ -41,7 +41,7 @@ import {
 } from "./config.js";
 import { ACTIVE_ON_MAX } from "./current-path.js";
 import { readEnv } from "./env.js";
-import { CmsError, isLinkPath, isTenantHandle, list, tenantForHost, tenantServed } from "./delivery.js";
+import { CmsError, isLinkPath, isTenantHandle, list, refusesTenant, tenantForHost } from "./delivery.js";
 import { readSecret } from "./secret.js";
 import { parseSiteSegment, type SiteRoute } from "./site-route.js";
 import { isPluginName } from "./blocks/plugins.js";
@@ -383,30 +383,28 @@ export async function getGlobals(config: PressConfig): Promise<Record<string, un
 }
 
 /**
- * The settings a resolved request-time site renders with, or null when barakoCMS does not serve its
- * tenant (#201), which is no site, the same as a host with no tenant.
+ * The settings a resolved request-time site renders with, or null when barakoCMS says it does not serve
+ * the tenant (#201), which is no site, the same as a host with no tenant.
  */
 async function readSiteSettings(config: PressConfig): Promise<Record<string, unknown> | undefined | null> {
-    const read = await readSettingsOrMissing(config);
-    if (read !== MISSING) return read;
-    return (await tenantServed(config)) ? undefined : null;
+    const read = await readSettingsOrRefused(config);
+    return read === REFUSED ? null : read;
 }
 
 async function readSettings(
     config: PressConfig,
     type: string | undefined = config.sites?.settingsType,
 ): Promise<Record<string, unknown> | undefined> {
-    const read = await readSettingsOrMissing(config, type);
-    return read === MISSING ? undefined : read;
+    const read = await readSettingsOrRefused(config, type);
+    return read === REFUSED ? undefined : read;
 }
 
-/** A settings read that answered 404, told apart from an outage, which renders without asking again. */
-const MISSING = Symbol("missing");
+const REFUSED = Symbol("refused");
 
-async function readSettingsOrMissing(
+async function readSettingsOrRefused(
     config: PressConfig,
     type: string | undefined = config.sites?.settingsType,
-): Promise<Record<string, unknown> | undefined | typeof MISSING> {
+): Promise<Record<string, unknown> | undefined | typeof REFUSED> {
     if (!type) return undefined;
     try {
         const res = await list(config, type, { pageSize: 1 });
@@ -416,7 +414,8 @@ async function readSettingsOrMissing(
         // No settings type in this tenant is a site that has not been set up yet, and a failed read
         // with nothing kept is an outage. Both render with the configured identity and theme rather
         // than failing the page (#14: fall back to the configured theme, not to the defaults).
-        if (e instanceof CmsError && e.status === 404) return MISSING;
+        if (refusesTenant(e)) return REFUSED;
+        if (e instanceof CmsError && e.status === 404) return undefined;
         const why = e instanceof Error ? e.message : String(e);
         console.warn(`site: settings for tenant "${pinnedTenant(config) ?? ""}" could not be read (${why})`);
         return undefined;

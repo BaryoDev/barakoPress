@@ -64,9 +64,25 @@ export class CmsError extends Error {
     constructor(
         readonly path: string,
         readonly status: number,
+        /** The start of a 404's body, kept to tell a refused tenant apart (see `refusesTenant`). */
+        readonly body?: string,
     ) {
         super(`${path} answered ${status}`);
     }
+}
+
+/*
+ * The body barakoCMS answers in Multi mode, as plain text with a 404, for a request whose tenant it
+ * does not serve: no tenant record, the default partition, or a tenant that is not Active (barakoCMS
+ * docs/multi-tenancy.md, on 4.9 and 5.0). An endpoint's own 404 has an empty body. Single mode answers
+ * a paused tenant with an empty 404 too, so there the two cannot be told apart, and the tenant renders
+ * as it did before (#201).
+ */
+const NO_TENANT_BODY = "This deployment serves registered tenants only.";
+
+/** True when a read failed because the API does not serve the tenant at all. */
+export function refusesTenant(e: unknown): boolean {
+    return e instanceof CmsError && e.status === 404 && e.body?.trim() === NO_TENANT_BODY;
 }
 
 /*
@@ -480,6 +496,7 @@ async function read<T>(config: PressConfig, path: string, opts: ReadOptions): Pr
                   }),
         });
         noteDeliveryContract(config, res);
+        if (res.status === 404) throw new CmsError(path, 404, (await res.text()).slice(0, 200));
         if (!res.ok) throw new CmsError(path, res.status);
         const text = await res.text();
         const value = JSON.parse(text) as T;
@@ -608,28 +625,6 @@ export async function tenantForHost(config: PressConfig, host: string): Promise<
     return tenant;
 }
 
-/*
- * Whether barakoCMS serves a tenant at all.
- *
- * From 5.0 a tenant that is not Active answers 404 on every delivery route (barakoCMS #894), with the
- * body a tenant nobody registered gets, on purpose. A settings read that 404s is therefore either that
- * or a served tenant with no settings type yet, and only the second renders (#14). The tenant's public
- * profile tells them apart: it answers for a registered, Active tenant and 404s otherwise, on 4.x too.
- *
- * Asked only after the settings read 404s. Read like any other, so a 200 is cached under the tenant's
- * tag. Anything but a 404 is not an answer about the tenant, and leaves it served, as it was before.
- */
-export async function tenantServed(config: PressConfig): Promise<boolean> {
-    const tenant = pinnedTenant(config);
-    if (!tenant) return true;
-    try {
-        await get<unknown>(config, `/api/tenants/${encodeURIComponent(tenant)}/public`);
-        return true;
-    } catch (e) {
-        if (e && typeof e === "object" && "digest" in e) throw e;
-        return !(e instanceof CmsError && e.status === 404);
-    }
-}
 
 /*
  * What a type says about itself (barakoCMS 4.7, #1108): `GET /api/public/types/{type}/description`
