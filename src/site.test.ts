@@ -20,7 +20,7 @@ vi.mock("next/navigation", () => ({
 const { defineConfig } = await import("./config.js");
 const { listPosts } = await import("./cms.js");
 const { forgetCachedReads, tenantForHost } = await import("./delivery.js");
-const { applySiteSettings, normaliseHost, resolveSite, siteConfig, tenantFromHeaders } = await import("./site.js");
+const { applySiteSettings, normaliseHost, resolveSite, siteConfig, siteFromRoute, tenantFromHeaders } = await import("./site.js");
 const { createFeed } = await import("./routes/feed.js");
 const { createSitemap } = await import("./routes/sitemap.js");
 const { createRobots } = await import("./routes/robots.js");
@@ -56,7 +56,13 @@ const TENANTS: Record<string, { host: string; settings: Record<string, unknown>;
 
 type Call = { url: string; tenant: string | null; tags: string[] };
 
-function cms(options: { down?: boolean } = {}) {
+/*
+ * A CMS in Multi mode. `paused` is a tenant barakoCMS 5.0 no longer serves (#894): its host answers
+ * 404, and every delivery read answers 404 with the plain text body a tenant nobody registered gets.
+ * `unset` is a served tenant with no settings type, whose settings read is an endpoint's empty 404 and
+ * which renders with the configured identity (#14).
+ */
+function cms(options: { down?: boolean; paused?: string[]; unset?: string[] } = {}) {
     const calls: Call[] = [];
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit & { next?: { tags?: string[] } }) => {
         const url = new URL(String(input));
@@ -67,11 +73,13 @@ function cms(options: { down?: boolean } = {}) {
         const byHost = url.pathname.match(/^\/api\/tenants\/by-host\/(.+)$/);
         if (byHost) {
             const entry = Object.entries(TENANTS).find(([, t]) => t.host === decodeURIComponent(byHost[1]));
-            return entry ? Response.json({ handle: entry[0] }) : new Response("", { status: 404 });
+            const live = entry && !options.paused?.includes(entry[0]);
+            return live ? Response.json({ handle: entry[0] }) : new Response("", { status: 404 });
         }
 
-        const t = tenant ? TENANTS[tenant] : undefined;
-        if (!t) return new Response("", { status: 404 });
+        const t = tenant && !options.paused?.includes(tenant) ? TENANTS[tenant] : undefined;
+        if (!t) return new Response("This deployment serves registered tenants only.", { status: 404 });
+        if (url.pathname === "/api/public/site" && options.unset?.includes(tenant!)) return new Response("", { status: 404 });
         const page = (items: unknown[]) =>
             Response.json({ items, page: 1, pageSize: 20, totalItems: items.length, totalPages: 1, hasNextPage: false });
         if (url.pathname === "/api/public/site") return page([{ id: "s", data: t.settings }]);
@@ -336,6 +344,87 @@ describe("one build serving two sites", () => {
     it("refuses to read with a request-time config that was never resolved", async () => {
         vi.stubGlobal("fetch", cms().fetchMock);
         await expect(listPosts(requestTime())).rejects.toThrow("resolved");
+    });
+});
+
+describe("a tenant barakoCMS no longer serves", () => {
+    it("is no site: the page, the feed, the sitemap and robots all answer 404", async () => {
+        vi.stubGlobal("fetch", cms({ paused: ["baryo"] }).fetchMock);
+        const config = defineConfig({ sites: { tenantHeader: "X-Press-Tenant" }, cmsUrl: CMS });
+
+        onHost("anything.example", { "x-press-tenant": "baryo" });
+        expect(await resolveSite(config, requestHeaders!)).toBeNull();
+        await expect(siteConfig(config)).rejects.toThrow("NEXT_NOT_FOUND");
+        expect((await createFeed(config)()).status).toBe(404);
+        await expect(createSitemap(config)()).rejects.toThrow("NEXT_NOT_FOUND");
+        await expect(createRobots(config)()).rejects.toThrow("NEXT_NOT_FOUND");
+    });
+
+    it("is no site when the proxy already put it in the path", async () => {
+        vi.stubGlobal("fetch", cms({ paused: ["baryo"] }).fetchMock);
+        const config = requestTime();
+
+        await expect(siteFromRoute(config, { tenant: "baryo", gate: "public", host: "baryo.dev" })).resolves.toBeNull();
+        const served = await siteFromRoute(config, { tenant: "rckoronadal", gate: "public", host: "rckoronadal.org" });
+        expect(served?.site.name).toBe("Rotary Club of Koronadal");
+    });
+
+    it("still renders a served tenant with no settings type, with the configured identity", async () => {
+        vi.stubGlobal("fetch", cms({ unset: ["baryo"] }).fetchMock);
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        const config = defineConfig({ sites: {}, cmsUrl: CMS, site: { name: "Configured", tagline: "", url: "https://configured.example" } });
+
+        const site = await resolveSite(config, new Headers({ host: "baryo.dev" }));
+        expect(site?.tenant).toBe("baryo");
+        expect(site?.site.name).toBe("Configured");
+    });
+
+    it("keeps rendering the configured identity on a Single-mode CMS, which says nothing about a tenant it refuses", async () => {
+        // Single mode answers a paused tenant, and a tenant with no record and no settings type, with
+        // the same bare 404, and the profile route 404s for both. 0.12.0 rendered the configured identity.
+        vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 404 })));
+        const config = defineConfig({ sites: {}, tenant: "default", cmsUrl: CMS, site: { name: "Configured", tagline: "", url: "https://configured.example" } });
+
+        const site = await resolveSite(config, new Headers({ host: "anything.example" }));
+        expect(site?.tenant).toBe("default");
+        expect(site?.site.name).toBe("Configured");
+        await expect(siteFromRoute(config, { tenant: "default", gate: "public", host: null })).resolves.toMatchObject({
+            site: { name: "Configured" },
+        });
+    });
+
+    it("does not come back from a kept answer when the CMS goes down after it was paused", async () => {
+        const config = defineConfig({ sites: { tenantHeader: "X-Press-Tenant" }, cmsUrl: CMS });
+        const headers = new Headers({ host: "anything.example", "x-press-tenant": "baryo" });
+        vi.stubGlobal("fetch", cms().fetchMock);
+        const live = await resolveSite(config, headers);
+        await listPosts(live!);
+
+        vi.stubGlobal("fetch", cms({ paused: ["baryo"] }).fetchMock);
+        expect(await resolveSite(config, headers)).toBeNull();
+        await expect(listPosts(live!)).rejects.toThrow("404");
+
+        vi.stubGlobal("fetch", cms({ down: true }).fetchMock);
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        await expect(listPosts(live!)).rejects.toThrow("ECONNREFUSED");
+        expect((await resolveSite(config, headers))?.site.name).not.toBe("BaryoDev");
+    });
+
+    it("forgets the tenant a host resolved to once the lookup says the host has none", async () => {
+        const config = requestTime();
+        let now = 1_000_000;
+        vi.spyOn(Date, "now").mockImplementation(() => now);
+        vi.stubGlobal("fetch", cms().fetchMock);
+        expect(await tenantForHost(config, "baryo.dev")).toBe("baryo");
+
+        vi.stubGlobal("fetch", cms({ paused: ["baryo"] }).fetchMock);
+        now += 61_000;
+        expect(await tenantForHost(config, "baryo.dev")).toBeNull();
+
+        vi.stubGlobal("fetch", cms({ down: true }).fetchMock);
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        now += 61_000;
+        await expect(tenantForHost(config, "baryo.dev")).rejects.toThrow("ECONNREFUSED");
     });
 });
 

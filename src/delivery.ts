@@ -64,9 +64,25 @@ export class CmsError extends Error {
     constructor(
         readonly path: string,
         readonly status: number,
+        /** The start of a 404's body, kept to tell a refused tenant apart (see `refusesTenant`). */
+        readonly body?: string,
     ) {
         super(`${path} answered ${status}`);
     }
+}
+
+/*
+ * The body barakoCMS answers in Multi mode, as plain text with a 404, for a request whose tenant it
+ * does not serve: no tenant record, the default partition, or a tenant that is not Active (barakoCMS
+ * docs/multi-tenancy.md, on 4.9 and 5.0). An endpoint's own 404 has an empty body. Single mode answers
+ * a paused tenant with an empty 404 too, so there the two cannot be told apart, and the tenant renders
+ * as it did before (#201).
+ */
+const NO_TENANT_BODY = "This deployment serves registered tenants only.";
+
+/** True when a read failed because the API does not serve the tenant at all. */
+export function refusesTenant(e: unknown): boolean {
+    return e instanceof CmsError && e.status === 404 && e.body?.trim() === NO_TENANT_BODY;
 }
 
 /*
@@ -386,7 +402,7 @@ export function forgetCachedReads() {
  * helps nobody; the server log saying so plainly, once, is what tells the operator to upgrade. The
  * range is typed as numbers rather than `as const`, because it is the ends of a range that moves.
  */
-export const DELIVERY_CONTRACT: { readonly min: number; readonly max: number } = { min: 1, max: 7 };
+export const DELIVERY_CONTRACT: { readonly min: number; readonly max: number } = { min: 1, max: 8 };
 
 export type DeliveryContract =
     | { kind: "absent" }
@@ -480,6 +496,7 @@ async function read<T>(config: PressConfig, path: string, opts: ReadOptions): Pr
                   }),
         });
         noteDeliveryContract(config, res);
+        if (res.status === 404) throw new CmsError(path, 404, (await res.text()).slice(0, 200));
         if (!res.ok) throw new CmsError(path, res.status);
         const text = await res.text();
         const value = JSON.parse(text) as T;
@@ -505,6 +522,12 @@ async function read<T>(config: PressConfig, path: string, opts: ReadOptions): Pr
         }
         return value;
     } catch (e) {
+        // A 404 is the API saying this read is gone: the entry was removed, or the tenant is no longer
+        // served (barakoCMS 5.0, #894). A kept copy of it is not one to bring back during an outage.
+        if (opts.staleKey && e instanceof CmsError && e.status === 404) {
+            await store.delete(staleStoreKey(opts.staleKey));
+            await store.delete(failedKey(opts.staleKey));
+        }
         const kept = opts.staleKey ? await store.get(staleStoreKey(opts.staleKey)) : null;
         if (kept === null || !worthServingStale(e)) throw e;
         await markFailed(store, opts.staleKey!);
@@ -595,9 +618,13 @@ export async function tenantForHost(config: PressConfig, host: string): Promise<
     }
 
     await store.set(hostKey(host), tenant ?? "", HOST_TTL_SECONDS);
+    // A host that now has no tenant, a paused one included (barakoCMS 5.0, #894), keeps none to fall
+    // back on either, so an outage cannot bring the tenant it used to have back.
     if (tenant) await store.set(hostLastKey(host), tenant, HOST_LAST_TTL_SECONDS);
+    else await store.delete(hostLastKey(host));
     return tenant;
 }
+
 
 /*
  * What a type says about itself (barakoCMS 4.7, #1108): `GET /api/public/types/{type}/description`

@@ -68,6 +68,7 @@ export function createSharedLinkPage(base: PressConfig, registry?: BlockRegistry
         // Only the proxy sends a request here, and only with the link gate. Anything else opens nothing.
         if (!route || route.gate !== "link") notFound();
         const config = await siteFromRoute(base, route);
+        if (!config) notFound();
         const path = pathOf((await params).path);
 
         const link = openLinkCookie((await cookies()).get(LINK_COOKIE)?.value, route.tenant, shareSecret());

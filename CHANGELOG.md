@@ -2,6 +2,22 @@
 
 ## 0.13.0 (unreleased)
 
+- Reads barakoCMS 5.0 (#201). `DELIVERY_CONTRACT` is 1 to 8, so an API on delivery contract 8 no
+  longer logs that it is newer, and 4.x (7) reads as before. What 5.0 changed for a reader is
+  additive: `changedSince` and one-query lists, the tenant's own site origin in the CMS feed and
+  sitemap, `boundBlocks` on Pages resolve, image `width` and `height` on file metadata, and field
+  schemas that only refuse writes. The Pages contract is still 2.
+
+- A tenant barakoCMS refuses to serve is no site (#201). On a CMS in Multi mode, a tenant with no
+  record or one that is not `Active` (barakoCMS 5.0 adds `Suspended` and `Archived`) answers every
+  delivery read with a 404 whose body is `This deployment serves registered tenants only.`. A
+  request-time site used to read that as a tenant with no settings type and render the configured
+  identity over lists that then 404ed. Now that answer to the settings read makes every page, the
+  feed, the sitemap and `robots.txt` answer 404. Any other 404 renders as before, which keeps a
+  tenant with no settings type, and every tenant on a CMS in Single mode, exactly as 0.12.0 drew it.
+  A 404 drops the last good answer kept for that read, and a 404 from the host lookup drops the
+  tenant the host last resolved to, so an outage cannot bring a paused tenant back.
+
 - `HeaderRecipes` puts style recipes on the built-in header's parts (#167): the link row, a link,
   the current link, a badge, an action and the brand, each by the name of a recipe in
   `StyleRecipes`. A part's recipe replaces that part's own look; a part with none draws as it did, so
