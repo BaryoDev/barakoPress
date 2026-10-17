@@ -8,6 +8,7 @@ import {
     type HeaderActionVariant,
     type IconSymbol,
     type PressConfig,
+    type SiteLink,
     type Region,
     type SiteIdentity,
 } from "../config.js";
@@ -24,6 +25,7 @@ import { themeVariablesCss, type PressTheme } from "../theme.js";
 import { lookOr, recipeLook } from "../recipes.js";
 import type { BlockRegistry } from "../blocks/schema.js";
 import { getNavigation, getPageAtPath, isChromePath, type NavItem, type Page } from "../cms.js";
+import { withoutHeaderDuplicates } from "./header-links.js";
 import { Navigation } from "./navigation.js";
 import { HeaderLink, PhoneMenu, type HeaderLinkStyles, type PhoneMenuStyles } from "./header-menu.js";
 import { CURRENT_CSS, DROPDOWN_CSS, headerLinkStyles } from "./header-styles.js";
@@ -134,7 +136,7 @@ async function holdingPage(cfg: PressConfig, registry?: BlockRegistry): Promise<
  * page. While holding, the holding page leaves it, as it leaves the header links. A header or footer
  * region page leaves it too: it is chrome that is drawn on every page, not somewhere to navigate to.
  */
-async function menu(cfg: PressConfig): Promise<NavItem[]> {
+async function menu(cfg: PressConfig, links: SiteLink[]): Promise<NavItem[]> {
     if (cfg.pages === undefined) return [];
     let items: NavItem[];
     try {
@@ -145,7 +147,7 @@ async function menu(cfg: PressConfig): Promise<NavItem[]> {
         console.warn(`pages: navigation for tenant "${cfg.tenant ?? ""}" could not be read (${why})`);
         return [];
     }
-    return withoutChrome(cfg, items);
+    return withoutHeaderDuplicates(cfg, withoutChrome(cfg, items), links);
 }
 
 function withoutChrome(cfg: PressConfig, items: NavItem[]): NavItem[] {
@@ -641,7 +643,7 @@ export function createSiteLayout(config: PressConfig, options: SiteLayoutOptions
             return await HoldingDocument({ cfg, registry: options.blocks, loadFonts });
         }
 
-        const nav = await menu(cfg);
+        const nav = await menu(cfg, cfg.site.headerLinks ?? []);
         const headerRegion = cfg.regions?.header;
         const footerRegion = cfg.regions?.footer;
         const headerPage = await regionPage(cfg, headerRegion);
