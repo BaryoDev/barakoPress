@@ -41,6 +41,7 @@ merged over the configured collections by key. A build-time site passes `collect
 | `index` | Whether the root catch-all serves an index at the route. On unless `false`; the derived `author` and `category` have it off, so `/authors` stays a 404 unless a route file mounts it. An object is the index's copy, and the index is on. See below |
 | `indexPage` | A site path such as `/site/blog`. The blocks of the page served there are drawn above the list on the index. See below |
 | `defaultAuthor` | The byline name on an entry that names no author, on its card and on its `article` page |
+| `blocksField` | The data field on an entry that holds blocks. They are drawn on its detail page after the view; a field that is missing or not a list of blocks draws nothing |
 | `pageSize`, `label`, `noun` | Items on the index, its heading, and how a count reads |
 | `colorBy` | A choice field whose option colours the item. See below |
 | `related` | What an item page lists under the item: `"semantic"` for the items of this collection closest to it by meaning, `false` for none. Unset, the first collection that references this one |
@@ -136,6 +137,9 @@ still wins. `indexPage` draws a page's blocks above the list, so the index is co
 and the route stays the collection's. With `defaultAuthor`, an entry whose first reference (the
 byline) did not come back, or a collection with no reference at all, is signed with that name after
 `labels.by`. Set none of the three and the index and the byline draw what they always did.
+
+`blocksField` names a field of block data on the entry, such as `Blocks`. The detail page draws those blocks
+after the entry's own view, so a profile can carry its own composed content. Unset, the page is unchanged.
 
 A page named by `indexPage` only holds data, the way a header or footer region page does: it answers
 404 at its own path and is left out of the menu and the sitemap.

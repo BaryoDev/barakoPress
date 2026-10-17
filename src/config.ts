@@ -424,6 +424,8 @@ export interface CollectionConfig {
      * out of the menu and the sitemap.
      */
     indexPage?: string;
+    /** The field on an entry that holds blocks, drawn on its detail page after the view. Unset, none. */
+    blocksField?: string;
     /** The byline name on an entry that names no author: the first reference is the byline. */
     defaultAuthor?: string;
     /** Items on its index. `pageSizes.index` when unset. */

@@ -933,6 +933,7 @@ function collectionFrom(v: unknown): CollectionConfig | undefined {
     const indexPath = sitePath(c.indexPage);
     const indexPage = indexPath ? withoutTrailingSlashes(indexPath) : undefined;
     const defaultAuthor = short(c.defaultAuthor, 80);
+    const blocksField = typeof c.blocksField === "string" && DATA_FIELD.test(c.blocksField) ? c.blocksField : undefined;
     return {
         type,
         route,
@@ -952,6 +953,7 @@ function collectionFrom(v: unknown): CollectionConfig | undefined {
         ...(treeFrom(c.tree) ? { tree: treeFrom(c.tree) } : {}),
         ...(indexPage ? { indexPage } : {}),
         ...(defaultAuthor ? { defaultAuthor } : {}),
+        ...(blocksField ? { blocksField } : {}),
     };
 }
 

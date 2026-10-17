@@ -502,6 +502,25 @@ async function indexLead(config: PressConfig, path: string, blocks: BlockRegistr
 }
 
 /*
+ * The blocks an entry carries in the field its collection names as `blocksField`, drawn after the view.
+ * A field that is absent or not a list of blocks draws nothing.
+ */
+async function entryBlocks(config: PressConfig, col: CollectionConfig, item: Item, blocks: BlockRegistry | undefined): Promise<ReactNode> {
+    if (!col.blocksField) return null;
+    const page = { id: item.content.id, slug: item.slug, title: item.title, body: "", blocks: item.content.data[col.blocksField] };
+    const resolved = await pageBlocks(config, page, registryFor(config, blocks ?? createBlockRegistry(config, [], { presets: [] })), {
+        scope: "detail",
+    });
+    if (resolved.length === 0) return null;
+    return (
+        <>
+            <style dangerouslySetInnerHTML={{ __html: proseCss(config.theme, BLOCK_PROSE_CLASS) }} />
+            <BlockList blocks={resolved} theme={config.theme} />
+        </>
+    );
+}
+
+/*
  * A factory rather than a component, because a Next route is a file and a package cannot write files
  * into someone else's app. The consumer's app/doctors/page.tsx is:
  *
@@ -604,6 +623,7 @@ export async function renderCollectionDetail(
         <>
             <StructuredData config={config} content={item.content} />
             {await view({ config, item, related, tree, preview: Boolean(previewToken), backHref: options.backHref })}
+            {await entryBlocks(config, col, item, undefined)}
         </>
     );
 }
