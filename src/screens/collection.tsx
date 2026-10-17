@@ -561,6 +561,8 @@ export interface CollectionDetailOptions {
      */
     related?: { collection: string; via: string } | false;
     backHref?: string;
+    /** The blocks an entry's `blocksField` renders with. The built-in ones when unset. */
+    blocks?: BlockRegistry;
     /** Renders the page in place of `ItemView`. It gets no related items unless `related` names them. */
     view?: (props: ItemViewProps) => ReactNode | Promise<ReactNode>;
 }
@@ -623,7 +625,7 @@ export async function renderCollectionDetail(
         <>
             <StructuredData config={config} content={item.content} />
             {await view({ config, item, related, tree, preview: Boolean(previewToken), backHref: options.backHref })}
-            {await entryBlocks(config, col, item, undefined)}
+            {await entryBlocks(config, col, item, options.blocks)}
         </>
     );
 }
@@ -631,6 +633,7 @@ export async function renderCollectionDetail(
 type DetailParams = { params: Promise<{ slug: string; site?: string }>; searchParams?: Promise<{ preview?: string }> };
 
 export function createCollectionDetail(base: PressConfig, collection: string, options: CollectionDetailOptions = {}) {
+    let blocks = options.blocks;
     return async function CollectionDetail({ params, searchParams }: DetailParams) {
         const config = await siteConfig(base, params);
         const { slug } = await params;
@@ -640,7 +643,8 @@ export function createCollectionDetail(base: PressConfig, collection: string, op
          * route file that wants preview is the one that leaves `generateStaticParams` out (#55).
          */
         const token = options.preview && searchParams ? (await searchParams).preview : undefined;
-        return renderCollectionDetail(config, collection, slug, options, token);
+        if (collectionOf(config, collection)?.blocksField) blocks ??= createBlockRegistry(base);
+        return renderCollectionDetail(config, collection, slug, { ...options, blocks }, token);
     };
 }
 

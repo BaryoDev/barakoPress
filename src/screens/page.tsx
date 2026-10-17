@@ -276,7 +276,7 @@ export function createPage(base: PressConfig, registry?: BlockRegistry, options:
         const query = options.query ?? (await routeFromParams(params)) === null;
         const hit = collectionHit(config, p);
         if (hit) {
-            if (hit.slug !== undefined) return renderCollectionDetail(config, hit.key, hit.slug);
+            if (hit.slug !== undefined) return renderCollectionDetail(config, hit.key, hit.slug, { blocks: (blocks ??= createBlockRegistry(base)) });
             blocks ??= createBlockRegistry(base);
             return CollectionIndexView({ config, collection: hit.key, query: await queryFor(query, searchParams), blocks });
         }
@@ -302,7 +302,7 @@ export function createViewerPage(base: PressConfig, registry?: BlockRegistry, op
         const p = await params;
         const hit = collectionHit(config, p);
         if (hit) {
-            if (hit.slug !== undefined) return renderCollectionDetail(config, hit.key, hit.slug);
+            if (hit.slug !== undefined) return renderCollectionDetail(config, hit.key, hit.slug, { blocks: (blocks ??= createBlockRegistry(base)) });
             blocks ??= createBlockRegistry(base);
             return CollectionIndexView({ config, collection: hit.key, query: await queryFor(true, searchParams), blocks });
         }

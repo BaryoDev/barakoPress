@@ -37,6 +37,9 @@ vi.mock("next/link", () => ({
 const { defineConfig } = await import("./config.js");
 const { forgetCachedReads } = await import("./delivery.js");
 const { createCollectionDetail } = await import("./screens/collection.js");
+const { createPage } = await import("./screens/page.js");
+const { createBlockRegistry } = await import("./blocks/registry.js");
+const { defineBlock } = await import("./blocks/schema.js");
 
 const CMS = "http://cms.test";
 const BLOCKS = [{ type: "text", props: { value: "Open Monday to Friday" } }];
@@ -47,6 +50,11 @@ const TENANTS: Record<string, { host: string; collection: Record<string, unknown
         host: "set.example",
         collection: { ...PROFILES, blocksField: "Blocks" },
         data: { Name: "Ana Cruz", Slug: "ana", Body: "Ana's page", Blocks: BLOCKS },
+    },
+    custom: {
+        host: "custom.example",
+        collection: { ...PROFILES, blocksField: "Blocks" },
+        data: { Name: "Ana Cruz", Slug: "ana", Body: "Ana's page", Blocks: [{ type: "hours", props: {} }] },
     },
     unset: {
         host: "unset.example",
@@ -104,6 +112,8 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
+const hours = defineBlock({ type: "hours", label: "Hours", fields: [], component: () => <p>consumer hours block</p> });
+
 describe("a collection entry's blocks", () => {
     it("draws the blocks in the field blocksField names", async () => {
         const html = await detail("set.example");
@@ -121,5 +131,20 @@ describe("a collection entry's blocks", () => {
         const html = await detail("text.example");
         expect(html).toContain("Ana Cruz");
         expect(html).not.toContain("not blocks");
+    });
+});
+
+describe("a custom block on a collection entry", () => {
+    it("renders from the registry the route was given, on the root catch-all and on the detail route", async () => {
+        const registry = createBlockRegistry(config, [hours]);
+        requestHeaders = new Headers({ host: "custom.example" });
+
+        const Page = createPage(config, registry);
+        const viaPage = await prerender(await Page({ params: Promise.resolve({ path: ["find", "ana"] }), searchParams: Promise.resolve({}) }));
+        expect(await new Response(viaPage.prelude).text()).toContain("consumer hours block");
+
+        const Detail = createCollectionDetail(config, "profiles", { blocks: registry });
+        const viaDetail = await prerender(await Detail({ params: Promise.resolve({ slug: "ana" }) }));
+        expect(await new Response(viaDetail.prelude).text()).toContain("consumer hours block");
     });
 });
