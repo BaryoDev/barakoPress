@@ -674,7 +674,10 @@ function tokens<T extends object>(base: T, v: unknown, valid: RegExp): T {
 }
 
 /** What follows the first family in a stack, so a site's own face keeps the configured fallbacks. */
-function fallbackStack(stack: string): string {
+const SERIF_STACK = "Georgia, 'Times New Roman', serif";
+
+function fallbackStack(stack: string, kind?: unknown): string {
+    if (kind === "serif") return SERIF_STACK;
     const comma = stack.indexOf(",");
     return comma === -1 ? "sans-serif" : stack.slice(comma + 1).trim();
 }
@@ -688,6 +691,9 @@ function fallbackStack(stack: string): string {
  * A role the tenant names is the tenant's, family and stylesheet together: a family set with no url
  * clears a configured one rather than leaving the page loading a stylesheet for a face it no longer
  * uses. A role the tenant leaves out keeps both.
+ *
+ * `"fallback": "serif"` swaps the stack that follows the family for a serif one. Any other value
+ * leaves the configured stack alone.
  *
  * A url is kept only if it is an absolute https URL. Whether it is ever linked is a separate
  * question, answered against the deployment's allow list when the head is built, because the
@@ -710,7 +716,7 @@ function fontsFrom(
         const family = str(spec ? spec.family : entry);
         const href = spec ? fontStylesheetHref(spec.url ?? spec.href) : undefined;
         if (family && FONT_FAMILY.test(family)) {
-            out[role] = `'${family}', ${fallbackStack(base[role])}`;
+            out[role] = `'${family}', ${fallbackStack(base[role], spec?.fallback)}`;
             if (href) sources[role] = href;
             else delete sources[role];
         } else if (href) {

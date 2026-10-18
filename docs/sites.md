@@ -207,6 +207,15 @@ must not send visitor addresses to a third party, names the stylesheet instead:
 { "Fonts": { "heading": { "family": "Zilla Slab", "url": "https://type.school.example/zilla.css" } } }
 ```
 
+A serif face needs a serif stack behind it while it loads. Add `"fallback": "serif"` and the family is
+followed by `Georgia, 'Times New Roman', serif` instead of the sans stack:
+
+```json
+{ "Fonts": { "heading": { "family": "Source Serif 4", "fallback": "serif" } } }
+```
+
+Leave it out, or set `"sans-serif"`, for the configured stack. Any other value is ignored.
+
 That URL is a tenant's setting on its way into a `<link>` in every visitor's page, so which origins a
 page may reach is the deployment's decision and not the tenant's. `PRESS_FONT_ORIGINS` is the list:
 origins separated by commas or spaces, each `https://host`, a bare host read as https.
