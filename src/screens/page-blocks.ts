@@ -21,7 +21,7 @@ export async function pageBlocks(
     config: PressConfig,
     page: Page,
     registry: BlockRegistry,
-    options: { perViewer?: boolean; searchParams?: SearchParams; scope?: string } = {},
+    options: { perViewer?: boolean; searchParams?: SearchParams; scope?: string; item?: Record<string, unknown> } = {},
 ): Promise<ResolvedBlock[]> {
     if (!Array.isArray(page.blocks) || page.blocks.length === 0) return [];
     const blocks = resolveBlocks(page.blocks, registry, { perViewer: options.perViewer === true });
@@ -32,6 +32,7 @@ export async function pageBlocks(
         scopes: {
             site: async () => siteScope(config, await getGlobals(config)),
             page: () => pageScope(page),
+            ...(options.item ? { item: () => options.item! } : {}),
             ...(options.searchParams ? { query: async () => queryScope(await options.searchParams!) } : {}),
         },
         // Reported, never thrown, and never shown to a visitor: a renamed field is something the

@@ -873,6 +873,15 @@ function withoutHoldingPage(site: SiteIdentity, path: string): SiteIdentity {
 const COLLECTION_KEY = /^[A-Za-z][A-Za-z0-9_-]{0,40}$/;
 const TYPE_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,62}$/;
 const FIELD_NAME = /^@?[A-Za-z][A-Za-z0-9_]{0,62}$/;
+/** A list of stored blocks (objects with a type), or undefined. What a block's props hold is checked when it is drawn. */
+function blockList(v: unknown): NonNullable<CollectionConfig["detailBlocks"]> | undefined {
+    const list = array(v)?.filter((b): b is { type: string } => {
+        const r = record(b);
+        return r !== undefined && typeof r.type === "string" && r.type !== "";
+    });
+    return list && list.length > 0 ? list.slice(0, 100) : undefined;
+}
+
 const DATA_FIELD = /^[A-Za-z][A-Za-z0-9_]{0,62}$/;
 const SORT = /^-?[A-Za-z][A-Za-z0-9_]{0,62}$/;
 const FIELD_ROLES = [
@@ -945,6 +954,7 @@ function collectionFrom(v: unknown): CollectionConfig | undefined {
     const indexPath = sitePath(c.indexPage);
     const indexPage = indexPath ? withoutTrailingSlashes(indexPath) : undefined;
     const defaultAuthor = short(c.defaultAuthor, 80);
+    const detailBlocks = blockList(c.detailBlocks);
     const blocksField = typeof c.blocksField === "string" && DATA_FIELD.test(c.blocksField) ? c.blocksField : undefined;
     return {
         type,
@@ -966,6 +976,7 @@ function collectionFrom(v: unknown): CollectionConfig | undefined {
         ...(indexPage ? { indexPage } : {}),
         ...(defaultAuthor ? { defaultAuthor } : {}),
         ...(blocksField ? { blocksField } : {}),
+        ...(detailBlocks ? { detailBlocks } : {}),
     };
 }
 

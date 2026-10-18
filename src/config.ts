@@ -426,6 +426,11 @@ export interface CollectionConfig {
     indexPage?: string;
     /** The field on an entry that holds blocks, drawn on its detail page after the view. Unset, none. */
     blocksField?: string;
+    /**
+     * Blocks drawn on each entry's detail page in place of the built-in view. `item` is the entry's
+     * data, as in a `repeat` row. The `blocksField` blocks still follow. Unset, the built-in view.
+     */
+    detailBlocks?: Array<{ type: string; props?: Record<string, unknown>; [key: string]: unknown }>;
     /** The byline name on an entry that names no author: the first reference is the byline. */
     defaultAuthor?: string;
     /** Items on its index. `pageSizes.index` when unset. */

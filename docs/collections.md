@@ -42,6 +42,7 @@ merged over the configured collections by key. A build-time site passes `collect
 | `indexPage` | A site path such as `/site/blog`. The blocks of the page served there are drawn above the list on the index. See below |
 | `defaultAuthor` | The byline name on an entry that names no author, on its card and on its `article` page |
 | `blocksField` | The data field on an entry that holds blocks. They are drawn on its detail page after the view; a field that is missing or not a list of blocks draws nothing |
+| `detailBlocks` | A list of blocks drawn on each entry's detail page in place of the built-in view. `{{item.Field}}` reads the entry, as in a `repeat` row. See below |
 | `pageSize`, `label`, `noun` | Items on the index, its heading, and how a count reads |
 | `colorBy` | A choice field whose option colours the item. See below |
 | `related` | What an item page lists under the item: `"semantic"` for the items of this collection closest to it by meaning, `false` for none. Unset, the first collection that references this one |
@@ -140,6 +141,15 @@ byline) did not come back, or a collection with no reference at all, is signed w
 
 `blocksField` names a field of block data on the entry, such as `Blocks`. The detail page draws those blocks
 after the entry's own view, so a profile can carry its own composed content. Unset, the page is unchanged.
+
+`detailBlocks` is a list of blocks stored in the collection's settings. On an entry's page they are drawn instead
+of the built-in view, with `item` bound to the entry, so `{{item.Name}}` is its name and a whole-value
+`{{item.Tags}}` hands a list prop the array. The `blocksField` blocks still follow. A route that passes its own
+`view` keeps it, and if none of the blocks resolve the built-in view is drawn.
+
+```json
+{ "detailBlocks": [{ "type": "richText", "props": { "markdown": "Hello {{item.Name}}" } }] }
+```
 
 A page named by `indexPage` only holds data, the way a header or footer region page does: it answers
 404 at its own path and is left out of the menu and the sitemap.

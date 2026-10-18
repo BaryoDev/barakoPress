@@ -56,6 +56,18 @@ const TENANTS: Record<string, { host: string; collection: Record<string, unknown
         collection: { ...PROFILES, blocksField: "Blocks" },
         data: { Name: "Ana Cruz", Slug: "ana", Body: "Ana's page", Blocks: [{ type: "hours", props: {} }] },
     },
+    laid: {
+        host: "laid.example",
+        collection: {
+            ...PROFILES,
+            blocksField: "Blocks",
+            detailBlocks: [
+                { type: "richText", props: { markdown: "Hello {{item.Name}}" } },
+                { type: "tagDump", props: { tags: "{{item.Tags}}" } },
+            ],
+        },
+        data: { Name: "Lara", Slug: "ana", Body: "Lara's page", Tags: ["a", "b"], Blocks: BLOCKS },
+    },
     unset: {
         host: "unset.example",
         collection: PROFILES,
@@ -113,6 +125,40 @@ afterEach(() => {
 });
 
 const hours = defineBlock({ type: "hours", label: "Hours", fields: [], component: () => <p>consumer hours block</p> });
+
+const tagDump = defineBlock<{ tags?: string[] }>({
+    type: "tagDump",
+    label: "Tags",
+    fields: [{ name: "tags", kind: "list", item: { kind: "text" } }],
+    component: ({ props }) => <p data-tags={JSON.stringify(props.tags)}>tags block</p>,
+});
+
+describe("a collection's detailBlocks", () => {
+    async function laid(): Promise<string> {
+        requestHeaders = new Headers({ host: "laid.example" });
+        const Detail = createCollectionDetail(config, "profiles", { blocks: createBlockRegistry(config, [tagDump]) });
+        const { prelude } = await prerender(await Detail({ params: Promise.resolve({ slug: "ana" }) }));
+        return new Response(prelude).text();
+    }
+
+    it("binds item to the entry and draws the blocks in place of the default view, then the blocksField blocks", async () => {
+        const html = await laid();
+        expect(html).toContain("Hello Lara");
+        expect(html).not.toContain("<h1");
+        expect(html).not.toContain("Lara&#x27;s page");
+        expect(html.indexOf("Hello Lara")).toBeLessThan(html.indexOf("Open Monday to Friday"));
+    });
+
+    it("hands a whole-value binding to a list prop as the array", async () => {
+        expect(await laid()).toContain("data-tags=\"[&quot;a&quot;,&quot;b&quot;]\"");
+    });
+
+    it("draws the default view when a collection sets none", async () => {
+        const html = await detail("unset.example");
+        expect(html).toContain("<h1");
+        expect(html).toContain("Ana Cruz");
+    });
+});
 
 describe("a collection entry's blocks", () => {
     it("draws the blocks in the field blocksField names", async () => {

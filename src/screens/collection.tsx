@@ -35,6 +35,7 @@ import { IconGlyph } from "../blocks/primitives.js";
 import { siteConfig, type SiteParams } from "../site.js";
 import { BLOCK_PROSE_CLASS } from "../blocks/built-in.js";
 import { BlockList } from "../blocks/render.js";
+import { itemScope } from "../blocks/bind.js";
 import { createBlockRegistry, registryFor } from "../blocks/registry.js";
 import type { BlockRegistry } from "../blocks/schema.js";
 import { proseCss } from "../theme.js";
@@ -507,9 +508,24 @@ async function indexLead(config: PressConfig, path: string, blocks: BlockRegistr
  */
 async function entryBlocks(config: PressConfig, col: CollectionConfig, item: Item, blocks: BlockRegistry | undefined): Promise<ReactNode> {
     if (!col.blocksField) return null;
-    const page = { id: item.content.id, slug: item.slug, title: item.title, body: "", blocks: item.content.data[col.blocksField] };
+    return drawEntryBlocks(config, item, item.content.data[col.blocksField], blocks, "detail");
+}
+
+/*
+ * `item` is the entry, the scope a `repeat` row gets, so `{{item.Name}}` and a whole-value
+ * `{{item.Tags}}` read it. The blocksField blocks bind it too.
+ */
+async function drawEntryBlocks(
+    config: PressConfig,
+    item: Item,
+    list: unknown,
+    blocks: BlockRegistry | undefined,
+    scope: string,
+): Promise<ReactNode> {
+    const page = { id: item.content.id, slug: item.slug, title: item.title, body: "", blocks: list };
     const resolved = await pageBlocks(config, page, registryFor(config, blocks ?? createBlockRegistry(config, [], { presets: [] })), {
-        scope: "detail",
+        scope,
+        item: itemScope(config, item),
     });
     if (resolved.length === 0) return null;
     return (
@@ -621,10 +637,13 @@ export async function renderCollectionDetail(
     const tree = col.tree ? await collectionTree(config, collection, { product: item.product }) : undefined;
 
     const view = options.view ?? ItemView;
+    // Blocks that all fail to resolve leave the entry with the built-in view rather than a blank page.
+    const layout = col.detailBlocks && !options.view ? await drawEntryBlocks(config, item, col.detailBlocks, options.blocks, "detail-layout") : null;
     return (
         <>
             <StructuredData config={config} content={item.content} />
-            {await view({ config, item, related, tree, preview: Boolean(previewToken), backHref: options.backHref })}
+            {layout ??
+                (await view({ config, item, related, tree, preview: Boolean(previewToken), backHref: options.backHref }))}
             {await entryBlocks(config, col, item, options.blocks)}
         </>
     );
@@ -643,7 +662,8 @@ export function createCollectionDetail(base: PressConfig, collection: string, op
          * route file that wants preview is the one that leaves `generateStaticParams` out (#55).
          */
         const token = options.preview && searchParams ? (await searchParams).preview : undefined;
-        if (collectionOf(config, collection)?.blocksField) blocks ??= createBlockRegistry(base);
+        const col = collectionOf(config, collection);
+        if (col?.blocksField || col?.detailBlocks) blocks ??= createBlockRegistry(base);
         return renderCollectionDetail(config, collection, slug, { ...options, blocks }, token);
     };
 }
