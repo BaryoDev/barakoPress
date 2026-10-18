@@ -760,6 +760,11 @@ export interface PressConfig {
     /** Passed to toLocaleDateString. */
     locale: string;
     /**
+     * An IANA zone such as "Asia/Manila" that dates are shown in. Unset, they follow the server's
+     * zone, which on a host in UTC moves an evening event onto the wrong day.
+     */
+    timeZone?: string;
+    /**
      * The ISO code a `money` binding format uses, for example "PHP". Unset, an amount renders as a
      * plain number: a default currency is one client's currency, and there is no neutral one.
      */
@@ -1081,6 +1086,7 @@ export function defineConfig(
         backstopSeconds: input.backstopSeconds ?? 300,
         cmsTimeoutMs: timeoutMs(input.cmsTimeoutMs),
         locale: input.locale ?? "en-GB",
+        ...(validTimeZone(input.timeZone) ? { timeZone: validTimeZone(input.timeZone) } : {}),
         ...(input.currency ? { currency: input.currency } : {}),
         embedHosts: embedHosts(input.embedHosts) ?? [...EMBED_HOSTS],
         presets: input.presets ?? [],
@@ -1164,4 +1170,15 @@ export function includesFor(config: PressConfig): string[] {
         config.types.category ? config.fields.category : undefined,
     ];
     return wanted.filter((f): f is string => Boolean(f));
+}
+
+/** The zone name when this runtime knows it, otherwise undefined. */
+export function validTimeZone(v: unknown): string | undefined {
+    if (typeof v !== "string" || !v.trim()) return undefined;
+    try {
+        new Intl.DateTimeFormat("en", { timeZone: v.trim() });
+        return v.trim();
+    } catch {
+        return undefined;
+    }
 }

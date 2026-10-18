@@ -1,5 +1,5 @@
 import type { PressConfig } from "./config.js";
-import { AUTHOR_COLLECTION, CATEGORY_COLLECTION, POST_COLLECTION, RESERVED_AT_ROOT } from "./config.js";
+import { AUTHOR_COLLECTION, CATEGORY_COLLECTION, POST_COLLECTION, RESERVED_AT_ROOT, validTimeZone } from "./config.js";
 import { bySlug, list, navigationTree, pageAtPath, redirectAt, type PublicContent, type Seo } from "./delivery.js";
 import { collectionOf, getItem, getItemPreview, listCollection, slugOf, toItem, type Item } from "./collections.js";
 import { samePath, siteHref } from "./site.js";
@@ -497,7 +497,8 @@ export async function listPages(
 export function formatDate(config: PressConfig, value?: string): string {
     if (!value) return "";
     const d = new Date(value);
-    return Number.isNaN(d.getTime())
-        ? ""
-        : d.toLocaleDateString(config.locale, { day: "numeric", month: "long", year: "numeric" });
+    if (Number.isNaN(d.getTime())) return "";
+    const parts: Intl.DateTimeFormatOptions = { day: "numeric", month: "long", year: "numeric" };
+    const timeZone = validTimeZone(config.timeZone);
+    return d.toLocaleDateString(config.locale, timeZone ? { ...parts, timeZone } : parts);
 }

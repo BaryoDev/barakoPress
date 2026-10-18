@@ -214,6 +214,8 @@ type RecordScope = Exclude<BindingScope, "count">;
 
 export interface BindingOptions {
     locale: string;
+    /** An IANA zone that dates are shown in. Unset or unknown, the server's zone stands. */
+    timeZone?: string;
     /** The ISO code `money` formats with. Unset formats an amount as a plain number. */
     currency?: string;
     onProblem?: (problem: BindingProblem) => void;
@@ -290,13 +292,18 @@ export function walk(root: Record<string, unknown>, path: string): unknown {
     return current;
 }
 
-function dateText(value: unknown, locale: string, parts: Intl.DateTimeFormatOptions): string | null {
+function dateText(value: unknown, locale: string, parts: Intl.DateTimeFormatOptions, timeZone?: string): string | null {
     const date = value instanceof Date ? value : new Date(String(value));
     if (Number.isNaN(date.getTime())) return null;
     try {
-        return date.toLocaleString(locale, parts);
+        return date.toLocaleString(locale, timeZone ? { ...parts, timeZone } : parts);
     } catch {
-        return date.toISOString();
+        // An unknown zone must not turn the date into an ISO string, so try again without it.
+        try {
+            return date.toLocaleString(locale, parts);
+        } catch {
+            return date.toISOString();
+        }
     }
 }
 
@@ -320,20 +327,20 @@ export function formatValue(value: unknown, format: BindingFormat, options: Bind
     if (value === undefined || value === null || value === "") return null;
     if (typeof value === "object" && !Array.isArray(value) && !(value instanceof Date)) return null;
     const locale = options.locale;
+    const zone = options.timeZone;
 
     switch (format) {
         case "date":
-            return dateText(value, locale, { year: "numeric", month: "long", day: "numeric" });
+            return dateText(value, locale, { year: "numeric", month: "long", day: "numeric" }, zone);
         case "datetime":
-            return dateText(value, locale, {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-            });
+            return dateText(
+                value,
+                locale,
+                { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" },
+                zone,
+            );
         case "time":
-            return dateText(value, locale, { hour: "2-digit", minute: "2-digit" });
+            return dateText(value, locale, { hour: "2-digit", minute: "2-digit" }, zone);
         case "money":
             return numberText(
                 value,

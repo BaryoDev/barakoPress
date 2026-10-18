@@ -38,6 +38,7 @@ import {
     TREE_SEARCHES,
     TREE_SIDEBARS,
     TREE_SWITCHERS,
+    validTimeZone,
 } from "./config.js";
 import { ACTIVE_ON_MAX } from "./current-path.js";
 import { readEnv } from "./env.js";
@@ -719,6 +720,11 @@ function fontsFrom(
     return { fonts: out, sources: Object.keys(sources).length > 0 ? sources : undefined };
 }
 
+function timeZoneSetting(base: string | undefined, v: unknown): { timeZone?: string } {
+    const zone = validTimeZone(v) ?? base;
+    return zone ? { timeZone: zone } : {};
+}
+
 function locale(base: string, v: unknown): string {
     const value = str(v);
     if (!value || !/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8}){0,3}$/.test(value)) return base;
@@ -1366,6 +1372,7 @@ export function applySiteSettings(
         site: held?.path ? withoutHoldingPage(site, held.path) : site,
         theme,
         locale: locale(config.locale, d.Locale),
+        ...timeZoneSetting(config.timeZone, d.TimeZone),
         ...(str(d.Currency) && /^[A-Za-z]{3}$/.test(str(d.Currency) as string)
             ? { currency: (str(d.Currency) as string).toUpperCase() }
             : {}),

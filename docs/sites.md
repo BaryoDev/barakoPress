@@ -72,7 +72,7 @@ The settings are the singleton `site` type from barakoCMS `docs/site-settings.md
 `Colors` (the theme slots), `Fonts` (a family name per role, and the stylesheet that loads it),
 `Radii`, `Layout`, `Space` and `Text` (the spacing and type scales), `Tokens` and `Tones` (see [Tokens and tones](look.md#tokens-and-tones)), `StyleRecipes` (see [Style recipes](look.md#style-recipes)), `TopBar`, `HeaderLinks`, `MenuLinks`, `HeaderActions`, `FooterColumns`, `SocialLinks`, `HeaderPath`,
 `HeaderTone`, `FooterPath`, `FooterTone`, `AssetsAsSupplied`, `LogoAsSupplied`, `LogoClearSpace`,
-`PageSizes`, `ReservedSlugs`, `Labels`, `HomePath`, `HomeCollection`, `Currency`, `EmbedHosts`,
+`PageSizes`, `ReservedSlugs`, `Labels`, `HomePath`, `HomeCollection`, `Currency`, `TimeZone`, `EmbedHosts`,
 `AnalyticsScript` and `AnalyticsWebsiteId` (see Analytics below),
 `Presets`, `Plugins` (see [Plugin packages](blocks.md#plugin-packages)), and `Mode`, `HoldingPath` and
 `HoldingMessage` (see Holding mode below). `Collections`, `OptionStyles` and `OptionColors` are read as [Collections](collections.md)
@@ -82,6 +82,10 @@ site or an absolute http or https URL. Set `Url`: without it the feed and sitema
 host the tenant was found by. A link in `HeaderLinks`, `TopBar` or `FooterColumns` may also carry
 `badge`, a marker of up to 12 characters drawn beside the label, and `external: true`, which the
 built-in header does not need (every header link is already a plain anchor) and a theme can read.
+
+`TimeZone` (or `timeZone` in the config) is an IANA name such as `Asia/Manila`. Dates, from the byline to a
+`date` binding, show in that zone. Without it they follow the server's zone, so a host in UTC can put an
+evening event on the day before. A name the runtime does not know is ignored.
 A link in `HeaderLinks` or `MenuLinks` may also carry `activeOn` and `children`; see
 [The built-in header](#the-built-in-header).
 
