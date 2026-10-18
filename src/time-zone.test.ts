@@ -62,7 +62,7 @@ describe("the site's time zone", () => {
     });
 
     it("uses the site zone for date, time and datetime bindings through bindBlocks", async () => {
-        const probe = defineBlock<{ text: string }>({
+        const probe = defineBlock<{ text?: string }>({
             type: "probe",
             label: "Probe",
             fields: [{ name: "text", kind: "text" }],
