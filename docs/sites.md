@@ -84,8 +84,9 @@ host the tenant was found by. A link in `HeaderLinks`, `TopBar` or `FooterColumn
 built-in header does not need (every header link is already a plain anchor) and a theme can read.
 
 `TimeZone` (or `timeZone` in the config) is an IANA name such as `Asia/Manila`. Dates, from the byline to a
-`date` binding, show in that zone. Without it they follow the server's zone, so a host in UTC can put an
-evening event on the day before. A name the runtime does not know is ignored.
+`date` binding, show in that zone. Without it a timestamp follows the server's zone, so a host in UTC can put an
+evening event on the day before. A bare `YYYY-MM-DD` names a calendar day, so it formats in UTC either
+way and keeps its day. A name the runtime does not know is ignored.
 A link in `HeaderLinks` or `MenuLinks` may also carry `activeOn` and `children`; see
 [The built-in header](#the-built-in-header).
 
