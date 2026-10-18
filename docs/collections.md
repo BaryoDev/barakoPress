@@ -140,7 +140,7 @@ byline) did not come back, or a collection with no reference at all, is signed w
 `labels.by`. Set none of the three and the index and the byline draw what they always did.
 
 `blocksField` names a field of block data on the entry, such as `Blocks`. The detail page draws those blocks
-after the entry's own view, so a profile can carry its own composed content. Unset, the page is unchanged.
+after the entry's own view, so a profile can carry its own composed content. Unset, the page is unchanged. Whoever can edit the entry authors those blocks.
 
 `detailBlocks` is a list of blocks stored in the collection's settings. On an entry's page they are drawn instead
 of the built-in view, with `item` bound to the entry, so `{{item.Name}}` is its name and a whole-value

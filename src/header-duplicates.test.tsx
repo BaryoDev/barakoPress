@@ -84,6 +84,39 @@ describe("withoutHeaderDuplicates", () => {
         expect(out).toHaveLength(1);
     });
 
+    const site = defineConfig({ sites: {}, cmsUrl: "http://cms.test", pages: "", site: { name: "Dup", url: "https://dup.example" } });
+
+    it.each([
+        ["an absolute same-site link", "https://dup.example/about"],
+        ["a link with a query", "/about?ref=nav"],
+        ["a link with a hash", "/about#top"],
+        ["an absolute link with a query and hash", "https://dup.example/about/?a=1#b"],
+    ])("matches %s", (_name, href) => {
+        const out = withoutHeaderDuplicates(site, [item("/about", "About"), item("/find", "Find")], [{ label: "About", href }]);
+        expect(out.map((i) => i.path)).toEqual(["/find"]);
+    });
+
+    it("drops a child page the header links to and keeps its parent", () => {
+        const parent = item("/about", "About", [item("/about/team", "Team"), item("/about/history", "History")]);
+        const out = withoutHeaderDuplicates(site, [parent], [{ label: "Team", href: "https://dup.example/about/team#x" }]);
+        expect(out).toHaveLength(1);
+        expect(out[0].children.map((c) => c.path)).toEqual(["/about/history"]);
+    });
+
+    it("compares against the page under a non-empty mount", () => {
+        const mounted = defineConfig({ sites: {}, cmsUrl: "http://cms.test", pages: "/docs", site: { name: "Dup", url: "https://dup.example" } });
+        const items = [item("/about", "About"), item("/find", "Find")];
+        const out = withoutHeaderDuplicates(mounted, items, [{ label: "About", href: "https://dup.example/docs/about?x=1" }]);
+        expect(out.map((i) => i.path)).toEqual(["/find"]);
+        const bare = withoutHeaderDuplicates(mounted, items, [{ label: "About", href: "/about" }]);
+        expect(bare).toHaveLength(2);
+    });
+
+    it("leaves a link to another site alone", () => {
+        const out = withoutHeaderDuplicates(site, [item("/about", "About")], [{ label: "About", href: "https://example.org/about" }]);
+        expect(out).toHaveLength(1);
+    });
+
     it("leaves an external link alone", () => {
         const out = withoutHeaderDuplicates(config, [item("/about", "About")], [{ label: "About", href: "https://example.org/about" }]);
         expect(out).toHaveLength(1);
@@ -91,6 +124,19 @@ describe("withoutHeaderDuplicates", () => {
 });
 
 describe("the real header", () => {
+    it("draws a page once under a non-empty mount", async () => {
+        const mounted = defineConfig({ sites: {}, cmsUrl: "http://cms.test", pages: "/docs" });
+        TENANT.settings.HeaderLinks = [{ label: "About", href: "/docs/about" }];
+        try {
+            const Layout = createSiteLayout(mounted, { loadFonts: false });
+            const html = renderToStaticMarkup(await Layout({ children: <p>child</p> }));
+            expect([...html.matchAll(/<a\b[^>]*>\s*About\s*<\/a>/g)]).toHaveLength(1);
+            expect(html).toContain('href="/docs/find"');
+        } finally {
+            TENANT.settings.HeaderLinks = [{ label: "About", href: "/about" }];
+        }
+    });
+
     it("draws About once when the header links it and the page tree lists it", async () => {
         const Layout = createSiteLayout(config, { loadFonts: false });
         const html = renderToStaticMarkup(await Layout({ children: <p>child</p> }));

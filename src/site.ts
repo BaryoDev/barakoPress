@@ -828,7 +828,7 @@ export function samePath(a: string, b: string): boolean {
 }
 
 /** The path a link opens on this site, or null when it goes elsewhere. */
-function localPathOf(href: string, siteUrl: string): string | null {
+export function localPathOf(href: string, siteUrl: string): string | null {
     try {
         const url = new URL(href, siteUrl || "http://site.invalid");
         const base = siteUrl ? new URL(siteUrl).origin : "http://site.invalid";
