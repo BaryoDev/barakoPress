@@ -3,6 +3,7 @@ import { AUTHOR_COLLECTION, CATEGORY_COLLECTION, POST_COLLECTION, RESERVED_AT_RO
 import { bySlug, list, navigationTree, pageAtPath, redirectAt, type PublicContent, type Seo } from "./delivery.js";
 import { collectionOf, getItem, getItemPreview, listCollection, slugOf, toItem, type Item } from "./collections.js";
 import { samePath, siteHref } from "./site.js";
+import { zoneFor } from "./calendar-date.js";
 
 export type { Seo };
 
@@ -499,6 +500,6 @@ export function formatDate(config: PressConfig, value?: string): string {
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return "";
     const parts: Intl.DateTimeFormatOptions = { day: "numeric", month: "long", year: "numeric" };
-    const timeZone = validTimeZone(config.timeZone);
+    const timeZone = zoneFor(value, validTimeZone(config.timeZone));
     return d.toLocaleDateString(config.locale, timeZone ? { ...parts, timeZone } : parts);
 }

@@ -22,6 +22,7 @@
  */
 
 import { literalToken, plainLiterals } from "../literal.js";
+import { zoneFor } from "../calendar-date.js";
 
 /**
  * The scopes a page may read. `viewer` arrives with barakoPress #7.
@@ -292,7 +293,8 @@ export function walk(root: Record<string, unknown>, path: string): unknown {
     return current;
 }
 
-function dateText(value: unknown, locale: string, parts: Intl.DateTimeFormatOptions, timeZone?: string): string | null {
+function dateText(value: unknown, locale: string, parts: Intl.DateTimeFormatOptions, siteZone?: string): string | null {
+    const timeZone = zoneFor(value, siteZone);
     const date = value instanceof Date ? value : new Date(String(value));
     if (Number.isNaN(date.getTime())) return null;
     try {
