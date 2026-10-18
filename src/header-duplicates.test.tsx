@@ -103,6 +103,25 @@ describe("withoutHeaderDuplicates", () => {
         expect(out[0].children.map((c) => c.path)).toEqual(["/about/history"]);
     });
 
+    it("drops a page the header links as a child of another link", () => {
+        const out = withoutHeaderDuplicates(
+            site,
+            [item("/about", "About"), item("/find", "Find")],
+            [{ label: "More", href: "/more", children: [{ label: "About", href: "/about" }] }],
+        );
+        expect(out.map((i) => i.path)).toEqual(["/find"]);
+    });
+
+    it("drops a linked parent once its only child is pruned", () => {
+        const parent = item("/about", "About", [item("/about/team", "Team")]);
+        const out = withoutHeaderDuplicates(
+            site,
+            [parent],
+            [{ label: "About", href: "/about" }, { label: "Team", href: "/about/team" }],
+        );
+        expect(out).toEqual([]);
+    });
+
     it("compares against the page under a non-empty mount", () => {
         const mounted = defineConfig({ sites: {}, cmsUrl: "http://cms.test", pages: "/docs", site: { name: "Dup", url: "https://dup.example" } });
         const items = [item("/about", "About"), item("/find", "Find")];

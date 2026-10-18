@@ -9,11 +9,12 @@ import { localPathOf, samePath } from "../site.js";
  */
 export function withoutHeaderDuplicates(config: PressConfig, items: NavItem[], links: SiteLink[]): NavItem[] {
     const siteUrl = config.site?.url ?? "";
-    const linked = links.map((l) => localPathOf(l.href, siteUrl)).filter((p): p is string => p !== null);
+    const hrefs = links.flatMap((l) => [l.href, ...(l.children ?? []).map((c) => c.href)]);
+    const linked = hrefs.map((h) => localPathOf(h, siteUrl)).filter((p): p is string => p !== null);
     const drawn = (i: NavItem) => linked.some((p) => samePath(p, pageHref(config, i.path)));
     const prune = (list: NavItem[]): NavItem[] =>
         list
-            .filter((i) => i.children.length > 0 || !drawn(i))
-            .map((i) => (i.children.length > 0 ? { ...i, children: prune(i.children) } : i));
+            .map((i) => ({ ...i, children: prune(i.children) }))
+            .filter((i) => i.children.length > 0 || !drawn(i));
     return prune(items);
 }
