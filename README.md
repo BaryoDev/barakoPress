@@ -380,8 +380,8 @@ Releasing is in [RELEASING.md](https://github.com/BaryoDev/barakoPress/blob/mast
 
 ## Status
 
-0.8.0, on npm as `barakopress` and on ghcr as `ghcr.io/baryodev/barako-press`. It renders
+0.13.0, on npm as `barakopress` and on ghcr as `ghcr.io/baryodev/barako-press`. It renders
 barakocms.com and press.baryo.dev against real barakoCMS instances. barakocms.com still runs a
-derived image of the engine, with a plugin and a small overlay; #166 to #170 track what it takes to
+derived image of the engine, with a plugin and a small overlay; #166 to #168 track what it takes to
 run it on the published image as configuration. Other open gaps are in the issues, among them
 visitor-switchable theme variants (#80) and a generated Open Graph image (#81).
