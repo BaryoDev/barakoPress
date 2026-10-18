@@ -72,7 +72,7 @@ The settings are the singleton `site` type from barakoCMS `docs/site-settings.md
 `Colors` (the theme slots), `Fonts` (a family name per role, and the stylesheet that loads it),
 `Radii`, `Layout`, `Space` and `Text` (the spacing and type scales), `Tokens` and `Tones` (see [Tokens and tones](look.md#tokens-and-tones)), `StyleRecipes` (see [Style recipes](look.md#style-recipes)), `TopBar`, `HeaderLinks`, `MenuLinks`, `HeaderActions`, `FooterColumns`, `SocialLinks`, `HeaderPath`,
 `HeaderTone`, `FooterPath`, `FooterTone`, `AssetsAsSupplied`, `LogoAsSupplied`, `LogoClearSpace`,
-`PageSizes`, `ReservedSlugs`, `Labels`, `HomePath`, `HomeCollection`, `Currency`, `EmbedHosts`,
+`PageSizes`, `ReservedSlugs`, `Labels`, `HomePath`, `HomeCollection`, `Currency`, `TimeZone`, `EmbedHosts`,
 `AnalyticsScript` and `AnalyticsWebsiteId` (see Analytics below),
 `Presets`, `Plugins` (see [Plugin packages](blocks.md#plugin-packages)), and `Mode`, `HoldingPath` and
 `HoldingMessage` (see Holding mode below). `Collections`, `OptionStyles` and `OptionColors` are read as [Collections](collections.md)
@@ -82,6 +82,11 @@ site or an absolute http or https URL. Set `Url`: without it the feed and sitema
 host the tenant was found by. A link in `HeaderLinks`, `TopBar` or `FooterColumns` may also carry
 `badge`, a marker of up to 12 characters drawn beside the label, and `external: true`, which the
 built-in header does not need (every header link is already a plain anchor) and a theme can read.
+
+`TimeZone` (or `timeZone` in the config) is an IANA name such as `Asia/Manila`. Dates, from the byline to a
+`date` binding, show in that zone. Without it a timestamp follows the server's zone, so a host in UTC can put an
+evening event on the day before. A bare `YYYY-MM-DD` names a calendar day, so it formats in UTC either
+way and keeps its day. A name the runtime does not know is ignored.
 A link in `HeaderLinks` or `MenuLinks` may also carry `activeOn` and `children`; see
 [The built-in header](#the-built-in-header).
 
@@ -202,6 +207,15 @@ must not send visitor addresses to a third party, names the stylesheet instead:
 ```json
 { "Fonts": { "heading": { "family": "Zilla Slab", "url": "https://type.school.example/zilla.css" } } }
 ```
+
+A serif face needs a serif stack behind it while it loads. Add `"fallback": "serif"` and the family is
+followed by `Georgia, 'Times New Roman', serif` instead of the sans stack:
+
+```json
+{ "Fonts": { "heading": { "family": "Source Serif 4", "fallback": "serif" } } }
+```
+
+Leave it out, or set `"sans-serif"`, for the configured stack. Any other value is ignored.
 
 That URL is a tenant's setting on its way into a `<link>` in every visitor's page, so which origins a
 page may reach is the deployment's decision and not the tenant's. `PRESS_FONT_ORIGINS` is the list:

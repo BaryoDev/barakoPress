@@ -38,6 +38,7 @@ import {
     TREE_SEARCHES,
     TREE_SIDEBARS,
     TREE_SWITCHERS,
+    validTimeZone,
 } from "./config.js";
 import { ACTIVE_ON_MAX } from "./current-path.js";
 import { readEnv } from "./env.js";
@@ -673,7 +674,10 @@ function tokens<T extends object>(base: T, v: unknown, valid: RegExp): T {
 }
 
 /** What follows the first family in a stack, so a site's own face keeps the configured fallbacks. */
-function fallbackStack(stack: string): string {
+const SERIF_STACK = "Georgia, 'Times New Roman', serif";
+
+function fallbackStack(stack: string, kind?: unknown): string {
+    if (kind === "serif") return SERIF_STACK;
     const comma = stack.indexOf(",");
     return comma === -1 ? "sans-serif" : stack.slice(comma + 1).trim();
 }
@@ -687,6 +691,9 @@ function fallbackStack(stack: string): string {
  * A role the tenant names is the tenant's, family and stylesheet together: a family set with no url
  * clears a configured one rather than leaving the page loading a stylesheet for a face it no longer
  * uses. A role the tenant leaves out keeps both.
+ *
+ * `"fallback": "serif"` swaps the stack that follows the family for a serif one. Any other value
+ * leaves the configured stack alone.
  *
  * A url is kept only if it is an absolute https URL. Whether it is ever linked is a separate
  * question, answered against the deployment's allow list when the head is built, because the
@@ -709,7 +716,7 @@ function fontsFrom(
         const family = str(spec ? spec.family : entry);
         const href = spec ? fontStylesheetHref(spec.url ?? spec.href) : undefined;
         if (family && FONT_FAMILY.test(family)) {
-            out[role] = `'${family}', ${fallbackStack(base[role])}`;
+            out[role] = `'${family}', ${fallbackStack(base[role], spec?.fallback)}`;
             if (href) sources[role] = href;
             else delete sources[role];
         } else if (href) {
@@ -717,6 +724,11 @@ function fontsFrom(
         }
     }
     return { fonts: out, sources: Object.keys(sources).length > 0 ? sources : undefined };
+}
+
+function timeZoneSetting(base: string | undefined, v: unknown): { timeZone?: string } {
+    const zone = validTimeZone(v) ?? base;
+    return zone ? { timeZone: zone } : {};
 }
 
 function locale(base: string, v: unknown): string {
@@ -816,7 +828,7 @@ export function samePath(a: string, b: string): boolean {
 }
 
 /** The path a link opens on this site, or null when it goes elsewhere. */
-function localPathOf(href: string, siteUrl: string): string | null {
+export function localPathOf(href: string, siteUrl: string): string | null {
     try {
         const url = new URL(href, siteUrl || "http://site.invalid");
         const base = siteUrl ? new URL(siteUrl).origin : "http://site.invalid";
@@ -861,6 +873,15 @@ function withoutHoldingPage(site: SiteIdentity, path: string): SiteIdentity {
 const COLLECTION_KEY = /^[A-Za-z][A-Za-z0-9_-]{0,40}$/;
 const TYPE_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,62}$/;
 const FIELD_NAME = /^@?[A-Za-z][A-Za-z0-9_]{0,62}$/;
+/** A list of stored blocks (objects with a type), or undefined. What a block's props hold is checked when it is drawn. */
+function blockList(v: unknown): NonNullable<CollectionConfig["detailBlocks"]> | undefined {
+    const list = array(v)?.filter((b): b is { type: string } => {
+        const r = record(b);
+        return r !== undefined && typeof r.type === "string" && r.type !== "";
+    });
+    return list && list.length > 0 ? list.slice(0, 100) : undefined;
+}
+
 const DATA_FIELD = /^[A-Za-z][A-Za-z0-9_]{0,62}$/;
 const SORT = /^-?[A-Za-z][A-Za-z0-9_]{0,62}$/;
 const FIELD_ROLES = [
@@ -933,6 +954,8 @@ function collectionFrom(v: unknown): CollectionConfig | undefined {
     const indexPath = sitePath(c.indexPage);
     const indexPage = indexPath ? withoutTrailingSlashes(indexPath) : undefined;
     const defaultAuthor = short(c.defaultAuthor, 80);
+    const detailBlocks = blockList(c.detailBlocks);
+    const blocksField = typeof c.blocksField === "string" && DATA_FIELD.test(c.blocksField) ? c.blocksField : undefined;
     return {
         type,
         route,
@@ -952,6 +975,8 @@ function collectionFrom(v: unknown): CollectionConfig | undefined {
         ...(treeFrom(c.tree) ? { tree: treeFrom(c.tree) } : {}),
         ...(indexPage ? { indexPage } : {}),
         ...(defaultAuthor ? { defaultAuthor } : {}),
+        ...(blocksField ? { blocksField } : {}),
+        ...(detailBlocks ? { detailBlocks } : {}),
     };
 }
 
@@ -1364,6 +1389,7 @@ export function applySiteSettings(
         site: held?.path ? withoutHoldingPage(site, held.path) : site,
         theme,
         locale: locale(config.locale, d.Locale),
+        ...timeZoneSetting(config.timeZone, d.TimeZone),
         ...(str(d.Currency) && /^[A-Za-z]{3}$/.test(str(d.Currency) as string)
             ? { currency: (str(d.Currency) as string).toUpperCase() }
             : {}),

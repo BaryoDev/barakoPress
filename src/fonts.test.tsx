@@ -181,6 +181,22 @@ describe("the Fonts setting", () => {
         expect(out.theme.fontSources).toBeUndefined();
     });
 
+    it("lets a role fall back to serif, and still links the family from Google Fonts", () => {
+        const out = applySiteSettings(base, { Fonts: { heading: { family: "Source Serif 4", fallback: "serif" } } }, null);
+        expect(out.theme.fonts.heading).toBe("'Source Serif 4', Georgia, 'Times New Roman', serif");
+        const head = fontLinks(out.theme, allowedFontOrigins(undefined));
+        expect(head.google).toBe(true);
+        expect(head.stylesheets.some((href) => href.includes("Source+Serif+4"))).toBe(true);
+    });
+
+    it("keeps today's stack for sans-serif or no fallback, and ignores any other value", () => {
+        const today = applySiteSettings(base, { Fonts: { heading: "Zilla Slab" } }, null).theme.fonts.heading;
+        for (const fallback of ["sans-serif", undefined, "monospace", "Comic Sans", 5, "serif, evil"]) {
+            const out = applySiteSettings(base, { Fonts: { heading: { family: "Zilla Slab", fallback } } }, null);
+            expect(out.theme.fonts.heading).toBe(today);
+        }
+    });
+
     it("drops a url that is not absolute https, and keeps the family", () => {
         for (const url of ["http://type.school.example/i.css", "/i.css", "javascript:alert(1)", 5]) {
             const out = applySiteSettings(base, { Fonts: { heading: { family: "Inter", url } } }, null);

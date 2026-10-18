@@ -536,6 +536,22 @@ describe("while the CMS is down", () => {
 describe("applySiteSettings", () => {
     const base = { ...defineConfig({ sites: {}, site: { name: "Fallback" }, theme: { colors: { accent: "#000001" } } }), tenant: "t" };
 
+    it("reads a collection blocksField and drops one that is not a data field name", () => {
+        const read = (blocksField: unknown) =>
+            applySiteSettings(base, { Collections: { p: { type: "profile", route: "/find", fields: { title: "Name" }, blocksField } } }, null).collections.p;
+        expect(read("Blocks").blocksField).toBe("Blocks");
+        for (const bad of ["1Blocks", "has space", "a.b", "", 5, null]) expect(Object.hasOwn(read(bad), "blocksField")).toBe(false);
+    });
+
+    it("reads a collection's detailBlocks as a list of blocks and drops anything else", () => {
+        const read = (detailBlocks: unknown) =>
+            applySiteSettings(base, { Collections: { p: { type: "profile", route: "/find", fields: { title: "Name" }, detailBlocks } } }, null).collections.p;
+        const blocks = [{ type: "richText", props: { markdown: "Hi" } }];
+        expect(read(blocks).detailBlocks).toEqual(blocks);
+        expect(read(JSON.stringify(blocks)).detailBlocks).toEqual(blocks);
+        for (const bad of ["nope", 5, null, [], [5], [{ props: {} }]]) expect(Object.hasOwn(read(bad), "detailBlocks")).toBe(false);
+    });
+
     it("keeps the configured links, footer columns and social links when a field is not a list, and clears them when it is an empty one", () => {
         const configured = {
             ...base,

@@ -424,6 +424,13 @@ export interface CollectionConfig {
      * out of the menu and the sitemap.
      */
     indexPage?: string;
+    /** The field on an entry that holds blocks, drawn on its detail page after the view. Unset, none. */
+    blocksField?: string;
+    /**
+     * Blocks drawn on each entry's detail page in place of the built-in view. `item` is the entry's
+     * data, as in a `repeat` row. The `blocksField` blocks still follow. Unset, the built-in view.
+     */
+    detailBlocks?: Array<{ type: string; props?: Record<string, unknown>; [key: string]: unknown }>;
     /** The byline name on an entry that names no author: the first reference is the byline. */
     defaultAuthor?: string;
     /** Items on its index. `pageSizes.index` when unset. */
@@ -758,6 +765,11 @@ export interface PressConfig {
     /** Passed to toLocaleDateString. */
     locale: string;
     /**
+     * An IANA zone such as "Asia/Manila" that dates are shown in. Unset, they follow the server's
+     * zone, which on a host in UTC moves an evening event onto the wrong day.
+     */
+    timeZone?: string;
+    /**
      * The ISO code a `money` binding format uses, for example "PHP". Unset, an amount renders as a
      * plain number: a default currency is one client's currency, and there is no neutral one.
      */
@@ -1079,6 +1091,7 @@ export function defineConfig(
         backstopSeconds: input.backstopSeconds ?? 300,
         cmsTimeoutMs: timeoutMs(input.cmsTimeoutMs),
         locale: input.locale ?? "en-GB",
+        ...(validTimeZone(input.timeZone) ? { timeZone: validTimeZone(input.timeZone) } : {}),
         ...(input.currency ? { currency: input.currency } : {}),
         embedHosts: embedHosts(input.embedHosts) ?? [...EMBED_HOSTS],
         presets: input.presets ?? [],
@@ -1162,4 +1175,15 @@ export function includesFor(config: PressConfig): string[] {
         config.types.category ? config.fields.category : undefined,
     ];
     return wanted.filter((f): f is string => Boolean(f));
+}
+
+/** The zone name when this runtime knows it, otherwise undefined. */
+export function validTimeZone(v: unknown): string | undefined {
+    if (typeof v !== "string" || !v.trim()) return undefined;
+    try {
+        new Intl.DateTimeFormat("en", { timeZone: v.trim() });
+        return v.trim();
+    } catch {
+        return undefined;
+    }
 }

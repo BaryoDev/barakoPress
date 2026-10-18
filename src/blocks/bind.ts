@@ -138,7 +138,7 @@ export async function bindBlocks(blocks: ResolvedBlock[], options: BindPageOptio
     if (options.scopes.count) ctx.count = options.scopes.count;
     const source = new BindingSource(
         { ...options.scopes, count: ctx.count },
-        { locale: options.config.locale, currency: options.config.currency, onProblem: options.onProblem },
+        { locale: options.config.locale, timeZone: options.config.timeZone, currency: options.config.currency, onProblem: options.onProblem },
     );
     return unnestLinks(await bindList(blocks, { source }, ctx));
 }

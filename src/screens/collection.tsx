@@ -35,6 +35,7 @@ import { IconGlyph } from "../blocks/primitives.js";
 import { siteConfig, type SiteParams } from "../site.js";
 import { BLOCK_PROSE_CLASS } from "../blocks/built-in.js";
 import { BlockList } from "../blocks/render.js";
+import { itemScope } from "../blocks/bind.js";
 import { createBlockRegistry, registryFor } from "../blocks/registry.js";
 import type { BlockRegistry } from "../blocks/schema.js";
 import { proseCss } from "../theme.js";
@@ -502,6 +503,48 @@ async function indexLead(config: PressConfig, path: string, blocks: BlockRegistr
 }
 
 /*
+ * The blocks an entry carries in the field its collection names as `blocksField`, drawn after the view.
+ * A field that is absent or not a list of blocks draws nothing.
+ */
+async function entryBlocks(
+    config: PressConfig,
+    col: CollectionConfig,
+    item: Item,
+    blocks: BlockRegistry | undefined,
+    perViewer?: boolean,
+): Promise<ReactNode> {
+    if (!col.blocksField) return null;
+    return drawEntryBlocks(config, item, item.content.data[col.blocksField], blocks, "detail", perViewer);
+}
+
+/*
+ * `item` is the entry, the scope a `repeat` row gets, so `{{item.Name}}` and a whole-value
+ * `{{item.Tags}}` read it. The blocksField blocks bind it too.
+ */
+async function drawEntryBlocks(
+    config: PressConfig,
+    item: Item,
+    list: unknown,
+    blocks: BlockRegistry | undefined,
+    scope: string,
+    perViewer = false,
+): Promise<ReactNode> {
+    const page = { id: item.content.id, slug: item.slug, title: item.title, body: "", blocks: list };
+    const resolved = await pageBlocks(config, page, registryFor(config, blocks ?? createBlockRegistry(config, [], { presets: [] })), {
+        scope,
+        perViewer,
+        item: itemScope(config, item),
+    });
+    if (resolved.length === 0) return null;
+    return (
+        <>
+            <style dangerouslySetInnerHTML={{ __html: proseCss(config.theme, BLOCK_PROSE_CLASS) }} />
+            <BlockList blocks={resolved} theme={config.theme} />
+        </>
+    );
+}
+
+/*
  * A factory rather than a component, because a Next route is a file and a package cannot write files
  * into someone else's app. The consumer's app/doctors/page.tsx is:
  *
@@ -542,6 +585,10 @@ export interface CollectionDetailOptions {
      */
     related?: { collection: string; via: string } | false;
     backHref?: string;
+    /** The blocks an entry's `blocksField` renders with. The built-in ones when unset. */
+    blocks?: BlockRegistry;
+    /** Render blocks marked `perViewer`. Only true where the output is never cached. */
+    perViewer?: boolean;
     /** Renders the page in place of `ItemView`. It gets no related items unless `related` names them. */
     view?: (props: ItemViewProps) => ReactNode | Promise<ReactNode>;
 }
@@ -591,19 +638,24 @@ export async function renderCollectionDetail(
         : await getItem(config, collection, slug);
     if (!item) notFound();
 
-    const related = await relatedFor(config, collection, col, item, options);
+    const view = options.view ?? ItemView;
+    // Blocks that all fail to resolve leave the entry with the built-in view rather than a blank page.
+    const layout = col.detailBlocks && !options.view
+        ? await drawEntryBlocks(config, item, col.detailBlocks, options.blocks, "detail-layout", options.perViewer)
+        : null;
     /*
-     * The tree is read here rather than in the view, and for the product this page belongs to, so a
-     * manual covering four products draws the sidebar of the one being read and spends its read
+     * Read only when the built-in view draws. The tree is read for the product this page belongs to,
+     * so a manual covering four products draws the sidebar of the one being read and spends its read
      * budget there. A collection that is not a tree reads nothing.
      */
-    const tree = col.tree ? await collectionTree(config, collection, { product: item.product }) : undefined;
-
-    const view = options.view ?? ItemView;
+    const related = layout ? undefined : await relatedFor(config, collection, col, item, options);
+    const tree = !layout && col.tree ? await collectionTree(config, collection, { product: item.product }) : undefined;
     return (
         <>
             <StructuredData config={config} content={item.content} />
-            {await view({ config, item, related, tree, preview: Boolean(previewToken), backHref: options.backHref })}
+            {layout ??
+                (await view({ config, item, related, tree, preview: Boolean(previewToken), backHref: options.backHref }))}
+            {await entryBlocks(config, col, item, options.blocks, options.perViewer)}
         </>
     );
 }
@@ -611,6 +663,7 @@ export async function renderCollectionDetail(
 type DetailParams = { params: Promise<{ slug: string; site?: string }>; searchParams?: Promise<{ preview?: string }> };
 
 export function createCollectionDetail(base: PressConfig, collection: string, options: CollectionDetailOptions = {}) {
+    let blocks = options.blocks;
     return async function CollectionDetail({ params, searchParams }: DetailParams) {
         const config = await siteConfig(base, params);
         const { slug } = await params;
@@ -620,7 +673,9 @@ export function createCollectionDetail(base: PressConfig, collection: string, op
          * route file that wants preview is the one that leaves `generateStaticParams` out (#55).
          */
         const token = options.preview && searchParams ? (await searchParams).preview : undefined;
-        return renderCollectionDetail(config, collection, slug, options, token);
+        const col = collectionOf(config, collection);
+        if (col?.blocksField || col?.detailBlocks) blocks ??= createBlockRegistry(base);
+        return renderCollectionDetail(config, collection, slug, { ...options, blocks }, token);
     };
 }
 
