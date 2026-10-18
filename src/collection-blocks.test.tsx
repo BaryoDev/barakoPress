@@ -26,6 +26,7 @@ vi.mock("next/navigation", () => ({
         throw Object.assign(new Error(`NEXT_REDIRECT ${to}`), { digest: "NEXT_REDIRECT" });
     },
 }));
+vi.mock("next/server", () => ({ connection: async () => {} }));
 vi.mock("next/link", () => ({
     default: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
         <a href={href} {...rest}>
@@ -37,7 +38,7 @@ vi.mock("next/link", () => ({
 const { defineConfig } = await import("./config.js");
 const { forgetCachedReads } = await import("./delivery.js");
 const { createCollectionDetail } = await import("./screens/collection.js");
-const { createPage } = await import("./screens/page.js");
+const { createPage, createViewerPage } = await import("./screens/page.js");
 const { createBlockRegistry } = await import("./blocks/registry.js");
 const { defineBlock } = await import("./blocks/schema.js");
 
@@ -68,6 +69,11 @@ const TENANTS: Record<string, { host: string; collection: Record<string, unknown
         },
         data: { Name: "Lara", Slug: "ana", Body: "Lara's page", Tags: ["a", "b"], Blocks: BLOCKS },
     },
+    viewer: {
+        host: "viewer.example",
+        collection: { ...PROFILES, detailBlocks: [{ type: "mine", props: {} }] },
+        data: { Name: "Vi", Slug: "ana", Body: "Vi's page" },
+    },
     unset: {
         host: "unset.example",
         collection: PROFILES,
@@ -96,6 +102,7 @@ function cms() {
         if (url.pathname === "/api/public/site") {
             return paged([{ id: "s", data: { Name: tenant, Url: `https://${t.host}`, Collections: { profiles: t.collection } } }]);
         }
+        if (url.pathname === "/api/public/profile" && tenant === "viewer") return new Response("boom", { status: 500 });
         if (url.pathname === "/api/public/profile/ana") return Response.json({ id: "p1", slug: "ana", data: t.data });
         return new Response("", { status: 404 });
     });
@@ -131,6 +138,33 @@ const tagDump = defineBlock<{ tags?: string[] }>({
     label: "Tags",
     fields: [{ name: "tags", kind: "list", item: { kind: "text" } }],
     component: ({ props }) => <p data-tags={JSON.stringify(props.tags)}>tags block</p>,
+});
+
+const mine = defineBlock({ type: "mine", label: "Mine", perViewer: true, fields: [], component: () => <p>viewer only block</p> });
+
+describe("a collection's detailBlocks on the viewer route", () => {
+    it("draws a perViewer block there and not on the cached route", async () => {
+        const registry = createBlockRegistry(config, [mine]);
+        requestHeaders = new Headers({ host: "viewer.example" });
+        const args = { params: Promise.resolve({ path: ["find", "ana"] }), searchParams: Promise.resolve({}) };
+        const viewer = await prerender(await createViewerPage(config, registry)(args));
+        expect(await new Response(viewer.prelude).text()).toContain("viewer only block");
+        const shared = await prerender(await createPage(config, registry)(args));
+        expect(await new Response(shared.prelude).text()).not.toContain("viewer only block");
+    });
+
+    it("does not read related items for an entry whose layout drew", async () => {
+        requestHeaders = new Headers({ host: "viewer.example" });
+        const Detail = createCollectionDetail(config, "profiles", {
+            blocks: createBlockRegistry(config, [mine]),
+            related: { collection: "profiles", via: "Friend" },
+            perViewer: true,
+        });
+        const { prelude } = await prerender(await Detail({ params: Promise.resolve({ slug: "ana" }) }));
+        const html = await new Response(prelude).text();
+        expect(html).not.toContain("<h1");
+        expect(html).toContain("viewer only block");
+    });
 });
 
 describe("a collection's detailBlocks", () => {

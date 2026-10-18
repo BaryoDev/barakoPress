@@ -302,7 +302,7 @@ export function createViewerPage(base: PressConfig, registry?: BlockRegistry, op
         const p = await params;
         const hit = collectionHit(config, p);
         if (hit) {
-            if (hit.slug !== undefined) return renderCollectionDetail(config, hit.key, hit.slug, { blocks: (blocks ??= createBlockRegistry(base)) });
+            if (hit.slug !== undefined) return renderCollectionDetail(config, hit.key, hit.slug, { blocks: (blocks ??= createBlockRegistry(base)), perViewer: true });
             blocks ??= createBlockRegistry(base);
             return CollectionIndexView({ config, collection: hit.key, query: await queryFor(true, searchParams), blocks });
         }
