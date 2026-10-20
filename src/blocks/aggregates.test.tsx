@@ -285,6 +285,76 @@ describe("count", () => {
     });
 });
 
+describe("a source or count the page cannot read (#210)", () => {
+    it("says so once when sources go past the page's read budget, naming the collection and the limit", async () => {
+        const within = Array.from({ length: MAX_SOURCES }, () => source({ collection: "posts", pageSize: 1 }, [text("x")]));
+        const out = await page([
+            ...within,
+            source({ collection: "releases", pageSize: 1 }, [text("past the budget")]),
+            source({ collection: "releases", pageSize: 1 }, [text("also past the budget")]),
+        ]);
+
+        expect(out).not.toContain("past the budget");
+        const said = warnings.filter((w) => w.includes('"releases"') && w.includes(String(MAX_SOURCES)));
+        expect(said).toHaveLength(1);
+        expect(warnings.filter((w) => w.includes('"posts"'))).toHaveLength(0);
+    });
+
+    it("says so when a count goes past the read budget", async () => {
+        const filler = Array.from({ length: MAX_SOURCES }, () => source({ collection: "posts", pageSize: 1 }, [text("x")]));
+        const out = await page([...filler, text("[{{count.packages ?? p}}]")]);
+
+        expect(out).toContain("[p]");
+        expect(warnings.some((w) => w.includes('"packages"') && w.includes(String(MAX_SOURCES)))).toBe(true);
+    });
+
+    it("says so when a source names a collection the site does not have", async () => {
+        const out = await page([source({ collection: "nope", pageSize: 1 }, [text("never drawn")])]);
+
+        expect(out).not.toContain("never drawn");
+        expect(warnings.some((w) => w.includes('"nope"'))).toBe(true);
+    });
+
+    it("writes a collection name from the URL to the log without its control characters", async () => {
+        await page([source({ collection: "fake\nERROR forged line", pageSize: 1 }, [text("x")])]);
+
+        const said = warnings.filter((w) => w.includes("forged line"));
+        expect(said).toHaveLength(1);
+        expect(said[0]).not.toContain("\n");
+        expect(said[0]).toContain('"fake?ERROR forged line"');
+    });
+});
+
+describe("a collection name in the log (#210)", () => {
+    it("replaces line separators and bidi overrides from the URL as well as control characters", async () => {
+        await page([source({ collection: "a\u2028b\u2029c\u202ed\u2066e\u0085f", pageSize: 1 }, [text("x")])]);
+
+        const said = warnings.filter((w) => w.includes("this site has no such collection"));
+        expect(said).toHaveLength(1);
+        expect(said[0]).toContain('"a?b?c?d?e?f"');
+    });
+});
+
+describe("a warning is kept per bind (#210)", () => {
+    it("is said by each of two overlapping pages that hit the same limit", async () => {
+        const blocks = [source({ collection: "nope-overlap", pageSize: 1 }, [text("x")])];
+
+        await Promise.all([page(blocks), page(blocks)]);
+
+        const said = warnings.filter((w) => w.includes("this site has no such collection"));
+        expect(said).toHaveLength(2);
+    });
+
+    it("is said once per bind, however many times that bind hits the limit", async () => {
+        const one = source({ collection: "nope-once", pageSize: 1 }, [text("x")]);
+
+        await page([one, one]);
+
+        const said = warnings.filter((w) => w.includes("this site has no such collection"));
+        expect(said).toHaveLength(1);
+    });
+});
+
 describe("sum", () => {
     it("adds a numeric field over a source's rows, numbers written as text included", async () => {
         const out = await page([source({ collection: "milestones" }, [text("[{{sum.Open}} open]")])]);
