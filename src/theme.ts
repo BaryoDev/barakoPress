@@ -583,6 +583,37 @@ function colorVariables(c: ThemeColors): [string, string][] {
     ];
 }
 
+const ALIAS_SLOTS = new Set(Object.keys(COLOR_ALIASES));
+
+/** `--bp-c-` and the slot's name in kebab case. Every slot a variant can override has one. */
+export function slotVariable(slot: string): string {
+    return `--bp-c-${slot.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)}`;
+}
+
+/** Every role slot as its own variable. The old alias names follow their role, so they get none. */
+function slotVariables(c: ThemeColors): [string, string][] {
+    return Object.entries(c as unknown as Record<string, string>)
+        .filter(([slot]) => !ALIAS_SLOTS.has(slot))
+        .map(([slot, value]): [string, string] => [slotVariable(slot), value]);
+}
+
+/**
+ * The theme with each colour slot written as a reference to its variable, the written colour as the
+ * fallback. The inline styles the screens draw from the theme then follow a selected variant. A
+ * theme with no variants is returned as it is, so a site that names none renders the same markup.
+ */
+export function liveTheme(theme: PressTheme): PressTheme {
+    if (!theme.variants || Object.keys(theme.variants).length === 0) return theme;
+    const colors = Object.fromEntries(
+        Object.entries(theme.colors as unknown as Record<string, string>).map(([slot, value]) => {
+            const role = (COLOR_ALIASES as Record<string, string>)[slot] ?? slot;
+            const source = (theme.colors as unknown as Record<string, string>)[role] ?? value;
+            return [slot, `var(${slotVariable(role)},${source})`];
+        }),
+    ) as unknown as ThemeColors;
+    return { ...theme, colors };
+}
+
 /** Attribute on the root element that names the variant in force. Absent means the base theme. */
 export const VARIANT_ATTRIBUTE = "data-theme-variant";
 
@@ -590,8 +621,10 @@ export function themeVariablesCss(theme: PressTheme): string {
     const c = theme.colors;
     const f = theme.fonts;
     const r = theme.radii;
+    const hasVariants = Object.keys(theme.variants ?? {}).length > 0;
     const vars: [string, string][] = [
         ...colorVariables(c),
+        ...(hasVariants ? slotVariables(c) : []),
         ["--radius-chip", r.control],
         ["--radius-control", r.control],
         ["--radius-card", r.panel],
@@ -608,10 +641,10 @@ export function themeVariablesCss(theme: PressTheme): string {
     const declarations = (list: [string, string][]) =>
         list.map(([name, value]) => `${name}:${declarationValue(value)}`).join(";");
     const root = `:root{${declarations(vars)}}`;
-    const variants = Object.entries(theme.variants ?? {}).map(
-        ([name, slots]) =>
-            `:root[${VARIANT_ATTRIBUTE}="${name}"]{${declarations(colorVariables(mergeColors(c, slots)))}}`,
-    );
+    const variants = Object.entries(theme.variants ?? {}).map(([name, slots]) => {
+        const merged = mergeColors(c, slots);
+        return `:root[${VARIANT_ATTRIBUTE}="${name}"]{${declarations([...colorVariables(merged), ...slotVariables(merged)])}}`;
+    });
     const registered = legacy.map(([name, role]) => {
         const value = declarationValue(f[role]);
         const initial = PLAIN_FONT_STACK.test(value) ? value : DEFAULT_THEME.fonts[role];

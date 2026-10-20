@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- A selected theme variant now recolours the body, the built-in header and the footer (#218). When a
+  theme names variants, every colour slot is also written as `--bp-c-<slot>` (`--bp-c-inverse`,
+  `--bp-c-page-bg` and so on) in the base rule and in each variant rule, and those layout styles read
+  the variable with the written colour as the fallback. A site with no variants renders the same markup
+  as before, byte for byte.
+
 ## 0.15.0 (2026-10-20)
 
 - Viewer sessions (#7), the first slice. `viewerSessions: true` turns on `createViewerLoginRoute` and
