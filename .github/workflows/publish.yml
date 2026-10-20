@@ -9,6 +9,11 @@
 # architecture. The VM this deploys to is Ampere, and an amd64-only image has bitten this project
 # before.
 #
+# A second image, barako-press-source, carries the engine's source with its dependencies installed and
+# nothing built (the `source` stage of the Dockerfile). Blocks are registered when the Next build runs,
+# so a site with a plugin builds a derived image; this is what it builds from, so it needs no checkout
+# of this repository (#166). It is tagged exactly like the engine image.
+#
 # What the image contains is the reference app: the renderer as a running server, which is what a
 # site deploys. The npm package stays the way a consumer composes their own.
 
@@ -76,7 +81,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   build:
-    name: Build ${{ matrix.arch }}
+    name: Build ${{ matrix.image }} ${{ matrix.arch }}
     needs: version
     runs-on: ${{ matrix.runner }}
     permissions:
@@ -86,12 +91,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - arch: amd64
-            runner: ubuntu-latest
-            platform: linux/amd64
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-            platform: linux/arm64
+          - { image: barako-press, target: run, arch: amd64, runner: ubuntu-latest, platform: linux/amd64 }
+          - { image: barako-press, target: run, arch: arm64, runner: ubuntu-24.04-arm, platform: linux/arm64 }
+          - { image: barako-press-source, target: source, arch: amd64, runner: ubuntu-latest, platform: linux/amd64 }
+          - { image: barako-press-source, target: source, arch: arm64, runner: ubuntu-24.04-arm, platform: linux/arm64 }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -109,14 +112,15 @@ jobs:
         with:
           context: .
           file: Dockerfile
+          target: ${{ matrix.target }}
           platforms: ${{ matrix.platform }}
           labels: |
             org.opencontainers.image.source=https://github.com/BaryoDev/barakoPress
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.version=${{ needs.version.outputs.version }}
-          outputs: type=image,name=ghcr.io/baryodev/barako-press,push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+          outputs: type=image,name=ghcr.io/baryodev/${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
 
       # An empty digest would make the merge below build a manifest out of nothing, so it fails here
       # rather than producing an image that resolves to no architectures.
@@ -129,11 +133,11 @@ jobs:
             *) echo "::error::build produced no usable digest, got '$DIGEST'"; exit 1 ;;
           esac
           mkdir -p /tmp/digests
-          echo "$DIGEST" > "/tmp/digests/${{ matrix.arch }}"
+          echo "$DIGEST" > "/tmp/digests/${{ matrix.image }}-${{ matrix.arch }}"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: digest-${{ matrix.arch }}
+          name: digest-${{ matrix.image }}-${{ matrix.arch }}
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
@@ -163,43 +167,47 @@ jobs:
           path: /tmp/digests
           merge-multiple: true
 
-      - name: Create the manifest list
+      - name: Create the manifest lists
         id: tags
         run: |
           set -euo pipefail
-          IMG=ghcr.io/baryodev/barako-press
-          REFS=""
-          for arch in amd64 arm64; do
-            F="/tmp/digests/$arch"
-            [ -s "$F" ] || { echo "::error::no digest for $arch, refusing to publish a single-architecture image"; exit 1; }
-            REFS="$REFS $IMG@$(cat "$F")"
-          done
           if [ "$IS_RELEASE" = "true" ]; then
             if [ "$MOVE_LATEST" = "true" ]; then TAGS="latest $VERSION"; else TAGS="$VERSION"; fi
           else
             TAGS="dev dev-${GITHUB_SHA}"
           fi
-          ARGS=""
-          for t in $TAGS; do ARGS="$ARGS --tag $IMG:$t"; done
-          docker buildx imagetools create $ARGS $REFS
-          echo "pushed: $TAGS" >> "$GITHUB_STEP_SUMMARY"
+          for image in barako-press barako-press-source; do
+            IMG=ghcr.io/baryodev/$image
+            REFS=""
+            for arch in amd64 arm64; do
+              F="/tmp/digests/$image-$arch"
+              [ -s "$F" ] || { echo "::error::no digest for $image $arch, refusing to publish a single-architecture image"; exit 1; }
+              REFS="$REFS $IMG@$(cat "$F")"
+            done
+            ARGS=""
+            for t in $TAGS; do ARGS="$ARGS --tag $IMG:$t"; done
+            docker buildx imagetools create $ARGS $REFS
+            echo "pushed $image: $TAGS" >> "$GITHUB_STEP_SUMMARY"
+          done
 
       # Checked on the pushed manifest rather than on the build configuration, because the
       # configuration being right is not evidence that the push was. A single-architecture image is
       # invisible until something on the other architecture tries to run it.
-      - name: The pushed image carries both architectures
+      - name: The pushed images carry both architectures
         run: |
           set -euo pipefail
-          IMG=ghcr.io/baryodev/barako-press
           T="$( [ "$IS_RELEASE" = "true" ] && echo "$VERSION" || echo "dev-${GITHUB_SHA}" )"
-          PLATFORMS=$(docker buildx imagetools inspect "$IMG:$T" --raw \
-            | python3 -c "import sys,json; m=json.load(sys.stdin).get('manifests',[]); print(' '.join(sorted(f\"{x['platform']['os']}/{x['platform']['architecture']}\" for x in m if x.get('platform',{}).get('architecture') not in (None,'unknown'))))")
-          echo "$IMG:$T carries: $PLATFORMS"
-          case "$PLATFORMS" in
-            *linux/amd64*) ;;
-            *) echo "::error::no linux/amd64 in the pushed manifest"; exit 1 ;;
-          esac
-          case "$PLATFORMS" in
-            *linux/arm64*) ;;
-            *) echo "::error::no linux/arm64 in the pushed manifest"; exit 1 ;;
-          esac
+          for image in barako-press barako-press-source; do
+            IMG=ghcr.io/baryodev/$image
+            PLATFORMS=$(docker buildx imagetools inspect "$IMG:$T" --raw \
+              | python3 -c "import sys,json; m=json.load(sys.stdin).get('manifests',[]); print(' '.join(sorted(f\"{x['platform']['os']}/{x['platform']['architecture']}\" for x in m if x.get('platform',{}).get('architecture') not in (None,'unknown'))))")
+            echo "$IMG:$T carries: $PLATFORMS"
+            case "$PLATFORMS" in
+              *linux/amd64*) ;;
+              *) echo "::error::no linux/amd64 in the pushed manifest of $image"; exit 1 ;;
+            esac
+            case "$PLATFORMS" in
+              *linux/arm64*) ;;
+              *) echo "::error::no linux/arm64 in the pushed manifest of $image"; exit 1 ;;
+            esac
+          done
