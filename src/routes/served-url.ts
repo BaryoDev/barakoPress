@@ -7,8 +7,9 @@
  * decides the policy.
  */
 export function servedUrl(origin: string, path: string): string {
-    if (path === "" || path === "/") return origin;
-    const rooted = path.startsWith("/") ? path : `/${path}`;
-    const slashed = process.env.PRESS_TRAILING_SLASH === "true" && !rooted.endsWith("/");
+    const trimmed = path.replace(/\/+$/, "");
+    if (trimmed === "") return origin;
+    const rooted = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+    const slashed = process.env.PRESS_TRAILING_SLASH === "true";
     return `${origin}${rooted}${slashed ? "/" : ""}`;
 }

@@ -34,6 +34,8 @@ const SETTINGS = {
         { label: "Console", href: "https://console.example", external: true },
         { label: "Feed", href: "/feed.xml" },
         { label: "Q and A", href: "/q&a" },
+        { label: "Secret", href: "/secret" },
+        { label: "About again", href: "/about/" },
     ],
 };
 
@@ -123,6 +125,19 @@ describe("the sitemap of a site with no menu", () => {
         expect(listed).toContain(`${ORIGIN}/pricing/`);
         expect(listed).toContain(`${ORIGIN}/clients/`);
         expect(listed.slice(1).every((u) => u.endsWith("/"))).toBe(true);
+    });
+});
+
+describe("a header link", () => {
+    it("to a noIndex page is not listed", async () => {
+        const listed = await urls();
+        expect(listed.filter((u) => u.includes("secret"))).toEqual([]);
+    });
+
+    it("with a trailing slash lists the page once, in the form the policy serves", async () => {
+        expect((await urls()).filter((u) => u === `${ORIGIN}/about` || u === `${ORIGIN}/about/`)).toEqual([`${ORIGIN}/about`]);
+        vi.stubEnv("PRESS_TRAILING_SLASH", "true");
+        expect((await urls()).filter((u) => u === `${ORIGIN}/about` || u === `${ORIGIN}/about/`)).toEqual([`${ORIGIN}/about/`]);
     });
 });
 

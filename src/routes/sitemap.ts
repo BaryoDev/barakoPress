@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { pinnedTenant, type PressConfig, type SiteLink } from "../config.js";
 import { type NavItem, flattenNavigation, getNavigation, isChromePath, isReservedPath, listPages, pageHref } from "../cms.js";
-import { pageAtPath } from "../delivery.js";
+import { type ResolvedPage, pageAtPath } from "../delivery.js";
 import { RESERVED_AT_ROOT } from "../config.js";
 import { servedUrl } from "./served-url.js";
 import { listAllCollection } from "../collections.js";
@@ -148,12 +148,26 @@ async function pageUrls(config: PressConfig, home: string, listed: Set<string>, 
         urls.add(servedUrl(home, pageHref(config, p)));
     };
     paths.forEach(keep);
+    // One lookup per path, shared by the header links and the slug loop below.
+    const lookups = new Map<string, Promise<ResolvedPage | null>>();
+    const lookup = (path: string) => {
+        let found = lookups.get(path);
+        if (!found) {
+            found = pageAtPath(config, path).catch(() => null);
+            lookups.set(path, found);
+        }
+        return found;
+    };
     // A header link is a site path. Under the mount it is a page path; elsewhere it is some other route.
+    // A target that resolves to a noIndex page is left out; one that resolves to no page stays.
     for (const p of linkPaths(config.site.headerLinks)) {
-        if (mount && p.startsWith(`${mount}/`)) keep(p.slice(mount.length));
-        else if (mount && p === mount) keep("/");
-        else if (!mount) keep(p);
-        else if (!reserved(p)) urls.add(servedUrl(home, p));
+        const pagePath = mount && p.startsWith(`${mount}/`) ? p.slice(mount.length) : mount && p === mount ? "/" : !mount ? p : undefined;
+        if (pagePath === undefined) {
+            if (!reserved(p)) urls.add(servedUrl(home, p));
+            continue;
+        }
+        if ((await lookup(pagePath.replace(/(.)\/+$/, "$1")))?.entry.seo?.noIndex) continue;
+        keep(pagePath);
     }
 
     const type = config.types.page;
@@ -174,7 +188,7 @@ async function pageUrls(config: PressConfig, home: string, listed: Set<string>, 
             const found = await Promise.all(
                 slugs.slice(i, i + PAGE_LOOKUPS_AT_ONCE).map(async (slug) => {
                     try {
-                        return (await pageAtPath(config, `/${slug}`))?.path;
+                        return (await lookup(`/${slug}`))?.path;
                     } catch {
                         return undefined;
                     }
