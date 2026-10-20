@@ -22,6 +22,10 @@
   only to a request carrying `X-Viewer-Token`, and a junk viewer token answers 401. barakoPress sends
   no viewer token, so it reads exactly what it read from 5.0.
 
+- Written down that the `PressStore` seam is the deliverable for running more than one container (#86).
+  The engine ships no store backend and no Next `cacheHandler`; the consumer supplies the store, with
+  the example in `docs/caching.md` as the contract. No code changes.
+
 ## 0.14.0 (2026-10-20)
 
 - Dates print in the site's time zone (#207). A site sets `TimeZone` (`timeZone` in the config), an

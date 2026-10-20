@@ -52,6 +52,24 @@ against each tag it dropped, and a read carries the newest generation of its own
 asks the CMS for, so a container that was never told is asking for something it has never cached.
 Next's own data cache stays per container; what crosses is the knowledge that it is out of date.
 
+### What the engine does not ship
+
+The `PressStore` seam and the example above are the whole contract. The engine ships no store backend
+and no Next `cacheHandler`, and a deployment that wants either supplies it.
+
+- **No backend.** The engine has one dependency, and a Redis client (or any other) is not worth the
+  package carrying it for every site that runs one container. You write about ten lines over what you
+  already run, as above. `add` has to be atomic write-if-absent, because that is what honours a
+  replayed webhook delivery once.
+- **No `cacheHandler`.** Next's data cache stays per container. A shared one would let a second
+  container serve a warm body instead of fetching once, which saves work but is not needed for a
+  correct answer: the generation in the read URL already stops a container serving something that was
+  purged. If you want that saving, set `cacheHandler` in your own `next.config`.
+
+Running two servers behind one store is therefore tested as two module instances sharing one store
+(`src/cache.test.ts`), not as two started servers. That covers the logic. The wiring of your store
+client is yours to check: purge on one container, then confirm the other asks the CMS again.
+
 Each read also carries a backstop, 300 seconds by default. That is not for correctness, it is for the
 deployment where nobody ever created the webhook: without it their blog would be empty forever and
 nothing would say why. With it, a missing webhook degrades publishing from instant to a few minutes.
