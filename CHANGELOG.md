@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.14.0 (2026-10-20)
+
+- Dates print in the site's time zone (#207). A site sets `TimeZone` (`timeZone` in the config), an
+  IANA name such as `Asia/Manila`, and `formatDate` and the `date`, `time` and `datetime` binding
+  formats use it. A bare `YYYY-MM-DD` stays on its calendar day in any zone. An unknown name keeps
+  the old output, and a site that sets nothing prints as before.
+
+- A `Fonts` role takes `"fallback": "serif"`, so a serif heading face falls back to Georgia and
+  serif instead of the sans stack (#207).
+
+- A collection can set `detailBlocks`, blocks drawn on every entry's detail page in place of the
+  built-in view with `item` bound to the entry, and `blocksField`, a field on the entry holding its
+  own blocks, drawn after the view (#207). `{{item.Tags}}` hands a list prop the array. A route's own
+  `view` still wins over `detailBlocks`, and when no detail block resolves the built-in view is drawn.
+
+- Custom blocks render on a collection detail page, and a header link the page tree also lists is
+  drawn once (#207).
+
 ## 0.13.0 (2026-10-13)
 
 - Reads barakoCMS 5.0 (#201). `DELIVERY_CONTRACT` is 1 to 8, so an API on delivery contract 8 no
