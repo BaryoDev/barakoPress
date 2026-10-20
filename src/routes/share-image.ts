@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import type { PressConfig } from "../config.js";
 import { getPageByPath } from "../cms.js";
 import { readEnv } from "../env.js";
-import { siteConfigOrNull } from "../site.js";
+import { siteConfigOrNull, tenantVary } from "../site.js";
 
 /*
  * A 1200 by 630 share image drawn from a page's title and the site's name, with a font the
@@ -65,6 +65,10 @@ export function createShareImage(base: PressConfig) {
         }
 
         const { ImageResponse } = await import("next/og");
+        const headers: Record<string, string> = { "cache-control": SHARE_IMAGE_CACHE_CONTROL };
+        // The card is drawn for the tenant, and the URL does not name one picked by a header.
+        const vary = tenantVary(config);
+        if (vary) headers.vary = vary;
         return new ImageResponse(
             {
                 type: "div",
@@ -87,7 +91,7 @@ export function createShareImage(base: PressConfig) {
                 },
                 key: null,
             },
-            { ...SHARE_IMAGE_SIZE, headers: { "cache-control": SHARE_IMAGE_CACHE_CONTROL }, fonts: [{ name: "Press", data: font, weight: 400, style: "normal" }] },
+            { ...SHARE_IMAGE_SIZE, headers, fonts: [{ name: "Press", data: font, weight: 400, style: "normal" }] },
         );
     };
 }
