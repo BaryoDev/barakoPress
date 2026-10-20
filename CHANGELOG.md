@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.14.1 (unreleased)
+
+- Reads barakoCMS 5.1.0 (#212). `DELIVERY_CONTRACT` is 1 to 9, so an API on delivery contract 9 no
+  longer logs that it is newer. What 9 changed for a reader: `Members` entries and fields are served
+  only to a request carrying `X-Viewer-Token`, and a junk viewer token answers 401. barakoPress sends
+  no viewer token, so it reads exactly what it read from 5.0.
+
 ## 0.14.0 (2026-10-20)
 
 - Dates print in the site's time zone (#207). A site sets `TimeZone` (`timeZone` in the config), an

@@ -474,13 +474,14 @@ describe("the delivery contract", () => {
     });
 
     it("reads the delivery header, and the admin header from an API that predates the split", () => {
+        expect(classifyDeliveryContract(new Headers({ "X-Delivery-Contract-Version": "9" }))).toEqual({ kind: "ok", version: 9 });
         expect(classifyDeliveryContract(new Headers({ "X-Delivery-Contract-Version": "8" }))).toEqual({ kind: "ok", version: 8 });
         expect(classifyDeliveryContract(new Headers({ "X-Delivery-Contract-Version": "7" }))).toEqual({ kind: "ok", version: 7 });
         expect(classifyDeliveryContract(new Headers({ "X-Delivery-Contract-Version": "6" }))).toEqual({ kind: "ok", version: 6 });
         expect(classifyDeliveryContract(new Headers({ "X-Api-Contract-Version": "5" }))).toEqual({ kind: "ok", version: 5 });
-        expect(classifyDeliveryContract(new Headers({ "X-Api-Contract-Version": "8", "X-Delivery-Contract-Version": "9" }))).toEqual({
+        expect(classifyDeliveryContract(new Headers({ "X-Api-Contract-Version": "9", "X-Delivery-Contract-Version": "10" }))).toEqual({
             kind: "api-newer",
-            version: 9,
+            version: 10,
         });
     });
 
@@ -491,12 +492,12 @@ describe("the delivery contract", () => {
 
     it("says once, plainly, that the API is newer, and still answers the read", async () => {
         const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-        answering({ "X-Delivery-Contract-Version": "9" });
+        answering({ "X-Delivery-Contract-Version": "10" });
 
         await expect(list(config, "post")).resolves.toMatchObject({ items: [] });
         await list(config, "post", { page: 2 });
 
-        const said = warn.mock.calls.filter(([m]) => String(m).includes("delivery contract 9"));
+        const said = warn.mock.calls.filter(([m]) => String(m).includes("delivery contract 10"));
         expect(said).toHaveLength(1);
         expect(String(said[0][0])).toContain("upgrade barakoPress");
     });
