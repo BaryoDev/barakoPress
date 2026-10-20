@@ -311,7 +311,7 @@ export function createViewerPage(base: PressConfig, registry?: BlockRegistry, op
         await connection();
         const config = await siteConfig(base, params);
         if (options.gate) {
-            const outcome = gateOutcome(await getViewer(config), options.gate);
+            const outcome = gateOutcome(await getViewer(config), options.gate, config.tenant);
             if (outcome === "sign-in" && options.gate.signIn) redirect(options.gate.signIn);
             if (outcome !== "allow") notFound();
         }

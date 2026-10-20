@@ -151,9 +151,17 @@ export interface ViewerGate {
 
 export type GateOutcome = "allow" | "sign-in" | "deny";
 
-/** Whether `viewer` passes the gate. Role names are compared as written, case included. */
-export function gateOutcome(viewer: Viewer | null, gate: ViewerGate): GateOutcome {
+/**
+ * Whether `viewer` passes the gate. Role names are compared as written, case included.
+ *
+ * `tenant` is the tenant resolved for this request. `/api/me` answers for the tenant a token was
+ * issued in, whatever tenant the request names, so a token pasted into the cookie of another
+ * tenant's host would pass on a role name alone. A viewer from any other tenant, or one with no
+ * tenant, is refused when the site has one.
+ */
+export function gateOutcome(viewer: Viewer | null, gate: ViewerGate, tenant?: string): GateOutcome {
     if (!viewer) return "sign-in";
+    if (tenant && viewer.tenant.toLowerCase() !== tenant.toLowerCase()) return "deny";
     const wanted = gate.roles ?? [];
     return wanted.length === 0 || wanted.some((r) => viewer.roles.includes(r)) ? "allow" : "deny";
 }

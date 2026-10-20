@@ -45,7 +45,7 @@ vi.mock("next/link", () => ({
 
 const { defineConfig } = await import("./config.js");
 const { forgetCachedReads } = await import("./delivery.js");
-const { VIEWER_COOKIE, signIn, signOut, getViewer } = await import("./viewer.js");
+const { VIEWER_COOKIE, signIn, signOut, getViewer, gateOutcome } = await import("./viewer.js");
 const { createViewerLoginRoute } = await import("./routes/viewer-login.js");
 const { createViewerLogoutRoute } = await import("./routes/viewer-logout.js");
 const { createPage, createViewerPage } = await import("./screens/page.js");
@@ -65,6 +65,8 @@ const ME = {
     capabilities: ["content.read"],
     legacyRoleFallback: false,
 };
+
+const ME_VIEWER = { id: "u-1", username: "ana", tenant: "t", roles: ["Member"], capabilities: [] as string[] };
 
 let calls: { path: string; auth: string | null; tenant: string | null }[] = [];
 let loginAnswer: () => Response;
@@ -303,5 +305,15 @@ describe("a gated viewer page", () => {
     it("admits nobody when sessions are off", async () => {
         jar[VIEWER_COOKIE] = TOKEN;
         expect(await refused(createViewerPage(off, undefined, { gate: { roles: ["Member"] } })(args))).toBe("NEXT_NOT_FOUND");
+    });
+
+    it("refuses a viewer whose token belongs to another tenant, or to none", async () => {
+        jar[VIEWER_COOKIE] = TOKEN;
+        const other = defineConfig({ site: { name: "Test", url: "https://test.example" }, cmsUrl: CMS, tenant: "other", viewerSessions: true });
+        const gate = { gate: { roles: ["Member"] } };
+        expect(await refused(createViewerPage(other, undefined, gate)(args))).toBe("NEXT_NOT_FOUND");
+        expect(calls.some((c) => c.path === "/api/me")).toBe(true);
+        expect(gateOutcome({ ...ME_VIEWER, tenant: "" }, gate.gate, "t")).toBe("deny");
+        expect(gateOutcome({ ...ME_VIEWER, tenant: "T" }, gate.gate, "t")).toBe("allow");
     });
 });
