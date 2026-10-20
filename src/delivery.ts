@@ -560,6 +560,8 @@ function readsAType(path: string): boolean {
     const parts = route.split("/").filter(Boolean);
     if (parts[0] !== "api" || parts[1] !== "public") return false;
     const rest = parts.slice(2);
+    // The Pages module's path lookup is the one route outside /{type} that reads an entry for a viewer.
+    if (rest.length === 2 && rest[0].toLowerCase() === "pages" && rest[1].toLowerCase() === "resolve") return true;
     return (rest.length === 1 || rest.length === 2) && !NOT_A_TYPE.has(rest[0].toLowerCase());
 }
 
