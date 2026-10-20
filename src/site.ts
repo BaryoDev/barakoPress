@@ -38,6 +38,7 @@ import {
     TREE_SEARCHES,
     TREE_SIDEBARS,
     TREE_SWITCHERS,
+    validRobots,
     validTimeZone,
 } from "./config.js";
 import { ACTIVE_ON_MAX } from "./current-path.js";
@@ -731,6 +732,11 @@ function timeZoneSetting(base: string | undefined, v: unknown): { timeZone?: str
     return zone ? { timeZone: zone } : {};
 }
 
+function robotsSetting(base: PressConfig["robots"], v: unknown): { robots?: PressConfig["robots"] } {
+    const robots = validRobots(json(v)) ?? base;
+    return robots ? { robots } : {};
+}
+
 function locale(base: string, v: unknown): string {
     const value = str(v);
     if (!value || !/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8}){0,3}$/.test(value)) return base;
@@ -1390,6 +1396,7 @@ export function applySiteSettings(
         theme,
         locale: locale(config.locale, d.Locale),
         ...timeZoneSetting(config.timeZone, d.TimeZone),
+        ...robotsSetting(config.robots, d.Robots),
         ...(str(d.Currency) && /^[A-Za-z]{3}$/.test(str(d.Currency) as string)
             ? { currency: (str(d.Currency) as string).toUpperCase() }
             : {}),

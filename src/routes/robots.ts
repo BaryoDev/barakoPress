@@ -19,7 +19,7 @@ export function createRobots(base: PressConfig) {
         // Reachable while holding, but asking for nothing to be crawled and naming no sitemap.
         if (config.holding) return { rules: { userAgent: "*", disallow: "/" } };
         return {
-            rules: { userAgent: "*", allow: "/" },
+            rules: { userAgent: "*", allow: "/", ...(config.robots ? { disallow: config.robots.disallow } : {}) },
             sitemap: `${config.site.url}/sitemap.xml`,
         };
     };
