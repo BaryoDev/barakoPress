@@ -44,6 +44,8 @@ export interface PressEnv {
     fontOrigins?: string;
     /** `PRESS_SCRIPT_ORIGINS`. The origins a site's analytics script may be loaded from. */
     scriptOrigins?: string;
+    /** `PRESS_TRAILING_SLASH`. `true` when the build serves every path with a trailing slash. */
+    trailingSlash?: string;
 }
 
 /** The variable each value comes from. A log line names this, never the value. */
@@ -58,6 +60,7 @@ export const ENV_NAMES = {
     previewSecret: "PRESS_PREVIEW_SECRET",
     fontOrigins: "PRESS_FONT_ORIGINS",
     scriptOrigins: "PRESS_SCRIPT_ORIGINS",
+    trailingSlash: "PRESS_TRAILING_SLASH",
 } as const satisfies Record<keyof PressEnv, string>;
 
 /** Reads every value, now. Call it where the value is used, never at module scope. */

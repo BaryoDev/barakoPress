@@ -1,3 +1,5 @@
+import { readEnv } from "../env.js";
+
 /*
  * The URL a path is served at. A build that sets `PRESS_TRAILING_SLASH=true` sets Next's
  * `trailingSlash`, and then every path without the slash answers 308 to the one with it, so a
@@ -10,6 +12,6 @@ export function servedUrl(origin: string, path: string): string {
     const trimmed = path.replace(/\/+$/, "");
     if (trimmed === "") return origin;
     const rooted = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-    const slashed = process.env.PRESS_TRAILING_SLASH === "true";
+    const slashed = readEnv().trailingSlash === "true";
     return `${origin}${rooted}${slashed ? "/" : ""}`;
 }

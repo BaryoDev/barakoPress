@@ -34,7 +34,7 @@ afterEach(() => {
 
 describe("readEnv", () => {
     it("reads every variable it names, under the key the code uses", () => {
-        expect(NAMES.length).toBe(10);
+        expect(NAMES.length).toBe(11);
         for (const [key, name] of NAMES) {
             stub({ [name]: `value-of-${name}` });
             expect(readEnv()[key]).toBe(`value-of-${name}`);
