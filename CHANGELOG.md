@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.14.1 (unreleased)
+## 0.15.0 (2026-10-20)
 
 - Viewer sessions (#7), the first slice. `viewerSessions: true` turns on `createViewerLoginRoute` and
   `createViewerLogoutRoute`, which keep the barakoCMS token in an http-only, secure, `SameSite=Lax`

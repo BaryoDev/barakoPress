@@ -382,7 +382,7 @@ Releasing is in [RELEASING.md](https://github.com/BaryoDev/barakoPress/blob/mast
 
 ## Status
 
-0.14.0, on npm as `barakopress` and on ghcr as `ghcr.io/baryodev/barako-press`. It renders
+0.15.0, on npm as `barakopress` and on ghcr as `ghcr.io/baryodev/barako-press`. It renders
 barakocms.com and press.baryo.dev against real barakoCMS instances. barakocms.com still runs a
 derived image of the engine, with a plugin and a small overlay; #166 to #168 track what it takes to
 run it on the published image as configuration. A derived image needs no checkout: each release also
