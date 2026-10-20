@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- A selected theme variant now recolours the body, the built-in header and the footer (#218). When a
+  theme names variants, every colour slot is also written as `--bp-c-<slot>` (`--bp-c-inverse`,
+  `--bp-c-page-bg` and so on) in the base rule and in each variant rule, and those layout styles read
+  the variable with the written colour as the fallback. A site with no variants renders the same markup
+  as before, byte for byte.
+
+- Viewer sessions (#7), page gating. `createViewerPage(config, blocks, { gate: { roles, signIn } })`
+  shows the route only to a signed-in viewer holding one of the roles (any signed-in viewer for an
+  empty list). A signed-out visitor is sent to `signIn` or gets not found, and a viewer without the
+  role gets not found. It gates rendering, not the CMS data. Without `gate` the route renders as before.
+  Sending a `Members` viewer token to the CMS, gated widgets and a sign-in block are not in yet.
+
 ## 0.15.0 (2026-10-20)
 
 - Viewer sessions (#7), the first slice. `viewerSessions: true` turns on `createViewerLoginRoute` and

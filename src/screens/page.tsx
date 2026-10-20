@@ -1,7 +1,7 @@
 import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { connection } from "next/server";
 import type { Metadata } from "next";
-import { POST_COLLECTION, indexCopy, type PressConfig } from "../config.js";
+import { POST_COLLECTION, indexCopy, pinnedTenant, type PressConfig } from "../config.js";
 import {
     flattenNavigation,
     getNavigation,
@@ -25,6 +25,7 @@ import { BlockList } from "../blocks/render.js";
 import { createBlockRegistry, registryFor } from "../blocks/registry.js";
 import type { BlockRegistry } from "../blocks/schema.js";
 import { routeFromParams, siteConfig } from "../site.js";
+import { gateOutcome, getViewer, type ViewerGate } from "../viewer.js";
 import { collectionAt, collectionOf, getItem } from "../collections.js";
 import { CollectionIndexView, itemMetadata, renderCollectionDetail } from "./collection.js";
 import { Breadcrumbs } from "./navigation.js";
@@ -295,11 +296,25 @@ export function createPage(base: PressConfig, registry?: BlockRegistry, options:
     };
 }
 
-export function createViewerPage(base: PressConfig, registry?: BlockRegistry, options: Pick<PageOptions, "bare"> = {}) {
+export interface ViewerPageOptions extends Pick<PageOptions, "bare"> {
+    /**
+     * Who may see the route. Rendering is refused, not the data: an entry the CMS serves anonymously
+     * is still served anonymously by the API, so a page that must stay private is a `Members` entry.
+     * Needs `viewerSessions`; with sessions off, a gated route admits nobody.
+     */
+    gate?: ViewerGate;
+}
+
+export function createViewerPage(base: PressConfig, registry?: BlockRegistry, options: ViewerPageOptions = {}) {
     let blocks = registry;
     return async function ViewerPage({ params, searchParams }: PageParams) {
         await connection();
         const config = await siteConfig(base, params);
+        if (options.gate) {
+            const outcome = gateOutcome(await getViewer(config), options.gate, pinnedTenant(config));
+            if (outcome === "sign-in" && options.gate.signIn) redirect(options.gate.signIn);
+            if (outcome !== "allow") notFound();
+        }
         const p = await params;
         const hit = collectionHit(config, p);
         if (hit) {
