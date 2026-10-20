@@ -90,7 +90,7 @@ way and keeps its day. A name the runtime does not know is ignored.
 `Robots` (or `robots` in the config) is `{ "disallow": ["/api/"] }`. Each path is added as a `Disallow` line next to
 `Allow: /` in the generated robots.txt. An entry that is not a string starting with `/` is dropped, which includes
 anything with a newline or other control character, and the list is capped at 100 entries. Dropped entries are said
-once in the server log. A holding site keeps `Disallow: /` whatever is set, and a site with no `Robots` gets the same
+once in the server log. An empty `disallow` in the site setting clears the config list; a list whose entries were all dropped falls back to it. A holding site keeps `Disallow: /` whatever is set, and a site with no `Robots` gets the same
 file as before.
 A link in `HeaderLinks` or `MenuLinks` may also carry `activeOn` and `children`; see
 [The built-in header](#the-built-in-header).
