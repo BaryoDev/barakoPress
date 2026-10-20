@@ -2,6 +2,15 @@
 
 ## 0.14.1 (unreleased)
 
+- The sitemap lists every published page, and the feed links match the served URL (#168, #170). The
+  sitemap adds the pages the menu does not list: the targets of `HeaderLinks` and each page of the
+  page type (found at `/slug`, so a nested page outside the menu is still left out), less region
+  pages, a collection's `indexPage`, `noIndex` pages and reserved routes. On a build with
+  `PRESS_TRAILING_SLASH=true` the sitemap and the feed write the trailing slash, so a feed `<link>`
+  no longer answers 308. Feed guids change only on such a build, where readers will show each item
+  once as new; a build without the setting writes the same guids as before. The home page stays the
+  bare origin. The file still stops at 50,000 URLs.
+
 - Reads barakoCMS 5.1.0 (#212). `DELIVERY_CONTRACT` is 1 to 9, so an API on delivery contract 9 no
   longer logs that it is newer. What 9 changed for a reader: `Members` entries and fields are served
   only to a request carrying `X-Viewer-Token`, and a junk viewer token answers 401. barakoPress sends

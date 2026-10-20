@@ -189,6 +189,10 @@ error and does not buy more rows.
 ```
 
 A first segment on it is left out of the menu and the sitemap, and a page there is never asked for.
+The sitemap lists every published page, not only the menu: the pages in the menu, the internal targets
+of `HeaderLinks`, and each page of the page type that answers at `/slug`. Region pages, a collection's
+`indexPage` and `noIndex` pages are left out. On a build with `PRESS_TRAILING_SLASH=true` the sitemap
+and the feed write the trailing slash.
 It is what a proxy in front of this domain answers instead of the renderer, which is a fact about
 one tenant rather than about the image. It only ever adds: a tenant cannot free a segment the app's
 own routes already hold, because a page there would sit behind a route file and render nowhere. A
