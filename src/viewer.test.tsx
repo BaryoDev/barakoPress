@@ -316,4 +316,15 @@ describe("a gated viewer page", () => {
         expect(gateOutcome({ ...ME_VIEWER, tenant: "" }, gate.gate, "t")).toBe("deny");
         expect(gateOutcome({ ...ME_VIEWER, tenant: "T" }, gate.gate, "t")).toBe("allow");
     });
+
+    it("refuses a viewer from another tenant when CMS_TENANT pins the site", async () => {
+        jar[VIEWER_COOKIE] = TOKEN;
+        vi.stubEnv("CMS_TENANT", "other");
+        try {
+            const pinned = defineConfig({ site: { name: "Test", url: "https://test.example" }, cmsUrl: CMS, viewerSessions: true });
+            expect(await refused(createViewerPage(pinned, undefined, { gate: { roles: ["Member"] } })(args))).toBe("NEXT_NOT_FOUND");
+        } finally {
+            vi.unstubAllEnvs();
+        }
+    });
 });

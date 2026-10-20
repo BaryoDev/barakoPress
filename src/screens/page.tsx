@@ -1,7 +1,7 @@
 import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { connection } from "next/server";
 import type { Metadata } from "next";
-import { POST_COLLECTION, indexCopy, type PressConfig } from "../config.js";
+import { POST_COLLECTION, indexCopy, pinnedTenant, type PressConfig } from "../config.js";
 import {
     flattenNavigation,
     getNavigation,
@@ -311,7 +311,7 @@ export function createViewerPage(base: PressConfig, registry?: BlockRegistry, op
         await connection();
         const config = await siteConfig(base, params);
         if (options.gate) {
-            const outcome = gateOutcome(await getViewer(config), options.gate, config.tenant);
+            const outcome = gateOutcome(await getViewer(config), options.gate, pinnedTenant(config));
             if (outcome === "sign-in" && options.gate.signIn) redirect(options.gate.signIn);
             if (outcome !== "allow") notFound();
         }
