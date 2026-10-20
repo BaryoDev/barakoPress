@@ -112,6 +112,34 @@ describe("resolveBlocks", () => {
         expect(depth).toBe(MAX_DEPTH);
     });
 
+    it("says so once when blocks sit past the depth limit (#210)", () => {
+        forgetBlockBudgetWarnings();
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        let raw: unknown = [text("deepest"), text("also deepest")];
+        for (let i = 0; i < MAX_DEPTH; i++) raw = [{ type: "columns", props: { columns: [raw] } }];
+
+        resolveBlocks(raw, registry, { perViewer: false });
+        resolveBlocks(raw, registry, { perViewer: false });
+
+        const said = warn.mock.calls.map((c) => String(c[0])).filter((m) => m.includes(String(MAX_DEPTH)));
+        warn.mockRestore();
+        expect(said).toHaveLength(1);
+        expect(said[0]).toContain("2 blocks");
+    });
+
+    it("does not warn about depth when the deepest list is empty (#210)", () => {
+        forgetBlockBudgetWarnings();
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        let raw: unknown = [];
+        for (let i = 0; i < MAX_DEPTH; i++) raw = [{ type: "columns", props: { columns: [raw] } }];
+
+        resolveBlocks(raw, registry, { perViewer: false });
+
+        const said = warn.mock.calls.length;
+        warn.mockRestore();
+        expect(said).toBe(0);
+    });
+
     it("reads at most MAX_BLOCKS from one list", () => {
         const raw = Array.from({ length: MAX_BLOCKS + 5 }, (_, i) => text(`b${i}`));
         expect(types(raw)).toHaveLength(MAX_BLOCKS);

@@ -39,6 +39,7 @@ const { forgetCachedReads } = await import("../delivery.js");
 const { createPage } = await import("../screens/page.js");
 const { createBlockRegistry } = await import("./registry.js");
 const { MAX_SOURCES } = await import("./data.js");
+const { forgetBindWarnings } = await import("./bind.js");
 
 const CMS = "http://cms.test";
 
@@ -148,6 +149,7 @@ beforeEach(() => {
     calls = [];
     pages = {};
     warnings = [];
+    forgetBindWarnings();
     failing = null;
     requestHeaders = null;
     forgetCachedReads();
@@ -282,6 +284,37 @@ describe("count", () => {
         expect(out).not.toContain("the ninth read");
         expect(listReads("milestone")).toHaveLength(0);
         expect(warnings.some((w) => w.includes("{{count.milestones ?? m}}"))).toBe(true);
+    });
+});
+
+describe("a source or count the page cannot read (#210)", () => {
+    it("says so once when sources go past the page's read budget, naming the collection and the limit", async () => {
+        const within = Array.from({ length: MAX_SOURCES }, () => source({ collection: "posts", pageSize: 1 }, [text("x")]));
+        const out = await page([
+            ...within,
+            source({ collection: "releases", pageSize: 1 }, [text("past the budget")]),
+            source({ collection: "releases", pageSize: 1 }, [text("also past the budget")]),
+        ]);
+
+        expect(out).not.toContain("past the budget");
+        const said = warnings.filter((w) => w.includes('"releases"') && w.includes(String(MAX_SOURCES)));
+        expect(said).toHaveLength(1);
+        expect(warnings.filter((w) => w.includes('"posts"'))).toHaveLength(0);
+    });
+
+    it("says so when a count goes past the read budget", async () => {
+        const filler = Array.from({ length: MAX_SOURCES }, () => source({ collection: "posts", pageSize: 1 }, [text("x")]));
+        const out = await page([...filler, text("[{{count.packages ?? p}}]")]);
+
+        expect(out).toContain("[p]");
+        expect(warnings.some((w) => w.includes('"packages"') && w.includes(String(MAX_SOURCES)))).toBe(true);
+    });
+
+    it("says so when a source names a collection the site does not have", async () => {
+        const out = await page([source({ collection: "nope", pageSize: 1 }, [text("never drawn")])]);
+
+        expect(out).not.toContain("never drawn");
+        expect(warnings.some((w) => w.includes('"nope"'))).toBe(true);
     });
 });
 

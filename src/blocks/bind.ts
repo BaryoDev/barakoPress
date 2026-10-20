@@ -223,6 +223,15 @@ async function bindList(blocks: ResolvedBlock[], frame: Frame, ctx: BindContext)
     return out;
 }
 
+/* A collection key can come from the URL, so what goes in the log is bounded. */
+function named(key: string): string {
+    return key.length > 60 ? `${key.slice(0, 60)}...` : key;
+}
+
+function sayReadsOver(what: string): void {
+    say(`blocks: ${what} is past the ${MAX_SOURCES} reads a page may make, so it was not read and draws nothing`);
+}
+
 function sayRowsOver(): void {
     say(`blocks: a page's rows drew more than ${MAX_ROW_BLOCKS} blocks between them, so the rest were left out`);
 }
@@ -512,11 +521,17 @@ function emptyText(ctx: BindContext, value: string): ResolvedBlock[] {
 
 async function bindSource(block: ResolvedBlock, frame: Frame, ctx: BindContext): Promise<ResolvedBlock[]> {
     const content = block.slots.content?.[0] ?? [];
-    if (ctx.budget.reads <= 0) return [];
+    const key = await boundString(block, frame.source, "collection");
+    if (ctx.budget.reads <= 0) {
+        sayReadsOver(`a source over "${named(key)}"`);
+        return [];
+    }
     ctx.budget.reads--;
 
-    const key = await boundString(block, frame.source, "collection");
-    if (!collectionOf(ctx.config, key)) return [];
+    if (!collectionOf(ctx.config, key)) {
+        say(`blocks: a source names the collection "${named(key)}" and this site has no such collection, so it draws nothing`);
+        return [];
+    }
 
     const slug = (await boundString(block, frame.source, "slug")).trim();
     const one = block.props.mode === "one" || (block.props.mode === undefined && slug !== "");
@@ -842,7 +857,10 @@ function collectionCount(ctx: BindContext, path: string): Promise<number | undef
     if (path === "" || !collectionOf(ctx.config, path)) return undefined;
     const known = ctx.counts.get(path);
     if (known) return known;
-    if (ctx.budget.reads <= 0) return undefined;
+    if (ctx.budget.reads <= 0) {
+        sayReadsOver(`a count of "${named(path)}"`);
+        return undefined;
+    }
     ctx.budget.reads--;
     const counted = read(() => listCollection(ctx.config, path, { pageSize: 1 })).then((page) =>
         typeof page?.total === "number" ? page.total : undefined,
@@ -998,4 +1016,9 @@ export function queryScope(params: Record<string, string | string[] | undefined>
         if (typeof first === "string") out[name] = first;
     }
     return out;
+}
+
+/** For tests: say every message again. */
+export function forgetBindWarnings(): void {
+    said.clear();
 }

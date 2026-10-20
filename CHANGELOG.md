@@ -2,6 +2,12 @@
 
 ## 0.14.1 (unreleased)
 
+- A source past the page's eight reads, a count past them, a source over a collection the site does
+  not have, and blocks nested past `MAX_DEPTH` now say so in the server log, once per message, the
+  way `MAX_ALL_ROWS` does (#210). It is a warning, not an error: the page still renders and answers
+  200, so a site already past a limit starts logging and nothing else changes. The limits are not
+  raised.
+
 - Reads barakoCMS 5.1.0 (#212). `DELIVERY_CONTRACT` is 1 to 9, so an API on delivery contract 9 no
   longer logs that it is newer. What 9 changed for a reader: `Members` entries and fields are served
   only to a request carrying `X-Viewer-Token`, and a junk viewer token answers 401. barakoPress sends

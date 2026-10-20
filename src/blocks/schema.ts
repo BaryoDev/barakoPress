@@ -507,7 +507,16 @@ function resolveList(
     depth: number,
     budget: { remaining: number; truncated: boolean },
 ): ResolvedBlock[] {
-    if (!Array.isArray(raw) || depth >= MAX_DEPTH) return [];
+    if (!Array.isArray(raw)) return [];
+    if (depth >= MAX_DEPTH) {
+        if (raw.length > 0) {
+            sayOnce(
+                `blocks: ${raw.length} block${raw.length === 1 ? "" : "s"} sat more than ${MAX_DEPTH} levels deep, ` +
+                    "past the nesting limit, so they were dropped and do not render",
+            );
+        }
+        return [];
+    }
 
     const resolved: ResolvedBlock[] = [];
     for (const item of raw) {
