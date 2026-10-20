@@ -98,7 +98,7 @@ export function refusesTenant(e: unknown): boolean {
  * An unparseable URL is treated as unsafe. A read against it fails on its own terms a moment later,
  * and a value nobody can parse is not one to make an exception for.
  */
-function carriesSecretsSafely(cmsUrl: string): boolean {
+export function carriesSecretsSafely(cmsUrl: string): boolean {
     let url: URL;
     try {
         url = new URL(cmsUrl);

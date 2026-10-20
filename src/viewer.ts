@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { cmsUrlFor, type PressConfig } from "./config.js";
-import { deliveryHeaders } from "./delivery.js";
+import { carriesSecretsSafely, deliveryHeaders } from "./delivery.js";
 
 /*
  * Viewer sessions (barakoPress #7).
@@ -50,6 +50,8 @@ function sessionSeconds(expiry: unknown): number {
 
 export async function signIn(config: PressConfig, credentials: ViewerCredentials): Promise<SignInResult> {
     if (config.viewerSessions !== true) return { ok: false, reason: "off" };
+    // A password does not travel over plain http to a CMS that is not on this machine.
+    if (!carriesSecretsSafely(cmsUrlFor(config))) return { ok: false, reason: "unavailable" };
     let res: Response;
     try {
         res = await fetch(`${cmsUrlFor(config)}/api/auth/login`, {
@@ -103,6 +105,7 @@ export async function getViewer(config: PressConfig): Promise<Viewer | null> {
     if (config.viewerSessions !== true) return null;
     const token = (await cookies()).get(VIEWER_COOKIE)?.value;
     if (!token) return null;
+    if (!carriesSecretsSafely(cmsUrlFor(config))) return null;
     try {
         const res = await fetch(`${cmsUrlFor(config)}/api/me`, {
             headers: { ...(deliveryHeaders(config) as Record<string, string>), authorization: `Bearer ${token}` },

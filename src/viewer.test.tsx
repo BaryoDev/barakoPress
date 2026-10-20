@@ -50,7 +50,7 @@ const { createViewerLoginRoute } = await import("./routes/viewer-login.js");
 const { createViewerLogoutRoute } = await import("./routes/viewer-logout.js");
 const { createPage, createViewerPage } = await import("./screens/page.js");
 
-const CMS = "http://cms.test";
+const CMS = "https://cms.test";
 const on = defineConfig({ site: { name: "Test", url: "https://test.example" }, cmsUrl: CMS, tenant: "t", viewerSessions: true });
 const off = defineConfig({ site: { name: "Test", url: "https://test.example" }, cmsUrl: CMS, tenant: "t" });
 
@@ -203,6 +203,18 @@ describe("signing out", () => {
         expect(sets).toHaveLength(0);
         await signOut();
         expect(sets).toHaveLength(1);
+    });
+});
+
+describe("a CMS on plain http", () => {
+    const plain = defineConfig({ site: { name: "Test", url: "https://test.example" }, cmsUrl: "http://cms.test", tenant: "t", viewerSessions: true });
+
+    it("is sent no password and no token", async () => {
+        calls = [];
+        expect(await signIn(plain, { username: "ana", password: "pw" })).toEqual({ ok: false, reason: "unavailable" });
+        jar[VIEWER_COOKIE] = TOKEN;
+        expect(await getViewer(plain)).toBeNull();
+        expect(calls).toHaveLength(0);
     });
 });
 
