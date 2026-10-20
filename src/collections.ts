@@ -622,7 +622,11 @@ export function collectionAt(
             if (col.index === false) continue;
             return { key };
         }
-        if (parts.length === route.length + 2) return { key, product: parts[route.length], slug: parts[route.length + 1] };
+        if (parts.length === route.length + 2) {
+            const product = parts[route.length].toLowerCase();
+            if (!col.tree?.products?.some((p) => p.key.toLowerCase() === product)) continue;
+            return { key, product: parts[route.length], slug: parts[route.length + 1] };
+        }
         return { key, slug: parts[route.length] };
     }
     return null;

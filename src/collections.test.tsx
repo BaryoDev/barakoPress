@@ -943,6 +943,7 @@ describe("collections from a tenant's settings", () => {
         expect(collectionAt(config, "/docs/cms/quickstart")).toEqual({ key: "docs", product: "cms", slug: "quickstart" });
         expect(collectionAt(config, "/docs/quickstart")).toEqual({ key: "docs", slug: "quickstart" });
         expect(collectionAt(config, "/docs/cms/a/b")).toBeNull();
+        expect(collectionAt(config, "/docs/guides/intro")).toBeNull();
 
         const plain = defineConfig({
             sites: {},
