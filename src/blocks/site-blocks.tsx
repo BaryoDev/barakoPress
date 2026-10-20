@@ -5,6 +5,7 @@ import type { PressConfig } from "../config.js";
 import { lookOr, recipeLook } from "../recipes.js";
 import { HeaderLink, type HeaderLinkStyles } from "../screens/header-menu.js";
 import { CURRENT_CSS, DROPDOWN_CSS, headerLinkStyles } from "../screens/header-styles.js";
+import { sitePath } from "../site-path.js";
 import { getViewer } from "../viewer.js";
 import { boundToConfig } from "./built-in.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
@@ -156,15 +157,12 @@ function siteLogo(config: PressConfig): BlockDefinition {
  * never in this markup, a prop or a response body. It draws nothing for a viewer who is already
  * signed in and nothing at all when sessions are off.
  */
-type SignInProps = { title?: string; action?: string; next?: string; error?: string };
+type SignInProps = { title?: string; next?: string; error?: string };
 
-const SIGN_IN_MESSAGES: Record<string, string> = {
-    invalid: "That username or password is not right.",
-    approval: "This device has to be approved before you can sign in.",
-};
-
-const sitePath = (value: string | undefined, fallback: string) =>
-    value && value.startsWith("/") && !value.startsWith("//") && !value.includes("\\") ? value : fallback;
+const SIGN_IN_MESSAGES = new Map([
+    ["invalid", "That username or password is not right."],
+    ["approval", "This device has to be approved before you can sign in."],
+]);
 
 function viewerSignIn(config: PressConfig): BlockDefinition {
     const definition = defineBlock<SignInProps>({
@@ -174,7 +172,6 @@ function viewerSignIn(config: PressConfig): BlockDefinition {
         perViewer: true,
         fields: [
             { name: "title", kind: "text", label: "Heading" },
-            { name: "action", kind: "text", label: "Login route (a path)" },
             { name: "next", kind: "text", label: "Go to after signing in (a path)" },
             // Bind it to {{query.signin}}: the route adds ?signin=invalid when a sign-in fails.
             { name: "error", kind: "text", label: "Why the last attempt failed" },
@@ -182,7 +179,7 @@ function viewerSignIn(config: PressConfig): BlockDefinition {
         component: async ({ props, theme }) => {
             if (config.viewerSessions !== true) return null;
             if (await getViewer(config)) return null;
-            const problem = props.error ? (SIGN_IN_MESSAGES[props.error] ?? "Could not sign in. Try again.") : undefined;
+            const problem = props.error ? (SIGN_IN_MESSAGES.get(props.error) ?? "Could not sign in. Try again.") : undefined;
             const field: CSSProperties = {
                 display: "block",
                 width: "100%",
@@ -197,7 +194,7 @@ function viewerSignIn(config: PressConfig): BlockDefinition {
             return (
                 <form
                     method="post"
-                    action={sitePath(props.action, "/api/viewer/login")}
+                    action="/api/viewer/login"
                     data-press="viewer-sign-in"
                     style={{ display: "grid", gap: spaceOf(theme, "md"), maxWidth: "24rem" }}
                 >
@@ -207,7 +204,7 @@ function viewerSignIn(config: PressConfig): BlockDefinition {
                             {problem}
                         </p>
                     )}
-                    <input type="hidden" name="next" value={sitePath(props.next, "/")} />
+                    <input type="hidden" name="next" value={sitePath(props.next)} />
                     <label>
                         Username
                         <input name="username" autoComplete="username" required style={field} />

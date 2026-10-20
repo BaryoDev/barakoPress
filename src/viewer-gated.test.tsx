@@ -112,6 +112,15 @@ const widget = (type: string, gate?: { roles?: string[]; fallback?: ReactNode })
             return <p>{type} drawn</p>;
         },
     });
+const guarded = {
+    type: "guardedBand",
+    label: "Guarded band",
+    fields: [],
+    blocks: [
+        { type: "report", props: {} },
+        { type: "columns", props: { columns: [[{ type: "report", props: {} }]] } },
+    ],
+};
 const report = widget("report", { roles: ["Member"], fallback: <p>Members only</p> });
 const open = widget("openReport");
 
@@ -199,6 +208,63 @@ describe("a gated block's server calls", () => {
     });
 });
 
+describe("a gated block inside a preset", () => {
+    const withPreset = (config: typeof on) => createBlockRegistry(config, [report], { presets: [guarded] });
+    const sharedArgs = { params: Promise.resolve({ slug: "band" }), searchParams: Promise.resolve({}) };
+
+    beforeEach(() => {
+        const base = cms();
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+                if (new URL(String(input)).pathname === "/api/public/page/band") {
+                    calls.push({ path: "/api/public/page/band", viewerToken: null, cache: init?.cache });
+                    return Response.json({ id: "p2", slug: "band", data: { Title: "Band", Blocks: [{ type: "guardedBand", props: {} }] } });
+                }
+                return base(input, init);
+            }),
+        );
+    });
+
+    it("renders no gated content on a shared page and makes no token call", async () => {
+        jar[VIEWER_COOKIE] = SESSION;
+        const out = await html(createPage(on, withPreset(on))(sharedArgs));
+        expect(out).toContain("Band");
+        expect(out).not.toContain("report drawn");
+        expect(read("report")).toHaveLength(0);
+        expect(calls.some((c) => c.path === "/api/viewer-tokens" || c.path === "/api/me")).toBe(false);
+        expect(calls.every((c) => c.viewerToken === null)).toBe(true);
+    });
+
+    it("still draws, with the token, on a viewer page for a member", async () => {
+        jar[VIEWER_COOKIE] = SESSION;
+        const out = await html(createViewerPage(on, withPreset(on))(sharedArgs));
+        expect(out).toContain("report drawn");
+        expect(read("report").length).toBeGreaterThan(0);
+        expect(read("report").every((c) => c.viewerToken === minted())).toBe(true);
+    });
+});
+
+describe("preset and registry bookkeeping", () => {
+    it("lists a preset holding a gated block, nested or not, as per-viewer in the block schema", async () => {
+        const { blockSchema } = await import("./blocks/schema.js");
+        const registry = createBlockRegistry(on, [report], { presets: [guarded] });
+        expect(blockSchema(registry).blocks.find((b) => b.type === "guardedBand")?.perViewer).toBe(true);
+        const nested = { type: "nestedBand", label: "Nested", fields: [], blocks: [{ type: "columns", props: { columns: [[{ type: "report", props: {} }]] } }] };
+        const only = createBlockRegistry(on, [report], { presets: [nested] });
+        expect(blockSchema(only).blocks.find((b) => b.type === "nestedBand")?.perViewer).toBe(true);
+    });
+
+    it("keeps a site's own viewerSignIn over the built-in one", async () => {
+        const own = defineBlock({ type: "viewerSignIn", label: "Mine", fields: [], component: () => <p>my sign in</p> });
+        const registry = createBlockRegistry(on, [own]);
+        expect(registry.get("viewerSignIn")).toBe(own);
+        const out = await html(createViewerPage(on, registry)(args));
+        expect(out).toContain("my sign in");
+        expect(out).not.toContain("viewer-sign-in");
+    });
+});
+
 describe("the Pages module path", () => {
     it("carries the viewer token on the path lookup inside a viewer scope", async () => {
         await withViewerToken(minted(), async () => {
@@ -227,6 +293,48 @@ describe("the sign-in block", () => {
         expect(out).toContain("That username or password is not right.");
         expect(out).not.toContain("<script");
         for (const secret of [SESSION, MINT_CREDENTIAL, minted()]) expect(out).not.toContain(secret);
+    });
+
+    it("always posts to the login route and keeps the redirect on the site, whatever an editor wrote", async () => {
+        const base = cms();
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async (input: string | URL | Request, init?: RequestInit) =>
+                new URL(String(input)).pathname === "/api/public/page/home"
+                    ? Response.json({
+                          id: "p1",
+                          slug: "home",
+                          data: {
+                              Title: "Home",
+                              Blocks: [
+                                  { type: "viewerSignIn", props: { action: "https://evil.example/steal", next: "/\u0007//evil.example" } },
+                                  { type: "viewerSignIn", props: { next: "/..//evil.example" } },
+                              ],
+                          },
+                      })
+                    : base(input, init),
+            ),
+        );
+        const out = await html(viewerPage()(args));
+        expect(out).not.toContain("evil.example");
+        expect(out).not.toContain("steal");
+        expect([...out.matchAll(/action="([^"]*)"/g)].map((m) => m[1])).toEqual(["/api/viewer/login", "/api/viewer/login"]);
+        expect([...out.matchAll(/name="next" value="([^"]*)"/g)].map((m) => m[1])).toEqual(["/", "/"]);
+    });
+
+    it("shows the generic message for a reason that is not one of ours", async () => {
+        for (const error of ["__proto__", "constructor", "toString"]) {
+            const base = cms();
+            vi.stubGlobal(
+                "fetch",
+                vi.fn(async (input: string | URL | Request, init?: RequestInit) =>
+                    new URL(String(input)).pathname === "/api/public/page/home"
+                        ? Response.json({ id: "p1", slug: "home", data: { Title: "Home", Blocks: [{ type: "viewerSignIn", props: { error } }] } })
+                        : base(input, init),
+                ),
+            );
+            expect(await html(viewerPage()(args))).toContain("Could not sign in. Try again.");
+        }
     });
 
     it("draws nothing for a signed-in viewer", async () => {
@@ -280,6 +388,25 @@ describe("posting the sign-in form", () => {
         expect(res.status).toBe(303);
         expect(res.headers.get("location")).toBe("/login?x=1&signin=invalid");
         expect(sets).toHaveLength(0);
+    });
+
+    it("keeps every redirect on the site, success and failure", async () => {
+        const hostile = ["/.//evil.com", "/a/..//evil.com", "/\\evil.com", "/%2F%2Fevil.com", "/\tevil", "/..//evil.com", "//evil.com", "/a\nb", "/..\\evil.com"];
+        const stay = (location: string | null) => {
+            expect(location).not.toBeNull();
+            expect(location!.startsWith("/")).toBe(true);
+            expect(location!.startsWith("//")).toBe(false);
+            expect(new URL(location!, "https://site.example").origin).toBe("https://site.example");
+        };
+        for (const next of hostile) {
+            sets = [];
+            stay((await createViewerLoginRoute(on)(form({ username: "ana", password: "pw", next }))).headers.get("location"));
+            vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 401 })));
+            stay((await createViewerLoginRoute(on)(form({ username: "ana", password: "bad", next }))).headers.get("location"));
+            vi.stubGlobal("fetch", cms());
+        }
+        const res = await createViewerLoginRoute(on)(form({ username: "ana", password: "pw", next: "/..//evil.com" }));
+        expect(res.headers.get("location")).toBe("/");
     });
 
     it("refuses a cross-site post", async () => {

@@ -1,6 +1,7 @@
 import type { PressConfig } from "../config.js";
 import { resolveSite } from "../site.js";
 import { signIn } from "../viewer.js";
+import { sitePath } from "../site-path.js";
 import { sameOrigin } from "./share.js";
 
 /*
@@ -20,15 +21,8 @@ const reply = (status: number, body: Record<string, unknown>) =>
 
 const isForm = (request: Request) => (request.headers.get("content-type") ?? "").toLowerCase().startsWith("application/x-www-form-urlencoded");
 
-/** A path on this site, or `/`. Nothing that could leave it: no scheme, no `//host`, no backslash. */
-function safeNext(value: unknown): string {
-    if (typeof value !== "string" || value.length > 512) return "/";
-    if (!value.startsWith("/") || value.startsWith("//") || /[\\\u0000-\u001f]/.test(value)) return "/";
-    return value;
-}
-
 function withReason(path: string, reason: string): string {
-    const url = new URL(path, "http://site.invalid");
+    const url = new URL(sitePath(path), "http://site.invalid");
     url.searchParams.set("signin", reason);
     return `${url.pathname}${url.search}${url.hash}`;
 }
@@ -44,7 +38,7 @@ async function readCredentials(request: Request): Promise<{ username: string; pa
             : JSON.parse(raw);
         if (typeof body?.username !== "string" || typeof body.password !== "string") return null;
         if (body.username === "" || body.password === "") return null;
-        return { username: body.username, password: body.password, next: safeNext(body.next) };
+        return { username: body.username, password: body.password, next: sitePath(body.next) };
     } catch {
         return null;
     }

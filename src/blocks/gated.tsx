@@ -34,3 +34,14 @@ export function withGates(config: PressConfig, blocks: ResolvedBlock[]): Resolve
         return { ...block, definition: block.definition.gate ? gated(config, block.definition) : block.definition, slots };
     });
 }
+
+/** The blocks with every gated block removed, slots included. For output shared by every visitor. */
+export function withoutGated(blocks: ResolvedBlock[]): ResolvedBlock[] {
+    return blocks
+        .filter((block) => !block.definition.gate)
+        .map((block) => {
+            const slots: Record<string, ResolvedBlock[][]> = {};
+            for (const [name, lists] of Object.entries(block.slots)) slots[name] = lists.map(withoutGated);
+            return { ...block, slots };
+        });
+}

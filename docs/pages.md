@@ -340,7 +340,7 @@ On a `createViewerPage` route the block draws only for a signed-in viewer holdin
 (any signed-in viewer for an empty list), whose tenant is the one the request is pinned to. The
 server calls the component makes while it renders carry a minted viewer token, as above. Any other
 visitor, including one whose cookie belongs to another tenant, gets `fallback`, or nothing. It is
-never an error. A block with no `gate` never gets a token, even on a page a member is viewing. A
+never an error. On a route with no page `gate`, a block with no `gate` never gets a token, even on a page a member is viewing. On a route with a page `gate` the whole render runs with the viewer's token, so every block's type and entry reads carry it. A
 gated block is left out of `createPage` routes, which are shared and have no viewer.
 
 Calls made inside the component function carry the token. An async child component the function

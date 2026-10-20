@@ -23,7 +23,7 @@
 - Viewer sessions (#7), gated widgets, the Pages module path and a sign-in block. A block definition
   takes `gate: { roles, fallback }`: on a `createViewerPage` route it draws for a signed-in viewer of
   the pinned tenant holding a role, and the server calls it makes carry a minted viewer token. Anyone
-  else gets the fallback or nothing, never an error, and a block with no gate never gets a token. The
+  else gets the fallback or nothing, never an error, and on a route with no page gate a block with no gate never gets a token (on a page-gated route the whole render carries it). The
   Pages module's `/api/public/pages/resolve` read carries the token too. The new `viewerSignIn` block is
   a plain form posting to the viewer login route, which now also takes a form body and answers it with
   a redirect to a path on the site. No token is in the markup, a prop or the redirect.
