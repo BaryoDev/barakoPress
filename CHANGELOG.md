@@ -48,6 +48,10 @@
   Sorting, search, filters, saved-query sources and viewer-gated tables come later. Nothing changes
   for a page that does not use it.
 
+- A site can set a robots disallow list (#169). `Robots` on the site entry, or `robots` in the config, is
+  `{ "disallow": ["/api/"] }` and adds a `Disallow` line per path to robots.txt. Entries that are not
+  paths starting with `/` are dropped and said once, and the list is capped at 100. A holding site still
+  disallows everything, and a site with no setting gets the same file as before.
 - The sitemap lists every published page, and the feed links match the served URL (#168, #170). The
   sitemap adds the pages the menu does not list: the targets of `HeaderLinks` and each page of the
   page type (found at `/slug`, so a nested page outside the menu is still left out), less region
