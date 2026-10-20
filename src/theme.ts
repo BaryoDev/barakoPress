@@ -216,6 +216,11 @@ export interface PressTheme {
     tones?: Readonly<Record<string, ThemeTone>>;
     /** Style recipes a block names with `recipe` (#131). Absent when the site names none. */
     recipes?: Readonly<Record<string, StyleRecipe>>;
+    /**
+     * Named overrides of the colour slots, switched in the visitor's browser. Absent when the site
+     * names none, which is what keeps a site that sets nothing rendering as it did.
+     */
+    variants?: Readonly<Record<string, Partial<ThemeColors>>>;
 }
 
 export type PressThemeInput = {
@@ -230,6 +235,7 @@ export type PressThemeInput = {
     tokens?: Record<string, string>;
     tones?: Record<string, ThemeTone>;
     recipes?: Record<string, StyleRecipe>;
+    variants?: Record<string, Partial<ThemeColors>>;
 };
 
 export const DEFAULT_THEME: PressTheme = {
@@ -408,6 +414,33 @@ export function tonesFrom(
     return Object.keys(out).length > 0 ? out : undefined;
 }
 
+const MAX_VARIANTS = 12;
+
+/**
+ * Theme variants: a name, and the colour slots it overrides. A name that is not a lowercase word, a
+ * slot the palette does not have and a colour that is not a colour are dropped, and a variant left
+ * with no slot is dropped with them. Tenant variants replace the configured ones by name.
+ */
+export function variantsFrom(
+    base: Readonly<Record<string, Partial<ThemeColors>>> | undefined,
+    input: unknown,
+): Record<string, Partial<ThemeColors>> | undefined {
+    const out: Record<string, Partial<ThemeColors>> = { ...base };
+    if (isRecord(input)) {
+        const known = new Set(Object.keys(DEFAULT_THEME.colors));
+        for (const [name, spec] of Object.entries(input)) {
+            if (!TONE_NAME.test(name) || !isRecord(spec)) continue;
+            if (!Object.hasOwn(out, name) && Object.keys(out).length >= MAX_VARIANTS) continue;
+            const slots: Record<string, string> = {};
+            for (const [slot, value] of Object.entries(spec)) {
+                if (known.has(slot) && typeof value === "string" && COLOR.test(value)) slots[slot] = value;
+            }
+            if (Object.keys(slots).length > 0) out[name] = slots as Partial<ThemeColors>;
+        }
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+}
+
 export function resolveTheme(input: PressThemeInput | undefined): PressTheme {
     // A stylesheet a site configures is checked for shape the same as one a tenant saves, so a typo
     // here is a missing face rather than a link to nowhere in every page.
@@ -416,6 +449,7 @@ export function resolveTheme(input: PressThemeInput | undefined): PressTheme {
     const tokens = tokensFrom(undefined, input?.tokens);
     const tones = tonesFrom(undefined, input?.tones, { colors, tokens });
     const recipes = recipesFrom(undefined, input?.recipes);
+    const variants = variantsFrom(undefined, input?.variants);
     return {
         colors,
         fonts: { ...DEFAULT_THEME.fonts, ...input?.fonts },
@@ -428,6 +462,7 @@ export function resolveTheme(input: PressThemeInput | undefined): PressTheme {
         ...(tokens ? { tokens } : {}),
         ...(tones ? { tones } : {}),
         ...(recipes ? { recipes } : {}),
+        ...(variants ? { variants } : {}),
     };
 }
 
@@ -535,11 +570,8 @@ export function relatedCss(theme: PressTheme, scope: string): string {
  * has no value. That role's old name gets the default stack, and the real value is under
  * `--bp-font-*` only.
  */
-export function themeVariablesCss(theme: PressTheme): string {
-    const c = theme.colors;
-    const f = theme.fonts;
-    const r = theme.radii;
-    const vars: [string, string][] = [
+function colorVariables(c: ThemeColors): [string, string][] {
+    return [
         ["--background", c.pageBg],
         ["--foreground", c.ink],
         ["--muted", c.accentTint],
@@ -548,6 +580,18 @@ export function themeVariablesCss(theme: PressTheme): string {
         ["--border", c.hairline],
         ["--primary", c.accent],
         ["--primary-foreground", c.surface],
+    ];
+}
+
+/** Attribute on the root element that names the variant in force. Absent means the base theme. */
+export const VARIANT_ATTRIBUTE = "data-theme-variant";
+
+export function themeVariablesCss(theme: PressTheme): string {
+    const c = theme.colors;
+    const f = theme.fonts;
+    const r = theme.radii;
+    const vars: [string, string][] = [
+        ...colorVariables(c),
         ["--radius-chip", r.control],
         ["--radius-control", r.control],
         ["--radius-card", r.panel],
@@ -561,13 +605,19 @@ export function themeVariablesCss(theme: PressTheme): string {
         ["--font-display", "heading"],
         ["--font-mono", "mono"],
     ];
-    const root = `:root{${vars.map(([name, value]) => `${name}:${declarationValue(value)}`).join(";")}}`;
+    const declarations = (list: [string, string][]) =>
+        list.map(([name, value]) => `${name}:${declarationValue(value)}`).join(";");
+    const root = `:root{${declarations(vars)}}`;
+    const variants = Object.entries(theme.variants ?? {}).map(
+        ([name, slots]) =>
+            `:root[${VARIANT_ATTRIBUTE}="${name}"]{${declarations(colorVariables(mergeColors(c, slots)))}}`,
+    );
     const registered = legacy.map(([name, role]) => {
         const value = declarationValue(f[role]);
         const initial = PLAIN_FONT_STACK.test(value) ? value : DEFAULT_THEME.fonts[role];
         return `@property ${name}{syntax:"*";inherits:true;initial-value:${initial}}`;
     });
-    return root + registered.join("");
+    return root + variants.join("") + registered.join("");
 }
 
 /*

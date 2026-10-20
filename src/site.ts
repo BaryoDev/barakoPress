@@ -49,7 +49,7 @@ import { isPluginName } from "./blocks/plugins.js";
 import { presetsFrom } from "./blocks/presets.js";
 import { SPACES, TONES } from "./blocks/tokens.js";
 import { REVEAL_STYLES } from "./blocks/motion.js";
-import { COLOR, FLUID_LENGTH, LENGTH, mergeColors, tokensFrom, tonesFrom } from "./theme.js";
+import { COLOR, FLUID_LENGTH, LENGTH, mergeColors, tokensFrom, tonesFrom, variantsFrom } from "./theme.js";
 import { RECIPE_NAME, recipesFrom } from "./recipes.js";
 import type {
     PressTheme,
@@ -1365,6 +1365,7 @@ export function applySiteSettings(
     const named = tokensFrom(config.theme.tokens, record(d.Tokens));
     const tones = tonesFrom(config.theme.tones, record(d.Tones), { colors, tokens: named });
     const recipes = recipesFrom(config.theme.recipes, record(d.StyleRecipes));
+    const variants = variantsFrom(config.theme.variants, d.Variants);
     const theme: PressTheme = {
         colors,
         fonts: face.fonts,
@@ -1377,6 +1378,7 @@ export function applySiteSettings(
         ...(named ? { tokens: named } : {}),
         ...(tones ? { tones } : {}),
         ...(recipes ? { recipes } : {}),
+        ...(variants ? { variants } : {}),
     };
 
     const { holding: _ignored, ...rest } = config;

@@ -30,6 +30,17 @@
   Unset, the route answers 404 and no tag changes, so a site that configures nothing serves what it
   served before. A page's own SEO image still wins.
 
+- Theme variants (#80). A theme names variants, each a name and the colour slots it overrides
+  (`variants` in the config, `Variants` in a tenant's site settings, a tenant's entry replacing a
+  configured one of the same name, at most twelve). The page is rendered once with every variant in
+  the stylesheet, as `:root[data-theme-variant="name"]` rules, and a small head script applies the
+  visitor's choice from `localStorage` before the body paints, so a page stays in the shared render
+  cache. A control is any element with `data-theme-variant-set="name"` (empty for the base theme),
+  or `ThemeVariantSwitch`. A variant moves the variables `themeVariablesCss` writes (`--background`,
+  `--foreground`, `--muted`, `--muted-foreground`, `--card`, `--border`, `--primary`,
+  `--primary-foreground`); colours the engine writes inline from the theme do not change yet. A
+  site with no variants renders exactly as before.
+
 - The sitemap lists every published page, and the feed links match the served URL (#168, #170). The
   sitemap adds the pages the menu does not list: the targets of `HeaderLinks` and each page of the
   page type (found at `/slug`, so a nested page outside the menu is still left out), less region
