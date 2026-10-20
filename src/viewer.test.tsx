@@ -271,3 +271,37 @@ describe("a viewer page", () => {
         expect(calls.some((c) => c.path === "/api/me")).toBe(false);
     });
 });
+
+describe("a gated viewer page", () => {
+    const args = { params: Promise.resolve({ slug: "welcome" }), searchParams: Promise.resolve({}) };
+    const html = async (page: Promise<ReactNode> | ReactNode) => new Response((await prerender(await page)).prelude).text();
+    const refused = async (page: Promise<ReactNode>) => page.then(() => "rendered", (e: Error) => e.message);
+
+    it("shows the page to a viewer who holds one of the roles", async () => {
+        jar[VIEWER_COOKIE] = TOKEN;
+        const out = await html(createViewerPage(on, undefined, { gate: { roles: ["Staff", "Auditor"] } })(args));
+        expect(out).toContain("Hello ana");
+    });
+
+    it("answers not found for a signed-in viewer without the role", async () => {
+        jar[VIEWER_COOKIE] = TOKEN;
+        expect(await refused(createViewerPage(on, undefined, { gate: { roles: ["Staff"] } })(args))).toBe("NEXT_NOT_FOUND");
+    });
+
+    it("sends a signed-out visitor to the sign-in path, or answers not found without one", async () => {
+        expect(await refused(createViewerPage(on, undefined, { gate: { roles: ["Member"], signIn: "/login" } })(args))).toBe("NEXT_REDIRECT /login");
+        expect(await refused(createViewerPage(on, undefined, { gate: { roles: ["Member"] } })(args))).toBe("NEXT_NOT_FOUND");
+    });
+
+    it("admits any signed-in viewer for an empty role list, and nobody signed out", async () => {
+        const page = createViewerPage(on, undefined, { gate: {} });
+        expect(await refused(page(args))).toBe("NEXT_NOT_FOUND");
+        jar[VIEWER_COOKIE] = TOKEN;
+        expect(await html(page(args))).toContain("Hello ana");
+    });
+
+    it("admits nobody when sessions are off", async () => {
+        jar[VIEWER_COOKIE] = TOKEN;
+        expect(await refused(createViewerPage(off, undefined, { gate: { roles: ["Member"] } })(args))).toBe("NEXT_NOT_FOUND");
+    });
+});

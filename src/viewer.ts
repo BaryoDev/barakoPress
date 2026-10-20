@@ -138,3 +138,22 @@ export function viewerScope(viewer: Viewer | null): Record<string, unknown> {
     if (!viewer) return {};
     return { Id: viewer.id, Username: viewer.username, Tenant: viewer.tenant, Roles: viewer.roles, Capabilities: viewer.capabilities };
 }
+
+/**
+ * A rule for who may see a route. `roles` lists role names, any one of which lets a viewer in; an
+ * empty list admits any signed-in viewer. `signIn` is where a signed-out visitor is sent, and
+ * without it they get the not-found page, the same as a viewer who is signed in but lacks the role.
+ */
+export interface ViewerGate {
+    roles?: readonly string[];
+    signIn?: string;
+}
+
+export type GateOutcome = "allow" | "sign-in" | "deny";
+
+/** Whether `viewer` passes the gate. Role names are compared as written, case included. */
+export function gateOutcome(viewer: Viewer | null, gate: ViewerGate): GateOutcome {
+    if (!viewer) return "sign-in";
+    const wanted = gate.roles ?? [];
+    return wanted.length === 0 || wanted.some((r) => viewer.roles.includes(r)) ? "allow" : "deny";
+}

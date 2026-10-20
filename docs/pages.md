@@ -287,5 +287,20 @@ On a `createViewerPage` route, a block's props can bind the viewer:
 A signed-out visitor, or a route that is cached, has no `viewer` values, so the placeholder renders
 its fallback: `{{viewer.Username ?? Guest}}`.
 
-Not built yet: gating a page by role, gated widgets passing the token to server calls, a sign-in
-block and token refresh.
+To gate a route, pass `gate` to `createViewerPage`:
+
+```ts
+export default createViewerPage(config, blocks, { gate: { roles: ["Member"], signIn: "/login" } });
+```
+
+A viewer holding any listed role sees the route. An empty `roles` list admits any signed-in viewer.
+A signed-out visitor goes to `signIn`, or gets the not-found page without it, and a signed-in viewer
+without the role gets the not-found page. Sessions off means nobody gets in. This refuses to render
+the route; it does not hide the data. An entry the CMS serves anonymously is still served
+anonymously by the API, so a page that has to stay private is a `Members` entry in barakoCMS 5.1.0
+(see its delivery API), read with an `X-Viewer-Token` that press does not send yet.
+
+Not built yet: sending the viewer token to the CMS so `Members` entries and fields reach the page
+(it needs a server-side credential that holds `manage_public_delivery` to mint one through
+`POST /api/viewer-tokens`), gated widgets passing the token to server calls, a sign-in block and
+token refresh.
