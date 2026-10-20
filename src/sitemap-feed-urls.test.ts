@@ -33,6 +33,7 @@ const SETTINGS = {
         { label: "Work", href: "/work", children: [{ label: "Clients", href: "/clients?x=1#top" }] },
         { label: "Console", href: "https://console.example", external: true },
         { label: "Feed", href: "/feed.xml" },
+        { label: "Q and A", href: "/q&a" },
     ],
 };
 
@@ -122,6 +123,14 @@ describe("the sitemap of a site with no menu", () => {
         expect(listed).toContain(`${ORIGIN}/pricing/`);
         expect(listed).toContain(`${ORIGIN}/clients/`);
         expect(listed.slice(1).every((u) => u.endsWith("/"))).toBe(true);
+    });
+});
+
+describe("a URL that carries XML markup characters", () => {
+    it("is written escaped, since Next puts the url into <loc> as it is", async () => {
+        const listed = await urls();
+        expect(listed).toContain(`${ORIGIN}/q&amp;a`);
+        expect(listed).not.toContain(`${ORIGIN}/q&a`);
     });
 });
 

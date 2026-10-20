@@ -94,8 +94,14 @@ export function createSitemap(base: PressConfig) {
             .map((url) => ({ url, changeFrequency: "monthly" as const, priority: 0.5 }));
 
         if (pages.length > room()) sayOnce(sitemapFull(config));
-        return [{ url: home, changeFrequency: "daily" as const, priority: 1 }, ...items, ...pages.slice(0, room())];
+        const all = [{ url: home, changeFrequency: "daily" as const, priority: 1 }, ...items, ...pages.slice(0, room())];
+        // Next writes `url` into <loc> as it is, so a path from content with `&` or `<` would break the file.
+        return all.map((e) => ({ ...e, url: escapeXml(e.url) }));
     };
+}
+
+function escapeXml(value: string): string {
+    return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 }
 
 /** Where a page the menu does not list is served, found by asking the Pages module for its slug at the root. */
