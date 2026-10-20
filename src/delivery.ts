@@ -111,7 +111,7 @@ function carriesSecretsSafely(cmsUrl: string): boolean {
     return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
 }
 
-function headers(config: PressConfig, env: PressEnv = readEnv()): HeadersInit {
+export function deliveryHeaders(config: PressConfig, env: PressEnv = readEnv()): HeadersInit {
     const out: Record<string, string> = {};
     const tenant = pinnedTenant(config, env);
     if (tenant) out["X-Tenant"] = tenant;
@@ -544,7 +544,7 @@ async function get<T>(config: PressConfig, path: string, target: ReadTarget = {}
     const env = readEnv();
     const readKey = `${cmsUrlFor(config, env)}|t:${pinnedTenant(config, env) ?? ""}|${path}`;
     return read<T>(config, path, {
-        headers: headers(config, env),
+        headers: deliveryHeaders(config, env),
         tags: cacheTagsFor(config, target),
         readKey,
         staleKey: config.sites ? readKey : undefined,
@@ -554,7 +554,7 @@ async function get<T>(config: PressConfig, path: string, target: ReadTarget = {}
 /** An uncached read, for a draft. A cached draft would be served to the next visitor. */
 async function getFresh<T>(config: PressConfig, path: string): Promise<T | null> {
     const res = await fetch(`${cmsUrlFor(config)}${path}`, {
-        headers: headers(config),
+        headers: deliveryHeaders(config),
         cache: "no-store",
         signal: AbortSignal.timeout(config.cmsTimeoutMs),
         // Same reason as `read`: this now carries the renderer key too, so a redirect is refused
@@ -890,7 +890,7 @@ export function singleIp(raw: string | null | undefined): string | null {
  */
 /** The headers a share link request carries: the tenant, and who is asking, on a channel that protects the key. */
 function shareHeaders(config: PressConfig, cmsUrl: string, caller: ShareRedeemCaller): Record<string, string> {
-    const sent: Record<string, string> = { ...(headers(config) as Record<string, string>), "content-type": "application/json" };
+    const sent: Record<string, string> = { ...(deliveryHeaders(config) as Record<string, string>), "content-type": "application/json" };
     // The caller's key keeps the rule `headers` applies to every read: only over https or loopback.
     if (caller.rendererKey && carriesSecretsSafely(cmsUrl)) sent["X-Barako-Renderer-Key"] = caller.rendererKey;
     const visitorIp = singleIp(caller.visitorIp);

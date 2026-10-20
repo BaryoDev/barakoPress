@@ -401,6 +401,10 @@ export type { PressStore } from "./store.js";
 
 export { createBindingReportRoute, createBindingReportPreflight } from "./routes/binding-report.js";
 export type { BindingReport, BindingReportOptions } from "./routes/binding-report.js";
+export { createViewerLoginRoute } from "./routes/viewer-login.js";
+export { createViewerLogoutRoute } from "./routes/viewer-logout.js";
+export { signIn, signOut, getViewer, VIEWER_COOKIE } from "./viewer.js";
+export type { Viewer, ViewerCredentials, SignInResult } from "./viewer.js";
 export { createRevalidateRoute } from "./routes/revalidate.js";
 export { revalidateKeyFor, bindingsKeyFor } from "./revalidate-key.js";
 export { createSharePage, createShareRedeemRoute, SHARE_INVALID_FRAGMENT } from "./routes/share.js";
