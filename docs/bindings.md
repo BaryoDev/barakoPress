@@ -14,7 +14,7 @@ renders), `item` (the row inside a `source` or a `repeat`) and `query` (URL para
 reads its entry's own fields by name, with the collection's roles (`Title`, `Summary`, `Body`,
 `Date` and the rest) laid over them only where the collection's `fields` maps that role, so an
 unmapped `Body` is still the entry's own `Body`. `count`, `sum` and `group` are about a set of rows
-rather than one, and are described with `source` below. `viewer` arrives with #7. Formats are `text`, `date`, `datetime`, `time`, `money`, `number`, `upper` and
+rather than one, and are described with `source` below. `viewer` is the signed-in viewer on a `createViewerPage` route, described in pages.md. Formats are `text`, `date`, `datetime`, `time`, `money`, `number`, `upper` and
 `lower`; `money` uses the tenant's `Currency` setting, or a plain amount when it has none.
 
 Paths, formats and fallbacks only. There are no expressions and no JavaScript. Everything resolves

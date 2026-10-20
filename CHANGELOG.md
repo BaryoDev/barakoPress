@@ -2,6 +2,12 @@
 
 ## 0.14.1 (unreleased)
 
+- Viewer sessions (#7), the first slice. `viewerSessions: true` turns on `createViewerLoginRoute` and
+  `createViewerLogoutRoute`, which keep the barakoCMS token in an http-only, secure, `SameSite=Lax`
+  cookie that page script cannot read, and `{{viewer.Username}}`, `{{viewer.Roles}}` and the rest
+  resolve on a `createViewerPage` route. Off unless set: the routes answer 404 and no site changes.
+  Page-level role gating, gated widgets, a sign-in block and token refresh are not in yet.
+
 - The sitemap lists every published page, and the feed links match the served URL (#168, #170). The
   sitemap adds the pages the menu does not list: the targets of `HeaderLinks` and each page of the
   page type (found at `/slug`, so a nested page outside the menu is still left out), less region

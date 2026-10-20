@@ -225,3 +225,27 @@ describe("formats", () => {
         expect(formatValue(["heart", "surgery"], "text", options)).toBe("heart, surgery");
     });
 });
+
+describe("the viewer scope", () => {
+    it("reads the signed-in viewer's fields and a role list", async () => {
+        const { bound, problems } = source({ viewer: () => ({ Username: "ana", Roles: ["Auditor", "Member"] }) });
+        const out = await bindText("{{viewer.Username}} is {{viewer.Roles}}", bound);
+        expect(out.text).toBe("ana is Auditor, Member");
+        expect(problems).toHaveLength(0);
+    });
+
+    it("is a known scope, so a page that does not carry it is unbound rather than a typo", async () => {
+        const { bound, problems } = source(site({ Name: "Clinic" }));
+        const out = await bindText("Hi {{viewer.Username ?? Guest}}", bound);
+        expect(out.text).toBe("Hi Guest");
+        expect(problems).toHaveLength(1);
+        expect(problems[0].reason).toBe("unbound scope");
+    });
+
+    it("renders the fallback for a viewer with no such field", async () => {
+        const { bound, problems } = source({ viewer: () => ({}) });
+        const out = await bindText("{{viewer.Username ?? Guest}}", bound);
+        expect(out.text).toBe("Guest");
+        expect(problems[0].reason).toBe("no value");
+    });
+});

@@ -257,5 +257,35 @@ config closes over it.
 
 A block that shows something depending on who is looking sets `perViewer: true`. `createPage` leaves
 such blocks out, because its output is cached and shared. `createViewerPage` renders them and calls
-`connection()` first, so that route is always dynamic. Signing a viewer in, and gating a block by
-role, is issue #7.
+`connection()` first, so that route is always dynamic.
+
+### Signing a viewer in
+
+Set `viewerSessions: true` in the config. It is off by default, and off, the two routes below answer
+404 and no cookie is read.
+
+```ts
+// app/api/viewer/login/route.ts
+export const POST = createViewerLoginRoute(config);
+// app/api/viewer/logout/route.ts
+export const POST = createViewerLogoutRoute(config);
+```
+
+Login takes a JSON body, `{ "username": "...", "password": "..." }`, and signs in with a barakoCMS
+account of the tenant. The CMS token is kept in `__Host-press-viewer`, which is `HttpOnly`, `Secure`
+and `SameSite=Lax`. It is read on the server only: it is not in the response, a rendered page or any
+prop. A wrong password answers 401, an account whose device is not approved yet answers 403, and a
+CMS that cannot be reached answers 502. A request from another site is refused with 403. Logout clears
+the cookie. `signIn`, `signOut` and `getViewer` are exported for a route of your own.
+
+On a `createViewerPage` route, a block's props can bind the viewer:
+
+- `{{viewer.Username}}`, `{{viewer.Id}}`, `{{viewer.Tenant}}`
+- `{{viewer.Roles}}` and `{{viewer.Capabilities}}`, the role names and the capabilities the CMS
+  grants the account in this tenant
+
+A signed-out visitor, or a route that is cached, has no `viewer` values, so the placeholder renders
+its fallback: `{{viewer.Username ?? Guest}}`.
+
+Not built yet: gating a page by role, gated widgets passing the token to server calls, a sign-in
+block and token refresh.

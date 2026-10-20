@@ -25,7 +25,7 @@ import { literalToken, plainLiterals } from "../literal.js";
 import { zoneFor } from "../calendar-date.js";
 
 /**
- * The scopes a page may read. `viewer` arrives with barakoPress #7.
+ * The scopes a page may read. `viewer` is the signed-in viewer, and only a `perViewer` page carries it (#7).
  *
  * `count`, `sum` and `group` are about a set of rows rather than one (#128). `{{count.post}}` is how
  * many published entries a collection has, and `{{count}}` on its own, inside a `source`, is how many
@@ -33,7 +33,7 @@ import { zoneFor } from "../calendar-date.js";
  * `{{distinct.Repo}}` is how many different values a field holds among them, and `{{group.key}}` and
  * `{{group.count}}` name the group a `groupBy` source is repeating.
  */
-export const BINDING_SCOPES = ["site", "page", "item", "query", "props", "count", "sum", "distinct", "group"] as const;
+export const BINDING_SCOPES = ["site", "page", "item", "query", "props", "count", "sum", "distinct", "group", "viewer"] as const;
 export type BindingScope = (typeof BINDING_SCOPES)[number];
 
 export const BINDING_FORMATS = ["text", "date", "datetime", "time", "money", "number", "upper", "lower"] as const;
@@ -202,6 +202,7 @@ export interface BindingScopes {
     sum?: () => Promise<Record<string, unknown>> | Record<string, unknown>;
     distinct?: () => Promise<Record<string, unknown>> | Record<string, unknown>;
     group?: () => Promise<Record<string, unknown>> | Record<string, unknown>;
+    viewer?: () => Promise<Record<string, unknown>> | Record<string, unknown>;
     /**
      * A count by path rather than a record, because the path names what to count and each one is a
      * read of its own: the empty path is the enclosing source's total, any other a collection key.

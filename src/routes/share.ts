@@ -63,7 +63,7 @@ const refused = () => redirect(`/#${SHARE_INVALID_FRAGMENT}`);
  * either one naming another site is refused. A caller that sends neither is not a browser, and gets
  * no more than redeeming the key it already has.
  */
-function sameOrigin(request: Request, hostHeader: string): boolean {
+export function sameOrigin(request: Request, hostHeader: string): boolean {
     const site = request.headers.get("sec-fetch-site");
     if (site && site !== "same-origin" && site !== "none") return false;
     const origin = request.headers.get("origin");
