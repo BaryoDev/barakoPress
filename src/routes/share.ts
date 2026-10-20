@@ -1,7 +1,7 @@
 import type { Labels, PressConfig } from "../config.js";
 import { readEnv } from "../env.js";
 import { isLinkPath, openShareLink, redeemShareLink, type PublicContent, type ShareRedeemCaller } from "../delivery.js";
-import { collectionOf, hasProducts, itemRoutePath, productOf } from "../collections.js";
+import { collectionOf, itemRoutePath, productOf } from "../collections.js";
 import {
     LINK_COOKIE,
     normaliseHost,
@@ -127,7 +127,7 @@ function entryPath(config: PressConfig, entry: PublicContent): string | null {
         .map((key) => collectionOf(config, key))
         .find((c) => c !== undefined && c.type === entry.contentType && c.route !== undefined);
     const product = col ? productOf(col, entry) : undefined;
-    const path = (col?.route && slug ? itemRoutePath(col.route, hasProducts(col), { slug, product }) : undefined) ?? "";
+    const path = (col?.route && slug ? itemRoutePath(col.route, col.tree?.products, { slug, product }) : undefined) ?? "";
     if (!isLinkPath(path)) {
         console.warn(`share links: a link opened a ${JSON.stringify(entry.contentType ?? "")} entry that no collection with a route renders here`);
         return null;

@@ -14,6 +14,8 @@
   item's own `href` field still wins in a tree, and a collection without products is unchanged. Links
   to a products collection's items change from `/docs/slug` to `/docs/product/slug`; the old path still
   resolves.
+  The product segment is written only for a product the collection declares. `createCollectionDetail`
+  and `createCollectionMetadata` read an optional `product` route parameter, for a `[product]/[slug]` file.
 
 - Each release publishes `ghcr.io/baryodev/barako-press-source:<version>` beside the engine image (#166).
   It is the engine's source with dependencies installed and nothing built, for both architectures, and

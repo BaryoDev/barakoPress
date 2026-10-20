@@ -41,7 +41,7 @@ const { forgetCachedReads } = await import("./delivery.js");
 const { collectionTree, editHref, treeNeighbours, treeProducts } = await import("./tree.js");
 const { siteConfig } = await import("./site.js");
 const { createPage } = await import("./screens/page.js");
-const { createCollectionIndex } = await import("./screens/collection.js");
+const { createCollectionDetail, createCollectionIndex } = await import("./screens/collection.js");
 const { createBlockRegistry, registryFor } = await import("./blocks/registry.js");
 const { resolveBlocks } = await import("./blocks/schema.js");
 const { BlockList } = await import("./blocks/render.js");
@@ -693,6 +693,27 @@ describe("a manual served at route, product and slug", () => {
         const item = await getItem(config, "docs", "webhooks", "cms");
         expect(item).not.toBeNull();
         expect(itemPath(config, "docs", item!)).toBe("/docs/cms/webhooks");
+    });
+
+    it("builds the product segment only from a declared product, spelled as declared and encoded", async () => {
+        const { itemRoutePath } = await import("./collections.js");
+        const products = [{ key: "cms" }, { key: "a b" }];
+
+        expect(itemRoutePath("/docs", products, { slug: "s", product: "CMS" })).toBe("/docs/cms/s");
+        expect(itemRoutePath("/docs", products, { slug: "s", product: "a b" })).toBe("/docs/a%20b/s");
+        expect(itemRoutePath("/docs", products, { slug: "s", product: "retired" })).toBe("/docs/s");
+        expect(itemRoutePath("/docs", products, { slug: "s", product: "x/y?z" })).toBe("/docs/s");
+        expect(itemRoutePath("/docs", undefined, { slug: "s", product: "cms" })).toBe("/docs/s");
+        expect(itemRoutePath("/docs", products, { slug: "s" })).toBe("/docs/s");
+    });
+
+    it("serves a product-qualified route through createCollectionDetail", async () => {
+        const config = await site();
+        const detail = createCollectionDetail(config, "docs");
+
+        const html = await markup(detail({ params: Promise.resolve({ product: "cms", slug: "quickstart" }) }));
+        expect(html).toContain("Start here.");
+        await expect(markup(detail({ params: Promise.resolve({ product: "press", slug: "quickstart" }) }))).rejects.toThrow();
     });
 
     it("lists the three-segment paths in the sitemap and none at route and slug", async () => {

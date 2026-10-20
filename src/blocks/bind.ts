@@ -627,7 +627,8 @@ async function bindDataTable(block: ResolvedBlock, frame: Frame, ctx: BindContex
     const page = pageNumber(await frame.source.read("query"), param);
     const pageSize = typeof props.pageSize === "number" ? Math.min(props.pageSize, MAX_SOURCE_ROWS) : 20;
     const loaded = await read(() => listCollection(ctx.config, key, { page, pageSize }));
-    const items = loaded?.items ?? [];
+    if (!loaded) return [];
+    const items = loaded.items;
 
     const template = typeof props.rowLink === "string" ? props.rowLink.trim() : "";
     const linkable = template.startsWith("/") && isSafeHref(template.replace(/\{(slug|id)\}/g, "x"));
@@ -650,7 +651,7 @@ async function bindDataTable(block: ResolvedBlock, frame: Frame, ctx: BindContex
     const state = writeTableState({
         heads: columns.map((c) => (typeof c.label === "string" && c.label.trim() !== "" ? c.label : c.field)),
         rows,
-        pager: { param, page, hasNext: loaded?.hasNextPage ?? false },
+        pager: { param, page, hasNext: loaded.hasNextPage ?? false },
     });
     return [{ ...block, props: { ...props, state }, slots: {} }];
 }

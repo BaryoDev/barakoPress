@@ -228,8 +228,10 @@ describe("a dataTable over a public collection", () => {
 
     it("draws nothing when the read fails, and the page still renders", async () => {
         failing = "student";
-        const out = await page([table(), { type: "text", props: { value: "After" } }]);
+        const out = await page([table({ empty: "No students yet" }), { type: "text", props: { value: "After" } }]);
         expect(out).toContain("After");
         expect(out).not.toContain("Student 1");
+        expect(out).not.toContain("<table");
+        expect(out).not.toContain("No students yet");
     });
 });

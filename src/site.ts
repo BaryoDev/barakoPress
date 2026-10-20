@@ -1375,7 +1375,7 @@ export function applySiteSettings(
     const named = tokensFrom(config.theme.tokens, record(d.Tokens));
     const tones = tonesFrom(config.theme.tones, record(d.Tones), { colors, tokens: named });
     const recipes = recipesFrom(config.theme.recipes, record(d.StyleRecipes));
-    const variants = variantsFrom(config.theme.variants, d.Variants);
+    const variants = variantsFrom(config.theme.variants, record(d.Variants));
     const theme: PressTheme = {
         colors,
         fonts: face.fonts,

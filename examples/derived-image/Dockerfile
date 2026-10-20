@@ -18,7 +18,8 @@ COPY plugins/ /plugins/
 
 # The same steps the engine's Dockerfile runs. An overlay that ships its own app/%5Fpress replaces
 # the reference tree; any other overlay loses the tenant tree.
-RUN if [ -n "$(ls -A /overlay)" ]; then \
+RUN rm -f /overlay/.gitkeep; \
+    if [ -n "$(ls -A /overlay)" ]; then \
       rm -rf "app/%5Fpress"; \
       cp -R /overlay/. .; \
     fi; \

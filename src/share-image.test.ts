@@ -26,6 +26,12 @@ describe("generatedShareImages", () => {
         ]);
     });
 
+    it("advertises nothing when the site has no URL, since a relative image needs a metadataBase", () => {
+        process.env.PRESS_SHARE_IMAGE_FONT = "/fonts/brand.ttf";
+        const bare = { ...config, site: { ...config.site, url: "" } };
+        expect(generatedShareImages(bare, "/about")).toBeUndefined();
+    });
+
     it("advertises nothing for a page with no path", () => {
         process.env.PRESS_SHARE_IMAGE_FONT = "/fonts/brand.ttf";
         expect(generatedShareImages(config, undefined)).toBeUndefined();

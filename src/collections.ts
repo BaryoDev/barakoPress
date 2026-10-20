@@ -539,21 +539,23 @@ export function hasProducts(col: Pick<CollectionConfig, "tree"> | undefined): bo
 }
 
 /**
- * The path an item is served at: `route/product/slug` when its collection declares products and the
- * item has one, otherwise `route/slug`. Undefined when the collection has no route or the item no slug.
+ * The path an item is served at: `route/product/slug` when the item's product is one the collection
+ * declares (spelled as declared), otherwise `route/slug`, which still resolves. Undefined when the collection has no route or the item no slug.
  */
 export function itemRoutePath(
     route: string | undefined,
-    withProducts: boolean,
+    products: readonly { key: string }[] | undefined,
     item: Pick<Item, "slug" | "product">,
 ): string | undefined {
     if (route === undefined || !item.slug) return undefined;
-    return withProducts && item.product ? `${route}/${item.product}/${item.slug}` : `${route}/${item.slug}`;
+    const product = item.product?.toLowerCase();
+    const declared = product ? products?.find((p) => p.key.toLowerCase() === product) : undefined;
+    return declared ? `${route}/${encodeURIComponent(declared.key)}/${item.slug}` : `${route}/${item.slug}`;
 }
 
 export function itemPath(config: PressConfig, key: string, item: Pick<Item, "slug" | "product">): string | undefined {
     const col = collectionOf(config, key);
-    return itemRoutePath(col?.route, hasProducts(col), item);
+    return itemRoutePath(col?.route, col?.tree?.products, item);
 }
 
 /** A draft, read uncached with a preview token, as `bySlugPreview` does for any type. */

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -37,6 +37,13 @@ describe("the published source image", () => {
         expect(recipe).toContain("FROM ghcr.io/baryodev/barako-press-source:${PRESS_VERSION} AS build");
         expect(recipe).toContain("node scripts/plugins.mjs /plugins");
         expect(recipe).toContain("npm run build");
+    });
+
+    it("copies two directories that exist in a checkout, and ignores the placeholder in the overlay", () => {
+        expect(existsSync(resolve(root, "examples/derived-image/overlay/.gitkeep"))).toBe(true);
+        expect(existsSync(resolve(root, "examples/derived-image/plugins/.gitkeep"))).toBe(true);
+        expect(recipe.indexOf("rm -f /overlay/.gitkeep")).toBeGreaterThan(-1);
+        expect(recipe.indexOf("rm -f /overlay/.gitkeep")).toBeLessThan(recipe.indexOf('ls -A /overlay'));
     });
 
     it("ends in the same runtime stage as the engine Dockerfile", () => {

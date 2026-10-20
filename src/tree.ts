@@ -1,5 +1,5 @@
 import { TREE_LIMIT, type CollectionTree, type PressConfig, type TreeProduct } from "./config.js";
-import { collectionOf, hasProducts, itemRoutePath, listAllCollection, type Item } from "./collections.js";
+import { collectionOf, itemRoutePath, listAllCollection, type Item } from "./collections.js";
 import { createHash } from "node:crypto";
 import { siteHref } from "./site.js";
 import { markdownHeadings, type MarkdownHeading } from "./markdown.js";
@@ -131,16 +131,16 @@ const SITE_PATH = /^\/(?!\/)[^\\\s\u0000-\u001f\u007f]*$/;
 export function treeItemHref(
     item: Pick<Item, "href" | "slug"> & { product?: string },
     route: string | undefined,
-    withProducts = false,
+    products?: readonly { key: string }[],
 ): string | undefined {
     if (item.href !== undefined && SITE_PATH.test(item.href)) return item.href;
-    return itemRoutePath(route, withProducts, item);
+    return itemRoutePath(route, products, item);
 }
 
-function withHrefs(nodes: TreeNode[], route: string | undefined, withProducts: boolean): TreeNode[] {
+function withHrefs(nodes: TreeNode[], route: string | undefined, products: readonly { key: string }[] | undefined): TreeNode[] {
     return nodes.map((node) => {
-        const href = treeItemHref(node.item, route, withProducts);
-        return { ...node, ...(href ? { href } : {}), children: withHrefs(node.children, route, withProducts) };
+        const href = treeItemHref(node.item, route, products);
+        return { ...node, ...(href ? { href } : {}), children: withHrefs(node.children, route, products) };
     });
 }
 
@@ -201,7 +201,7 @@ export async function collectionTree(
                 bySlug,
             ),
             col.route,
-            hasProducts(col),
+            col.tree?.products,
         ),
     }));
 
