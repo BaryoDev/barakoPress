@@ -99,4 +99,37 @@ describe("the robots disallow list", () => {
         });
         expect(warn).not.toHaveBeenCalled();
     });
+
+    it("drops line separators, C1 controls and bidi overrides", async () => {
+        const bad = ["/a\u2028Sitemap: x", "/a\u2029b", "/a\u0085b", "/a\u009fb", "/a\u202eb", "/a\u2066b"];
+        const config = applySiteSettings(base(), { Robots: { disallow: ["/ok/", ...bad] } }, null);
+        expect((await createRobots(config)()).rules).toEqual({ userAgent: "*", allow: "/", disallow: ["/ok/"] });
+    });
+
+    it("an empty list in the setting clears the config list", async () => {
+        const config = applySiteSettings(defineConfig({ site, robots: { disallow: ["/old/"] } }), { Robots: { disallow: [] } }, null);
+        expect((await createRobots(config)()).rules).toEqual({ userAgent: "*", allow: "/" });
+    });
+
+    it("a list with no valid entry still falls back to the config list", async () => {
+        const config = applySiteSettings(defineConfig({ site, robots: { disallow: ["/old/"] } }), { Robots: { disallow: ["x", 5] } }, null);
+        expect((await createRobots(config)()).rules).toEqual({ userAgent: "*", allow: "/", disallow: ["/old/"] });
+    });
+
+    it("one tenant's warning does not silence the same mistake on another host", () => {
+        const bad = { Robots: { disallow: ["/ok/", "nope"] } };
+        applySiteSettings(base(), bad, "a.example");
+        applySiteSettings(base(), bad, "b.example");
+        applySiteSettings(base(), bad, "a.example");
+        expect(warn).toHaveBeenCalledTimes(2);
+    });
+
+    it("the warning memory stays bounded", () => {
+        for (let i = 1; i <= 600; i++) applySiteSettings(base(), { Robots: { disallow: ["/ok/", ...Array(i).fill("x")] } }, null);
+        expect(warn).toHaveBeenCalledTimes(600);
+        warn.mockClear();
+        applySiteSettings(base(), { Robots: { disallow: ["/ok/", "x"] } }, null);
+        applySiteSettings(base(), { Robots: { disallow: ["/ok/", "x"] } }, null);
+        expect(warn).toHaveBeenCalledTimes(1);
+    });
 });

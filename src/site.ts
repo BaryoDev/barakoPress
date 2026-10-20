@@ -732,8 +732,12 @@ function timeZoneSetting(base: string | undefined, v: unknown): { timeZone?: str
     return zone ? { timeZone: zone } : {};
 }
 
-function robotsSetting(base: PressConfig["robots"], v: unknown): { robots?: PressConfig["robots"] } {
-    const robots = validRobots(json(v)) ?? base;
+function robotsSetting(base: PressConfig["robots"], v: unknown, host: string | null): { robots?: PressConfig["robots"] } {
+    const parsed = json(v);
+    // A list somebody left empty on purpose clears the config's list. One with entries that were all dropped falls back.
+    const cleared = parsed && typeof parsed === "object" && Array.isArray((parsed as { disallow?: unknown }).disallow) && (parsed as { disallow: unknown[] }).disallow.length === 0;
+    if (cleared) return {};
+    const robots = validRobots(parsed, host ?? "") ?? base;
     return robots ? { robots } : {};
 }
 
@@ -1385,8 +1389,9 @@ export function applySiteSettings(
         ...(recipes ? { recipes } : {}),
     };
 
-    const { holding: _ignored, ...rest } = config;
+    const { holding: _ignored, robots: _robots, ...rest } = config;
     void _ignored;
+    void _robots;
     const held = holding(d);
     const bands = regions(config.regions, d, theme);
     const root = home(config.home, d);
@@ -1396,7 +1401,7 @@ export function applySiteSettings(
         theme,
         locale: locale(config.locale, d.Locale),
         ...timeZoneSetting(config.timeZone, d.TimeZone),
-        ...robotsSetting(config.robots, d.Robots),
+        ...robotsSetting(config.robots, d.Robots, host),
         ...(str(d.Currency) && /^[A-Za-z]{3}$/.test(str(d.Currency) as string)
             ? { currency: (str(d.Currency) as string).toUpperCase() }
             : {}),

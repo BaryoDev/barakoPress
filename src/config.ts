@@ -1198,7 +1198,9 @@ export interface Robots {
 }
 
 export const MAX_ROBOTS_DISALLOW = 100;
-const CONTROL = /[\u0000-\u001f\u007f]/;
+const CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/;
+const CONTROL_G = new RegExp(CONTROL.source, "g");
+const SAID_MAX = 200;
 const said = new Set<string>();
 
 /** For tests: say every robots warning again. */
@@ -1212,7 +1214,7 @@ export function forgetRobotsWarnings(): void {
  * with "/", or that holds a control character (a newline would start a new robots line), is dropped.
  * The list is capped. Anything dropped is said once.
  */
-export function validRobots(v: unknown): Robots | undefined {
+export function validRobots(v: unknown, who = ""): Robots | undefined {
     if (!v || typeof v !== "object" || Array.isArray(v)) return undefined;
     const list = (v as { disallow?: unknown }).disallow;
     if (!Array.isArray(list)) return undefined;
@@ -1223,9 +1225,11 @@ export function validRobots(v: unknown): Robots | undefined {
         const message =
             `robots: dropped ${invalid + over} disallow entries (${invalid} not a path starting with "/", ` +
             `${over} past the limit of ${MAX_ROBOTS_DISALLOW})`;
-        if (!said.has(message)) {
-            said.add(message);
-            console.warn(message);
+        const key = `${who}|${message}`;
+        if (!said.has(key)) {
+            if (said.size >= SAID_MAX) said.clear();
+            said.add(key);
+            console.warn(who ? `${message} for ${who.replace(CONTROL_G, " ")}` : message);
         }
     }
     return kept.length > 0 ? { disallow: kept.slice(0, MAX_ROBOTS_DISALLOW) } : undefined;
