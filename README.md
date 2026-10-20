@@ -244,6 +244,7 @@ per request, so when a value was read depended on which value it was.
 | `CMS_TENANT` | Pins the process to one tenant. `tenant` in the config wins |
 | `CMS_DEFAULT_TENANT` | The tenant for a host the CMS does not know. `sites.defaultTenant` wins |
 | `CMS_RENDERER_KEY` | Sent to the CMS as `X-Barako-Renderer-Key` on every delivery read when the CMS URL is https or loopback, and when a share link is redeemed, so the CMS rate limits by renderer. See [Share links](https://github.com/BaryoDev/barakoPress/blob/master/docs/sites.md#one-build-many-sites) |
+| `CMS_VIEWER_MINT_TOKEN` | Server only. A CMS bearer token whose account holds `manage_public_delivery`. A gated `createViewerPage` route uses it to mint a viewer token for the signed-in viewer and read `Members` content. Never sent to a browser. Unset, those reads stay anonymous. See [Viewer tokens](https://github.com/BaryoDev/barakoPress/blob/master/docs/pages.md#reading-members-content) |
 | `PRESS_CONSOLE_ORIGINS` | Browser origins allowed to read the block schema, comma separated |
 | `PRESS_SECRET` | The HMAC key for everything this renderer signs. See [One secret](https://github.com/BaryoDev/barakoPress/blob/master/docs/caching.md#one-secret) |
 | `REVALIDATE_SECRET` | The webhook key before `PRESS_SECRET`, read only while that is unset |

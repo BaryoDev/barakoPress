@@ -32,6 +32,11 @@ export interface PressEnv {
     defaultTenant?: string;
     /** `CMS_RENDERER_KEY`. Sent on every delivery read and on share link redemption, so the CMS rate limits by renderer rather than by every visitor sharing this container's one IP. */
     rendererKey?: string;
+    /**
+     * `CMS_VIEWER_MINT_TOKEN`. A CMS bearer token whose account holds `manage_public_delivery`, used on the
+     * server only to mint a viewer token for the signed-in viewer. Never sent to a browser.
+     */
+    viewerMintToken?: string;
     /** `PRESS_CONSOLE_ORIGINS`. Comma separated browser origins allowed to read the block schema. */
     consoleOrigins?: string;
     /** `PRESS_SECRET`. The HMAC key for everything this renderer signs. */
@@ -56,6 +61,7 @@ export const ENV_NAMES = {
     tenant: "CMS_TENANT",
     defaultTenant: "CMS_DEFAULT_TENANT",
     rendererKey: "CMS_RENDERER_KEY",
+    viewerMintToken: "CMS_VIEWER_MINT_TOKEN",
     consoleOrigins: "PRESS_CONSOLE_ORIGINS",
     secret: "PRESS_SECRET",
     revalidateSecret: "REVALIDATE_SECRET",

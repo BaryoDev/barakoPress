@@ -298,9 +298,26 @@ A signed-out visitor goes to `signIn`, or gets the not-found page without it, an
 without the role gets the not-found page. Sessions off means nobody gets in. This refuses to render
 the route; it does not hide the data. An entry the CMS serves anonymously is still served
 anonymously by the API, so a page that has to stay private is a `Members` entry in barakoCMS 5.1.0
-(see its delivery API), read with an `X-Viewer-Token` that press does not send yet.
+(see its delivery API), read with a viewer token as described next.
 
-Not built yet: sending the viewer token to the CMS so `Members` entries and fields reach the page
-(it needs a server-side credential that holds `manage_public_delivery` to mint one through
-`POST /api/viewer-tokens`), gated widgets passing the token to server calls, a sign-in block and
-token refresh.
+### Reading Members content
+
+Set `CMS_VIEWER_MINT_TOKEN` to a barakoCMS bearer token whose account holds `manage_public_delivery`.
+On a gated `createViewerPage` route, once the gate lets a viewer in, the server mints a viewer token
+for that viewer with `POST /api/viewer-tokens` (subject is the viewer's id, 15 minutes) and sends it
+as `X-Viewer-Token` on the route's reads of `/api/public/{type}` and `/api/public/{type}/{slug}`. So
+`Members` entries and fields reach the page.
+
+- The credential and the viewer token stay on the server. Neither is in a cookie, a prop, the HTML or
+  a response this package sends.
+- Those reads are `private, no-store` in the CMS and are plain uncached fetches here. They skip the
+  render cache, the kept copy used during an outage and the tag purge, so a member's answer is never
+  served to an anonymous visitor.
+- The token's tenant must be the tenant the request is pinned to, the same check as the gate. Any
+  other token is dropped and the route reads anonymously.
+- Unset credential, a refused mint or a token for another tenant all mean an anonymous read, which is
+  what the page got before. A route with no `gate` never mints.
+- Menus, site settings and the Pages module's path lookup are not type reads, so they stay anonymous
+  and cached. A `Members` page reached by its path through the Pages catch-all is not served yet.
+
+Not built yet: gated widgets, a sign-in block and token refresh.
