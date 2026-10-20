@@ -1,6 +1,9 @@
 import type { MetadataRoute } from "next";
-import { pinnedTenant, type PressConfig } from "../config.js";
-import { flattenNavigation, getNavigation, isChromePath, isReservedPath, pageHref } from "../cms.js";
+import { pinnedTenant, type PressConfig, type SiteLink } from "../config.js";
+import { type NavItem, flattenNavigation, getNavigation, isChromePath, isReservedPath, listPages, pageHref } from "../cms.js";
+import { type ResolvedPage, pageAtPath } from "../delivery.js";
+import { RESERVED_AT_ROOT } from "../config.js";
+import { servedUrl, trimTrailingSlashes } from "./served-url.js";
 import { listAllCollection } from "../collections.js";
 import { treeItemHref } from "../tree.js";
 import { notFound } from "next/navigation";
@@ -70,7 +73,7 @@ export function createSitemap(base: PressConfig) {
                     // An entry with no slug has no page of its own (barakoCMS #1100), so it is not listed.
                     const path = at ?? (item.slug ? `${col.route}/${item.slug}` : undefined);
                     if (path === undefined) continue;
-                    const url = path === "/" ? home : `${home}${path}`;
+                    const url = servedUrl(home, path);
                     if (listedUrls.has(url)) continue;
                     listedUrls.add(url);
                     items.push({
@@ -86,25 +89,119 @@ export function createSitemap(base: PressConfig) {
             }
         }
 
-        let pagePaths: string[] = [];
-        if (config.pages !== undefined) {
-            try {
-                pagePaths = flattenNavigation(await getNavigation(config)).filter(
-                    (p) => !isReservedPath(config, p) && !isChromePath(config, p),
-                );
-            } catch {
-                pagePaths = [];
-            }
-        }
-
-        const pages = [...new Set(pagePaths.map((p) => pageHref(config, p)))]
-            .map((href) => `${home}${href === "/" ? "" : href}`)
+        const pages = (await pageUrls(config, home, listedUrls, room()))
             .filter((url) => !listedUrls.has(url))
             .map((url) => ({ url, changeFrequency: "monthly" as const, priority: 0.5 }));
 
         if (pages.length > room()) sayOnce(sitemapFull(config));
-        return [{ url: home, changeFrequency: "daily" as const, priority: 1 }, ...items, ...pages.slice(0, room())];
+        const all = [{ url: home, changeFrequency: "daily" as const, priority: 1 }, ...items, ...pages.slice(0, room())];
+        // Next writes `url` into <loc> as it is, so a path from content with `&` or `<` would break the file.
+        return all.map((e) => ({ ...e, url: escapeXml(e.url) }));
     };
+}
+
+function escapeXml(value: string): string {
+    return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
+
+/** Where a page the menu does not list is served, found by asking the Pages module for its slug at the root. */
+const PAGE_LOOKUPS_AT_ONCE = 10;
+const PAGE_LIST_SIZE = 100;
+
+function internalPath(href: string): string | undefined {
+    const path = pagePart(href);
+    if (!path || !path.startsWith("/") || path.startsWith("//") || /[\\\s]/.test(path)) return undefined;
+    return path;
+}
+
+function linkPaths(links: readonly SiteLink[] | undefined): string[] {
+    return (links ?? []).flatMap((l) => [internalPath(l.href), ...linkPaths(l.children)]).filter((p): p is string => p !== undefined);
+}
+
+/*
+ * Every URL a page is served at: the menu, then the targets of `HeaderLinks`, then each published
+ * page of the page type the menu did not list. The Pages module publishes no list of paths beyond
+ * its menu, so such a page is asked for at `/slug` and listed at the path the module answers with. A
+ * nested page that is not in the menu does not answer there and is left out rather than listed at a
+ * URL that 404s. A page whose SEO block says noIndex, a region page and a collection's `indexPage`
+ * are never listed.
+ */
+async function pageUrls(config: PressConfig, home: string, listed: Set<string>, room: number): Promise<string[]> {
+    if (config.pages === undefined || room <= 0) return [];
+    const paths: string[] = [];
+    let navSlugs = new Set<string>();
+    try {
+        const nav = await getNavigation(config);
+        navSlugs = new Set(flatSlugs(nav));
+        paths.push(...flattenNavigation(nav));
+    } catch {
+        // A short sitemap beats a failed one.
+    }
+    const mount = config.pages;
+    const urls = new Set<string>();
+    const reserved = (p: string) => {
+        const first = p.split("/").filter(Boolean)[0]?.toLowerCase();
+        return first !== undefined && RESERVED_AT_ROOT.includes(first);
+    };
+    const keep = (p: string) => {
+        if (isChromePath(config, p) || isReservedPath(config, p) || reserved(p)) return;
+        urls.add(servedUrl(home, pageHref(config, p)));
+    };
+    paths.forEach(keep);
+    // One lookup per path, shared by the header links and the slug loop below.
+    const lookups = new Map<string, Promise<ResolvedPage | null>>();
+    const lookup = (path: string) => {
+        let found = lookups.get(path);
+        if (!found) {
+            found = pageAtPath(config, path).catch(() => null);
+            lookups.set(path, found);
+        }
+        return found;
+    };
+    // A header link is a site path. Under the mount it is a page path; elsewhere it is some other route.
+    // A target that resolves to a noIndex page is left out; one that resolves to no page stays.
+    for (const p of linkPaths(config.site.headerLinks)) {
+        const pagePath = mount && p.startsWith(`${mount}/`) ? p.slice(mount.length) : mount && p === mount ? "/" : !mount ? p : undefined;
+        if (pagePath === undefined) {
+            if (!reserved(p)) urls.add(servedUrl(home, p));
+            continue;
+        }
+        if ((await lookup(trimTrailingSlashes(pagePath) || "/"))?.entry.seo?.noIndex) continue;
+        keep(pagePath);
+    }
+
+    const type = config.types.page;
+    if (type) {
+        const slugs: string[] = [];
+        try {
+            for (let page = 1; slugs.length + urls.size < room; page++) {
+                const res = await listPages(config, { page, pageSize: PAGE_LIST_SIZE });
+                for (const p of res.pages) {
+                    if (p.slug && !p.seo?.noIndex && !navSlugs.has(p.slug)) slugs.push(p.slug);
+                }
+                if (!res.hasNextPage || res.pages.length === 0) break;
+            }
+        } catch {
+            // Same: what was read is listed.
+        }
+        for (let i = 0; i < slugs.length && urls.size < room; i += PAGE_LOOKUPS_AT_ONCE) {
+            const found = await Promise.all(
+                slugs.slice(i, i + PAGE_LOOKUPS_AT_ONCE).map(async (slug) => {
+                    try {
+                        return (await lookup(`/${slug}`))?.path;
+                    } catch {
+                        return undefined;
+                    }
+                }),
+            );
+            for (const path of found) if (typeof path === "string") keep(path);
+        }
+    }
+    return [...urls];
+}
+
+function flatSlugs(items: NavItem[]): string[] {
+    return items.flatMap((i) => [i.slug, ...flatSlugs(i.children)]);
 }
 
 /*

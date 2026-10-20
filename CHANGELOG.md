@@ -2,6 +2,15 @@
 
 ## 0.14.1 (unreleased)
 
+- The sitemap lists every published page, and the feed links match the served URL (#168, #170). The
+  sitemap adds the pages the menu does not list: the targets of `HeaderLinks` and each page of the
+  page type (found at `/slug`, so a nested page outside the menu is still left out), less region
+  pages, a collection's `indexPage`, `noIndex` pages and reserved routes. On a build with
+  `PRESS_TRAILING_SLASH=true` the sitemap and the feed write the trailing slash, so a feed `<link>`
+  no longer answers 308. Feed guids change only on such a build, where readers will show each item
+  once as new; a build without the setting writes the same guids as before. The home page stays the
+  bare origin. The file still stops at 50,000 URLs.
+
 - A source past the page's eight reads, a count past them, a source over a collection the site does
   not have, and blocks nested past `MAX_DEPTH` now say so in the server log, once per message, the
   way `MAX_ALL_ROWS` does (#210). It is a warning, not an error: the page still renders and answers
