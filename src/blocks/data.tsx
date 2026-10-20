@@ -28,7 +28,14 @@ export const SLOT_BLOCK = "slot";
 export const PAGER_BLOCK = "pager";
 export const FILTER_BAR_BLOCK = "filterBar";
 
-/** The most rows one `source` reads, and the most reads one page may make. Untrusted input, bounded. */
+/**
+ * The most rows one `source` reads, and the most reads one page may make. Untrusted input, bounded.
+ *
+ * Past MAX_SOURCES a source, or a `{{count.<collection>}}`, is not read and draws nothing. That is a
+ * warning in the server log, said once per message, not a failure: the page still renders and
+ * answers 200, so a site already sitting past the limit starts logging and nothing else changes
+ * (#210).
+ */
 export const MAX_SOURCE_ROWS = 50;
 export const MAX_SOURCES = 8;
 /*

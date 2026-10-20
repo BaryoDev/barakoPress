@@ -69,6 +69,11 @@ A filter narrows what the API already lets the reader see. It is never access co
 which rows is decided in barakoCMS. A page reads at most eight sources, and a `source` at most fifty
 rows a page.
 
+A source or a `{{count.<collection>}}` past those eight reads is not read and draws nothing. The server
+log says so once, naming the collection and the limit, and the page still renders. A source over a
+collection the site does not have is logged the same way. Blocks nested more than ten levels deep
+(`MAX_DEPTH`) are dropped, and the log says how many.
+
 `mode: "all"` is for a page that is the whole of a collection rather than a page of it, a changelog
 say: the source reads every row, fifty to a request, up to 500 (`MAX_ALL_ROWS`). Its first request
 is one of the page's eight reads, and the rest are made at once, out of 16 more a page's `all`
