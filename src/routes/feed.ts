@@ -1,5 +1,5 @@
 import { POST_COLLECTION, type PressConfig } from "../config.js";
-import { collectionOf, listCollection, type Item } from "../collections.js";
+import { collectionOf, itemPath, listCollection, type Item } from "../collections.js";
 import { siteConfigOrNull, tenantVary } from "../site.js";
 import { servedUrl } from "./served-url.js";
 
@@ -57,7 +57,7 @@ export function createFeed(base: PressConfig, collection: string = POST_COLLECTI
             // An entry with no slug has no page to link to (barakoCMS #1100).
             .filter((item) => item.slug)
             .map((item) => {
-                const url = servedUrl(config.site.url, `${col.route}/${item.slug}`);
+                const url = servedUrl(config.site.url, itemPath(config, collection, item) ?? `${col.route}/${item.slug}`);
                 const date = item.date ? new Date(item.date) : null;
                 const pubDate =
                     date && !Number.isNaN(date.getTime())

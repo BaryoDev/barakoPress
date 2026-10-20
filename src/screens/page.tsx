@@ -182,18 +182,18 @@ interface Found {
  * item one segment below. That is how a tenant's collections, which come from its settings, render with
  * no route file each. A route file for a collection still wins, since Next resolves it first.
  */
-function collectionHit(config: PressConfig, p: PageRouteParams): { key: string; slug?: string } | null {
+function collectionHit(config: PressConfig, p: PageRouteParams): { key: string; slug?: string; product?: string } | null {
     if (bySlugRoute(p) || (config.pages ?? "") !== "") return null;
     return collectionAt(config, pathOf(p.path));
 }
 
-async function collectionMetadata(config: PressConfig, hit: { key: string; slug?: string }): Promise<Metadata> {
+async function collectionMetadata(config: PressConfig, hit: { key: string; slug?: string; product?: string }): Promise<Metadata> {
     if (hit.slug === undefined) {
         const col = collectionOf(config, hit.key);
         const label = col ? (indexCopy(col).heading ?? col.label) : undefined;
         return label ? { title: label } : {};
     }
-    const item = await getItem(config, hit.key, hit.slug);
+    const item = await getItem(config, hit.key, hit.slug, hit.product);
     return item ? itemMetadata(item) : { title: "Not found" };
 }
 
@@ -276,7 +276,7 @@ export function createPage(base: PressConfig, registry?: BlockRegistry, options:
         const query = options.query ?? (await routeFromParams(params)) === null;
         const hit = collectionHit(config, p);
         if (hit) {
-            if (hit.slug !== undefined) return renderCollectionDetail(config, hit.key, hit.slug, { blocks: (blocks ??= createBlockRegistry(base)) });
+            if (hit.slug !== undefined) return renderCollectionDetail(config, hit.key, hit.slug, { product: hit.product, blocks: (blocks ??= createBlockRegistry(base)) });
             blocks ??= createBlockRegistry(base);
             return CollectionIndexView({ config, collection: hit.key, query: await queryFor(query, searchParams), blocks });
         }
@@ -302,7 +302,7 @@ export function createViewerPage(base: PressConfig, registry?: BlockRegistry, op
         const p = await params;
         const hit = collectionHit(config, p);
         if (hit) {
-            if (hit.slug !== undefined) return renderCollectionDetail(config, hit.key, hit.slug, { blocks: (blocks ??= createBlockRegistry(base)), perViewer: true });
+            if (hit.slug !== undefined) return renderCollectionDetail(config, hit.key, hit.slug, { product: hit.product, blocks: (blocks ??= createBlockRegistry(base)), perViewer: true });
             blocks ??= createBlockRegistry(base);
             return CollectionIndexView({ config, collection: hit.key, query: await queryFor(true, searchParams), blocks });
         }

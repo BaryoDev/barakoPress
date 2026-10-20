@@ -515,19 +515,61 @@ export async function listAllCollection(
     }
 }
 
-export async function getItem(config: PressConfig, key: string, slug: string): Promise<Item | null> {
+export async function getItem(config: PressConfig, key: string, slug: string, product?: string): Promise<Item | null> {
     const col = collectionOf(config, key);
     if (!col) return null;
     const [c, description] = await Promise.all([bySlug(config, col.type, slug), described(config, key, col)]);
-    return c ? toItem(config, key, c, description) : null;
+    if (!c) return null;
+    const item = toItem(config, key, c, description);
+    return productMatches(item, product) ? item : null;
+}
+
+function productMatches(item: Item, product: string | undefined): boolean {
+    return product === undefined || item.product?.toLowerCase() === product.toLowerCase();
+}
+
+/** The product an entry belongs to, from the collection's `tree.product` field. */
+export function productOf(col: CollectionConfig, c: PublicContent): string | undefined {
+    return text(c, col.tree?.product) || undefined;
+}
+
+/** True when the collection declares products, so its items are served at route, product, slug. */
+export function hasProducts(col: Pick<CollectionConfig, "tree"> | undefined): boolean {
+    return (col?.tree?.products?.length ?? 0) > 0;
+}
+
+/**
+ * The path an item is served at: `route/product/slug` when its collection declares products and the
+ * item has one, otherwise `route/slug`. Undefined when the collection has no route or the item no slug.
+ */
+export function itemRoutePath(
+    route: string | undefined,
+    withProducts: boolean,
+    item: Pick<Item, "slug" | "product">,
+): string | undefined {
+    if (route === undefined || !item.slug) return undefined;
+    return withProducts && item.product ? `${route}/${item.product}/${item.slug}` : `${route}/${item.slug}`;
+}
+
+export function itemPath(config: PressConfig, key: string, item: Pick<Item, "slug" | "product">): string | undefined {
+    const col = collectionOf(config, key);
+    return itemRoutePath(col?.route, hasProducts(col), item);
 }
 
 /** A draft, read uncached with a preview token, as `bySlugPreview` does for any type. */
-export async function getItemPreview(config: PressConfig, key: string, slug: string, token: string): Promise<Item | null> {
+export async function getItemPreview(
+    config: PressConfig,
+    key: string,
+    slug: string,
+    token: string,
+    product?: string,
+): Promise<Item | null> {
     const col = collectionOf(config, key);
     if (!col) return null;
     const [c, description] = await Promise.all([bySlugPreview(config, col.type, slug, token), described(config, key, col)]);
-    return c ? toItem(config, key, c, description) : null;
+    if (!c) return null;
+    const item = toItem(config, key, c, description);
+    return productMatches(item, product) ? item : null;
 }
 
 /** Items of `key` whose reference field `via` points at the entry `id`. `pageSizes.archive` of them unless told. */
@@ -560,20 +602,30 @@ export function referencedBy(config: PressConfig, key: string): { collection: st
 /**
  * Which collection a site path is: its index at the route, or an item one segment below. The longest
  * matching route wins, so a collection at /blog/featured is not read as a post slugged "featured". A
- * collection whose `index` is false answers only for its items.
+ * collection whose `index` is false answers only for its items. A collection that declares products
+ * also answers for route, product, slug, and the product is checked when the item is read.
  */
-export function collectionAt(config: PressConfig, path: string): { key: string; slug?: string } | null {
+export function collectionAt(
+    config: PressConfig,
+    path: string,
+): { key: string; slug?: string; product?: string } | null {
     const parts = path.split("/").filter(Boolean);
     const routes = Object.entries(config.collections)
         .map(([key, col]) => ({ key, col, route: col.route?.split("/").filter(Boolean) ?? [] }))
         .filter((r) => r.route.length > 0)
         .sort((a, b) => b.route.length - a.route.length);
     for (const { key, col, route } of routes) {
-        if (parts.length < route.length || parts.length > route.length + 1) continue;
+        const deepest = route.length + (hasProducts(col) ? 2 : 1);
+        if (parts.length < route.length || parts.length > deepest) continue;
         if (!route.every((segment, i) => segment.toLowerCase() === parts[i].toLowerCase())) continue;
         if (parts.length === route.length) {
             if (col.index === false) continue;
             return { key };
+        }
+        if (parts.length === route.length + 2) {
+            const product = parts[route.length].toLowerCase();
+            if (!col.tree?.products?.some((p) => p.key.toLowerCase() === product)) continue;
+            return { key, product: parts[route.length], slug: parts[route.length + 1] };
         }
         return { key, slug: parts[route.length] };
     }

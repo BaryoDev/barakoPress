@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { PressConfig } from "../config.js";
 import { formatDate } from "../cms.js";
-import { collectionOf, listCollection } from "../collections.js";
+import { collectionOf, itemPath, listCollection } from "../collections.js";
 import { IconGlyph, PROSE_CLASS, primitiveBlocks } from "./primitives.js";
 import { dataBlocks } from "./data.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
@@ -139,7 +139,7 @@ export async function collectionItems(
         return items
             .filter((item) => item.slug)
             .map((item) => ({
-                href: `${route}/${item.slug}`,
+                href: itemPath(config, which, item) ?? `${route}/${item.slug}`,
                 title: item.title,
                 date: item.date ? formatDate(config, item.date) : undefined,
                 summary: item.summary,

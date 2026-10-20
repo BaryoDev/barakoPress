@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
 import type { PressConfig, TreeVariant } from "../config.js";
 import type { Item } from "../collections.js";
-import { collectionOf } from "../collections.js";
+import { collectionOf, hasProducts } from "../collections.js";
 import type { MarkdownHeading } from "../markdown.js";
 import {
     editHref,
@@ -490,9 +490,10 @@ export interface TreePagerProps {
 export function TreePager({ config, collection, previous, next, variant }: TreePagerProps) {
     const t = config.theme;
     const c = t.colors;
-    const route = collectionOf(config, collection)?.route;
-    const previousHref = previous && treeItemHref(previous, route);
-    const nextHref = next && treeItemHref(next, route);
+    const col = collectionOf(config, collection);
+    const route = col?.route;
+    const previousHref = previous && treeItemHref(previous, route, hasProducts(col));
+    const nextHref = next && treeItemHref(next, route, hasProducts(col));
     if (!previousHref && !nextHref) return null;
     const halves = (variant ?? treeVariant(config, collection).pager) === "halves";
 

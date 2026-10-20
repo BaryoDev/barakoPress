@@ -224,7 +224,7 @@ describe("a collection configured as a tree", () => {
         // "delivery-api" is first on its order of 1, "orphan" next on 9, "webhooks" last with none.
         expect(reference!.nodes.map((n) => n.item.slug)).toEqual(["delivery-api", "orphan", "webhooks"]);
         expect(reference!.nodes[0].children.map((n) => n.item.slug)).toEqual(["delivery-paging"]);
-        expect(reference!.nodes[0].href).toBe("/docs/delivery-api");
+        expect(reference!.nodes[0].href).toBe("/docs/cms/delivery-api");
     });
 
     it("walks previous and next in reading order, parents before their children", async () => {
@@ -292,16 +292,16 @@ describe("a docs page", () => {
         expect(html).toContain("A page at a time.");
         // The sidebar, with the page being read marked and not linked.
         expect(html).toContain("Getting started");
-        expect(html).toContain('href="/docs/quickstart"');
+        expect(html).toContain('href="/docs/cms/quickstart"');
         expect(html).toContain('aria-current="page"');
-        expect(html).not.toContain('href="/docs/delivery-paging"');
+        expect(html).not.toContain('href="/docs/cms/delivery-paging"');
         // The switcher, from the settings, with the product being read not linked.
         expect(html).toContain("barakoPress");
         expect(html).toContain('href="/docs/press"');
         // Previous and next from the tree's reading order, not from the alphabet.
         const pager = between(html, 'rel="prev"', "</nav>");
         expect(pager).toContain("Public delivery API");
-        expect(html).toContain('href="/docs/orphan"');
+        expect(html).toContain('href="/docs/cms/orphan"');
         // Where the page is written.
         expect(html).toContain("https://github.com/BaryoDev/barakoCMS/edit/master/delivery-paging");
         expect(html).toContain("Edit this page");
@@ -370,7 +370,7 @@ describe("the docs blocks", () => {
         const html = await page({});
 
         expect(html).toContain("Getting started");
-        expect(html).toContain('href="/docs/quickstart"');
+        expect(html).toContain('href="/docs/cms/quickstart"');
         expect(html).toContain("barakoCMS");
         expect(html).toContain('role="search"');
     });
@@ -399,7 +399,7 @@ describe("the docs blocks", () => {
         const html = await page({ q: "delivery" });
 
         expect(html).toContain("Public delivery API");
-        expect(html).toContain('href="/docs/delivery-api"');
+        expect(html).toContain('href="/docs/cms/delivery-api"');
         expect(html).not.toContain("Rendering with barakoPress");
         expect(calls.some((c) => c.path.startsWith("/api/public/doc/search?"))).toBe(true);
     });
@@ -438,8 +438,8 @@ describe("what else reads an item of a tree", () => {
 
         expect(entries.length).toBeGreaterThan(0);
         const urls = entries.map((e) => e.url);
-        expect(urls).toContain("https://barakocms.com/docs/webhooks");
-        expect(urls).toContain("https://barakocms.com/docs/press-quickstart");
+        expect(urls).toContain("https://barakocms.com/docs/cms/webhooks");
+        expect(urls).toContain("https://barakocms.com/docs/press/press-quickstart");
     });
 });
 
@@ -472,7 +472,7 @@ describe("a manual whose items name their own path", () => {
         const nodes = tree.sections.flatMap((s) => s.nodes);
         expect(nodes.length).toBeGreaterThan(2);
         expect(nodes.find((n) => n.item.slug === "quickstart")?.href).toBe("/docs/cms/quickstart");
-        expect(nodes.find((n) => n.item.slug === "webhooks")?.href).toBe("/docs/webhooks");
+        expect(nodes.find((n) => n.item.slug === "webhooks")?.href).toBe("/docs/cms/webhooks");
 
         const html = await markup(createPage(base)({ params: Promise.resolve({ path: ["docs", "orphan"] }) }));
         const sidebar = between(html, 'class="bp-tree-sections"', "</nav>");
@@ -481,7 +481,7 @@ describe("a manual whose items name their own path", () => {
         expect(sidebar).not.toContain('href="/docs/delivery-api"');
         const pager = between(html, 'class="bp-tree-pager"', "</nav>");
         expect(pager).toContain('href="/docs/cms/delivery-paging"');
-        expect(pager).toContain('href="/docs/webhooks"');
+        expect(pager).toContain('href="/docs/cms/webhooks"');
         expect(html).toContain('<li><a href="/docs/cms/quickstart"><span>Quickstart</span></a></li>');
     });
 
@@ -503,7 +503,7 @@ describe("a manual whose items name their own path", () => {
         expect(urls.length).toBeGreaterThan(3);
         expect(urls).toContain("https://barakocms.com/docs/cms/quickstart");
         expect(urls).not.toContain("https://barakocms.com/docs/quickstart");
-        expect(urls).toContain("https://barakocms.com/docs/webhooks");
+        expect(urls).toContain("https://barakocms.com/docs/cms/webhooks");
     });
 });
 
@@ -589,7 +589,7 @@ describe("a manual whose CMS stopped answering", () => {
         // The search box needs no read of its own, so it stays while the sidebar cannot be drawn.
         expect(html).toContain('role="search"');
         // The sidebar had nothing to draw, so it drew nothing rather than throwing.
-        expect(html).not.toContain('href="/docs/quickstart"');
+        expect(html).not.toContain('href="/docs/cms/quickstart"');
     });
 
     it("leaves the manual out of the sitemap rather than throwing, which would fail a build", async () => {
@@ -639,8 +639,8 @@ describe("a manual laid out by its settings (#130)", () => {
         expect(html).toContain("bp-tree-nav-closed");
         expect(html).toContain(">Paging</span>");
         // Every page of the product is in the index, the one being read included.
-        expect(html).toContain('<li><a href="/docs/quickstart"><span>Quickstart</span></a></li>');
-        expect(html).toContain('<li><a href="/docs/delivery-paging"><span>Paging</span></a></li>');
+        expect(html).toContain('<li><a href="/docs/cms/quickstart"><span>Quickstart</span></a></li>');
+        expect(html).toContain('<li><a href="/docs/cms/delivery-paging"><span>Paging</span></a></li>');
     });
 
     it("keeps today's layout for a part whose variant it does not know, and ignores a rail that is not true", async () => {
@@ -658,5 +658,51 @@ describe("a manual laid out by its settings (#130)", () => {
         expect(html).toContain("bp-tree-switcher-tabs");
         expect(html).not.toContain("bp-tree-shell-boxed");
         expect(html).not.toContain("data-bp-search-index");
+    });
+});
+
+describe("a manual served at route, product and slug", () => {
+    it("resolves each product's page at its own three-segment path", async () => {
+        const config = await site();
+        const cmsPage = await getItem(config, "docs", "quickstart", "cms");
+        const pressPage = await getItem(config, "docs", "press-quickstart", "press");
+
+        expect(cmsPage?.title).toBe("Quickstart");
+        expect(pressPage?.title).toBe("Rendering with barakoPress");
+        expect(cmsPage?.id).not.toBe(pressPage?.id);
+    });
+
+    it("returns nothing for a slug read under the wrong product", async () => {
+        const config = await site();
+
+        expect(await getItem(config, "docs", "quickstart", "press")).toBeNull();
+        expect(await getItem(config, "docs", "press-quickstart", "cms")).toBeNull();
+    });
+
+    it("serves a page at route, product and slug, and not under another product", async () => {
+        const config = await site();
+        const { collectionAt, itemPath } = await import("./collections.js");
+
+        expect(collectionAt(config, "/docs/cms/quickstart")).toEqual({ key: "docs", product: "cms", slug: "quickstart" });
+        const html = await markup(createPage(base)({ params: Promise.resolve({ path: ["docs", "cms", "quickstart"] }) }));
+        expect(html).toContain("Start here.");
+
+        const wrong = markup(createPage(base)({ params: Promise.resolve({ path: ["docs", "press", "quickstart"] }) }));
+        await expect(wrong).rejects.toThrow();
+
+        const item = await getItem(config, "docs", "webhooks", "cms");
+        expect(item).not.toBeNull();
+        expect(itemPath(config, "docs", item!)).toBe("/docs/cms/webhooks");
+    });
+
+    it("lists the three-segment paths in the sitemap and none at route and slug", async () => {
+        requestHeaders = new Headers({ host: "barakocms.com" });
+        const urls = (await createSitemap(base)()).map((e) => e.url);
+
+        expect(urls.length).toBeGreaterThan(0);
+        expect(urls).toContain("https://barakocms.com/docs/cms/quickstart");
+        expect(urls).toContain("https://barakocms.com/docs/cms/webhooks");
+        expect(urls).toContain("https://barakocms.com/docs/press/press-quickstart");
+        expect(urls).not.toContain("https://barakocms.com/docs/webhooks");
     });
 });
