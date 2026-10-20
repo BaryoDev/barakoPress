@@ -12,15 +12,21 @@
   shows the route only to a signed-in viewer holding one of the roles (any signed-in viewer for an
   empty list). A signed-out visitor is sent to `signIn` or gets not found, and a viewer without the
   role gets not found. It gates rendering, not the CMS data. Without `gate` the route renders as before.
-  Gated widgets and a sign-in block are not in yet.
 
 - Viewer sessions (#7), Members content. With `CMS_VIEWER_MINT_TOKEN` set to a bearer token holding
   `manage_public_delivery`, a gated `createViewerPage` route mints a barakoCMS 5.1.0 viewer token for
   the signed-in viewer on the server and sends it as `X-Viewer-Token` on type and entry reads, so
   `Members` entries and fields reach the page. The credential and the token never reach a browser,
   those reads skip every cache, and a token for any tenant but the pinned one is dropped. Unset, the
-  route reads anonymously as before. A `Members` page reached through the Pages path lookup is not
-  served yet.
+  route reads anonymously as before.
+
+- Viewer sessions (#7), gated widgets, the Pages module path and a sign-in block. A block definition
+  takes `gate: { roles, fallback }`: on a `createViewerPage` route it draws for a signed-in viewer of
+  the pinned tenant holding a role, and the server calls it makes carry a minted viewer token. Anyone
+  else gets the fallback or nothing, never an error, and on a route with no page gate a block with no gate never gets a token (on a page-gated route the whole render carries it). The
+  Pages module's `/api/public/pages/resolve` read carries the token too. The new `viewerSignIn` block is
+  a plain form posting to the viewer login route, which now also takes a form body and answers it with
+  a redirect to a path on the site. No token is in the markup, a prop or the redirect.
 
 ## 0.15.0 (2026-10-20)
 

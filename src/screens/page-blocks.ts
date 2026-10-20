@@ -5,6 +5,7 @@ import { bindBlocks, pageScope, queryScope, siteScope } from "../blocks/bind.js"
 import { readBindings } from "../blocks/bindings.js";
 import { getGlobals } from "../site.js";
 import { getViewer, viewerScope } from "../viewer.js";
+import { withGates, withoutGated } from "../blocks/gated.js";
 
 /*
  * Apart from the page screen so a collection index can render its `indexPage` (#126): the page
@@ -27,7 +28,7 @@ export async function pageBlocks(
 ): Promise<ResolvedBlock[]> {
     if (!Array.isArray(page.blocks) || page.blocks.length === 0) return [];
     const blocks = resolveBlocks(page.blocks, registry, { perViewer: options.perViewer === true });
-    return bindBlocks(blocks, {
+    const bound = await bindBlocks(blocks, {
         config,
         registry,
         scope: options.scope,
@@ -51,4 +52,5 @@ export async function pageBlocks(
             );
         },
     });
+    return options.perViewer ? withGates(config, bound) : withoutGated(bound);
 }
