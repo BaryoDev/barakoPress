@@ -14,7 +14,7 @@ renders), `item` (the row inside a `source` or a `repeat`) and `query` (URL para
 reads its entry's own fields by name, with the collection's roles (`Title`, `Summary`, `Body`,
 `Date` and the rest) laid over them only where the collection's `fields` maps that role, so an
 unmapped `Body` is still the entry's own `Body`. `count`, `sum` and `group` are about a set of rows
-rather than one, and are described with `source` below. `viewer` arrives with #7. Formats are `text`, `date`, `datetime`, `time`, `money`, `number`, `upper` and
+rather than one, and are described with `source` below. `viewer` is the signed-in viewer on a `createViewerPage` route, described in pages.md. Formats are `text`, `date`, `datetime`, `time`, `money`, `number`, `upper` and
 `lower`; `money` uses the tenant's `Currency` setting, or a plain amount when it has none.
 
 Paths, formats and fallbacks only. There are no expressions and no JavaScript. Everything resolves
@@ -148,6 +148,27 @@ where a source per value was one read each:
 
 All of it resolves on the server as the request's tenant, so a count or a sum never makes the
 browser call the API. A page that uses none of it reads and renders exactly what it did before.
+
+**Data table.** A `dataTable` draws one page of a public collection as a table, with no `source`
+around it. `columns` is a list of `{ field, label, format }` (up to twelve; `format` is one of the
+binding formats, and a list field prints its entries joined by commas). `pageSize` defaults to 20 and
+is at most fifty. The page number comes from the URL parameter `pageParam` (`page` unless set), and
+the block draws previous and next links, so a page two is a different URL and nothing in the browser
+calls the API. `rowLink` is a site path such as `/students/{slug}`; `{slug}` and `{id}` are filled in
+per row and the first cell becomes the link. A path that is not on this site is ignored. `empty` is
+said when there are no rows. It is one of the page's eight reads, and a collection the site lacks
+draws nothing and says so in the log.
+
+It reads the delivery API, so it shows what the content type marks Public. Sorting, search, filters,
+saved-query sources and viewer-gated tables are not part of this block yet (they need viewer sessions,
+#7, and a paged query endpoint in barakoCMS).
+
+```json
+{ "type": "dataTable", "props": {
+    "collection": "packages", "pageSize": 20, "rowLink": "/packages/{slug}",
+    "columns": [ { "field": "Title", "label": "Package" }, { "field": "Category" } ]
+} }
+```
 
 **Filter buttons.** A `filterBar` inside a `source` draws one button per distinct value of `field`
 among the rows the source read, after an "all" button (`allLabel`, which binds, so `All {{count}}`

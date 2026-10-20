@@ -1,7 +1,7 @@
 import type { Labels, PressConfig } from "../config.js";
 import { readEnv } from "../env.js";
 import { isLinkPath, openShareLink, redeemShareLink, type PublicContent, type ShareRedeemCaller } from "../delivery.js";
-import { collectionOf } from "../collections.js";
+import { collectionOf, itemRoutePath, productOf } from "../collections.js";
 import {
     LINK_COOKIE,
     normaliseHost,
@@ -63,7 +63,7 @@ const refused = () => redirect(`/#${SHARE_INVALID_FRAGMENT}`);
  * either one naming another site is refused. A caller that sends neither is not a browser, and gets
  * no more than redeeming the key it already has.
  */
-function sameOrigin(request: Request, hostHeader: string): boolean {
+export function sameOrigin(request: Request, hostHeader: string): boolean {
     const site = request.headers.get("sec-fetch-site");
     if (site && site !== "same-origin" && site !== "none") return false;
     const origin = request.headers.get("origin");
@@ -126,7 +126,8 @@ function entryPath(config: PressConfig, entry: PublicContent): string | null {
     const col = Object.keys(config.collections)
         .map((key) => collectionOf(config, key))
         .find((c) => c !== undefined && c.type === entry.contentType && c.route !== undefined);
-    const path = col?.route && slug ? `${col.route}/${slug}` : "";
+    const product = col ? productOf(col, entry) : undefined;
+    const path = (col?.route && slug ? itemRoutePath(col.route, col.tree?.products, { slug, product }) : undefined) ?? "";
     if (!isLinkPath(path)) {
         console.warn(`share links: a link opened a ${JSON.stringify(entry.contentType ?? "")} entry that no collection with a route renders here`);
         return null;

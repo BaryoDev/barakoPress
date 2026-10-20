@@ -280,6 +280,8 @@ Every read in `src/delivery.ts` is tagged with your `cacheTag`. `POST /api/reval
 the moment barakoCMS says something changed, so a publish is live in one request and the steady state
 is no database reads. [Caching and the webhook](https://github.com/BaryoDev/barakoPress/blob/master/docs/caching.md) has the rest: what a publish
 drops, the render cache, running more than one container, and wiring the webhook.
+Running more than one container takes a `store` you supply over whatever you already run; the engine
+ships no backend and no Next `cacheHandler`.
 
 ## Deploying
 
@@ -383,5 +385,7 @@ Releasing is in [RELEASING.md](https://github.com/BaryoDev/barakoPress/blob/mast
 0.14.0, on npm as `barakopress` and on ghcr as `ghcr.io/baryodev/barako-press`. It renders
 barakocms.com and press.baryo.dev against real barakoCMS instances. barakocms.com still runs a
 derived image of the engine, with a plugin and a small overlay; #166 to #168 track what it takes to
-run it on the published image as configuration. Other open gaps are in the issues, among them
+run it on the published image as configuration. A derived image needs no checkout: each release also
+publishes `ghcr.io/baryodev/barako-press-source:<version>` to build `FROM` (see
+`examples/derived-image/Dockerfile`). Other open gaps are in the issues, among them
 visitor-switchable theme variants (#80) and a generated Open Graph image (#81).

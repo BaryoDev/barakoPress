@@ -103,7 +103,7 @@ echo "ok: rckoronadal.org renders its projects collection from its settings, col
 page baryo.dev /manual/bindings > "$TMP/manual.html"
 grep -q "Bind them." "$TMP/manual.html" || fail "the manual page does not render its body"
 grep -q "Getting going" "$TMP/manual.html" || fail "the sidebar does not list the tree"
-grep -q 'href="/manual/blocks"' "$TMP/manual.html" || fail "the sidebar does not link a sibling"
+grep -q 'href="/manual/press/blocks"' "$TMP/manual.html" || fail "the sidebar does not link a sibling"
 grep -q 'aria-current="page"' "$TMP/manual.html" || fail "the sidebar does not mark the page being read"
 grep -q 'rel="prev"' "$TMP/manual.html" || fail "the manual page has no previous link"
 grep -q "https://github.com/BaryoDev/barakoPress/edit/master/bindings" "$TMP/manual.html" || fail "the edit link is not built from the setting"
@@ -117,9 +117,9 @@ grep -q "Run it." "$TMP/manual-cms.html" || fail "the other product's page does 
 if grep -q "Getting going" "$TMP/manual-cms.html"; then fail "the sidebar shows another product's pages"; fi
 # A nested page is drawn under its parent, and the page being read is marked rather than linked, so
 # this is read off a sibling's page where "bindings" is still a link.
-if grep -q 'href="/manual/bindings"' "$TMP/manual.html"; then fail "the sidebar links the page being read"; fi
+if grep -q 'href="/manual/press/bindings"' "$TMP/manual.html"; then fail "the sidebar links the page being read"; fi
 page baryo.dev /manual/start > "$TMP/manual-start.html"
-grep -q 'href="/manual/bindings"' "$TMP/manual-start.html" || fail "the sidebar does not link a nested page"
+grep -q 'href="/manual/press/bindings"' "$TMP/manual-start.html" || fail "the sidebar does not link a nested page"
 [ "$(status rckoronadal.org /manual)" = "404" ] || fail "rckoronadal.org serves baryo.dev's manual"
 echo "ok: baryo.dev renders its manual as a tree per product, with a sidebar, previous and next, an edit link and a search box pointing where search lives"
 

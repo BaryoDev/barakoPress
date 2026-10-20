@@ -2,6 +2,54 @@
 
 ## 0.14.1 (unreleased)
 
+- Viewer sessions (#7), the first slice. `viewerSessions: true` turns on `createViewerLoginRoute` and
+  `createViewerLogoutRoute`, which keep the barakoCMS token in an http-only, secure, `SameSite=Lax`
+  cookie that page script cannot read, and `{{viewer.Username}}`, `{{viewer.Roles}}` and the rest
+  resolve on a `createViewerPage` route. Off unless set: the routes answer 404 and no site changes.
+  Page-level role gating, gated widgets, a sign-in block and token refresh are not in yet.
+
+- A collection with `products` is served at `route/product/slug` (#99). The tree, the pager, the
+  sitemap, the feed, share links, cards and search results link an item that has a product there, and
+  the catch-all resolves the path and returns not found when the product in it is not the item's. An
+  item's own `href` field still wins in a tree, and a collection without products is unchanged. Links
+  to a products collection's items change from `/docs/slug` to `/docs/product/slug`; the old path still
+  resolves.
+  The product segment is written only for a product the collection declares. `createCollectionDetail`
+  and `createCollectionMetadata` read an optional `product` route parameter, for a `[product]/[slug]` file.
+
+- Each release publishes `ghcr.io/baryodev/barako-press-source:<version>` beside the engine image (#166).
+  It is the engine's source with dependencies installed and nothing built, for both architectures, and
+  a site with a plugin or an overlay builds its derived image `FROM` it with no checkout of this
+  repository. `examples/derived-image/Dockerfile` is the recipe, and "Plugin packages" in
+  docs/blocks.md describes it. The engine image, its tags and the existing git URL build are
+  unchanged.
+
+- A generated Open Graph image, with a font the consumer supplies (#81). Set `PRESS_SHARE_IMAGE_FONT`
+  to the path of a font file (ttf, otf or woff) and mount `createShareImage(config)` at
+  `app/share-image/route.ts`. A page with no SEO image of its own then advertises
+  `/share-image?path=...`, a 1200 by 630 card drawn from the page's title and the site's name. The
+  title is read from the page, never from the query. Nothing is embedded or fetched at render time.
+  Unset, the route answers 404 and no tag changes, so a site that configures nothing serves what it
+  served before. A page's own SEO image still wins.
+
+- Theme variants (#80). A theme names variants, each a name and the colour slots it overrides
+  (`variants` in the config, `Variants` in a tenant's site settings, a tenant's entry replacing a
+  configured one of the same name, at most twelve). The page is rendered once with every variant in
+  the stylesheet, as `:root[data-theme-variant="name"]` rules, and a small head script applies the
+  visitor's choice from `localStorage` before the body paints, so a page stays in the shared render
+  cache. A control is any element with `data-theme-variant-set="name"` (empty for the base theme),
+  or `ThemeVariantSwitch`. A variant moves the variables `themeVariablesCss` writes (`--background`,
+  `--foreground`, `--muted`, `--muted-foreground`, `--card`, `--border`, `--primary`,
+  `--primary-foreground`); colours the engine writes inline from the theme do not change yet. A
+  site with no variants renders exactly as before.
+
+- A `dataTable` block draws one page of a public collection as a table (#26). Columns take a field,
+  a heading and a format; the page number is a URL parameter, so paging is previous and next links
+  and the browser never calls the API; `rowLink` links each row to a site path with `{slug}` or
+  `{id}`. It is one of the page's reads and shows only the fields the content type marks Public.
+  Sorting, search, filters, saved-query sources and viewer-gated tables come later. Nothing changes
+  for a page that does not use it.
+
 - A site can set a robots disallow list (#169). `Robots` on the site entry, or `robots` in the config, is
   `{ "disallow": ["/api/"] }` and adds a `Disallow` line per path to robots.txt. Entries that are not
   paths starting with `/` are dropped and said once, and the list is capped at 100. A holding site still
@@ -25,6 +73,10 @@
   longer logs that it is newer. What 9 changed for a reader: `Members` entries and fields are served
   only to a request carrying `X-Viewer-Token`, and a junk viewer token answers 401. barakoPress sends
   no viewer token, so it reads exactly what it read from 5.0.
+
+- Written down that the `PressStore` seam is the deliverable for running more than one container (#86).
+  The engine ships no store backend and no Next `cacheHandler`; the consumer supplies the store, with
+  the example in `docs/caching.md` as the contract. No code changes.
 
 ## 0.14.0 (2026-10-20)
 

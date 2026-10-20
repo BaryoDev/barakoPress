@@ -928,6 +928,31 @@ describe("collections from a tenant's settings", () => {
         expect(await outcome(() => createCollectionIndex(missingType, "nurses")())).toBe("NEXT_NOT_FOUND");
     });
 
+    it("reads route, product and slug only for a collection that declares products", async () => {
+        const config = defineConfig({
+            sites: {},
+            collections: {
+                docs: {
+                    type: "doc",
+                    route: "/docs",
+                    fields: { title: "Title" },
+                    tree: { product: "Product", products: [{ key: "cms", label: "CMS", href: "/docs" }] },
+                },
+            },
+        });
+        expect(collectionAt(config, "/docs/cms/quickstart")).toEqual({ key: "docs", product: "cms", slug: "quickstart" });
+        expect(collectionAt(config, "/docs/quickstart")).toEqual({ key: "docs", slug: "quickstart" });
+        expect(collectionAt(config, "/docs/cms/a/b")).toBeNull();
+        expect(collectionAt(config, "/docs/guides/intro")).toBeNull();
+
+        const plain = defineConfig({
+            sites: {},
+            collections: { notes: { type: "note", route: "/notes", fields: { title: "Title" } } },
+        });
+        expect(collectionAt(plain, "/notes/one")).toEqual({ key: "notes", slug: "one" });
+        expect(collectionAt(plain, "/notes/cms/one")).toBeNull();
+    });
+
     it("prefers the longest matching route, and refuses a collection mounted at the site root", async () => {
         const nested = defineConfig({
             sites: {},

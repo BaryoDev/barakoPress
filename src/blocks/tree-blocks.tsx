@@ -1,5 +1,5 @@
 import { TREE_SWITCHERS, type PressConfig } from "../config.js";
-import { collectionOf, searchCollection } from "../collections.js";
+import { collectionOf, itemPath, searchCollection } from "../collections.js";
 import { collectionTree } from "../tree.js";
 import { SearchBox, TreeSidebar, TreeSwitcher } from "../screens/tree.js";
 import { boundToConfig } from "./built-in.js";
@@ -95,7 +95,7 @@ function search(config: PressConfig, holding: boolean): BlockDefinition {
                     id={`bp-search-block-${props.collection}`}
                     results={found?.map((item) => ({
                         title: item.title,
-                        ...(route && item.slug ? { href: `${route}/${item.slug}` } : {}),
+                        ...(route && item.slug ? { href: itemPath(config, props.collection, item) ?? `${route}/${item.slug}` } : {}),
                         ...(item.summary ? { summary: item.summary } : {}),
                     }))}
                 />

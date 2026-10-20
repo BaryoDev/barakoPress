@@ -490,9 +490,10 @@ export interface TreePagerProps {
 export function TreePager({ config, collection, previous, next, variant }: TreePagerProps) {
     const t = config.theme;
     const c = t.colors;
-    const route = collectionOf(config, collection)?.route;
-    const previousHref = previous && treeItemHref(previous, route);
-    const nextHref = next && treeItemHref(next, route);
+    const col = collectionOf(config, collection);
+    const route = col?.route;
+    const previousHref = previous && treeItemHref(previous, route, col?.tree?.products);
+    const nextHref = next && treeItemHref(next, route, col?.tree?.products);
     if (!previousHref && !nextHref) return null;
     const halves = (variant ?? treeVariant(config, collection).pager) === "halves";
 

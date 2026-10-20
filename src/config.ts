@@ -868,6 +868,12 @@ export interface PressConfig {
      * that writes its own. Unset, an item page draws the block whenever the API sent one.
      */
     structuredData?: boolean;
+    /**
+     * True turns on viewer sessions (#7): `createViewerLoginRoute` and `createViewerLogoutRoute` answer,
+     * and `createViewerPage` can bind `{{viewer.X}}`. Unset, both routes answer 404 and no cookie is
+     * read, so a site that does not opt in is unchanged.
+     */
+    viewerSessions?: boolean;
 }
 
 export type PressConfigInput = {
@@ -1109,6 +1115,7 @@ export function defineConfig(
         ...(input.store ? { store: input.store } : {}),
         ...(input.home ? { home: input.home } : {}),
         ...(input.structuredData === false ? { structuredData: false } : {}),
+        ...(input.viewerSessions === true ? { viewerSessions: true } : {}),
         reservedSlugs: reservedSlugs(
             [routes.post, routes.author, routes.category, ...Object.values(collections).map((c) => c.route)],
             input.reservedSlugs,

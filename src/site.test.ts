@@ -534,6 +534,11 @@ describe("while the CMS is down", () => {
 });
 
 describe("applySiteSettings", () => {
+    it("reads Variants saved as a JSON string, as it does Tokens and Tones", () => {
+        const saved = applySiteSettings(base, { Variants: JSON.stringify({ dark: { ink: "#fff" } }) }, null);
+        expect(saved.theme.variants).toEqual({ dark: { ink: "#fff" } });
+    });
+
     const base = { ...defineConfig({ sites: {}, site: { name: "Fallback" }, theme: { colors: { accent: "#000001" } } }), tenant: "t" };
 
     it("reads a collection blocksField and drops one that is not a data field name", () => {

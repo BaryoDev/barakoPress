@@ -3,7 +3,9 @@ import type { CSSProperties } from "react";
 import type { PressConfig } from "../config.js";
 import { FilterButtons } from "./filter-bar.js";
 import { readFilterState } from "./filter.js";
+import { BINDING_FORMATS } from "./bindings.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
+import type { PressTheme } from "../theme.js";
 import { recipeLook } from "../recipes.js";
 import { spaceOf, toneOf } from "./tokens.js";
 
@@ -27,6 +29,7 @@ export const SHOW_IF_BLOCK = "showIf";
 export const SLOT_BLOCK = "slot";
 export const PAGER_BLOCK = "pager";
 export const FILTER_BAR_BLOCK = "filterBar";
+export const DATA_TABLE_BLOCK = "dataTable";
 
 /**
  * The most rows one `source` reads, and the most reads one page may make. Untrusted input, bounded.
@@ -169,33 +172,36 @@ const pager = defineBlock<PagerProps & { state?: string }>({
     component: ({ props, theme }) => {
         const state = readPagerState(props.state);
         if (!state) return null;
-        const href = (page: number) => `?${encodeURIComponent(state.param)}=${page}`;
-        const tone = toneOf(theme, undefined);
-        const style = { color: tone.accent, fontWeight: 600, textDecoration: "none" } as const;
-        return (
-            <nav
-                style={{
-                    display: "flex",
-                    gap: spaceOf(theme, "md"),
-                    justifyContent:
-                        props.align === "center" ? "center" : props.align === "end" ? "flex-end" : "flex-start",
-                    fontSize: theme.text.small,
-                }}
-            >
-                {state.page > 1 && (
-                    <Link href={href(state.page - 1)} rel="prev" style={style}>
-                        {props.previousLabel ?? "Previous"}
-                    </Link>
-                )}
-                {state.hasNext && (
-                    <Link href={href(state.page + 1)} rel="next" style={style}>
-                        {props.nextLabel ?? "Next"}
-                    </Link>
-                )}
-            </nav>
-        );
+        return pagerLinks(state, theme, props.previousLabel, props.nextLabel, props.align);
     },
 });
+
+function pagerLinks(state: PagerState, theme: PressTheme, previousLabel?: string, nextLabel?: string, align?: string) {
+    const href = (page: number) => `?${encodeURIComponent(state.param)}=${page}`;
+    const tone = toneOf(theme, undefined);
+    const style = { color: tone.accent, fontWeight: 600, textDecoration: "none" } as const;
+    return (
+        <nav
+            style={{
+                display: "flex",
+                gap: spaceOf(theme, "md"),
+                justifyContent: align === "center" ? "center" : align === "end" ? "flex-end" : "flex-start",
+                fontSize: theme.text.small,
+            }}
+        >
+            {state.page > 1 && (
+                <Link href={href(state.page - 1)} rel="prev" style={style}>
+                    {previousLabel ?? "Previous"}
+                </Link>
+            )}
+            {state.hasNext && (
+                <Link href={href(state.page + 1)} rel="next" style={style}>
+                    {nextLabel ?? "Next"}
+                </Link>
+            )}
+        </nav>
+    );
+}
 
 /** `param:page:hasNext`, so the state is a plain string field rather than a second prop shape. */
 export function writePagerState(state: PagerState): string {
@@ -281,6 +287,132 @@ const filterBar = defineBlock<FilterBarProps>({
     },
 });
 
+/*
+ * A table over a public collection (barakoPress #26). The binder reads one page of the collection on
+ * the server and writes it into `state`; the block draws a table and prev and next links, so paging
+ * is a different URL and nothing in the browser calls the API. It reads what the delivery API
+ * serves, so it shows only the fields the content type marks Public.
+ */
+export const MAX_TABLE_COLUMNS = 12;
+
+type DataTableProps = {
+    collection: string;
+    columns: { field: string; label?: string; format?: string }[];
+    pageSize?: number;
+    pageParam?: string;
+    rowLink?: string;
+    empty?: string;
+    caption?: string;
+    previousLabel?: string;
+    nextLabel?: string;
+    state?: string;
+};
+
+export interface DataTableState {
+    heads: string[];
+    rows: { cells: string[]; href?: string }[];
+    pager: PagerState;
+}
+
+export function writeTableState(state: DataTableState): string {
+    return JSON.stringify(state);
+}
+
+export function readTableState(value: string | undefined): DataTableState | null {
+    if (!value) return null;
+    try {
+        const parsed = JSON.parse(value) as Partial<DataTableState>;
+        if (!Array.isArray(parsed.heads) || !Array.isArray(parsed.rows) || !parsed.pager) return null;
+        return parsed as DataTableState;
+    } catch {
+        return null;
+    }
+}
+
+function dataTable(config: PressConfig): BlockDefinition {
+    return defineBlock<DataTableProps>({
+        type: DATA_TABLE_BLOCK,
+        label: "Data table",
+        layer: "data",
+        fields: [
+            collectionField(config, "Collection"),
+            {
+                name: "columns",
+                kind: "list",
+                label: "Columns",
+                required: true,
+                min: 1,
+                max: MAX_TABLE_COLUMNS,
+                item: {
+                    kind: "group",
+                    label: "Column",
+                    fields: [
+                        { name: "field", kind: "text", label: "Field", required: true, bindable: false },
+                        { name: "label", kind: "text", label: "Heading" },
+                        { name: "format", kind: "select", label: "Show as", options: [...BINDING_FORMATS] },
+                    ],
+                },
+            },
+            { name: "pageSize", kind: "number", label: "Rows a page", min: 1, max: MAX_SOURCE_ROWS },
+            { name: "pageParam", kind: "text", label: "URL parameter holding the page number", bindable: false },
+            { name: "rowLink", kind: "text", label: "Row link, a site path with {slug} or {id}", bindable: false },
+            { name: "empty", kind: "text", label: "Say this when there are no rows" },
+            { name: "caption", kind: "text", label: "Caption, for a screen reader" },
+            { name: "previousLabel", kind: "text", label: "Previous label" },
+            { name: "nextLabel", kind: "text", label: "Next label" },
+            // Written by the binder, never by an editor.
+            { name: "state", kind: "text", label: "Table state", bindable: false },
+        ],
+        component: ({ props, theme }) => {
+            const state = readTableState(props.state);
+            if (!state) return null;
+            const c = theme.colors;
+            const cell: CSSProperties = {
+                padding: "8px 12px",
+                textAlign: "left",
+                borderBottom: `1px solid ${c.hairline}`,
+                fontSize: theme.text.small,
+            };
+            const link = { color: c.ink, fontWeight: 600 } as const;
+            return (
+                <div style={{ display: "grid", gap: spaceOf(theme, "md"), overflowX: "auto" }}>
+                    <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                        {props.caption ? <caption style={{ ...cell, fontWeight: 700 }}>{props.caption}</caption> : null}
+                        <thead>
+                            <tr>
+                                {state.heads.map((head, i) => (
+                                    <th key={i} scope="col" style={{ ...cell, color: c.secondaryInk }}>
+                                        {head}
+                                    </th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {state.rows.map((row, r) => (
+                                <tr key={r}>
+                                    {row.cells.map((text, i) => (
+                                        <td key={i} style={cell}>
+                                            {row.href && i === 0 ? (
+                                                <Link href={row.href} style={link}>
+                                                    {text}
+                                                </Link>
+                                            ) : (
+                                                text
+                                            )}
+                                        </td>
+                                    ))}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    {state.rows.length === 0 && props.empty ? <p style={{ fontSize: theme.text.small }}>{props.empty}</p> : null}
+                    {pagerLinks(state.pager, theme, props.previousLabel, props.nextLabel)}
+                </div>
+            );
+        },
+    });
+}
+
 export function dataBlocks(config: PressConfig): BlockDefinition[] {
-    return [source(config), repeat, showIf, slot, pager, filterBar];
+    return [source(config), repeat, showIf, slot, pager, filterBar, dataTable(config)];
 }

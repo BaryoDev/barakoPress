@@ -2,7 +2,9 @@ import type { PressConfig } from "../config.js";
 import type { Page } from "../cms.js";
 import { resolveBlocks, type BlockRegistry, type ResolvedBlock } from "../blocks/schema.js";
 import { bindBlocks, pageScope, queryScope, siteScope } from "../blocks/bind.js";
+import { readBindings } from "../blocks/bindings.js";
 import { getGlobals } from "../site.js";
+import { getViewer, viewerScope } from "../viewer.js";
 
 /*
  * Apart from the page screen so a collection index can render its `indexPage` (#126): the page
@@ -33,15 +35,20 @@ export async function pageBlocks(
             site: async () => siteScope(config, await getGlobals(config)),
             page: () => pageScope(page),
             ...(options.item ? { item: () => options.item! } : {}),
+            // Only where the output is never cached, and only when the site turned sessions on.
+            ...(options.perViewer && config.viewerSessions === true ? { viewer: async () => viewerScope(await getViewer(config)) } : {}),
             ...(options.searchParams ? { query: async () => queryScope(await options.searchParams!) } : {}),
         },
         // Reported, never thrown, and never shown to a visitor: a renamed field is something the
         // person editing the page has to see, and nothing a reader can act on. Where they see it is
         // barakoBrew, over `createBindingReportRoute`; this line is for whoever has the log.
-        onProblem: (problem) =>
+        onProblem: (problem) => {
+            // A signed-out viewer has no value, and that is every anonymous request, not a typo.
+            if (readBindings(problem.binding)[0]?.scope === "viewer") return;
             console.warn(
                 `blocks: ${problem.binding} on page "${page.slug || page.id}" is ${problem.reason}` +
                     (problem.block ? ` (${problem.block}.${problem.field})` : ""),
-            ),
+            );
+        },
     });
 }

@@ -1,10 +1,11 @@
 import type { PressConfig } from "../config.js";
-import { collectionOf, getItem, listCollection, names, type Item } from "../collections.js";
+import { collectionOf, getItem, itemPath, listCollection, names, type Item } from "../collections.js";
 import type { Page } from "../cms.js";
 import {
     BindingSource,
     bindText,
     bindValue,
+    BINDING_FORMATS,
     formatValue,
     hasBinding,
     walk,
@@ -13,7 +14,10 @@ import {
     type BindingWhere,
 } from "./bindings.js";
 import {
+    DATA_TABLE_BLOCK,
     FILTER_BAR_BLOCK,
+    MAX_TABLE_COLUMNS,
+    writeTableState,
     MAX_FILTER_VALUES,
     MAX_SOURCES,
     MAX_ALL_REQUESTS,
@@ -28,7 +32,7 @@ import {
     writePagerState,
 } from "./data.js";
 import { writeFilterState } from "./filter.js";
-import { holdsLink } from "../markdown.js";
+import { holdsLink, isSafeHref } from "../markdown.js";
 import { plainLiterals } from "../literal.js";
 import {
     INVALID,
@@ -255,6 +259,8 @@ async function bindBlock(block: ResolvedBlock, frame: Frame, ctx: BindContext): 
             return bindPager(block, frame);
         case FILTER_BAR_BLOCK:
             return bindFilterBar(block, frame);
+        case DATA_TABLE_BLOCK:
+            return bindDataTable(block, frame, ctx);
     }
 
     const bound = await bindProps(block, frame.source, { preset: Boolean(block.definition.preset) });
@@ -591,6 +597,63 @@ async function bindSource(block: ResolvedBlock, frame: Frame, ctx: BindContext):
         ...(param !== "" ? { pager: { param, page, hasNext: loaded?.hasNextPage ?? false } } : {}),
     };
     return bindList(content, { ...frame, source: frame.source.with(rowScopes(ctx, items, total)), rows, filter }, ctx);
+}
+
+/*
+ * A `dataTable`: one page of a collection as a table (#26). One of the page's reads, paged by the
+ * API through the `pageParam` URL parameter (`page` unless set), so a table of a thousand rows is
+ * fifty at most on the page and the rest are a link away.
+ */
+async function bindDataTable(block: ResolvedBlock, frame: Frame, ctx: BindContext): Promise<ResolvedBlock[]> {
+    const props = await bindProps(block, frame.source, {});
+    if (!props) return [];
+    const key = typeof props.collection === "string" ? props.collection : "";
+    if (ctx.budget.reads <= 0) {
+        sayReadsOver(ctx, `a table over "${named(key)}"`);
+        return [];
+    }
+    ctx.budget.reads--;
+    if (!collectionOf(ctx.config, key)) {
+        say(ctx, `blocks: a table names the collection "${named(key)}" and this site has no such collection, so it draws nothing`);
+        return [];
+    }
+
+    const columns = (Array.isArray(props.columns) ? props.columns : [])
+        .slice(0, MAX_TABLE_COLUMNS)
+        .filter((c): c is { field: string; label?: string; format?: string } => Boolean(c) && typeof c.field === "string" && c.field !== "");
+    if (columns.length === 0) return [];
+
+    const param = typeof props.pageParam === "string" && props.pageParam !== "" ? props.pageParam : "page";
+    const page = pageNumber(await frame.source.read("query"), param);
+    const pageSize = typeof props.pageSize === "number" ? Math.min(props.pageSize, MAX_SOURCE_ROWS) : 20;
+    const loaded = await read(() => listCollection(ctx.config, key, { page, pageSize }));
+    if (!loaded) return [];
+    const items = loaded.items;
+
+    const template = typeof props.rowLink === "string" ? props.rowLink.trim() : "";
+    const linkable = template.startsWith("/") && isSafeHref(template.replace(/\{(slug|id)\}/g, "x"));
+    const rows = items.map((item) => {
+        const scope = itemScope(ctx.config, item);
+        const cells = columns.map((column) => {
+            const format = BINDING_FORMATS.find((f) => f === column.format) ?? "text";
+            const value = Object.hasOwn(scope, column.field) ? scope[column.field] : undefined;
+            const text = Array.isArray(value)
+                ? value.map((one) => formatValue(one, format, frame.source.options) ?? "").filter((t) => t !== "").join(", ")
+                : (formatValue(value, format, frame.source.options) ?? "");
+            return text;
+        });
+        const href = linkable
+            ? template.replace(/\{(slug|id)\}/g, (_, name: string) => encodeURIComponent(name === "slug" ? item.slug : item.id))
+            : undefined;
+        return href ? { cells, href } : { cells };
+    });
+
+    const state = writeTableState({
+        heads: columns.map((c) => (typeof c.label === "string" && c.label.trim() !== "" ? c.label : c.field)),
+        rows,
+        pager: { param, page, hasNext: loaded.hasNextPage ?? false },
+    });
+    return [{ ...block, props: { ...props, state }, slots: {} }];
 }
 
 /*
@@ -971,7 +1034,7 @@ export function itemScope(config: PressConfig, item: Item): Record<string, unkno
         ...(item.href !== undefined
             ? { Href: item.href }
             : route !== undefined && item.slug
-              ? { Href: `${route}/${item.slug}` }
+              ? { Href: itemPath(config, item.collection, item) ?? `${route}/${item.slug}` }
               : {}),
         ...Object.fromEntries(Object.entries(item.refs).map(([field, ref]) => [field, ref ? { ...ref } : undefined])),
         // A field holding a list of references reads as the list, so a repeat or `{{item.Speakers}}`
