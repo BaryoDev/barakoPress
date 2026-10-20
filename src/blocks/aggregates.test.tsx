@@ -327,6 +327,16 @@ describe("a source or count the page cannot read (#210)", () => {
     });
 });
 
+describe("a collection name in the log (#210)", () => {
+    it("replaces line separators and bidi overrides from the URL as well as control characters", async () => {
+        await page([source({ collection: "a\u2028b\u2029c\u202ed\u2066e\u0085f", pageSize: 1 }, [text("x")])]);
+
+        const said = warnings.filter((w) => w.includes("this site has no such collection"));
+        expect(said).toHaveLength(1);
+        expect(said[0]).toContain('"a?b?c?d?e?f"');
+    });
+});
+
 describe("sum", () => {
     it("adds a numeric field over a source's rows, numbers written as text included", async () => {
         const out = await page([source({ collection: "milestones" }, [text("[{{sum.Open}} open]")])]);

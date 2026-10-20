@@ -223,10 +223,10 @@ async function bindList(blocks: ResolvedBlock[], frame: Frame, ctx: BindContext)
     return out;
 }
 
-/* A collection key can come from the URL, so what goes in the log is bounded. */
-// The key can come from the URL, so control characters are replaced before it reaches the log.
+// The key can come from the URL, so what reaches the log is bounded and has its control characters,
+// line separators and bidi overrides replaced.
 function named(key: string): string {
-    const clean = key.replace(/[\u0000-\u001f\u007f-\u009f]/g, "?");
+    const clean = key.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g, "?");
     return clean.length > 60 ? `${clean.slice(0, 60)}...` : clean;
 }
 
