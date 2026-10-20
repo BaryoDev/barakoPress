@@ -44,6 +44,8 @@ export interface PressEnv {
     fontOrigins?: string;
     /** `PRESS_SCRIPT_ORIGINS`. The origins a site's analytics script may be loaded from. */
     scriptOrigins?: string;
+    /** `PRESS_SHARE_IMAGE_FONT`. Path to a font file (ttf, otf or woff) the generated share image draws with. Unset, no image is generated. */
+    shareImageFont?: string;
     /** `PRESS_TRAILING_SLASH`. `true` when the build serves every path with a trailing slash. */
     trailingSlash?: string;
 }
@@ -60,6 +62,7 @@ export const ENV_NAMES = {
     previewSecret: "PRESS_PREVIEW_SECRET",
     fontOrigins: "PRESS_FONT_ORIGINS",
     scriptOrigins: "PRESS_SCRIPT_ORIGINS",
+    shareImageFont: "PRESS_SHARE_IMAGE_FONT",
     trailingSlash: "PRESS_TRAILING_SLASH",
 } as const satisfies Record<keyof PressEnv, string>;
 

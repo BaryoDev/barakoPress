@@ -18,6 +18,7 @@ import {
 } from "../cms.js";
 import { renderProse } from "../assets.js";
 import { shareImageUrl } from "../media.js";
+import { generatedShareImages } from "../share-image.js";
 import { proseCss } from "../theme.js";
 import { BLOCK_PROSE_CLASS } from "../blocks/built-in.js";
 import { BlockList } from "../blocks/render.js";
@@ -391,7 +392,7 @@ export function createHomeMetadata(base: PressConfig) {
             description,
             alternates: seo?.canonicalUrl ? { canonical: seo.canonicalUrl } : undefined,
             robots: seo?.noIndex ? { index: false, follow: false } : undefined,
-            openGraph: { title, description, images: shareImages(seo?.imageUrl) },
+            openGraph: { title, description, images: shareImages(seo?.imageUrl) ?? generatedShareImages(config, path) },
         };
     };
 }
@@ -420,7 +421,11 @@ export function createPageMetadata(base: PressConfig) {
             description,
             alternates: seo?.canonicalUrl ? { canonical: seo.canonicalUrl } : undefined,
             robots: seo?.noIndex ? { index: false, follow: false } : undefined,
-            openGraph: { title, description, images: shareImages(seo?.imageUrl) },
+            openGraph: {
+                title,
+                description,
+                images: shareImages(seo?.imageUrl) ?? generatedShareImages(config, bySlugRoute(p) ? undefined : pathOf(p.path)),
+            },
         };
     };
 }
