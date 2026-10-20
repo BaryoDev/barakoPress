@@ -39,7 +39,6 @@ const { forgetCachedReads } = await import("../delivery.js");
 const { createPage } = await import("../screens/page.js");
 const { createBlockRegistry } = await import("./registry.js");
 const { MAX_SOURCES } = await import("./data.js");
-const { forgetBindWarnings } = await import("./bind.js");
 
 const CMS = "http://cms.test";
 
@@ -149,7 +148,6 @@ beforeEach(() => {
     calls = [];
     pages = {};
     warnings = [];
-    forgetBindWarnings();
     failing = null;
     requestHeaders = null;
     forgetCachedReads();
@@ -334,6 +332,26 @@ describe("a collection name in the log (#210)", () => {
         const said = warnings.filter((w) => w.includes("this site has no such collection"));
         expect(said).toHaveLength(1);
         expect(said[0]).toContain('"a?b?c?d?e?f"');
+    });
+});
+
+describe("a warning is kept per bind (#210)", () => {
+    it("is said by each of two overlapping pages that hit the same limit", async () => {
+        const blocks = [source({ collection: "nope-overlap", pageSize: 1 }, [text("x")])];
+
+        await Promise.all([page(blocks), page(blocks)]);
+
+        const said = warnings.filter((w) => w.includes("this site has no such collection"));
+        expect(said).toHaveLength(2);
+    });
+
+    it("is said once per bind, however many times that bind hits the limit", async () => {
+        const one = source({ collection: "nope-once", pageSize: 1 }, [text("x")]);
+
+        await page([one, one]);
+
+        const said = warnings.filter((w) => w.includes("this site has no such collection"));
+        expect(said).toHaveLength(1);
     });
 });
 

@@ -109,6 +109,8 @@ export interface BindContext {
     filters: number;
     /** Which bind this is, from `BindPageOptions.scope`, so two binds on one page never share an id. */
     scope: string;
+    /** Warnings this bind has made, so each bind says a message once and two overlapping binds never silence or clear one another. */
+    said: Set<string>;
 }
 
 export interface BindPageOptions {
@@ -134,13 +136,14 @@ export async function bindBlocks(blocks: ResolvedBlock[], options: BindPageOptio
         counts: new Map(),
         filters: 0,
         scope: (options.scope ?? "body").replace(/[^A-Za-z0-9_-]/g, "") || "body",
+        said: new Set(),
     };
     if (options.scopes.count) ctx.count = options.scopes.count;
     const source = new BindingSource(
         { ...options.scopes, count: ctx.count },
         { locale: options.config.locale, timeZone: options.config.timeZone, currency: options.config.currency, onProblem: options.onProblem },
     );
-    return unnestLinks(await bindList(blocks, { source }, ctx));
+    return unnestLinks(await bindList(blocks, { source }, ctx), ctx);
 }
 
 /*
@@ -174,13 +177,13 @@ const CONTROLS = new Set([
     "docsSwitcher",
 ]);
 const LINKING = new Set(["stack", "panel"]);
-const said = new Set<string>();
+const SAID_MAX = 200;
 
-/** A warning for the server log, once per message, from a set kept bounded. */
-function say(message: string): void {
-    if (said.has(message)) return;
-    if (said.size >= 200) said.clear();
-    said.add(message);
+/** A warning for the server log, once per message per bind, from a set kept bounded. */
+function say(ctx: BindContext, message: string): void {
+    if (ctx.said.has(message)) return;
+    if (ctx.said.size >= SAID_MAX) ctx.said.clear();
+    ctx.said.add(message);
     console.warn(message);
 }
 
@@ -196,14 +199,14 @@ function pressable(block: ResolvedBlock): boolean {
     return Object.values(block.slots).some((lists) => lists.some((list) => list.some(pressable)));
 }
 
-function unnestLinks(blocks: ResolvedBlock[]): ResolvedBlock[] {
+function unnestLinks(blocks: ResolvedBlock[], ctx: BindContext): ResolvedBlock[] {
     return blocks.map((block) => {
         const slots = Object.fromEntries(
-            Object.entries(block.slots).map(([name, lists]) => [name, lists.map((list) => unnestLinks(list))]),
+            Object.entries(block.slots).map(([name, lists]) => [name, lists.map((list) => unnestLinks(list, ctx))]),
         );
         const inner = Object.values(slots).some((lists) => lists.some((list) => list.some(pressable)));
         if (!linksAsAWhole(block) || !inner) return { ...block, slots };
-        say(`blocks: a ${block.definition.type} linking to ${String(block.props.href)} holds a link or a control of its own, so it is drawn without its href`);
+        say(ctx, `blocks: a ${block.definition.type} linking to ${String(block.props.href)} holds a link or a control of its own, so it is drawn without its href`);
         const { href: _dropped, ...props } = block.props;
         return { ...block, props, slots };
     });
@@ -214,7 +217,7 @@ async function bindList(blocks: ResolvedBlock[], frame: Frame, ctx: BindContext)
     const counter = frame.inRow ? "rowBlocks" : "blocks";
     for (const block of blocks) {
         if (ctx.budget[counter] <= 0) {
-            if (frame.inRow) sayRowsOver();
+            if (frame.inRow) sayRowsOver(ctx);
             break;
         }
         ctx.budget[counter]--;
@@ -230,12 +233,12 @@ function named(key: string): string {
     return clean.length > 60 ? `${clean.slice(0, 60)}...` : clean;
 }
 
-function sayReadsOver(what: string): void {
-    say(`blocks: ${what} is past the ${MAX_SOURCES} reads a page may make, so it was not read and draws nothing`);
+function sayReadsOver(ctx: BindContext, what: string): void {
+    say(ctx, `blocks: ${what} is past the ${MAX_SOURCES} reads a page may make, so it was not read and draws nothing`);
 }
 
-function sayRowsOver(): void {
-    say(`blocks: a page's rows drew more than ${MAX_ROW_BLOCKS} blocks between them, so the rest were left out`);
+function sayRowsOver(ctx: BindContext): void {
+    say(ctx, `blocks: a page's rows drew more than ${MAX_ROW_BLOCKS} blocks between them, so the rest were left out`);
 }
 
 async function bindBlock(block: ResolvedBlock, frame: Frame, ctx: BindContext): Promise<ResolvedBlock[]> {
@@ -492,7 +495,7 @@ async function bindRepeat(block: ResolvedBlock, frame: Frame, ctx: BindContext):
     const drawn = items.slice(0, limit);
     for (const [at, item] of drawn.entries()) {
         if (ctx.budget.rowBlocks <= 0) {
-            say(`blocks: a repeat drew ${at} of ${drawn.length} rows, since the page's rows had spent their ${MAX_ROW_BLOCKS} blocks`);
+            say(ctx, `blocks: a repeat drew ${at} of ${drawn.length} rows, since the page's rows had spent their ${MAX_ROW_BLOCKS} blocks`);
             break;
         }
         const scope = itemScope(ctx.config, item);
@@ -525,13 +528,13 @@ async function bindSource(block: ResolvedBlock, frame: Frame, ctx: BindContext):
     const content = block.slots.content?.[0] ?? [];
     const key = await boundString(block, frame.source, "collection");
     if (ctx.budget.reads <= 0) {
-        sayReadsOver(`a source over "${named(key)}"`);
+        sayReadsOver(ctx, `a source over "${named(key)}"`);
         return [];
     }
     ctx.budget.reads--;
 
     if (!collectionOf(ctx.config, key)) {
-        say(`blocks: a source names the collection "${named(key)}" and this site has no such collection, so it draws nothing`);
+        say(ctx, `blocks: a source names the collection "${named(key)}" and this site has no such collection, so it draws nothing`);
         return [];
     }
 
@@ -709,7 +712,7 @@ async function bindGroups(
     for (const [at, group] of groups.entries()) {
         // A group is rows, so its blocks are the rows' to spend, not the page's around the source.
         if (ctx.budget.rowBlocks <= 0) {
-            say(`blocks: a source drew ${at} of ${groups.length} groups, since the page's rows had spent their ${MAX_ROW_BLOCKS} blocks`);
+            say(ctx, `blocks: a source drew ${at} of ${groups.length} groups, since the page's rows had spent their ${MAX_ROW_BLOCKS} blocks`);
             break;
         }
         const scope = { key: group.key, count: group.items.length };
@@ -763,12 +766,12 @@ async function readAll(ctx: BindContext, key: string, filter: Record<string, str
         );
         for (const page of pages) items.push(...page.items);
         if (more < wanted) {
-            say(`blocks: the page's sources that read everything spent their ${MAX_ALL_REQUESTS} extra requests, so "${key}" read ${Math.min(items.length, MAX_ALL_ROWS)} of its ${total ?? "many"} entries`);
+            say(ctx, `blocks: the page's sources that read everything spent their ${MAX_ALL_REQUESTS} extra requests, so "${key}" read ${Math.min(items.length, MAX_ALL_ROWS)} of its ${total ?? "many"} entries`);
         }
     }
     const read = items.slice(0, MAX_ALL_ROWS);
     if (total !== undefined && total > MAX_ALL_ROWS) {
-        say(`blocks: "${key}" holds ${total} entries and a source reads at most ${MAX_ALL_ROWS}, so ${total - MAX_ALL_ROWS} were left out`);
+        say(ctx, `blocks: "${key}" holds ${total} entries and a source reads at most ${MAX_ALL_ROWS}, so ${total - MAX_ALL_ROWS} were left out`);
     }
     return { items: read, total: total ?? read.length, hasNextPage: false };
 }
@@ -860,7 +863,7 @@ function collectionCount(ctx: BindContext, path: string): Promise<number | undef
     const known = ctx.counts.get(path);
     if (known) return known;
     if (ctx.budget.reads <= 0) {
-        sayReadsOver(`a count of "${named(path)}"`);
+        sayReadsOver(ctx, `a count of "${named(path)}"`);
         return undefined;
     }
     ctx.budget.reads--;
@@ -1018,9 +1021,4 @@ export function queryScope(params: Record<string, string | string[] | undefined>
         if (typeof first === "string") out[name] = first;
     }
     return out;
-}
-
-/** For tests: say every message again. */
-export function forgetBindWarnings(): void {
-    said.clear();
 }
