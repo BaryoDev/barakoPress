@@ -204,10 +204,16 @@ describe("a dataTable over a public collection", () => {
         expect(off).not.toContain("evil.example");
     });
 
-    it("does not print inherited properties for a column field, and survives a non-text label", async () => {
-        const out = await page([table({ columns: [{ field: "Title", label: 5 }, { field: "constructor" }, { field: "toString" }] })]);
+    it("does not print inherited properties for a column field", async () => {
+        const out = await page([table({ columns: [{ field: "Title" }, { field: "constructor" }, { field: "toString" }] })]);
         expect(out).toContain("Student 1");
         expect(out).not.toContain("native code");
+    });
+
+    it("draws nothing, and does not throw, for a column whose heading is not text", async () => {
+        const out = await page([table({ columns: [{ field: "Title", label: 5 }] })]);
+        expect(out).not.toContain("Student 1");
+        expect(out).not.toContain("<table");
     });
 
     it("says it is empty when the collection has no rows, and draws nothing for a collection the site lacks", async () => {
