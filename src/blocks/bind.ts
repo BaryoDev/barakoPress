@@ -635,7 +635,7 @@ async function bindDataTable(block: ResolvedBlock, frame: Frame, ctx: BindContex
         const scope = itemScope(ctx.config, item);
         const cells = columns.map((column) => {
             const format = BINDING_FORMATS.find((f) => f === column.format) ?? "text";
-            const value = scope[column.field];
+            const value = Object.hasOwn(scope, column.field) ? scope[column.field] : undefined;
             const text = Array.isArray(value)
                 ? value.map((one) => formatValue(one, format, frame.source.options) ?? "").filter((t) => t !== "").join(", ")
                 : (formatValue(value, format, frame.source.options) ?? "");
@@ -648,7 +648,7 @@ async function bindDataTable(block: ResolvedBlock, frame: Frame, ctx: BindContex
     });
 
     const state = writeTableState({
-        heads: columns.map((c) => (c.label && c.label.trim() !== "" ? c.label : c.field)),
+        heads: columns.map((c) => (typeof c.label === "string" && c.label.trim() !== "" ? c.label : c.field)),
         rows,
         pager: { param, page, hasNext: loaded?.hasNextPage ?? false },
     });
