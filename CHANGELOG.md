@@ -2,6 +2,13 @@
 
 ## 0.14.1 (unreleased)
 
+- Each release publishes `ghcr.io/baryodev/barako-press-source:<version>` beside the engine image (#166).
+  It is the engine's source with dependencies installed and nothing built, for both architectures, and
+  a site with a plugin or an overlay builds its derived image `FROM` it with no checkout of this
+  repository. `examples/derived-image/Dockerfile` is the recipe, and "Plugin packages" in
+  docs/blocks.md describes it. The engine image, its tags and the existing git URL build are
+  unchanged.
+
 - The sitemap lists every published page, and the feed links match the served URL (#168, #170). The
   sitemap adds the pages the menu does not list: the targets of `HeaderLinks` and each page of the
   page type (found at `/slug`, so a nested page outside the menu is still left out), less region

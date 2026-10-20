@@ -17,11 +17,16 @@ FROM scratch AS overlay
 # The directory holds `npm pack` tarballs of plugin packages. See "Plugin packages" in the README.
 FROM scratch AS plugins
 
-FROM node:22-alpine AS build
+# The engine's source with its dependencies installed and nothing built. It is published as
+# ghcr.io/baryodev/barako-press-source:<version> so a site can build a derived image with a plugin or
+# an overlay from `FROM` that tag, with no checkout of this repository. See examples/derived-image.
+FROM node:22-alpine AS source
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts
 COPY . .
+
+FROM source AS build
 COPY --from=overlay / /overlay/
 COPY --from=plugins / /plugins/
 

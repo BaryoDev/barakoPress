@@ -166,6 +166,19 @@ docker buildx build \
   https://github.com/BaryoDev/barakoPress.git#v0.8.0
 ```
 
+**Without a checkout.** Every release also publishes `ghcr.io/baryodev/barako-press-source:<version>`
+(both architectures, tagged like the engine image): the engine's source with its dependencies
+installed and nothing built. `examples/derived-image/Dockerfile` builds from it, so a site keeps
+`plugins/` and an overlay in its own repository and takes a barakoPress release by changing one build
+argument:
+
+```bash
+docker buildx build --build-arg PRESS_VERSION=0.14.1 -t my-press:0.14.1 examples/derived-image
+```
+
+(copy the Dockerfile next to your `plugins/` and `overlay/` directories; either may be empty). The
+steps are the engine Dockerfile's own, so the result is the image the git URL build above makes.
+
 `examples/derived-image/compose.yml` is the same thing in compose. The `plugins` directory holds
 tarballs and nothing else, so what is built is exactly the bytes that were packed. The install runs
 offline, so a plugin's own dependencies must travel inside its tarball: list each one in
