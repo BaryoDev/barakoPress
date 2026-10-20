@@ -430,7 +430,7 @@ export function variantsFrom(
         const known = new Set(Object.keys(DEFAULT_THEME.colors));
         for (const [name, spec] of Object.entries(input)) {
             if (!TONE_NAME.test(name) || !isRecord(spec)) continue;
-            if (!(name in out) && Object.keys(out).length >= MAX_VARIANTS) continue;
+            if (!Object.hasOwn(out, name) && Object.keys(out).length >= MAX_VARIANTS) continue;
             const slots: Record<string, string> = {};
             for (const [slot, value] of Object.entries(spec)) {
                 if (known.has(slot) && typeof value === "string" && COLOR.test(value)) slots[slot] = value;

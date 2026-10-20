@@ -78,6 +78,14 @@ describe("theme variants", () => {
         expect(Object.keys(variantsFrom(undefined, many) ?? {})).toHaveLength(12);
     });
 
+    it("counts an inherited object name against the cap, not as an existing variant", () => {
+        const full = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`v${i}`, { accent: "#fff" }]));
+        const merged = variantsFrom(full, { constructor: { accent: "#000" } });
+
+        expect(Object.keys(merged ?? {})).toHaveLength(12);
+        expect(Object.hasOwn(merged ?? {}, "constructor")).toBe(false);
+    });
+
     it("puts the switch in the head as a script that depends on nothing per request", () => {
         const theme = resolveTheme({ variants: DARK });
         const source = variantScript(theme);
