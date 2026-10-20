@@ -2,6 +2,13 @@
 
 ## 0.14.1 (unreleased)
 
+- A `dataTable` block draws one page of a public collection as a table (#26). Columns take a field,
+  a heading and a format; the page number is a URL parameter, so paging is previous and next links
+  and the browser never calls the API; `rowLink` links each row to a site path with `{slug}` or
+  `{id}`. It is one of the page's reads and shows only the fields the content type marks Public.
+  Sorting, search, filters, saved-query sources and viewer-gated tables come later. Nothing changes
+  for a page that does not use it.
+
 - The sitemap lists every published page, and the feed links match the served URL (#168, #170). The
   sitemap adds the pages the menu does not list: the targets of `HeaderLinks` and each page of the
   page type (found at `/slug`, so a nested page outside the menu is still left out), less region

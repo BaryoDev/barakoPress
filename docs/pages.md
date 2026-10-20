@@ -152,7 +152,7 @@ an inverse band readable, and it is why a block dropped anywhere still looks lik
 whatever a tenant saves of its own.
 
 **Data blocks** load and choose rather than draw: `source`, `repeat`, `showIf`, `pager`, `filterBar`
-and `slot`.
+and `slot`, and `dataTable`, which draws a page of a collection as a table.
 See [Bindings](bindings.md).
 
 Also built in, from before the layers: `columns` (up to four lists of blocks), `callToAction` and
