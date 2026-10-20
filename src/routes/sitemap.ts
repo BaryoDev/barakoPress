@@ -4,7 +4,7 @@ import { type NavItem, flattenNavigation, getNavigation, isChromePath, isReserve
 import { type ResolvedPage, pageAtPath } from "../delivery.js";
 import { RESERVED_AT_ROOT } from "../config.js";
 import { servedUrl, trimTrailingSlashes } from "./served-url.js";
-import { listAllCollection } from "../collections.js";
+import { hasProducts, itemRoutePath, listAllCollection } from "../collections.js";
 import { treeItemHref } from "../tree.js";
 import { notFound } from "next/navigation";
 import { siteConfigOrNull } from "../site.js";
@@ -69,9 +69,9 @@ export function createSitemap(base: PressConfig) {
                     if (item.seo?.noIndex) continue;
                     // A tree's item is read where the tree links it. Any other collection's `href` is
                     // where its card sends a reader, not where the item is served.
-                    const at = col.tree ? pagePart(treeItemHref(item, col.route)) : undefined;
+                    const at = col.tree ? pagePart(treeItemHref(item, col.route, hasProducts(col))) : undefined;
                     // An entry with no slug has no page of its own (barakoCMS #1100), so it is not listed.
-                    const path = at ?? (item.slug ? `${col.route}/${item.slug}` : undefined);
+                    const path = at ?? itemRoutePath(col.route, hasProducts(col), item);
                     if (path === undefined) continue;
                     const url = servedUrl(home, path);
                     if (listedUrls.has(url)) continue;

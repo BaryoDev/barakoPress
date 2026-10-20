@@ -253,6 +253,11 @@ quickstart keeps `cms-quickstart` as the slug and names `/docs/cms/quickstart` i
 serving that path is the site's own. A site drawing the sidebar on a page the tree does not hold, an
 index, gives `TreeAside` or `TreeSidebar` a `summary` (`{ line, title }`) for the closed control to say.
 
+A collection that declares `products` is served at `route/product/slug`, for example `/docs/cms/quickstart`,
+and the engine resolves that path itself: links, the sitemap, the feed and share links use it for an item
+that has a product (`itemPath`), and the page checks the item's product against the path. An item with no
+product, and a collection with no `products`, stay at `route/slug`, which still resolves.
+
 **Search.** `searchCollection(config, key, query)` goes through barakoCMS's `/api/public/{type}/search`,
 which matches only over the fields a type publishes, so a draft or a field held back from public
 delivery can never come back. `createCollectionIndex(config, key, { search: true })` answers `?q=` with

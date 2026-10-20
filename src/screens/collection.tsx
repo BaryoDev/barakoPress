@@ -15,6 +15,7 @@ import {
     collectionOf,
     getItem,
     getItemPreview,
+    itemPath,
     listCollection,
     listReferencing,
     referencedBy,
@@ -139,7 +140,7 @@ export function Card(props: CardProps) {
             style={item.color ? { borderLeft: `4px solid ${item.color}` } : undefined}
         >
             {featured && <span className="chip">{config.labels.featured}</span>}
-            <h2>{col?.route !== undefined && item.slug ? <Link href={`${col.route}/${item.slug}`}>{item.title}</Link> : item.title}</h2>
+            <h2>{col?.route !== undefined && item.slug ? <Link href={itemPath(config, item.collection, item) ?? `${col.route}/${item.slug}`}>{item.title}</Link> : item.title}</h2>
             <p className="meta">
                 {item.date && <time dateTime={item.date}>{formatDate(config, item.date)}</time>}
                 {byline && ` ${byline.label} ${byline.name}`}
@@ -236,11 +237,11 @@ export function ItemView(props: ItemViewProps) {
 
 /** The item as a card in the band under an article: its own route unless another collection owns it. */
 function asBandCard(config: PressConfig, item: Item): ArticleRelated {
-    const route = collectionOf(config, item.collection)?.route;
+    const path = itemPath(config, item.collection, item);
     return {
         slug: item.slug,
         title: item.title,
-        ...(route !== undefined && item.slug ? { href: `${route}/${item.slug}` } : {}),
+        ...(path !== undefined ? { href: path } : {}),
         ...(item.date ? { date: item.date } : {}),
         ...(item.summary ? { summary: item.summary } : {}),
     };
@@ -585,6 +586,8 @@ export interface CollectionDetailOptions {
      */
     related?: { collection: string; via: string } | false;
     backHref?: string;
+    /** The product segment of a `route/product/slug` path. The item's own product must match it. */
+    product?: string;
     /** The blocks an entry's `blocksField` renders with. The built-in ones when unset. */
     blocks?: BlockRegistry;
     /** Render blocks marked `perViewer`. Only true where the output is never cached. */
@@ -634,8 +637,8 @@ export async function renderCollectionDetail(
     const col = collectionOf(config, collection);
     if (!col) notFound();
     const item = previewToken
-        ? await getItemPreview(config, collection, slug, previewToken)
-        : await getItem(config, collection, slug);
+        ? await getItemPreview(config, collection, slug, previewToken, options.product)
+        : await getItem(config, collection, slug, options.product);
     if (!item) notFound();
 
     const view = options.view ?? ItemView;

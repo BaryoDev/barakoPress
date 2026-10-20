@@ -1,5 +1,5 @@
 import { TREE_LIMIT, type CollectionTree, type PressConfig, type TreeProduct } from "./config.js";
-import { collectionOf, listAllCollection, type Item } from "./collections.js";
+import { collectionOf, hasProducts, itemRoutePath, listAllCollection, type Item } from "./collections.js";
 import { createHash } from "node:crypto";
 import { siteHref } from "./site.js";
 import { markdownHeadings, type MarkdownHeading } from "./markdown.js";
@@ -128,15 +128,19 @@ const SITE_PATH = /^\/(?!\/)[^\\\s\u0000-\u001f\u007f]*$/;
  * Only a site path. The sidebar, the pager and the index draw these as the site's own links, so an
  * address somewhere else would read as a page of the manual and take the reader off site unmarked.
  */
-export function treeItemHref(item: Pick<Item, "href" | "slug">, route: string | undefined): string | undefined {
+export function treeItemHref(
+    item: Pick<Item, "href" | "slug"> & { product?: string },
+    route: string | undefined,
+    withProducts = false,
+): string | undefined {
     if (item.href !== undefined && SITE_PATH.test(item.href)) return item.href;
-    return route !== undefined && item.slug ? `${route}/${item.slug}` : undefined;
+    return itemRoutePath(route, withProducts, item);
 }
 
-function withHrefs(nodes: TreeNode[], route: string | undefined): TreeNode[] {
+function withHrefs(nodes: TreeNode[], route: string | undefined, withProducts: boolean): TreeNode[] {
     return nodes.map((node) => {
-        const href = treeItemHref(node.item, route);
-        return { ...node, ...(href ? { href } : {}), children: withHrefs(node.children, route) };
+        const href = treeItemHref(node.item, route, withProducts);
+        return { ...node, ...(href ? { href } : {}), children: withHrefs(node.children, route, withProducts) };
     });
 }
 
@@ -197,6 +201,7 @@ export async function collectionTree(
                 bySlug,
             ),
             col.route,
+            hasProducts(col),
         ),
     }));
 

@@ -2,6 +2,13 @@
 
 ## 0.14.1 (unreleased)
 
+- A collection with `products` is served at `route/product/slug` (#99). The tree, the pager, the
+  sitemap, the feed, share links, cards and search results link an item that has a product there, and
+  the catch-all resolves the path and returns not found when the product in it is not the item's. An
+  item's own `href` field still wins in a tree, and a collection without products is unchanged. Links
+  to a products collection's items change from `/docs/slug` to `/docs/product/slug`; the old path still
+  resolves.
+
 - The sitemap lists every published page, and the feed links match the served URL (#168, #170). The
   sitemap adds the pages the menu does not list: the targets of `HeaderLinks` and each page of the
   page type (found at `/slug`, so a nested page outside the menu is still left out), less region
