@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { defineConfig } from "./config.js";
 import { generatedShareImages, shareImageHref, SHARE_IMAGE_ROUTE } from "./share-image.js";
-import { loadFont, shareTitle } from "./routes/share-image.js";
+import { isSharePath, loadFont, SHARE_IMAGE_CACHE_CONTROL, shareTitle } from "./routes/share-image.js";
 import { writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -61,5 +61,19 @@ describe("loadFont", () => {
         await expect(loadFont(file)).rejects.toThrow();
         writeFileSync(file, Buffer.from([9]));
         expect(new Uint8Array(await loadFont(file))[0]).toBe(9);
+    });
+});
+
+describe("the route's guards", () => {
+    it("takes an absolute path and refuses a missing, relative or oversized one", () => {
+        expect(isSharePath("/about")).toBe(true);
+        expect(isSharePath(null)).toBe(false);
+        expect(isSharePath("about")).toBe(false);
+        expect(isSharePath(`/${"a".repeat(600)}`)).toBe(false);
+    });
+
+    it("does not let a cache keep a card for a year", () => {
+        expect(SHARE_IMAGE_CACHE_CONTROL).not.toContain("immutable");
+        expect(SHARE_IMAGE_CACHE_CONTROL).toContain("max-age=0");
     });
 });

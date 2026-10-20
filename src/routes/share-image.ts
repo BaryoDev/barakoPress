@@ -15,6 +15,15 @@ import { siteConfigOrNull } from "../site.js";
 
 export const SHARE_IMAGE_SIZE = { width: 1200, height: 630 } as const;
 const MAX_TITLE = 140;
+const MAX_PATH = 512;
+
+/** next/og defaults to a year, immutable. A retitled page would keep its old card in every cache, so this one revalidates. */
+export const SHARE_IMAGE_CACHE_CONTROL = "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400";
+
+/** A path worth a lookup: absolute and short. */
+export function isSharePath(path: string | null): path is string {
+    return !!path && path.startsWith("/") && path.length <= MAX_PATH;
+}
 
 const fonts = new Map<string, Promise<ArrayBuffer>>();
 
@@ -43,7 +52,7 @@ export function createShareImage(base: PressConfig) {
         if (!config || config.holding) return new Response("Not found", { status: 404 });
 
         const path = new URL(request.url).searchParams.get("path");
-        if (!path || !path.startsWith("/")) return new Response("Not found", { status: 404 });
+        if (!isSharePath(path)) return new Response("Not found", { status: 404 });
         const found = await getPageByPath(config, path).catch(() => null);
         if (!found) return new Response("Not found", { status: 404 });
 
@@ -78,7 +87,7 @@ export function createShareImage(base: PressConfig) {
                 },
                 key: null,
             },
-            { ...SHARE_IMAGE_SIZE, fonts: [{ name: "Press", data: font, weight: 400, style: "normal" }] },
+            { ...SHARE_IMAGE_SIZE, headers: { "cache-control": SHARE_IMAGE_CACHE_CONTROL }, fonts: [{ name: "Press", data: font, weight: 400, style: "normal" }] },
         );
     };
 }
