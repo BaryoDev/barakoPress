@@ -2,6 +2,14 @@
 
 ## 0.14.1 (unreleased)
 
+- A generated Open Graph image, with a font the consumer supplies (#81). Set `PRESS_SHARE_IMAGE_FONT`
+  to the path of a font file (ttf, otf or woff) and mount `createShareImage(config)` at
+  `app/share-image/route.ts`. A page with no SEO image of its own then advertises
+  `/share-image?path=...`, a 1200 by 630 card drawn from the page's title and the site's name. The
+  title is read from the page, never from the query. Nothing is embedded or fetched at render time.
+  Unset, the route answers 404 and no tag changes, so a site that configures nothing serves what it
+  served before. A page's own SEO image still wins.
+
 - The sitemap lists every published page, and the feed links match the served URL (#168, #170). The
   sitemap adds the pages the menu does not list: the targets of `HeaderLinks` and each page of the
   page type (found at `/slug`, so a nested page outside the menu is still left out), less region
