@@ -224,8 +224,10 @@ async function bindList(blocks: ResolvedBlock[], frame: Frame, ctx: BindContext)
 }
 
 /* A collection key can come from the URL, so what goes in the log is bounded. */
+// The key can come from the URL, so control characters are replaced before it reaches the log.
 function named(key: string): string {
-    return key.length > 60 ? `${key.slice(0, 60)}...` : key;
+    const clean = key.replace(/[\u0000-\u001f\u007f-\u009f]/g, "?");
+    return clean.length > 60 ? `${clean.slice(0, 60)}...` : clean;
 }
 
 function sayReadsOver(what: string): void {

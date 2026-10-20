@@ -316,6 +316,15 @@ describe("a source or count the page cannot read (#210)", () => {
         expect(out).not.toContain("never drawn");
         expect(warnings.some((w) => w.includes('"nope"'))).toBe(true);
     });
+
+    it("writes a collection name from the URL to the log without its control characters", async () => {
+        await page([source({ collection: "fake\nERROR forged line", pageSize: 1 }, [text("x")])]);
+
+        const said = warnings.filter((w) => w.includes("forged line"));
+        expect(said).toHaveLength(1);
+        expect(said[0]).not.toContain("\n");
+        expect(said[0]).toContain('"fake?ERROR forged line"');
+    });
 });
 
 describe("sum", () => {
