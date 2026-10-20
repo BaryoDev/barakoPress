@@ -402,7 +402,7 @@ export function forgetCachedReads() {
  * helps nobody; the server log saying so plainly, once, is what tells the operator to upgrade. The
  * range is typed as numbers rather than `as const`, because it is the ends of a range that moves.
  */
-export const DELIVERY_CONTRACT: { readonly min: number; readonly max: number } = { min: 1, max: 8 };
+export const DELIVERY_CONTRACT: { readonly min: number; readonly max: number } = { min: 1, max: 9 };
 
 export type DeliveryContract =
     | { kind: "absent" }
