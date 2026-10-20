@@ -181,3 +181,14 @@ describe("the feed", () => {
         expect(body).toContain('<guid isPermaLink="true">https://studio.example/blog/hello</guid>');
     });
 });
+
+describe("trimming trailing slashes", () => {
+    it("strips a long run of slashes in linear time and keeps the rest of the path", async () => {
+        const { trimTrailingSlashes } = await import("./routes/served-url.js");
+        const started = performance.now();
+        expect(trimTrailingSlashes(`/a${"/".repeat(200_000)}`)).toBe("/a");
+        expect(performance.now() - started).toBeLessThan(200);
+        expect(trimTrailingSlashes("/")).toBe("");
+        expect(trimTrailingSlashes("/about")).toBe("/about");
+    });
+});

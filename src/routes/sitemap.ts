@@ -3,7 +3,7 @@ import { pinnedTenant, type PressConfig, type SiteLink } from "../config.js";
 import { type NavItem, flattenNavigation, getNavigation, isChromePath, isReservedPath, listPages, pageHref } from "../cms.js";
 import { type ResolvedPage, pageAtPath } from "../delivery.js";
 import { RESERVED_AT_ROOT } from "../config.js";
-import { servedUrl } from "./served-url.js";
+import { servedUrl, trimTrailingSlashes } from "./served-url.js";
 import { listAllCollection } from "../collections.js";
 import { treeItemHref } from "../tree.js";
 import { notFound } from "next/navigation";
@@ -166,7 +166,7 @@ async function pageUrls(config: PressConfig, home: string, listed: Set<string>, 
             if (!reserved(p)) urls.add(servedUrl(home, p));
             continue;
         }
-        if ((await lookup(pagePath.replace(/(.)\/+$/, "$1")))?.entry.seo?.noIndex) continue;
+        if ((await lookup(trimTrailingSlashes(pagePath) || "/"))?.entry.seo?.noIndex) continue;
         keep(pagePath);
     }
 
