@@ -22,6 +22,7 @@ import {
 import { allowedScriptOrigins, analyticsTag, type AnalyticsTag } from "../analytics.js";
 import { SHARE_INVALID_FRAGMENT } from "../routes/share.js";
 import { themeVariablesCss, type PressTheme } from "../theme.js";
+import { VariantScript } from "./theme-variants.js";
 import { lookOr, recipeLook } from "../recipes.js";
 import type { BlockRegistry } from "../blocks/schema.js";
 import { getNavigation, getPageAtPath, isChromePath, type NavItem, type Page } from "../cms.js";
@@ -81,6 +82,7 @@ function ThemeHead({
     return (
         <head>
             <style dangerouslySetInnerHTML={{ __html: themeVariablesCss(theme) }} />
+            <VariantScript theme={theme} />
             {faces && (
                 <>
                     {faces.google && (
@@ -653,7 +655,7 @@ export function createSiteLayout(config: PressConfig, options: SiteLayoutOptions
         const c = t.colors;
 
         return (
-            <html lang={cfg.locale}>
+            <html lang={cfg.locale} suppressHydrationWarning>
                 <ThemeHead theme={t} loadFonts={loadFonts} analytics={analyticsTag(cfg.site, allowedScriptOrigins())} />
                 <body style={{ margin: 0, background: c.pageBg, color: c.ink, fontFamily: t.fonts.body }}>
                     {cfg.site.iconSprite && <IconSprite symbols={cfg.site.iconSprite} />}
