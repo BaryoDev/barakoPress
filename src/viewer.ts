@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
-import { cmsUrlFor, type PressConfig } from "./config.js";
+import { cmsUrlFor, pinnedTenant, type PressConfig } from "./config.js";
 import { carriesSecretsSafely, deliveryHeaders } from "./delivery.js";
+import { readEnv } from "./env.js";
 
 /*
  * Viewer sessions (barakoPress #7).
@@ -164,4 +165,75 @@ export function gateOutcome(viewer: Viewer | null, gate: ViewerGate, tenant?: st
     if (tenant && viewer.tenant.toLowerCase() !== tenant.toLowerCase()) return "deny";
     const wanted = gate.roles ?? [];
     return wanted.length === 0 || wanted.some((r) => viewer.roles.includes(r)) ? "allow" : "deny";
+}
+
+/*
+ * A viewer token for delivery reads (barakoPress #7).
+ *
+ * `POST /api/viewer-tokens` needs a credential holding `manage_public_delivery`. That credential is
+ * `CMS_VIEWER_MINT_TOKEN`, read on the server per call. The minted token is held in this process
+ * only and goes to the CMS and nowhere else: not a cookie, a prop, a header or a body this package
+ * sends to a browser. Unset, or on any failure, there is no token and delivery reads stay anonymous.
+ */
+const MINT_MINUTES = 15;
+const REFRESH_BEFORE_MS = 60_000;
+const LONGEST_CACHE = 500;
+const minted = new Map<string, { token: string; until: number }>();
+
+/** The tenant a viewer token is bound to, read off its payload. The CMS signed it; this only compares. */
+function tokenTenant(token: string): string | null {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+    try {
+        const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { vtenant?: unknown };
+        return typeof claims.vtenant === "string" ? claims.vtenant : null;
+    } catch {
+        return null;
+    }
+}
+
+export async function mintViewerToken(config: PressConfig, viewer: Viewer): Promise<string | null> {
+    const credential = readEnv().viewerMintToken?.trim();
+    if (!credential || config.viewerSessions !== true) return null;
+    if (!carriesSecretsSafely(cmsUrlFor(config))) return null;
+    // The same tenant the gate compares against. A token for any other is not used.
+    const tenant = (pinnedTenant(config) ?? viewer.tenant).toLowerCase();
+    if (tenant === "" || viewer.tenant.toLowerCase() !== tenant) return null;
+
+    const key = `${cmsUrlFor(config)}|${tenant}|${viewer.id}`;
+    const held = minted.get(key);
+    if (held && held.until - REFRESH_BEFORE_MS > Date.now()) return held.token;
+
+    try {
+        const res = await fetch(`${cmsUrlFor(config)}/api/viewer-tokens`, {
+            method: "POST",
+            headers: {
+                ...(deliveryHeaders(config) as Record<string, string>),
+                authorization: `Bearer ${credential}`,
+                "content-type": "application/json",
+            },
+            body: JSON.stringify({ subject: viewer.id, lifetimeMinutes: MINT_MINUTES }),
+            cache: "no-store",
+            redirect: "manual",
+            signal: AbortSignal.timeout(config.cmsTimeoutMs),
+        });
+        if (!res.ok) return null;
+        const body = (await res.json()) as { token?: unknown; expiresAt?: unknown };
+        const token = body.token;
+        if (typeof token !== "string" || token === "" || token.length > LONGEST_TOKEN) return null;
+        if (tokenTenant(token)?.toLowerCase() !== tenant) return null;
+        const until = typeof body.expiresAt === "string" ? Date.parse(body.expiresAt) : NaN;
+        if (Number.isNaN(until)) return token;
+        if (minted.size >= LONGEST_CACHE) minted.clear();
+        minted.set(key, { token, until });
+        return token;
+    } catch (e) {
+        if (e && typeof e === "object" && "digest" in e) throw e;
+        return null;
+    }
+}
+
+/** Forgets minted tokens. For tests. */
+export function forgetMintedTokens() {
+    minted.clear();
 }

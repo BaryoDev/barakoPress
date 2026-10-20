@@ -12,7 +12,15 @@
   shows the route only to a signed-in viewer holding one of the roles (any signed-in viewer for an
   empty list). A signed-out visitor is sent to `signIn` or gets not found, and a viewer without the
   role gets not found. It gates rendering, not the CMS data. Without `gate` the route renders as before.
-  Sending a `Members` viewer token to the CMS, gated widgets and a sign-in block are not in yet.
+  Gated widgets and a sign-in block are not in yet.
+
+- Viewer sessions (#7), Members content. With `CMS_VIEWER_MINT_TOKEN` set to a bearer token holding
+  `manage_public_delivery`, a gated `createViewerPage` route mints a barakoCMS 5.1.0 viewer token for
+  the signed-in viewer on the server and sends it as `X-Viewer-Token` on type and entry reads, so
+  `Members` entries and fields reach the page. The credential and the token never reach a browser,
+  those reads skip every cache, and a token for any tenant but the pinned one is dropped. Unset, the
+  route reads anonymously as before. A `Members` page reached through the Pages path lookup is not
+  served yet.
 
 ## 0.15.0 (2026-10-20)
 

@@ -25,7 +25,8 @@ import { BlockList } from "../blocks/render.js";
 import { createBlockRegistry, registryFor } from "../blocks/registry.js";
 import type { BlockRegistry } from "../blocks/schema.js";
 import { routeFromParams, siteConfig } from "../site.js";
-import { gateOutcome, getViewer, type ViewerGate } from "../viewer.js";
+import { withViewerToken } from "../delivery.js";
+import { gateOutcome, getViewer, mintViewerToken, type ViewerGate } from "../viewer.js";
 import { collectionAt, collectionOf, getItem } from "../collections.js";
 import { CollectionIndexView, itemMetadata, renderCollectionDetail } from "./collection.js";
 import { Breadcrumbs } from "./navigation.js";
@@ -310,30 +311,37 @@ export function createViewerPage(base: PressConfig, registry?: BlockRegistry, op
     return async function ViewerPage({ params, searchParams }: PageParams) {
         await connection();
         const config = await siteConfig(base, params);
+        let viewerToken: string | null = null;
         if (options.gate) {
-            const outcome = gateOutcome(await getViewer(config), options.gate, pinnedTenant(config));
+            const viewer = await getViewer(config);
+            const outcome = gateOutcome(viewer, options.gate, pinnedTenant(config));
             if (outcome === "sign-in" && options.gate.signIn) redirect(options.gate.signIn);
             if (outcome !== "allow") notFound();
+            // Only a gated route reads Members content, and only for a viewer the gate let in.
+            viewerToken = viewer ? await mintViewerToken(config, viewer) : null;
         }
-        const p = await params;
-        const hit = collectionHit(config, p);
-        if (hit) {
-            if (hit.slug !== undefined) return renderCollectionDetail(config, hit.key, hit.slug, { product: hit.product, blocks: (blocks ??= createBlockRegistry(base)), perViewer: true });
+        const render = async () => {
+            const p = await params;
+            const hit = collectionHit(config, p);
+            if (hit) {
+                if (hit.slug !== undefined) return renderCollectionDetail(config, hit.key, hit.slug, { product: hit.product, blocks: (blocks ??= createBlockRegistry(base)), perViewer: true });
+                blocks ??= createBlockRegistry(base);
+                return CollectionIndexView({ config, collection: hit.key, query: await queryFor(true, searchParams), blocks });
+            }
+            const found = await findPage(config, p);
+            if (!found) return missing(config, p);
             blocks ??= createBlockRegistry(base);
-            return CollectionIndexView({ config, collection: hit.key, query: await queryFor(true, searchParams), blocks });
-        }
-        const found = await findPage(config, p);
-        if (!found) return missing(config, p);
-        blocks ??= createBlockRegistry(base);
-        return PageView({
-            config,
-            page: found.page,
-            breadcrumbs: found.breadcrumbs,
-            registry: registryFor(config, blocks),
-            searchParams,
-            perViewer: true,
-            bare: options.bare,
-        });
+            return PageView({
+                config,
+                page: found.page,
+                breadcrumbs: found.breadcrumbs,
+                registry: registryFor(config, blocks),
+                searchParams,
+                perViewer: true,
+                bare: options.bare,
+            });
+        };
+        return viewerToken ? withViewerToken(viewerToken, render) : render();
     };
 }
 
