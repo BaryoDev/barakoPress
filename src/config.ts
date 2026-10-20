@@ -769,6 +769,8 @@ export interface PressConfig {
      * zone, which on a host in UTC moves an evening event onto the wrong day.
      */
     timeZone?: string;
+    /** Paths crawlers are asked to stay out of. Unset, robots.txt allows everything. */
+    robots?: Robots;
     /**
      * The ISO code a `money` binding format uses, for example "PHP". Unset, an amount renders as a
      * plain number: a default currency is one client's currency, and there is no neutral one.
@@ -1092,6 +1094,7 @@ export function defineConfig(
         cmsTimeoutMs: timeoutMs(input.cmsTimeoutMs),
         locale: input.locale ?? "en-GB",
         ...(validTimeZone(input.timeZone) ? { timeZone: validTimeZone(input.timeZone) } : {}),
+        ...(validRobots(input.robots) ? { robots: validRobots(input.robots) } : {}),
         ...(input.currency ? { currency: input.currency } : {}),
         embedHosts: embedHosts(input.embedHosts) ?? [...EMBED_HOSTS],
         presets: input.presets ?? [],
@@ -1186,4 +1189,48 @@ export function validTimeZone(v: unknown): string | undefined {
     } catch {
         return undefined;
     }
+}
+
+/** What a site tells crawlers to stay out of. Merged into the generated robots.txt. */
+export interface Robots {
+    /** Paths such as "/api/". Each starts with "/". Ignored while the site is holding, which disallows everything. */
+    disallow: string[];
+}
+
+export const MAX_ROBOTS_DISALLOW = 100;
+const CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/;
+const CONTROL_G = new RegExp(CONTROL.source, "g");
+const SAID_MAX = 200;
+const said = new Set<string>();
+
+/** For tests: say every robots warning again. */
+export function forgetRobotsWarnings(): void {
+    said.clear();
+}
+
+/**
+ * The disallow list of a `Robots` setting, or undefined when there is none to use. Every entry is
+ * text somebody typed and ends up as a line of robots.txt, so one that is not a string path starting
+ * with "/", or that holds a control character (a newline would start a new robots line), is dropped.
+ * The list is capped. Anything dropped is said once.
+ */
+export function validRobots(v: unknown, who = ""): Robots | undefined {
+    if (!v || typeof v !== "object" || Array.isArray(v)) return undefined;
+    const list = (v as { disallow?: unknown }).disallow;
+    if (!Array.isArray(list)) return undefined;
+    const kept = list.filter((p): p is string => typeof p === "string" && p.startsWith("/") && !CONTROL.test(p));
+    const invalid = list.length - kept.length;
+    const over = Math.max(0, kept.length - MAX_ROBOTS_DISALLOW);
+    if (invalid > 0 || over > 0) {
+        const message =
+            `robots: dropped ${invalid + over} disallow entries (${invalid} not a path starting with "/", ` +
+            `${over} past the limit of ${MAX_ROBOTS_DISALLOW})`;
+        const key = `${who}|${message}`;
+        if (!said.has(key)) {
+            if (said.size >= SAID_MAX) said.clear();
+            said.add(key);
+            console.warn(who ? `${message} for ${who.replace(CONTROL_G, " ")}` : message);
+        }
+    }
+    return kept.length > 0 ? { disallow: kept.slice(0, MAX_ROBOTS_DISALLOW) } : undefined;
 }

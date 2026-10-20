@@ -72,7 +72,7 @@ The settings are the singleton `site` type from barakoCMS `docs/site-settings.md
 `Colors` (the theme slots), `Fonts` (a family name per role, and the stylesheet that loads it),
 `Radii`, `Layout`, `Space` and `Text` (the spacing and type scales), `Tokens` and `Tones` (see [Tokens and tones](look.md#tokens-and-tones)), `StyleRecipes` (see [Style recipes](look.md#style-recipes)), `TopBar`, `HeaderLinks`, `MenuLinks`, `HeaderActions`, `FooterColumns`, `SocialLinks`, `HeaderPath`,
 `HeaderTone`, `FooterPath`, `FooterTone`, `AssetsAsSupplied`, `LogoAsSupplied`, `LogoClearSpace`,
-`PageSizes`, `ReservedSlugs`, `Labels`, `HomePath`, `HomeCollection`, `Currency`, `TimeZone`, `EmbedHosts`,
+`PageSizes`, `ReservedSlugs`, `Labels`, `HomePath`, `HomeCollection`, `Currency`, `TimeZone`, `Robots`, `EmbedHosts`,
 `AnalyticsScript` and `AnalyticsWebsiteId` (see Analytics below),
 `Presets`, `Plugins` (see [Plugin packages](blocks.md#plugin-packages)), and `Mode`, `HoldingPath` and
 `HoldingMessage` (see Holding mode below). `Collections`, `OptionStyles` and `OptionColors` are read as [Collections](collections.md)
@@ -87,6 +87,11 @@ built-in header does not need (every header link is already a plain anchor) and 
 `date` binding, show in that zone. Without it a timestamp follows the server's zone, so a host in UTC can put an
 evening event on the day before. A bare `YYYY-MM-DD` names a calendar day, so it formats in UTC either
 way and keeps its day. A name the runtime does not know is ignored.
+`Robots` (or `robots` in the config) is `{ "disallow": ["/api/"] }`. Each path is added as a `Disallow` line next to
+`Allow: /` in the generated robots.txt. An entry that is not a string starting with `/` is dropped, which includes
+anything with a newline or other control character, and the list is capped at 100 entries. Dropped entries are said
+once in the server log. An empty `disallow` in the site setting clears the config list; a list whose entries were all dropped falls back to it. A holding site keeps `Disallow: /` whatever is set, and a site with no `Robots` gets the same
+file as before.
 A link in `HeaderLinks` or `MenuLinks` may also carry `activeOn` and `children`; see
 [The built-in header](#the-built-in-header).
 
