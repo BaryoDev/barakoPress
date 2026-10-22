@@ -4,7 +4,8 @@
 
 - The image builds on `node:22.23.4-alpine` instead of the floating `node:22-alpine`. Node 22.23.4
   fixes the ten CVEs in the October 21 Node.js security release, the Brotli RCE (CVE-2026-111497)
-  among them, and a pinned tag means a cached older base layer cannot ship.
+  among them, and pinning the version means a rebuild no longer drifts to whatever the floating tag
+  pointed at last.
 
 ## 0.15.0 (2026-10-20)
 
