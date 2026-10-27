@@ -100,10 +100,10 @@ services:
       API_DOMAIN: ${API_DOMAIN}
       CONSOLE_DOMAIN: ${CONSOLE_DOMAIN}
       # Origins the blog's Content-Security-Policy allows, space separated, each https://host. Match
-      # PRESS_FONT_ORIGINS, PRESS_SCRIPT_ORIGINS and the embed block's hosts. Frames are closed by default.
+      # PRESS_FONT_ORIGINS, PRESS_SCRIPT_ORIGINS and the embed block's hosts. Frames default to the seven embedHosts players.
       CSP_FONT_ORIGINS: ${CSP_FONT_ORIGINS:-https://fonts.googleapis.com https://fonts.gstatic.com}
       CSP_SCRIPT_ORIGINS: ${CSP_SCRIPT_ORIGINS:-}
-      CSP_FRAME_ORIGINS: ${CSP_FRAME_ORIGINS:-'none'}
+      CSP_FRAME_ORIGINS: ${CSP_FRAME_ORIGINS:-https://www.youtube-nocookie.com https://www.youtube.com https://youtube.com https://player.vimeo.com https://www.google.com https://open.spotify.com https://w.soundcloud.com}
       ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env, Let us Encrypt needs it}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
