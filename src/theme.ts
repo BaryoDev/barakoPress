@@ -471,13 +471,57 @@ export function resolveTheme(input: PressThemeInput | undefined): PressTheme {
  * reach. This is the stylesheet for it, generated from the same tokens so the prose column and the
  * markup around it cannot drift.
  *
- * Values are interpolated into CSS, and a token is a developer-supplied string rather than a
- * constant, so they are stripped of the two characters that could close the element early. Nobody
- * is expected to put a bracket in a colour; this is here so that a config that somehow carries one
- * produces a broken rule instead of an injected tag.
+ * Values are interpolated into CSS, and a theme value can come from a tenant's settings, so each
+ * one is checked here rather than trusted. A value that fails is dropped to an empty string, which
+ * leaves a declaration the browser ignores, so the property falls back to its inherited or initial
+ * value instead of carrying anything a tenant wrote into the page.
  */
+
+/** Functions a value may call. Anything else with parentheses (url, image-set, env, attr) is refused. */
+const SAFE_FUNCTIONS = new Set([
+    "rgb", "rgba", "hsl", "hsla", "hwb", "lab", "lch", "oklab", "oklch", "color-mix",
+    "var", "calc", "clamp", "min", "max",
+]);
+
+/** What a quoted family name may hold. A quote around anything else is not a family name. */
+const QUOTED_NAME = /'[A-Za-z0-9 ._-]{1,60}'|"[A-Za-z0-9 ._-]{1,60}"/g;
+/** Letters, digits, space and the punctuation colours, lengths, stacks and calc() need. */
+const SAFE_CHARS = /^[A-Za-z0-9 #%.,_()/+*-]*$/;
+const MAX_VALUE = 300;
+
+/**
+ * The value as written when it is safe to put in a stylesheet, otherwise undefined.
+ *
+ * Refused outright: a backslash (so no CSS escape can hide `u\72l(`, and there is nothing to
+ * decode because nothing with an escape gets through), a quote that is not around a plain family
+ * name, `;`, braces, angle brackets, `@`, `!`, comments, and any parenthesis that is not a call to
+ * a colour, `var()` or math function. `url(`, `@import` and `expression(` are named in the check
+ * as well, so they stay refused if the allow list above ever grows.
+ */
+export function safeCssValue(value: string): string | undefined {
+    const v = value.trim();
+    if (v.length > MAX_VALUE) return undefined;
+    if (/[\\<>;{}@!`]|\/\*|\*\//.test(v)) return undefined;
+    const bare = v.replace(QUOTED_NAME, "Q");
+    if (/['"]/.test(bare)) return undefined;
+    if (/(?:url|expression|image-set|image|element|src|attr|env)\s*\(|@import/i.test(bare)) return undefined;
+    if (!SAFE_CHARS.test(bare)) return undefined;
+
+    let depth = 0;
+    for (const m of bare.matchAll(/([A-Za-z0-9_-]*)\s*([()])/g)) {
+        if (m[2] === ")") {
+            if (--depth < 0) return undefined;
+            continue;
+        }
+        depth++;
+        // A bare group is fine inside calc(), and a name before a parenthesis must be on the list.
+        if (m[1] !== "" && !SAFE_FUNCTIONS.has(m[1].toLowerCase())) return undefined;
+    }
+    return depth === 0 ? v : undefined;
+}
+
 function css(value: string): string {
-    return value.replace(/[<>]/g, "");
+    return safeCssValue(value) ?? "";
 }
 
 export function proseCss(theme: PressTheme, scope: string): string {
@@ -605,8 +649,12 @@ export function themeVariablesCss(theme: PressTheme): string {
         ["--font-display", "heading"],
         ["--font-mono", "mono"],
     ];
+    // A value css() refused drops its declaration. A value written as empty is kept as it was.
     const declarations = (list: [string, string][]) =>
-        list.map(([name, value]) => `${name}:${declarationValue(value)}`).join(";");
+        list
+            .filter(([, value]) => value.trim() === "" || declarationValue(value) !== "")
+            .map(([name, value]) => `${name}:${declarationValue(value)}`)
+            .join(";");
     const root = `:root{${declarations(vars)}}`;
     const variants = Object.entries(theme.variants ?? {}).map(
         ([name, slots]) =>
