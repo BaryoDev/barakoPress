@@ -18,35 +18,26 @@ on:
 
 permissions:
   contents: read
-  id-token: write # the OIDC token npm verifies. Without it the publish is refused.
 
+# Three jobs. `build` packs the tarball, hashes it and uploads it before any third-party install.
+# `smoke` installs it into a stranger's app, which runs install scripts from the whole dependency
+# tree, so it holds no OIDC permission. `publish` holds `id-token: write`, installs nothing and runs
+# no project code: it checks the tarball against the hash `build` recorded and hands it to npm.
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    outputs:
+      already: ${{ steps.registry.outputs.already }}
+      tarball_sha256: ${{ steps.pack.outputs.sha256 }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           # Trusted publishing needs Node 22.14 or later.
           node-version: 22
-          registry-url: https://registry.npmjs.org
           cache: npm
-
-      - name: npm new enough for trusted publishing
-        # Pinned, not @latest. This is the one job that holds id-token: write, so the npm it runs is
-        # a supply-chain input and "whatever was published an hour ago" is not a version. The floor
-        # check below stays as the guard that a future bump of this pin cannot go backwards.
-        run: |
-          npm install -g npm@11.19.1
-          npm --version
-          node -e '
-            const [maj, min, pat] = require("child_process")
-              .execSync("npm --version").toString().trim().split(".").map(Number);
-            const ok = maj > 11 || (maj === 11 && (min > 5 || (min === 5 && pat >= 1)));
-            if (!ok) { console.error("npm 11.5.1 or later is required for trusted publishing"); process.exit(1); }
-          '
 
       - name: The tag matches the version being published
         # Only a tag push has a tag to compare, which is why this is conditional. The Publish step
@@ -97,15 +88,90 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
-      - name: A stranger's app builds against the tarball with no extra configuration
-        # The claim this package makes is "npm install and import it". No transpilePackages, no CMS.
+      - name: Pack the tarball and record its hash
+        # Packed and hashed before any install of third-party code, and uploaded in the next step,
+        # so nothing that runs later in this job can swap it. Publish checks the hash.
+        id: pack
         run: |
           npm pack --pack-destination /tmp
           mv /tmp/barakopress-*.tgz "/tmp/engine-$GITHUB_SHA.tgz"
+          sum=$(sha256sum "/tmp/engine-$GITHUB_SHA.tgz" | cut -d' ' -f1)
+          echo "sha256 $sum"
+          echo "sha256=$sum" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: tarball
+          path: /tmp/engine-${{ github.sha }}.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: What would go in the tarball
+        run: npm pack --dry-run
+
+      - name: Is this version already on the registry
+        id: registry
+        # The registry is the authority on what has been published, not this workflow's history.
+        #
+        # Two cases where it already is. 0.2.0 was published by hand, because npm cannot attach a
+        # trusted publisher to a package that does not exist yet, so the tag for it arrives after the
+        # publish. And a run that uploaded the tarball and then failed on something after it would,
+        # on a re-run, fail again on a version npm will not let anyone replace.
+        #
+        # Both used to mean a red release for a reason that is not a problem. Every check above still
+        # runs; only the publish is skipped, and the step below says so out loud rather than leaving a
+        # green run that looks like it published something.
+        run: |
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          # A 200 on the exact version is the only answer treated as "already there". Anything else,
+          # a 404 or a registry having a bad minute, falls through to the publish, where npm itself
+          # refuses a duplicate. The registry is the guard; this is the explanation.
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --retry 3 --retry-delay 2 \
+                   "https://registry.npmjs.org/$name/$version" || echo 000)
+          echo "registry answered $code for $name@$version"
+          if [ "$code" = "200" ]; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Nothing was published
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') || steps.registry.outputs.already == 'true' }}
+        run: |
+          if [ "${{ steps.registry.outputs.already }}" = "true" ]; then
+            name=$(node -p "require('./package.json').name")
+            version=$(node -p "require('./package.json').version")
+            echo "::notice::$name@$version is already on the registry. Every check above ran and the publish was skipped."
+            echo "The registry will not replace a published version. Bump the version to publish a new one."
+          else
+            echo "$GITHUB_REF is not a v tag, so every check above ran and the publish was skipped."
+            echo "Push a version tag to publish."
+          fi
+
+  smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: tarball
+          path: /tmp/tarball
+
+      - name: A stranger's app builds against the tarball with no extra configuration
+        # The claim this package makes is "npm install and import it". No transpilePackages, no CMS.
+        run: |
           mkdir -p /tmp/strangers-app/app/blog/'[slug]' && cd /tmp/strangers-app
           cat > package.json <<JSON
           { "name":"strangers-app","private":true,"type":"module",
-            "dependencies":{"barakopress":"file:/tmp/engine-$GITHUB_SHA.tgz",
+            "dependencies":{"barakopress":"file:/tmp/tarball/engine-$GITHUB_SHA.tgz",
               "next":"^16.0.0","react":"^19.0.0","react-dom":"^19.0.0"},
             "devDependencies":{"typescript":"^5.6.0","@types/react":"^19.0.0","@types/node":"^22.0.0"} }
           JSON
@@ -136,52 +202,54 @@ jobs:
           npm install --no-audit --no-fund
           npx next build
 
-      - name: What would go in the tarball
-        run: npm pack --dry-run
+  publish:
+    needs: [build, smoke]
+    # Tag pushes only, the same condition the version check uses. Without it a workflow_dispatch run
+    # would publish whatever version package.json held on whatever branch it was run from.
+    if: startsWith(github.ref, 'refs/tags/v') && needs.build.outputs.already != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # the OIDC token npm verifies. Without it the publish is refused.
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          # Trusted publishing needs Node 22.14 or later.
+          node-version: 22
+          registry-url: https://registry.npmjs.org
 
-      - name: Is this version already on the registry
-        id: registry
-        # The registry is the authority on what has been published, not this workflow's history.
-        #
-        # Two cases where it already is. 0.2.0 was published by hand, because npm cannot attach a
-        # trusted publisher to a package that does not exist yet, so the tag for it arrives after the
-        # publish. And a run that uploaded the tarball and then failed on something after it would,
-        # on a re-run, fail again on a version npm will not let anyone replace.
-        #
-        # Both used to mean a red release for a reason that is not a problem. Every check above still
-        # runs; only the upload is skipped, and the step below says so out loud rather than leaving a
-        # green run that looks like it published something.
+      - name: npm new enough for trusted publishing
+        # Pinned, not @latest. This is the one job that holds id-token: write, so the npm it runs is
+        # a supply-chain input and "whatever was published an hour ago" is not a version. The floor
+        # check below stays as the guard that a future bump of this pin cannot go backwards.
         run: |
-          name=$(node -p "require('./package.json').name")
-          version=$(node -p "require('./package.json').version")
-          # A 200 on the exact version is the only answer treated as "already there". Anything else,
-          # a 404 or a registry having a bad minute, falls through to the publish, where npm itself
-          # refuses a duplicate. The registry is the guard; this is the explanation.
-          code=$(curl -sS -o /dev/null -w '%{http_code}' --retry 3 --retry-delay 2 \
-                   "https://registry.npmjs.org/$name/$version" || echo 000)
-          echo "registry answered $code for $name@$version"
-          if [ "$code" = "200" ]; then
-            echo "already=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "already=false" >> "$GITHUB_OUTPUT"
+          npm install -g npm@11.19.1
+          npm --version
+          node -e '
+            const [maj, min, pat] = require("child_process")
+              .execSync("npm --version").toString().trim().split(".").map(Number);
+            const ok = maj > 11 || (maj === 11 && (min > 5 || (min === 5 && pat >= 1)));
+            if (!ok) { console.error("npm 11.5.1 or later is required for trusted publishing"); process.exit(1); }
+          '
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: tarball
+          path: /tmp/tarball
+
+      - name: The tarball is the one build packed
+        env:
+          EXPECTED_SHA256: ${{ needs.build.outputs.tarball_sha256 }}
+        run: |
+          actual=$(sha256sum "/tmp/tarball/engine-$GITHUB_SHA.tgz" | cut -d' ' -f1)
+          if [ -z "$EXPECTED_SHA256" ] || [ "$actual" != "$EXPECTED_SHA256" ]; then
+            echo "tarball hash $actual does not match the build job's $EXPECTED_SHA256"
+            exit 1
           fi
+          echo "tarball hash matches $actual"
 
       - name: Publish
-        # Tag pushes only, the same condition as the version check above. Without it a
-        # workflow_dispatch run skipped that check and published whatever version package.json held
-        # on whatever branch it was run from.
-        if: startsWith(github.ref, 'refs/tags/v') && steps.registry.outputs.already != 'true'
-        run: npm publish --access public
-
-      - name: Nothing was published
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') || steps.registry.outputs.already == 'true' }}
-        run: |
-          if [ "${{ steps.registry.outputs.already }}" = "true" ]; then
-            name=$(node -p "require('./package.json').name")
-            version=$(node -p "require('./package.json').version")
-            echo "::notice::$name@$version is already on the registry. Every check above ran and the upload was skipped."
-            echo "The registry will not replace a published version. Bump the version to publish a new one."
-          else
-            echo "$GITHUB_REF is not a v tag, so every check above ran and the publish was skipped."
-            echo "Push a version tag to publish."
-          fi
+        # The tarball from the build job, not a checkout, so no install script and no project code
+        # runs while the OIDC token is available.
+        run: npm publish "/tmp/tarball/engine-$GITHUB_SHA.tgz" --access public
