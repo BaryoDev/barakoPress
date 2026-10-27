@@ -18,35 +18,24 @@ on:
 
 permissions:
   contents: read
-  id-token: write # the OIDC token npm verifies. Without it the publish is refused.
 
+# Two jobs. `build` installs dependencies, which runs install scripts from the whole dependency
+# tree, so it holds no OIDC permission. `publish` holds `id-token: write`, installs nothing and
+# runs no project code: it takes the tarball `build` tested and hands it to npm.
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    outputs:
+      already: ${{ steps.registry.outputs.already }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           # Trusted publishing needs Node 22.14 or later.
           node-version: 22
-          registry-url: https://registry.npmjs.org
           cache: npm
-
-      - name: npm new enough for trusted publishing
-        # Pinned, not @latest. This is the one job that holds id-token: write, so the npm it runs is
-        # a supply-chain input and "whatever was published an hour ago" is not a version. The floor
-        # check below stays as the guard that a future bump of this pin cannot go backwards.
-        run: |
-          npm install -g npm@11.19.1
-          npm --version
-          node -e '
-            const [maj, min, pat] = require("child_process")
-              .execSync("npm --version").toString().trim().split(".").map(Number);
-            const ok = maj > 11 || (maj === 11 && (min > 5 || (min === 5 && pat >= 1)));
-            if (!ok) { console.error("npm 11.5.1 or later is required for trusted publishing"); process.exit(1); }
-          '
 
       - name: The tag matches the version being published
         # Only a tag push has a tag to compare, which is why this is conditional. The Publish step
@@ -166,12 +155,13 @@ jobs:
             echo "already=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Publish
-        # Tag pushes only, the same condition as the version check above. Without it a
-        # workflow_dispatch run skipped that check and published whatever version package.json held
-        # on whatever branch it was run from.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: startsWith(github.ref, 'refs/tags/v') && steps.registry.outputs.already != 'true'
-        run: npm publish --access public
+        with:
+          name: tarball
+          path: /tmp/engine-${{ github.sha }}.tgz
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Nothing was published
         if: ${{ !startsWith(github.ref, 'refs/tags/v') || steps.registry.outputs.already == 'true' }}
@@ -185,3 +175,44 @@ jobs:
             echo "$GITHUB_REF is not a v tag, so every check above ran and the publish was skipped."
             echo "Push a version tag to publish."
           fi
+
+  publish:
+    needs: build
+    # Tag pushes only, the same condition the version check uses. Without it a workflow_dispatch run
+    # would publish whatever version package.json held on whatever branch it was run from.
+    if: startsWith(github.ref, 'refs/tags/v') && needs.build.outputs.already != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # the OIDC token npm verifies. Without it the publish is refused.
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          # Trusted publishing needs Node 22.14 or later.
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: npm new enough for trusted publishing
+        # Pinned, not @latest. This is the one job that holds id-token: write, so the npm it runs is
+        # a supply-chain input and "whatever was published an hour ago" is not a version. The floor
+        # check below stays as the guard that a future bump of this pin cannot go backwards.
+        run: |
+          npm install -g npm@11.19.1
+          npm --version
+          node -e '
+            const [maj, min, pat] = require("child_process")
+              .execSync("npm --version").toString().trim().split(".").map(Number);
+            const ok = maj > 11 || (maj === 11 && (min > 5 || (min === 5 && pat >= 1)));
+            if (!ok) { console.error("npm 11.5.1 or later is required for trusted publishing"); process.exit(1); }
+          '
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: tarball
+          path: /tmp/tarball
+
+      - name: Publish
+        # The tarball from the build job, not a checkout, so no install script and no project code
+        # runs while the OIDC token is available.
+        run: npm publish "/tmp/tarball/engine-$GITHUB_SHA.tgz" --access public
