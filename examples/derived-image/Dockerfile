@@ -31,7 +31,7 @@ ENV PRESS_TRAILING_SLASH=$PRESS_TRAILING_SLASH
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-FROM node:22-alpine AS run
+FROM node:22.23.4-alpine AS run
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
 RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001

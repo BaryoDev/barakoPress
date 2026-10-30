@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defineConfig } from "./config.js";
-import { DEFAULT_THEME, proseCss, resolveTheme, themeVariablesCss } from "./theme.js";
+import { DEFAULT_THEME, proseCss, resolveTheme, safeCssValue, themeVariablesCss } from "./theme.js";
 
 const SITE = { name: "Test", url: "https://test.example" };
 
@@ -54,7 +54,9 @@ describe("proseCss", () => {
 
         // Only `<`. A `>` is legitimate here: the scoping rules use child selectors.
         expect(css).not.toContain("<");
-        expect(css).toContain("/style");
+        // The value is refused whole, so none of it reaches the rule.
+        expect(css).not.toContain("script");
+        expect(css).not.toContain("/style");
     });
 
     /*
@@ -119,27 +121,26 @@ describe("themeVariablesCss", () => {
         const registered = (name: string, fonts: Parameters<typeof resolveTheme>[0]) =>
             themeVariablesCss(resolveTheme(fonts)).match(new RegExp(`@property ${name}\\{[^}]*initial-value:([^}]*)\\}`))?.[1];
 
-        for (const body of [
-            "var(--font-inter), sans-serif",
-            "env(x), sans-serif",
-            "'Inter', sans-serif !important",
-            "'Inter, sans-serif",
-            "Inter\\",
-            "",
-        ]) {
+        for (const body of ["var(--font-inter), sans-serif", ""]) {
             const css = themeVariablesCss(resolveTheme({ fonts: { body } }));
             expect(css).toContain(`--bp-font-sans:${body}`);
             expect(registered("--font-sans", { fonts: { body } })).toBe(DEFAULT_THEME.fonts.body);
         }
 
-        for (const body of ["Inter", "'Inter', sans-serif", `"Noto Sans JP", '__Inter_5a1b2c', system-ui`, `"Q (x), y", serif`]) {
+        // Refused, so the declaration is dropped and the old name still registers the default.
+        for (const body of ["env(x), sans-serif", "'Inter', sans-serif !important", "'Inter, sans-serif", "Inter\\", `"Q (x), y", serif`]) {
+            expect(themeVariablesCss(resolveTheme({ fonts: { body } }))).not.toContain("--bp-font-sans:");
+            expect(registered("--font-sans", { fonts: { body } })).toBe(DEFAULT_THEME.fonts.body);
+        }
+
+        for (const body of ["Inter", "'Inter', sans-serif", `"Noto Sans JP", '__Inter_5a1b2c', system-ui`]) {
             expect(registered("--font-sans", { fonts: { body } })).toBe(body);
         }
         expect(registered("--font-mono", { fonts: { mono: "var(--m)" } })).toBe(DEFAULT_THEME.fonts.mono);
         expect(registered("--font-display", { fonts: { heading: "var(--h)" } })).toBe(DEFAULT_THEME.fonts.heading);
     });
 
-    it("strips a font name of what would close the rule or the style element, under both names", () => {
+    it("drops a font name that would close the rule or the style element, under both names", () => {
         const css = themeVariablesCss(
             resolveTheme({ fonts: { body: "x;}</style><script>x", heading: "y;} body{color:red} :root{--z:", mono: "z" } }),
         );
@@ -147,8 +148,122 @@ describe("themeVariablesCss", () => {
         expect(css).not.toContain("<");
         expect(css).not.toContain(">");
         expect(css.match(/[{}]/g)).toEqual(BRACES);
-        expect(css.match(/;/g)).toHaveLength(themeVariablesCss(DEFAULT_THEME).match(/;/g)!.length);
-        expect(css).toContain("--bp-font-sans:x/stylescriptx;");
-        expect(css).toContain("initial-value:x/stylescriptx}");
+        expect(css).not.toContain("--bp-font-sans:");
+        expect(css).not.toContain("--bp-font-display:");
+        expect(css).toContain("--bp-font-mono:z");
+        expect(css).toContain(`@property --font-sans{syntax:"*";inherits:true;initial-value:${DEFAULT_THEME.fonts.body}}`);
+    });
+});
+
+/*
+ * Tenant theme values reach a stylesheet. Each of these is refused whole, so the declaration is
+ * dropped and the property keeps what it inherits.
+ */
+describe("safeCssValue", () => {
+    it("keeps every value the default theme ships", () => {
+        const groups = [DEFAULT_THEME.colors, DEFAULT_THEME.fonts, DEFAULT_THEME.radii, DEFAULT_THEME.layout, DEFAULT_THEME.space, DEFAULT_THEME.text];
+        for (const group of groups) {
+            for (const value of Object.values(group)) expect(safeCssValue(value)).toBe(value);
+        }
+    });
+
+    it("keeps colours, lengths and stacks a real theme writes", () => {
+        for (const value of [
+            "#fff",
+            "#5A46D680",
+            "rgb(10 20 30 / 50%)",
+            "hsl(210, 40%, 96%)",
+            "oklch(0.7 0.1 250)",
+            "var(--t-brand)",
+            "calc(100% - 2rem)",
+            "clamp(1rem, 2vw, 3rem)",
+            "min(90vw, 64ch)",
+            "tomato",
+            `"Noto Sans JP", Inter, system-ui, sans-serif`,
+            "var(--font-inter), sans-serif",
+        ]) {
+            expect(safeCssValue(value)).toBe(value);
+        }
+    });
+
+    it("refuses url(), @import and expression() in any case", () => {
+        for (const value of [
+            "url(https://evil.example/x.png)",
+            "URL(//evil.example/x)",
+            "red url(data:image/png;base64,AAAA)",
+            "image-set(url(x) 1x)",
+            "@import 'https://evil.example/x.css'",
+            "x @IMPORT url(x)",
+            "expression(alert(1))",
+            "Expression (alert(1))",
+            "env(safe-area-inset-top)",
+            "attr(data-x)",
+        ]) {
+            expect(safeCssValue(value)).toBeUndefined();
+        }
+    });
+
+    it("refuses backslash escapes, including ones that spell a forbidden word", () => {
+        for (const value of ["\\75rl(x)", "u\\72l(x)", "u\\000072l(x)", "red\\", "\\@import", "ex\\pression(x)"]) {
+            expect(safeCssValue(value)).toBeUndefined();
+        }
+    });
+
+    it("refuses quotes that are not around a plain family name", () => {
+        for (const value of [`"`, `'`, `'Inter`, `Inter"`, `"a;b"`, `'x' }`, `"Q (x)"`, `"</style>"`, `'a\\'b'`]) {
+            expect(safeCssValue(value)).toBeUndefined();
+        }
+    });
+
+    it("refuses what ends a declaration, a rule or the element, and comments", () => {
+        for (const value of ["red;color:blue", "red}", "{red", "</style>", "red>", "red /* x */", "red !important", "a@b", "red\nblue"]) {
+            expect(safeCssValue(value)).toBeUndefined();
+        }
+    });
+
+    it("refuses parentheses that are not a colour, var() or math function, and unbalanced ones", () => {
+        for (const value of ["foo(1)", "rgb(1 2 3", "rgb(1 2 3))", ")(", "image(x)", "paint(x)", "element(#a)"]) {
+            expect(safeCssValue(value)).toBeUndefined();
+        }
+    });
+
+    it("refuses a value longer than a theme needs", () => {
+        expect(safeCssValue("a".repeat(301))).toBeUndefined();
+    });
+});
+
+describe("a theme value that is refused", () => {
+    const hostile = ["url(https://evil.example/x)", "red;} body{background:url(x)}", "\\75rl(x)", "expression(alert(1))", "'x'};"];
+
+    it("never reaches the prose stylesheet", () => {
+        for (const value of hostile) {
+            const css = proseCss(
+                resolveTheme({
+                    colors: { ink: value, accent: value, proseInk: value },
+                    fonts: { body: value, heading: value, mono: value },
+                    radii: { panel: value },
+                }),
+                "s",
+            );
+            expect(css).not.toMatch(/url\(|expression|@import|evil\.example/i);
+            expect(css).not.toContain("\\");
+            expect(css).not.toContain("<");
+        }
+    });
+
+    it("never reaches the root variables, and takes only its own declaration with it", () => {
+        for (const value of hostile) {
+            const css = themeVariablesCss(
+                resolveTheme({ colors: { accent: value }, fonts: { body: value }, radii: { control: value }, tokens: { brand: value } }),
+            );
+            expect(css).not.toMatch(/url\(|expression|@import|evil\.example/i);
+            expect(css).not.toContain("\\");
+            expect(css).not.toContain("--primary:");
+            expect(css).not.toContain("--bp-font-sans:");
+            expect(css).not.toContain("--t-brand");
+            expect(css).toContain("--background:");
+            expect(css).toContain("--bp-font-mono:");
+            expect(css.match(/[{}]/g)).toEqual(BRACES);
+        }
     });
 });

@@ -22,6 +22,16 @@
 		# The site renders markdown into HTML. lib/markdown.ts escapes raw HTML, so this is the
 		# second line rather than the first, and it is cheap.
 		X-Frame-Options "SAMEORIGIN"
+		# Enforced. The renderer needs 'unsafe-inline' for scripts and styles: Next writes inline
+		# scripts for hydration, the variant switch is an inline script, and every block, theme
+		# variable and tenant style is an inline <style> or style attribute. Nonces would need every
+		# page rendered per request, which the cached build avoids. Everything else is closed.
+		#   fonts: the theme's stylesheet links and font files (CSP_FONT_ORIGINS, Google Fonts by default)
+		#   scripts: the analytics script origins (CSP_SCRIPT_ORIGINS, none by default)
+		#   frames: the embed block's allowed hosts (CSP_FRAME_ORIGINS, the seven default embedHosts by default)
+		#   images and media: any https host, since tenant markdown and the CMS media host differ
+		#   connect: self only, the site does not call the API from the browser
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' {$CSP_SCRIPT_ORIGINS:}; style-src 'self' 'unsafe-inline' {$CSP_FONT_ORIGINS:https://fonts.googleapis.com https://fonts.gstatic.com}; font-src 'self' data: {$CSP_FONT_ORIGINS:https://fonts.googleapis.com https://fonts.gstatic.com}; img-src 'self' data: https:; media-src 'self' https:; connect-src 'self'; frame-src {$CSP_FRAME_ORIGINS:https://www.youtube-nocookie.com https://www.youtube.com https://youtube.com https://player.vimeo.com https://www.google.com https://open.spotify.com https://w.soundcloud.com}; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'"
 		-Server
 	}
 }
@@ -35,6 +45,7 @@
 	header {
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
 		-Server
 	}
 }
@@ -47,6 +58,7 @@
 	header {
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
 		-Server
 	}
 }
