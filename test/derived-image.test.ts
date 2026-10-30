@@ -17,7 +17,7 @@ describe("the published source image", () => {
     const recipe = read("examples/derived-image/Dockerfile");
 
     it("is a stage of the engine Dockerfile that the build stage starts from", () => {
-        expect(dockerfile).toMatch(/^FROM node:22-alpine AS source$/m);
+        expect(dockerfile).toMatch(/^FROM node:22.23.4-alpine AS source$/m);
         expect(dockerfile).toMatch(/^FROM source AS build$/m);
     });
 
@@ -47,7 +47,7 @@ describe("the published source image", () => {
     });
 
     it("ends in the same runtime stage as the engine Dockerfile", () => {
-        const run = (text: string) => text.slice(text.indexOf("FROM node:22-alpine AS run"));
+        const run = (text: string) => text.slice(text.indexOf("FROM node:22.23.4-alpine AS run"));
         const code = (text: string) => text.split("\n").filter((l) => l.trim() && !l.trim().startsWith("#")).join("\n");
         expect(code(run(recipe))).toBe(code(run(dockerfile)));
     });

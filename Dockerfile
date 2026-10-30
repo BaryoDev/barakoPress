@@ -3,7 +3,7 @@
 # Next's standalone output traces the files actually imported and copies them, so the final image
 # is the server plus the modules it reaches, rather than every dependency in package.json.
 
-FROM node:22-alpine AS deps
+FROM node:22.23.4-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
 # npm ci needs a lockfile; fall back so a fresh clone without one still builds.
@@ -20,7 +20,7 @@ FROM scratch AS plugins
 # The engine's source with its dependencies installed and nothing built. It is published as
 # ghcr.io/baryodev/barako-press-source:<version> so a site can build a derived image with a plugin or
 # an overlay from `FROM` that tag, with no checkout of this repository. See examples/derived-image.
-FROM node:22-alpine AS source
+FROM node:22.23.4-alpine AS source
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts
@@ -70,7 +70,7 @@ ENV PRESS_TRAILING_SLASH=$PRESS_TRAILING_SLASH
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-FROM node:22-alpine AS run
+FROM node:22.23.4-alpine AS run
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
 
