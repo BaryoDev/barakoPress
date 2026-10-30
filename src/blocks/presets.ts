@@ -273,6 +273,16 @@ function nestedFields(value: unknown, depth: number): BlockField[] | null {
  * anything renders. It is here so the definition is complete, and it renders whatever an editor put
  * in the preset's slots, which is the closest thing to right if a caller skips the binding pass.
  */
+/** Whether a block, or any block nested in its slots, is per-viewer or gated. */
+function holdsViewerBlock(blocks: ResolvedBlock[]): boolean {
+    return blocks.some(
+        (b) =>
+            b.definition.perViewer === true ||
+            b.definition.gate !== undefined ||
+            Object.values(b.slots).some((lists) => lists.some(holdsViewerBlock)),
+    );
+}
+
 export function compilePreset(preset: BlockPreset, registry: BlockRegistry): BlockDefinition {
     const body = resolveBlocks(preset.blocks, registry, { perViewer: true });
     const definition: BlockDefinition = {
@@ -283,7 +293,7 @@ export function compilePreset(preset: BlockPreset, registry: BlockRegistry): Blo
         preset: body,
         // A preset holding a per-viewer block is per-viewer itself. The body is resolved once at
         // startup, so the page-level check is the only one that can keep it out of a shared cache.
-        perViewer: body.some((b) => b.definition.perViewer === true),
+        perViewer: holdsViewerBlock(body),
         component: ({ slots }) => Object.values(slots).flat(),
     };
     checkDefinition(definition);

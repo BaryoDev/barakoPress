@@ -145,6 +145,12 @@ export interface BlockComponentProps<P extends BlockProps = BlockProps, S extend
     theme: PressTheme;
 }
 
+export interface BlockGate {
+    roles?: readonly string[];
+    /** Drawn in place of the block for a visitor the gate refuses. Server-rendered, never a prop. */
+    fallback?: ReactNode;
+}
+
 export interface BlockDefinition<P extends BlockProps = BlockProps, S extends string = string> {
     /** The name stored in the page's `type`. */
     type: string;
@@ -167,6 +173,13 @@ export interface BlockDefinition<P extends BlockProps = BlockProps, S extends st
      * cached.
      */
     perViewer?: boolean;
+    /**
+     * Shows only to a signed-in viewer, and sends that viewer's token with the server calls the
+     * block makes (#7). `roles` lists role names, any one of which admits a viewer; empty or unset
+     * admits any signed-in viewer. Anyone else, including a viewer of another tenant, gets
+     * `fallback`, or nothing. Like `perViewer`, a gated block is left out of shared pages.
+     */
+    gate?: BlockGate;
     /**
      * Draws without the wrapper `BlockList` puts around every block, which is `display: contents`
      * on that wrapper rather than no element at all.
@@ -241,6 +254,10 @@ export const MAX_LIST_ITEMS = 100;
 export function checkDefinition(definition: BlockDefinition): void {
     if (!definition.type) throw new Error("a block definition needs a type");
     checkFields(definition.type, definition.fields as BlockField[], 0);
+    const roles = definition.gate?.roles;
+    if (roles !== undefined && (!Array.isArray(roles) || roles.some((r) => typeof r !== "string" || r === ""))) {
+        throw new Error(`block "${definition.type}" gate roles must be a list of role names`);
+    }
 }
 
 function checkFields(type: string, fields: BlockField[], depth: number): void {
@@ -524,7 +541,7 @@ function resolveList(
         if (!isRecord(item) || typeof item.type !== "string") continue;
         const definition = registry.get(item.type);
         if (!definition) continue;
-        if (definition.perViewer && !options.perViewer) continue;
+        if ((definition.perViewer || definition.gate) && !options.perViewer) continue;
 
         const fields = definition.fields as BlockField[];
         const props = readProps(fields, item.props ?? {});
@@ -648,7 +665,7 @@ export function blockSchema(
             type: d.type,
             label: d.label,
             layer: d.layer ?? "block",
-            perViewer: d.perViewer === true,
+            perViewer: d.perViewer === true || d.gate !== undefined,
             ...(d.plugin ? { plugin: d.plugin } : {}),
             fields: (d.fields as BlockField[]).map(publishField),
         })),

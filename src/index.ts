@@ -305,6 +305,7 @@ export {
 } from "./blocks/schema.js";
 export type {
     BlockDefinition,
+    BlockGate,
     BlockField,
     BlockProps,
     BlockComponentProps,
