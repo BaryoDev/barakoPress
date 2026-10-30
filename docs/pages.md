@@ -287,5 +287,74 @@ On a `createViewerPage` route, a block's props can bind the viewer:
 A signed-out visitor, or a route that is cached, has no `viewer` values, so the placeholder renders
 its fallback: `{{viewer.Username ?? Guest}}`.
 
-Not built yet: gating a page by role, gated widgets passing the token to server calls, a sign-in
-block and token refresh.
+To gate a route, pass `gate` to `createViewerPage`:
+
+```ts
+export default createViewerPage(config, blocks, { gate: { roles: ["Member"], signIn: "/login" } });
+```
+
+A viewer holding any listed role sees the route. An empty `roles` list admits any signed-in viewer.
+A signed-out visitor goes to `signIn`, or gets the not-found page without it, and a signed-in viewer
+without the role gets the not-found page. Sessions off means nobody gets in. This refuses to render
+the route; it does not hide the data. An entry the CMS serves anonymously is still served
+anonymously by the API, so a page that has to stay private is a `Members` entry in barakoCMS 5.1.0
+(see its delivery API), read with a viewer token as described next.
+
+### Reading Members content
+
+Set `CMS_VIEWER_MINT_TOKEN` to a barakoCMS bearer token whose account holds `manage_public_delivery`.
+On a gated `createViewerPage` route, once the gate lets a viewer in, the server mints a viewer token
+for that viewer with `POST /api/viewer-tokens` (subject is the viewer's id, 15 minutes) and sends it
+as `X-Viewer-Token` on the route's reads of `/api/public/{type}` and `/api/public/{type}/{slug}`. So
+`Members` entries and fields reach the page.
+
+- The credential and the viewer token stay on the server. Neither is in a cookie, a prop, the HTML or
+  a response this package sends.
+- Those reads are `private, no-store` in the CMS and are plain uncached fetches here. They skip the
+  render cache, the kept copy used during an outage and the tag purge, so a member's answer is never
+  served to an anonymous visitor.
+- The token's tenant must be the tenant the request is pinned to, the same check as the gate. Any
+  other token is dropped and the route reads anonymously.
+- Unset credential, a refused mint or a token for another tenant all mean an anonymous read, which is
+  what the page got before. A route with no `gate` never mints.
+- Menus and site settings are not entry reads, so they stay anonymous and cached. The Pages module's
+  path lookup (`/api/public/pages/resolve`) does carry the token, uncached, the same way. Whether a
+  `Members` page is served there is up to the Pages module in the CMS; a module that ignores the
+  header answers the anonymous page.
+
+### Gated widgets
+
+A block definition can carry a `gate`:
+
+```ts
+defineBlock({
+    type: "salesReport",
+    label: "Sales report",
+    fields: [],
+    gate: { roles: ["Member"], fallback: <p>Members only.</p> },
+    component: async () => { /* server calls here carry the viewer token */ },
+});
+```
+
+On a `createViewerPage` route the block draws only for a signed-in viewer holding one of the roles
+(any signed-in viewer for an empty list), whose tenant is the one the request is pinned to. The
+server calls the component makes while it renders carry a minted viewer token, as above. Any other
+visitor, including one whose cookie belongs to another tenant, gets `fallback`, or nothing. It is
+never an error. On a route with no page `gate`, a block with no `gate` never gets a token, even on a page a member is viewing. On a route with a page `gate` the whole render runs with the viewer's token, so every block's type and entry reads carry it. A
+gated block is left out of `createPage` routes, which are shared and have no viewer.
+
+Calls made inside the component function carry the token. An async child component the function
+returns renders after it, outside that scope, so make the read in the block itself and pass the
+result down.
+
+### Sign-in block
+
+The `viewerSignIn` block is a plain form that posts `username`, `password` and `next` to
+`/api/viewer/login`. It needs no page script. The route sets the `HttpOnly` cookie and answers a form
+with a redirect to `next` (a path on this site, `/` otherwise); a failed sign-in comes back with
+`?signin=invalid` (or `approval`), and binding the block's `error` field to `{{query.signin}}` shows
+why. The block draws nothing for a viewer who is already signed in, and nothing when `viewerSessions`
+is off. It is a `perViewer` block, so only a `createViewerPage` route shows it. The token is never in
+its markup, props or the redirect.
+
+Not built yet: token refresh.

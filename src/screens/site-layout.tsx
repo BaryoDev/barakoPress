@@ -21,7 +21,7 @@ import {
 } from "../fonts.js";
 import { allowedScriptOrigins, analyticsTag, type AnalyticsTag } from "../analytics.js";
 import { SHARE_INVALID_FRAGMENT } from "../routes/share.js";
-import { themeVariablesCss, type PressTheme } from "../theme.js";
+import { liveTheme, themeVariablesCss, type PressTheme } from "../theme.js";
 import { VariantScript } from "./theme-variants.js";
 import { lookOr, recipeLook } from "../recipes.js";
 import type { BlockRegistry } from "../blocks/schema.js";
@@ -202,7 +202,7 @@ async function RegionBand({
     registry: BlockRegistry;
     tag: "header" | "footer";
 }) {
-    const t = cfg.theme;
+    const t = liveTheme(cfg.theme);
     const tone = toneOf(t, region.tone);
     const blocks = await pageBlocks(cfg, page, registry, { scope: tag });
     const Tag = tag;
@@ -243,13 +243,13 @@ async function RegionBand({
  * alone, so nothing is stored and no script runs for it.
  */
 async function HoldingDocument({ cfg, registry, loadFonts }: { cfg: PressConfig; registry?: BlockRegistry; loadFonts: boolean }) {
-    const t = cfg.theme;
+    const t = liveTheme(cfg.theme);
     const s = cfg.site;
     const page = await holdingPage(cfg, registry);
 
     return (
         <html lang={cfg.locale}>
-            <ThemeHead theme={t} loadFonts={loadFonts} />
+            <ThemeHead theme={cfg.theme} loadFonts={loadFonts} />
             <body style={{ margin: 0, background: t.colors.pageBg, color: t.colors.ink, fontFamily: t.fonts.body }}>
                 <style dangerouslySetInnerHTML={{ __html: `#${SHARE_INVALID_FRAGMENT}{display:none}#${SHARE_INVALID_FRAGMENT}:target{display:block}` }} />
                 <p
@@ -401,7 +401,7 @@ function phoneMenuStyles(
  * they meant and produce exactly what they produced.
  */
 function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
-    const t = cfg.theme;
+    const t = liveTheme(cfg.theme);
     const c = t.colors;
     const s = cfg.site;
     const band = { maxWidth: t.layout.wide, margin: "0 auto", padding: `0 ${t.layout.gutter}` } as const;
@@ -574,7 +574,7 @@ function IconSprite({ symbols }: { symbols: Readonly<Record<string, IconSymbol>>
 }
 
 function BuiltInFooter({ cfg }: { cfg: PressConfig }) {
-    const t = cfg.theme;
+    const t = liveTheme(cfg.theme);
     const c = t.colors;
     const s = cfg.site;
     const band = { maxWidth: t.layout.wide, margin: "0 auto", padding: `0 ${t.layout.gutter}` } as const;
@@ -651,12 +651,12 @@ export function createSiteLayout(config: PressConfig, options: SiteLayoutOptions
         const headerPage = await regionPage(cfg, headerRegion);
         const footerPage = await regionPage(cfg, footerRegion);
         const registry = headerPage || footerPage ? registryFor(cfg, blocksForRegions()) : undefined;
-        const t = cfg.theme;
+        const t = liveTheme(cfg.theme);
         const c = t.colors;
 
         return (
             <html lang={cfg.locale} suppressHydrationWarning>
-                <ThemeHead theme={t} loadFonts={loadFonts} analytics={analyticsTag(cfg.site, allowedScriptOrigins())} />
+                <ThemeHead theme={cfg.theme} loadFonts={loadFonts} analytics={analyticsTag(cfg.site, allowedScriptOrigins())} />
                 <body style={{ margin: 0, background: c.pageBg, color: c.ink, fontFamily: t.fonts.body }}>
                     {cfg.site.iconSprite && <IconSprite symbols={cfg.site.iconSprite} />}
                     {cfg.site.revealOnScroll && (

@@ -332,6 +332,7 @@ describe("createBlockRegistry", () => {
             "search",
             "siteNavigation",
             "siteLogo",
+            "viewerSignIn",
         ]);
     });
 

@@ -305,6 +305,7 @@ export {
 } from "./blocks/schema.js";
 export type {
     BlockDefinition,
+    BlockGate,
     BlockField,
     BlockProps,
     BlockComponentProps,
@@ -392,7 +393,7 @@ export {
     pageBlocks,
     PageView,
 } from "./screens/page.js";
-export type { PageOptions, PageViewProps } from "./screens/page.js";
+export type { PageOptions, PageViewProps, ViewerPageOptions } from "./screens/page.js";
 export { createBlockSchemaRoute, createBlockSchemaPreflight, parseOrigins } from "./routes/block-schema.js";
 export type { BlockSchemaRouteOptions } from "./routes/block-schema.js";
 
@@ -405,7 +406,7 @@ export type { BindingReport, BindingReportOptions } from "./routes/binding-repor
 export { createViewerLoginRoute } from "./routes/viewer-login.js";
 export { createViewerLogoutRoute } from "./routes/viewer-logout.js";
 export { signIn, signOut, getViewer, VIEWER_COOKIE } from "./viewer.js";
-export type { Viewer, ViewerCredentials, SignInResult } from "./viewer.js";
+export type { Viewer, ViewerCredentials, ViewerGate, SignInResult } from "./viewer.js";
 export { createRevalidateRoute } from "./routes/revalidate.js";
 export { revalidateKeyFor, bindingsKeyFor } from "./revalidate-key.js";
 export { createSharePage, createShareRedeemRoute, SHARE_INVALID_FRAGMENT } from "./routes/share.js";

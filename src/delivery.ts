@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { isIP } from "node:net";
 import { cmsUrlFor, pinnedTenant, type PressConfig } from "./config.js";
 import { readEnv, type PressEnv } from "./env.js";
@@ -539,8 +540,53 @@ async function read<T>(config: PressConfig, path: string, opts: ReadOptions): Pr
     }
 }
 
+/*
+ * Members reads (barakoPress #7).
+ *
+ * Inside `withViewerToken`, a delivery read of a type or an entry carries `X-Viewer-Token`. The CMS
+ * answers such a read `private, no-store`, so it never touches the store, the stale copy, the
+ * generation or Next's data cache here: it is a plain uncached fetch. A cached read made outside
+ * the scope is the anonymous one, so a member's answer cannot be served to anyone else.
+ */
+const viewerReads = new AsyncLocalStorage<string>();
+
+export const VIEWER_TOKEN_HEADER = "X-Viewer-Token";
+
+/** Delivery routes that are not `/{type}` or `/{type}/{slug}`: the viewer token means nothing there. */
+const NOT_A_TYPE = new Set(["pages", "site", "redirects", "types", "files", "events", "search", "semantic", "feed", "sitemap", "lookup"]);
+
+function readsAType(path: string): boolean {
+    const [route] = path.split("?");
+    const parts = route.split("/").filter(Boolean);
+    if (parts[0] !== "api" || parts[1] !== "public") return false;
+    const rest = parts.slice(2);
+    // The Pages module's path lookup is the one route outside /{type} that reads an entry for a viewer.
+    if (rest.length === 2 && rest[0].toLowerCase() === "pages" && rest[1].toLowerCase() === "resolve") return true;
+    return (rest.length === 1 || rest.length === 2) && !NOT_A_TYPE.has(rest[0].toLowerCase());
+}
+
+/** Runs `fn` with every type and entry delivery read inside it carrying `token`. */
+export function withViewerToken<T>(token: string, fn: () => Promise<T>): Promise<T> {
+    return viewerReads.run(token, fn);
+}
+
+async function getPrivate<T>(config: PressConfig, path: string, token: string): Promise<T> {
+    const res = await fetch(`${cmsUrlFor(config)}${path}`, {
+        headers: { ...(deliveryHeaders(config) as Record<string, string>), [VIEWER_TOKEN_HEADER]: token },
+        cache: "no-store",
+        signal: AbortSignal.timeout(config.cmsTimeoutMs),
+        redirect: "error",
+    });
+    noteDeliveryContract(config, res);
+    if (res.status === 404) throw new CmsError(path, 404, (await res.text()).slice(0, 200));
+    if (!res.ok) throw new CmsError(path, res.status);
+    return (await res.json()) as T;
+}
+
 /** A cached, tagged read. Everything a visitor sees comes through here. */
 async function get<T>(config: PressConfig, path: string, target: ReadTarget = {}): Promise<T> {
+    const viewerToken = viewerReads.getStore();
+    if (viewerToken && readsAType(path) && carriesSecretsSafely(cmsUrlFor(config))) return getPrivate<T>(config, path, viewerToken);
     const env = readEnv();
     const readKey = `${cmsUrlFor(config, env)}|t:${pinnedTenant(config, env) ?? ""}|${path}`;
     return read<T>(config, path, {
