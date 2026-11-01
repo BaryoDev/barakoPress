@@ -40,13 +40,20 @@ export function createFeed(base: PressConfig, collection: string = POST_COLLECTI
         if (!col?.feed || col.route === undefined) return new Response("Not found", { status: 404 });
 
         let items: Item[] = [];
+        let unread = false;
         try {
             ({ items } = await listCollection(config, collection, { pageSize: config.pageSizes.feed }));
         } catch {
-            // An unreachable CMS yields an empty channel, not a failure. This route is prerendered
-            // when the consumer gives it a revalidate window, so a throw fails their build, and at
-            // runtime it would hand a feed reader a 500.
-            items = [];
+            // An unreachable CMS does not throw. This route is prerendered when the consumer gives it
+            // a revalidate window, so a throw fails their build, and at runtime it would hand a feed
+            // reader a 500. It answers 503 below instead, so no cache keeps an empty feed as the answer.
+            unread = true;
+        }
+        if (unread) {
+            return new Response("Feed unavailable", {
+                status: 503,
+                headers: { "retry-after": "60", "cache-control": "no-store", "content-type": "text/plain; charset=utf-8" },
+            });
         }
 
         const categories = Object.entries(col.references ?? {})

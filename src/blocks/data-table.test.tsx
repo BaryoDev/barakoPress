@@ -193,7 +193,14 @@ describe("a dataTable over a public collection", () => {
     it("uses the page parameter the block names", async () => {
         const out = await page([table({ pageParam: "p" })], { p: "2", page: "3" });
         expect(out).toContain("Student 3");
-        expect(out).toContain('href="?p=3"');
+        // `page` is another parameter here, so it stays in the link.
+        expect(out).toContain('href="?page=3&amp;p=3"');
+    });
+
+    it("keeps the other query parameters in its links", async () => {
+        const out = await page([table()], { q: "ana", page: "2" });
+        expect(out).toContain('href="?q=ana&amp;page=1"');
+        expect(out).toContain('href="?q=ana&amp;page=3"');
     });
 
     it("links the first cell of a row through rowLink and refuses an off-site link", async () => {
