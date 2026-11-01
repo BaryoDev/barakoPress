@@ -23,8 +23,9 @@ const issue = (number: number, extra: Record<string, unknown> = {}) => ({
 
 const MIXED = [
     issue(1),
-    issue(2, { pull_request: { url: "https://api.github.com/repos/o/p/pulls/2" } }),
-    issue(3, { state: "closed" }),
+    // The two that must be dropped carry the newest dates, so a missing filter changes the first row.
+    issue(2, { pull_request: { url: "https://api.github.com/repos/o/p/pulls/2" }, created_at: "2026-10-29T00:00:00Z" }),
+    issue(3, { state: "closed", created_at: "2026-10-28T00:00:00Z" }),
     issue(4),
 ];
 
@@ -47,6 +48,7 @@ describe("issuesByLabel", () => {
 
         const rows = await issuesByLabel(config, ["o/p"], "known-gap", 10);
 
+        expect(rows).toHaveLength(2);
         expect(rows.map((r) => r.number)).toEqual([4, 1]);
     });
 
@@ -64,12 +66,15 @@ describe("issuesByLabel", () => {
     it("bounds the outbound read: no redirect, a timeout, one full page", async () => {
         const fetcher = vi.fn(async (..._args: unknown[]) => answer([]));
         vi.stubGlobal("fetch", fetcher);
+        const timeout = vi.spyOn(AbortSignal, "timeout");
+        const slow = defineConfig({ site: { name: "Test", url: "https://test.example" }, cmsTimeoutMs: 1234 });
 
-        await issuesByLabel(config, ["o/p"], "known-gap", 10);
+        await issuesByLabel(slow, ["o/p"], "known-gap", 10);
 
         const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
         expect(init.redirect).toBe("error");
         expect(init.signal).toBeDefined();
+        expect(timeout).toHaveBeenCalledWith(1234);
         expect(url).toContain("per_page=100");
     });
 
@@ -99,9 +104,11 @@ describe("issuesByLabel", () => {
         await issuesByLabel(config, ["o/p"], "known-gap", 10);
         vi.stubGlobal("fetch", vi.fn(async () => answer([])));
         expect(await issuesByLabel(config, ["o/p"], "known-gap", 10)).toEqual([]);
+        expect(await storeFor(config).get("stale:github-issues:o/p:known-gap")).toBe("[]");
 
         vi.stubGlobal("fetch", vi.fn(async () => answer({}, 502)));
         expect(await issuesByLabel(config, ["o/p"], "known-gap", 10)).toEqual([]);
+        expect(await storeFor(config).get("stale:github-issues:o/p:known-gap")).toBe("[]");
     });
 
     it("lists nothing when the kept answer is not valid JSON", async () => {
@@ -122,12 +129,13 @@ describe("issuesByLabel", () => {
     it("merges repos newest first and stops at the limit", async () => {
         vi.stubGlobal(
             "fetch",
-            vi.fn(async (url: string) => answer(url.includes("/a/one/") ? [issue(1), issue(5)] : [issue(3)])),
+            vi.fn(async (url: string) => answer(url.includes("/a/one/") ? [issue(1), issue(3)] : [issue(5)])),
         );
 
         const rows = await issuesByLabel(config, ["a/one", "b/two"], "known-gap", 2);
 
-        expect(rows.map((r) => `${r.repo}#${r.number}`)).toEqual(["a/one#5", "b/two#3"]);
+        // The newest one is in the second repo, so a plain concat and a sort give different lists.
+        expect(rows.map((r) => `${r.repo}#${r.number}`)).toEqual(["b/two#5", "a/one#3"]);
     });
 
     it("serves the last good answer when a later read fails", async () => {
@@ -196,6 +204,16 @@ describe("issueAge", () => {
         expect(issueAge(ago(65), NOW)).toBe("2 months ago");
         expect(issueAge(ago(800), NOW)).toBe("2 years ago");
     });
+
+    it("changes unit at 31 and 365 days, and reads a future or unreadable date as today", () => {
+        const ago = (days: number) => new Date(NOW - days * 86_400_000).toISOString();
+        expect(issueAge(ago(30), NOW)).toBe("30 days ago");
+        expect(issueAge(ago(31), NOW)).toBe("1 month ago");
+        expect(issueAge(ago(364), NOW)).toBe("12 months ago");
+        expect(issueAge(ago(365), NOW)).toBe("1 year ago");
+        expect(issueAge(ago(-5), NOW)).toBe("today");
+        expect(issueAge("not a date", NOW)).toBe("today");
+    });
 });
 
 describe("IssueListView", () => {
@@ -244,5 +262,27 @@ describe("the issueList block", () => {
         expect(html).toContain("issues/1");
         expect(html).not.toContain("issues/2");
         expect(html).not.toContain("issues/3");
+    });
+
+    it("stops at the block's limit", async () => {
+        vi.stubGlobal("fetch", vi.fn(async () => answer([issue(1), issue(2), issue(3)])));
+        const block = createBlockRegistry(config).get("issueList")!;
+
+        const node = await block.component({ props: { repo: "o/product", label: "known-gap", limit: 1 }, slots: {}, theme: config.theme } as never);
+        const html = renderToStaticMarkup(<>{node}</>);
+
+        expect(html).toContain("issues/3");
+        expect(html).not.toContain("issues/2");
+        expect(html).not.toContain("issues/1");
+    });
+
+    it("reads at most five of the repositories it was given", async () => {
+        const fetcher = vi.fn(async (..._args: unknown[]) => answer([]));
+        vi.stubGlobal("fetch", fetcher);
+        const block = createBlockRegistry(config).get("issueList")!;
+
+        await block.component({ props: { repo: "a/1 a/2 a/3 a/4 a/5 a/6 a/7", label: "known-gap" }, slots: {}, theme: config.theme } as never);
+
+        expect(fetcher).toHaveBeenCalledTimes(5);
     });
 });
