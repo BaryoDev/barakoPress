@@ -257,6 +257,14 @@ describe("a disclosure opens and closes with motion where motion is welcome", ()
         expect(rest).not.toContain("transition");
     });
 
+    it("clips the panel with room for a focus ring, so an open answer is not cut at the edge", async () => {
+        const css = styles(await page([{ type: "disclosure", props: { label: "One", content: BODY } }]));
+
+        expect(css).toContain("overflow:clip");
+        expect(css).toContain("overflow-clip-margin");
+        expect(css).not.toContain("overflow:hidden");
+    });
+
     it("keeps the answer in the markup, inside the details, with the summary first", async () => {
         const html = await page([{ type: "disclosure", props: { label: "One", content: BODY } }]);
 
