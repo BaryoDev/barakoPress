@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- A pager link now keeps the other query parameters of the page it is on, so `?q=ana&page=2` links to
+  `?q=ana&page=3`. A repeated parameter keeps its first value, the one `{{query.X}}` reads. A feed whose
+  read from the CMS fails now answers 503 with `no-store` and `retry-after`, where it used to answer an
+  empty feed that was cached for five minutes.
+
 - A selected theme variant now recolours the body, the built-in header and the footer (#218). When a
   theme names variants, every colour slot is also written as `--bp-c-<slot>` (`--bp-c-inverse`,
   `--bp-c-page-bg` and so on) in the base rule and in each variant rule, and those layout styles read
