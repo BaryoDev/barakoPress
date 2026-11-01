@@ -574,6 +574,25 @@ export async function getItemPreview(
     return productMatches(item, product) ? item : null;
 }
 
+/**
+ * One page of the items of `key` whose reference field `via` points at the entry `id`, with the total
+ * the API holds. `pageSizes.archive` of them unless told.
+ */
+export async function listReferencingPage(
+    config: PressConfig,
+    key: string,
+    id: string,
+    via: string,
+    pageSize?: number,
+): Promise<CollectionPage> {
+    const col = collectionOf(config, key);
+    if (!col || !id) return { items: [], total: 0, pageSize: 0, hasNextPage: false };
+    return listWith(config, key, col, {
+        pageSize: pageSize ?? config.pageSizes.archive,
+        filter: [[via, "eq", id]],
+    });
+}
+
 /** Items of `key` whose reference field `via` points at the entry `id`. `pageSizes.archive` of them unless told. */
 export async function listReferencing(
     config: PressConfig,
@@ -582,13 +601,7 @@ export async function listReferencing(
     via: string,
     pageSize?: number,
 ): Promise<Item[]> {
-    const col = collectionOf(config, key);
-    if (!col || !id) return [];
-    const { items } = await listWith(config, key, col, {
-        pageSize: pageSize ?? config.pageSizes.archive,
-        filter: [[via, "eq", id]],
-    });
-    return items;
+    return (await listReferencingPage(config, key, id, via, pageSize)).items;
 }
 
 /** The first collection with a reference into `key`, and the field it uses: what a detail page lists. */

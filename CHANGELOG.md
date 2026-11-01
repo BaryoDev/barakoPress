@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- A collection index can now page. `createCollectionIndex(config, key, { paging: true })` reads `?page=`
+  and draws previous and next under the list, from what the API says about a next page. Off by default
+  because reading the query makes the route dynamic, so an index that did not ask lists its first page
+  as before. The count over the items listed under an entry (a department's doctors) is now the total
+  the API holds, not the length of the page that was read. `listReferencingPage` returns that page with
+  its total.
+
 - A selected theme variant now recolours the body, the built-in header and the footer (#218). When a
   theme names variants, every colour slot is also written as `--bp-c-<slot>` (`--bp-c-inverse`,
   `--bp-c-page-bg` and so on) in the base rule and in each variant rule, and those layout styles read

@@ -17,7 +17,7 @@ import {
     getItemPreview,
     itemPath,
     listCollection,
-    listReferencing,
+    listReferencingPage,
     referencedBy,
     defaultByline,
     refsOf,
@@ -170,7 +170,7 @@ export interface ItemViewProps {
     config: PressConfig;
     item: Item;
     /** Items of another collection that reference this one, listed under it. */
-    related?: { collection: string; items: Item[] };
+    related?: { collection: string; items: Item[]; /** How many reference this one, when more than `items` holds. */ total?: number };
     /** True when the item is a draft read with a preview token. */
     preview?: boolean;
     backHref?: string;
@@ -260,7 +260,8 @@ function ItemArticle({ config, item, related, preview }: ItemViewProps) {
 
 function ItemList({ config, item, related, backHref = "/" }: ItemViewProps) {
     const noun = related ? collectionOf(config, related.collection)?.noun : undefined;
-    const count = related?.items.length ?? 0;
+    // The total the API holds, not the page this draws: past one page the heading would otherwise name the page size.
+    const count = related ? Math.max(related.total ?? 0, related.items.length) : 0;
     // Worked out from the body rather than typed, so there is no field to keep in step with the prose.
     const col = collectionOf(config, item.collection);
     const minutes = col?.readingTime && item.body ? readingMinutes(item.body) : undefined;
@@ -334,12 +335,37 @@ export interface CollectionIndexOptions {
      * refuses a build outright over it. The same trade as preview, made in the consumer's own file.
      */
     search?: boolean;
+    /**
+     * Read `?page=` and draw previous and next under the list. Off unless asked for, for the same
+     * reason as `search`: reading the query makes the route dynamic. Unset, the index lists its first page.
+     */
+    paging?: boolean;
     /** The blocks the collection's `indexPage` renders with. The built-in ones when unset. */
     blocks?: BlockRegistry;
 }
 
 /** The most rows a search on an index lists. The API caps its own side at fifty. */
 const SEARCH_LIMIT = 20;
+
+/** Previous and next under an index. Page one is the bare route, so the first page keeps one address. */
+function IndexPager({ config, route, page, hasNext }: { config: PressConfig; route: string; page: number; hasNext: boolean }) {
+    const at = (n: number) => (n > 1 ? `${route}?page=${n}` : route);
+    return (
+        <nav className="meta" aria-label={`${config.labels.previous} / ${config.labels.next}`}>
+            {page > 1 && (
+                <Link href={at(page - 1)} rel="prev">
+                    {config.labels.previous}
+                </Link>
+            )}
+            {page > 1 && hasNext && " "}
+            {hasNext && (
+                <Link href={at(page + 1)} rel="next">
+                    {config.labels.next}
+                </Link>
+            )}
+        </nav>
+    );
+}
 
 /** An index, rendered for an already resolved config. A catch-all serving a collection calls this. */
 export async function CollectionIndexView({
@@ -348,19 +374,27 @@ export async function CollectionIndexView({
     filter,
     heading,
     query,
+    page,
     blocks,
-}: { config: PressConfig; collection: string; query?: string } & CollectionIndexOptions) {
+}: { config: PressConfig; collection: string; query?: string; page?: number } & CollectionIndexOptions) {
     const col = collectionOf(config, collection);
     if (!col) notFound();
     const copy = indexCopy(col);
     const typed = (query ?? "").trim();
     let items: Item[] = [];
     let failure = false;
+    let hasNext = false;
+    // Only what the caller read from the query, so an index nobody asked to page stays on its first page.
+    const at = page !== undefined && Number.isInteger(page) && page > 1 ? page : 1;
 
     try {
-        ({ items } = typed
-            ? { items: await searchCollection(config, collection, typed, SEARCH_LIMIT) }
-            : await listCollection(config, collection, { filter }));
+        if (typed) {
+            items = await searchCollection(config, collection, typed, SEARCH_LIMIT);
+        } else {
+            const listed = await listCollection(config, collection, { filter, page: at });
+            items = listed.items;
+            hasNext = listed.hasNextPage;
+        }
     } catch (e) {
         if (e && typeof e === "object" && "digest" in e) throw e;
         // The type is not there, or not publicly deliverable, so nothing lives at this route.
@@ -426,6 +460,9 @@ export async function CollectionIndexView({
             {rest.map((i) => (
                 <Card key={i.id} config={config} item={i} />
             ))}
+            {!typed && !failure && (at > 1 || hasNext) && (
+                <IndexPager config={config} route={col.route ?? "/"} page={at} hasNext={hasNext} />
+            )}
         </div>
     );
     const list = lead ? (
@@ -557,20 +594,23 @@ export function createCollectionIndex(base: PressConfig, collection: string, opt
     return async function CollectionIndex({
         params,
         searchParams,
-    }: { params?: SiteParams; searchParams?: Promise<{ q?: string }> } = {}) {
+    }: { params?: SiteParams; searchParams?: Promise<{ q?: string; page?: string | string[] }> } = {}) {
         const config = await siteConfig(base, params);
         /*
          * Awaited only when the route file asked for search, because awaiting it is what makes the
          * route dynamic and `output: "export"` refuses a build over it (#55). An index with no search
          * never touches it and prerenders exactly as it did.
          */
-        const asked = options.search && searchParams ? (await searchParams).q : undefined;
+        const read = options.search || options.paging ? await searchParams : undefined;
+        const asked = options.search ? read?.q : undefined;
+        // A repeated or non-numeric `?page=` is the first page.
+        const page = options.paging && typeof read?.page === "string" ? Number(read.page) : undefined;
         // Repeated `?q=` arrives as an array, which nothing downstream can trim. Search was not asked
         // for in a shape this answers, so the index lists.
         const query = typeof asked === "string" ? asked : options.search ? "" : undefined;
         // Built once, on the first index that has a page to draw, and kept.
         if (collectionOf(config, collection)?.indexPage) blocks ??= createBlockRegistry(base);
-        return CollectionIndexView({ config, collection, ...options, query, blocks });
+        return CollectionIndexView({ config, collection, ...options, query, page, blocks });
     };
 }
 
@@ -612,9 +652,12 @@ async function relatedFor(
     col: CollectionConfig,
     item: Item,
     options: CollectionDetailOptions,
-): Promise<{ collection: string; items: Item[] } | undefined> {
-    const byReference = async (link: { collection: string; via: string } | undefined) =>
-        link ? { collection: link.collection, items: await listReferencing(config, link.collection, item.id, link.via) } : undefined;
+): Promise<{ collection: string; items: Item[]; total?: number } | undefined> {
+    const byReference = async (link: { collection: string; via: string } | undefined) => {
+        if (!link) return undefined;
+        const { items, total } = await listReferencingPage(config, link.collection, item.id, link.via);
+        return { collection: link.collection, items, total };
+    };
 
     if (options.related !== undefined) return byReference(options.related || undefined);
     if (options.view) return undefined;
