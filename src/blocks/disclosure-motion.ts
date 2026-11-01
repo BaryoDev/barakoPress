@@ -17,7 +17,7 @@ export function disclosureCss(): string {
         `[data-bp-disclosure]::details-content{display:grid;grid-template-rows:0fr;` +
         `transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1),content-visibility .4s allow-discrete}` +
         `[data-bp-disclosure][open]::details-content{grid-template-rows:1fr}` +
-        `[data-bp-disclosure-body]{overflow:hidden;min-height:0}` +
+        `[data-bp-disclosure-body]{overflow:clip;overflow-clip-margin:.5rem;min-height:0}` +
         `}}`
     );
 }
