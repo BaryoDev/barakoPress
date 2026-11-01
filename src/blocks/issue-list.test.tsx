@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineConfig } from "../config.js";
-import { forgetInProcessStore } from "../store.js";
+import { forgetInProcessStore, storeFor } from "../store.js";
 import { createBlockRegistry } from "./registry.js";
 import { IssueListView, issueAge, issuesByLabel, parseRepos } from "./issue-list.js";
 
@@ -59,6 +59,64 @@ describe("issuesByLabel", () => {
         const [url, init] = fetcher.mock.calls[0] as [string, { headers: Record<string, string> }];
         expect(url).toContain("https://api.github.com/repos/o/p/issues?state=open&labels=known%20gap");
         expect(Object.keys(init.headers).map((h) => h.toLowerCase())).not.toContain("authorization");
+    });
+
+    it("bounds the outbound read: no redirect, a timeout, one full page", async () => {
+        const fetcher = vi.fn(async (..._args: unknown[]) => answer([]));
+        vi.stubGlobal("fetch", fetcher);
+
+        await issuesByLabel(config, ["o/p"], "known-gap", 10);
+
+        const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+        expect(init.redirect).toBe("error");
+        expect(init.signal).toBeDefined();
+        expect(url).toContain("per_page=100");
+    });
+
+    it("revalidates on a fixed window when the site set no backstop", async () => {
+        const fetcher = vi.fn(async (..._args: unknown[]) => answer([]));
+        vi.stubGlobal("fetch", fetcher);
+        const none = defineConfig({ site: { name: "Test", url: "https://test.example" }, backstopSeconds: 0 });
+
+        await issuesByLabel(none, ["o/p"], "known-gap", 10);
+
+        const [, init] = fetcher.mock.calls[0] as [string, { next: { revalidate: unknown } }];
+        expect(init.next.revalidate).toBe(300);
+    });
+
+    it("keeps the last good answer when a 200 is not a list of issues", async () => {
+        vi.stubGlobal("fetch", vi.fn(async () => answer(MIXED)));
+        await issuesByLabel(config, ["o/p"], "known-gap", 10);
+
+        vi.stubGlobal("fetch", vi.fn(async () => answer({ message: "gateway page" })));
+        const rows = await issuesByLabel(config, ["o/p"], "known-gap", 10);
+
+        expect(rows.map((r) => r.number)).toEqual([4, 1]);
+    });
+
+    it("stores an empty list, since no open issues is an answer", async () => {
+        vi.stubGlobal("fetch", vi.fn(async () => answer(MIXED)));
+        await issuesByLabel(config, ["o/p"], "known-gap", 10);
+        vi.stubGlobal("fetch", vi.fn(async () => answer([])));
+        expect(await issuesByLabel(config, ["o/p"], "known-gap", 10)).toEqual([]);
+
+        vi.stubGlobal("fetch", vi.fn(async () => answer({}, 502)));
+        expect(await issuesByLabel(config, ["o/p"], "known-gap", 10)).toEqual([]);
+    });
+
+    it("lists nothing when the kept answer is not valid JSON", async () => {
+        await storeFor(config).set("stale:github-issues:o/p:known-gap", "{nope", 0);
+        vi.stubGlobal("fetch", vi.fn(async () => answer({}, 500)));
+
+        expect(await issuesByLabel(config, ["o/p"], "known-gap", 10)).toEqual([]);
+    });
+
+    it("keeps one answer for a label however it is cased", async () => {
+        vi.stubGlobal("fetch", vi.fn(async () => answer(MIXED)));
+        await issuesByLabel(config, ["o/p"], "Known-Gap", 10);
+
+        vi.stubGlobal("fetch", vi.fn(async () => answer({}, 503)));
+        expect((await issuesByLabel(config, ["o/p"], "known-gap", 10)).length).toBe(2);
     });
 
     it("merges repos newest first and stops at the limit", async () => {
