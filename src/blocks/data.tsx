@@ -155,6 +155,8 @@ export interface PagerState {
     param: string;
     page: number;
     hasNext: boolean;
+    /** The other query parameters of the request, so a link to another page keeps them. */
+    query?: Record<string, string>;
 }
 
 const pager = defineBlock<PagerProps & { state?: string }>({
@@ -177,7 +179,9 @@ const pager = defineBlock<PagerProps & { state?: string }>({
 });
 
 function pagerLinks(state: PagerState, theme: PressTheme, previousLabel?: string, nextLabel?: string, align?: string) {
-    const href = (page: number) => `?${encodeURIComponent(state.param)}=${page}`;
+    // The pager's own parameter goes last and replaces any copy, so the rest of the query survives a page change.
+    const rest = new URLSearchParams(Object.entries(state.query ?? {}).filter(([name]) => name !== state.param)).toString();
+    const href = (page: number) => `?${rest ? `${rest}&` : ""}${encodeURIComponent(state.param)}=${page}`;
     const tone = toneOf(theme, undefined);
     const style = { color: tone.accent, fontWeight: 600, textDecoration: "none" } as const;
     return (
@@ -203,18 +207,22 @@ function pagerLinks(state: PagerState, theme: PressTheme, previousLabel?: string
     );
 }
 
-/** `param:page:hasNext`, so the state is a plain string field rather than a second prop shape. */
+/** `param:page:hasNext` and, when the request had other parameters, `:query`, so the state stays a plain string field. */
 export function writePagerState(state: PagerState): string {
-    return `${state.param}:${state.page}:${state.hasNext ? "1" : "0"}`;
+    const base = `${state.param}:${state.page}:${state.hasNext ? "1" : "0"}`;
+    const rest = new URLSearchParams(Object.entries(state.query ?? {})).toString();
+    // URLSearchParams escapes the colon, so the split below stays unambiguous.
+    return rest ? `${base}:${rest}` : base;
 }
 
 export function readPagerState(value: string | undefined): PagerState | null {
     if (!value) return null;
     const parts = value.split(":");
-    if (parts.length !== 3) return null;
+    if (parts.length !== 3 && parts.length !== 4) return null;
     const page = Number(parts[1]);
     if (!parts[0] || !Number.isInteger(page) || page < 1) return null;
-    return { param: parts[0], page, hasNext: parts[2] === "1" };
+    const query = parts[3] ? Object.fromEntries(new URLSearchParams(parts[3])) : undefined;
+    return { param: parts[0], page, hasNext: parts[2] === "1", ...(query ? { query } : {}) };
 }
 
 /*

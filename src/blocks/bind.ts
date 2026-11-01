@@ -68,7 +68,7 @@ import {
 /** What `source` put in scope for the blocks inside it. */
 interface Rows {
     items: Item[];
-    pager?: { param: string; page: number; hasNext: boolean };
+    pager?: { param: string; page: number; hasNext: boolean; query?: Record<string, string> };
 }
 
 interface PresetSlot {
@@ -574,7 +574,8 @@ async function bindSource(block: ResolvedBlock, frame: Frame, ctx: BindContext):
 
     const all = block.props.mode === "all";
     const param = all || typeof block.props.pageParam !== "string" ? "" : block.props.pageParam;
-    const page = param === "" ? 1 : pageNumber(await frame.source.read("query"), param);
+    const query = param === "" ? null : await frame.source.read("query");
+    const page = param === "" ? 1 : pageNumber(query, param);
     const pageSize = typeof block.props.pageSize === "number" ? block.props.pageSize : 12;
     const narrowed = field !== "" ? { [field]: want } : undefined;
 
@@ -594,7 +595,7 @@ async function bindSource(block: ResolvedBlock, frame: Frame, ctx: BindContext):
 
     const rows: Rows = {
         items,
-        ...(param !== "" ? { pager: { param, page, hasNext: loaded?.hasNextPage ?? false } } : {}),
+        ...(param !== "" ? { pager: { param, page, hasNext: loaded?.hasNextPage ?? false, query: otherParams(query, param) } } : {}),
     };
     return bindList(content, { ...frame, source: frame.source.with(rowScopes(ctx, items, total)), rows, filter }, ctx);
 }
@@ -624,7 +625,8 @@ async function bindDataTable(block: ResolvedBlock, frame: Frame, ctx: BindContex
     if (columns.length === 0) return [];
 
     const param = typeof props.pageParam === "string" && props.pageParam !== "" ? props.pageParam : "page";
-    const page = pageNumber(await frame.source.read("query"), param);
+    const query = await frame.source.read("query");
+    const page = pageNumber(query, param);
     const pageSize = typeof props.pageSize === "number" ? Math.min(props.pageSize, MAX_SOURCE_ROWS) : 20;
     const loaded = await read(() => listCollection(ctx.config, key, { page, pageSize }));
     if (!loaded) return [];
@@ -651,7 +653,7 @@ async function bindDataTable(block: ResolvedBlock, frame: Frame, ctx: BindContex
     const state = writeTableState({
         heads: columns.map((c) => (typeof c.label === "string" && c.label.trim() !== "" ? c.label : c.field)),
         rows,
-        pager: { param, page, hasNext: loaded.hasNextPage ?? false },
+        pager: { param, page, hasNext: loaded.hasNextPage ?? false, query: otherParams(query, param) },
     });
     return [{ ...block, props: { ...props, state }, slots: {} }];
 }
@@ -945,6 +947,13 @@ async function read<T>(load: () => Promise<T>): Promise<T | null> {
         if (e && typeof e === "object" && "digest" in e) throw e;
         return null;
     }
+}
+
+/** The string parameters of the request other than the pager's own, which a link to another page carries along. */
+function otherParams(query: Record<string, unknown> | null, param: string): Record<string, string> | undefined {
+    const out: Record<string, string> = {};
+    for (const [name, value] of Object.entries(query ?? {})) if (name !== param && typeof value === "string") out[name] = value;
+    return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function pageNumber(query: Record<string, unknown> | null, param: string): number {
