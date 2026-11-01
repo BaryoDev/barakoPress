@@ -535,7 +535,34 @@ describe("while the CMS is down", () => {
         vi.stubGlobal("fetch", cms({ down: true }).fetchMock);
         vi.spyOn(console, "warn").mockImplementation(() => {});
 
-        expect(await getGlobals({ ...requestTime(), tenant: "baryo" })).toEqual({});
+        const globals = await getGlobals({ ...requestTime(), tenant: "baryo" });
+        expect(globals).not.toBeUndefined();
+        expect(globals).toStrictEqual({});
+    });
+
+    it("answers no site for a first read that failed, then holds once the settings are read and the CMS drops again", async () => {
+        const config = requestTime();
+        const holding = { Name: "BaryoDev", Url: "https://baryo.dev", Mode: "Holding" };
+        let mode: "error" | "ok" | "down" = "error";
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () => {
+                if (mode === "down") throw new Error("ECONNREFUSED");
+                if (mode === "error") return new Response("", { status: 500 });
+                return Response.json({ items: [{ id: "s", data: holding }], page: 1, pageSize: 1, totalItems: 1, totalPages: 1, hasNextPage: false });
+            }),
+        );
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        const route = { tenant: "baryo", gate: "public" as const, host: "baryo.dev" };
+
+        // Nothing kept yet: an unreadable read is no site, not an open one.
+        expect(await siteFromRoute(config, route)).toBeNull();
+
+        mode = "ok";
+        expect((await siteFromRoute(config, route))?.holding).toBeDefined();
+
+        mode = "down";
+        expect((await siteFromRoute(config, route))?.holding).toBeDefined();
     });
 
     it("keeps a holding tenant holding when the CMS goes down after the settings were read", async () => {
