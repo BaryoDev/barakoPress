@@ -7,6 +7,7 @@ import { dataBlocks } from "./data.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
 import { siteBlocks } from "./site-blocks.js";
 import { treeBlocks } from "./tree-blocks.js";
+import { versionBadge } from "./version-badge.js";
 
 /*
  * The blocks every site gets: the primitives and the data blocks of barakoPress #33, plus the named
@@ -311,7 +312,7 @@ function collection(config: PressConfig, holding = false): BlockDefinition {
 }
 
 export function builtInBlocks(config: PressConfig): BlockDefinition[] {
-    return [...primitiveBlocks(config), ...dataBlocks(config), columns, callToAction, collection(config), ...treeBlocks(config), ...siteBlocks(config)];
+    return [...primitiveBlocks(config), ...dataBlocks(config), columns, callToAction, collection(config), ...treeBlocks(config), ...siteBlocks(config), versionBadge(config)];
 }
 
 /*
