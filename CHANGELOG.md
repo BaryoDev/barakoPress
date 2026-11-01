@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- A `versionBadge` block (#232) shows the current version of a package or release, read from NuGet,
+  npm or GitHub (the latest release), so no site types a version number. Fields are `source`, `id`
+  and an optional `label`. Each good read is kept with its time, and when a read fails the badge shows
+  the kept value, or the label alone, or nothing. It never prints "undefined" and never fails the page.
+  The tooltip and a hidden text carry the time the version was last read. The `{cms.Version}` style
+  names in rich text are not part of this change.
+
 - A selected theme variant now recolours the body, the built-in header and the footer (#218). When a
   theme names variants, every colour slot is also written as `--bp-c-<slot>` (`--bp-c-inverse`,
   `--bp-c-page-bg` and so on) in the base rule and in each variant rule, and those layout styles read

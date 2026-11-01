@@ -20,7 +20,7 @@ export type VersionSource = (typeof VERSION_SOURCES)[number];
 const ID_PATTERNS: Record<VersionSource, RegExp> = {
     nuget: /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/,
     npm: /^(@[a-z0-9][a-z0-9._~-]{0,99}\/)?[a-z0-9][a-z0-9._~-]{0,99}$/,
-    github: /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}\/[A-Za-z0-9._-]{1,100}$/,
+    github: /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}\/(?!\.+$)[A-Za-z0-9._-]{1,100}$/,
 };
 
 export interface KeptVersion {
@@ -78,10 +78,11 @@ export async function versionOf(config: PressConfig, source: VersionSource, id: 
         const version = readVersion(source, await res.json());
         if (version === null) throw new Error(`${source} sent no version`);
         const fresh: KeptVersion = { version, checkedAt: new Date().toISOString() };
-        await store.set(key, JSON.stringify(fresh), 0);
+        // A store that cannot keep it does not cost the page a good read.
+        await store.set(key, JSON.stringify(fresh), 0).catch(() => {});
         return fresh;
     } catch (e) {
-        const kept = readKept(await store.get(key));
+        const kept = readKept(await store.get(key).catch(() => null));
         const why = e instanceof Error ? e.message : String(e);
         console.warn(`versionBadge: ${source} ${id} failed (${why}), ${kept ? "serving the last good answer" : "nothing was kept"}`);
         return kept;
