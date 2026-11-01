@@ -341,3 +341,52 @@ describe("a delivery that names its tenant", () => {
         expect(revalidateTag).not.toHaveBeenCalled();
     });
 });
+
+/*
+ * Which tags a delivery drops. An entry page carries the entry tag and no type tag, and a list that
+ * embeds a referenced entry carries the type tag of the list, so a type named without a slug, or a
+ * type other collections point at, has to drop the whole tenant to reach every read that shows it.
+ */
+describe("the tags a delivery drops", () => {
+    function about(body: object): NextRequest {
+        const raw = JSON.stringify(body);
+        const timestamp = String(Math.floor(Date.now() / 1000));
+        const signature = "sha256=" + createHmac("sha256", SECRET).update(`${timestamp}.${raw}`).digest("hex");
+        return new Request("http://internal:3000/api/revalidate", {
+            method: "POST",
+            headers: { host: "example.com", "content-type": "application/json", "x-barako-timestamp": timestamp, "x-barako-signature": signature },
+            body: raw,
+        }) as unknown as NextRequest;
+    }
+
+    const site = () =>
+        createRevalidateRoute(defineConfig({ site: { name: "Test", url: "https://example.com" }, cmsUrl: "http://cms.test" }), {
+            secret: SECRET,
+        });
+
+    const dropped = () => revalidateTag.mock.calls.map(([tag]) => tag);
+
+    it("drops the type and entry tags for an entry that names its slug", async () => {
+        await site().POST(about({ contentType: "post", data: { Slug: "hello" } }));
+
+        expect(dropped()).toEqual(["cms:type:post", "cms:entry:post:hello"]);
+    });
+
+    it("drops the whole tenant for a known type that names no slug", async () => {
+        await site().POST(about({ contentType: "post", data: { Title: "Hello" } }));
+
+        expect(dropped()).toEqual(["cms"]);
+    });
+
+    it("drops the whole tenant for a type that other collections point at", async () => {
+        await site().POST(about({ contentType: "author", data: { Slug: "jane" } }));
+
+        expect(dropped()).toEqual(["cms"]);
+    });
+
+    it("keeps the narrow tags for a type nothing points at", async () => {
+        await site().POST(about({ contentType: "page", data: { Slug: "about" } }));
+
+        expect(dropped()).toEqual(["cms:type:page", "cms:entry:page:about"]);
+    });
+});
