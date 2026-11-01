@@ -965,6 +965,23 @@ describe("collections from a tenant's settings", () => {
         expect(last).not.toContain("Next");
     });
 
+    it("answers not found for a page past the last, and lists page one for a page value that is not plain digits", async () => {
+        const paged = createCollectionIndex(config, "notices", { paging: true });
+        const at = async (page: string | string[]) => {
+            visit("school.example");
+            return outcome(() => paged({ searchParams: Promise.resolve({ page }) }));
+        };
+
+        expect(await at("99")).toBe("NEXT_NOT_FOUND");
+        expect(await at("99999999")).toBe("NEXT_NOT_FOUND");
+        for (const odd of ["abc", "", "0", "-3", "2.5", "1e3", "0x10", ["2", "3"]]) {
+            const html = await at(odd);
+            expect(html, JSON.stringify(odd)).toContain("Notice 1<");
+        }
+        // A value that is not plain digits never reaches the API.
+        expect(listed("notice").some((c) => /page=(1000|16|0|-3|2\.5)(&|$)/.test(c.path))).toBe(false);
+    });
+
     it("lists the first page, with no pager, on an index that did not ask for paging", async () => {
         visit("school.example");
         const html = await outcome(() => createCollectionIndex(config, "notices")({ searchParams: Promise.resolve({ page: "2" }) }));
