@@ -101,7 +101,7 @@ describe("a signed delivery to a request-time site", () => {
         expect(revalidateTag).toHaveBeenCalledWith("cms:baryo", { expire: 0 });
     });
 
-    it("still refuses a tenant barakoCMS no longer serves, and a bad signature when settings cannot be read", async () => {
+    it("refuses a bad signature when settings cannot be read", async () => {
         const { POST } = requestTime();
         vi.spyOn(console, "warn").mockImplementation(() => {});
         vi.stubGlobal(
@@ -115,6 +115,38 @@ describe("a signed delivery to a request-time site", () => {
         const forged = await POST(delivery("baryo.dev", "not-the-key"));
         expect(forged.status).toBe(401);
         expect(revalidateTag).not.toHaveBeenCalled();
+    });
+
+    it("answers 404 to a validly signed delivery for a tenant barakoCMS no longer serves", async () => {
+        const { POST } = requestTime();
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async (input: string | URL | Request) =>
+                new URL(String(input)).pathname === "/api/tenants/by-host/baryo.dev"
+                    ? Response.json({ handle: "baryo" })
+                    : new Response("This deployment serves registered tenants only.", { status: 404 }),
+            ),
+        );
+        const res = await POST(delivery("baryo.dev", revalidateKeyFor(SECRET, "baryo")));
+        expect(res.status).toBe(404);
+        expect(revalidateTag).not.toHaveBeenCalled();
+    });
+
+    it("drops the whole tenant for a validly signed delivery when its settings cannot be read", async () => {
+        const { POST } = requestTime();
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async (input: string | URL | Request) =>
+                new URL(String(input)).pathname === "/api/tenants/by-host/baryo.dev"
+                    ? Response.json({ handle: "baryo" })
+                    : new Response("", { status: 500 }),
+            ),
+        );
+        const res = await POST(delivery("baryo.dev", revalidateKeyFor(SECRET, "baryo")));
+        expect(res.status).toBe(200);
+        expect(revalidateTag.mock.calls).toEqual([["cms:baryo", { expire: 0 }]]);
     });
 
     it("verifies with the key of the tenant its host resolves to, so one tenant cannot purge another", async () => {
