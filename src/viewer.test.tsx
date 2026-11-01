@@ -44,7 +44,7 @@ vi.mock("next/link", () => ({
 }));
 
 const { defineConfig } = await import("./config.js");
-const { forgetCachedReads } = await import("./delivery.js");
+const { forgetCachedReads, singleIp } = await import("./delivery.js");
 const { VIEWER_COOKIE, signIn, signOut, getViewer, gateOutcome } = await import("./viewer.js");
 const { createViewerLoginRoute } = await import("./routes/viewer-login.js");
 const { createViewerLogoutRoute } = await import("./routes/viewer-logout.js");
@@ -167,6 +167,26 @@ describe("signing a viewer in", () => {
         expect(loginHeaders()?.get("x-barako-visitor-ip")).toBeNull();
         await signIn(on, { username: "ana", password: "pw" }, { visitorIp: "203.0.113.7, 198.51.100.1" });
         expect(loginHeaders()?.get("x-barako-visitor-ip")).toBeNull();
+        for (const bad of ["visitor.example", "1.2.3.4, 5.6.7.8", "1.2.3.4\r\nX-Evil: 1"]) {
+            await signIn(on, { username: "ana", password: "pw" }, { visitorIp: bad });
+            expect(loginHeaders()?.get("x-barako-visitor-ip"), JSON.stringify(bad)).toBeNull();
+        }
+    });
+
+    it("sends an IPv6 visitor address as it was given", async () => {
+        await signIn(on, { username: "ana", password: "pw" }, { visitorIp: "2001:db8::1" });
+        expect(loginHeaders()?.get("x-barako-visitor-ip")).toBe("2001:db8::1");
+    });
+});
+
+describe("singleIp", () => {
+    it("keeps exactly one IP literal, trimmed, and drops everything else", () => {
+        expect(singleIp("203.0.113.7")).toBe("203.0.113.7");
+        expect(singleIp("  203.0.113.7 ")).toBe("203.0.113.7");
+        expect(singleIp("2001:db8::1")).toBe("2001:db8::1");
+        for (const bad of [undefined, null, "", "   ", "visitor.example", "1.2.3.4, 5.6.7.8", "1.2.3.4:80", "fe80::1%eth0", "1.2.3.4\r\nX-Evil: 1", "1.2.3", "256.1.1.1", "1".repeat(46)]) {
+            expect(singleIp(bad), JSON.stringify(bad)).toBeNull();
+        }
     });
 });
 
