@@ -159,6 +159,8 @@ Also built in, from before the layers: `columns` (up to four lists of blocks), `
 `collection` (the newest posts, or authors or categories when the site has those routes). Pages
 already hold these and they render unchanged.
 
+`issueList` lists open issues with one label from public GitHub repositories: `repo` (`owner/name`, up to five, comma separated), `label`, `limit` (1 to 50, ten by default) and `heading`. Each row shows the title, number, age and repo name, linked to the issue. Pull requests and closed issues are left out. The renderer reads `api.github.com` from the server with no token, so a locked-down host has to allow that address. A failed read serves the last good answer, and an empty list says "Nothing listed.".
+
 A site adds its own blocks, or replaces a built-in, by registering a definition. The fields are the
 only description of the props: the renderer reads props through them, and `app/api/blocks` publishes
 them for an editor, so the two cannot drift.

@@ -25,6 +25,7 @@ const REPO_PATTERN = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
 const MAX_LABEL = 50;
 /** One page of the API. Pull requests share the endpoint, so a page larger than `limit` leaves room to drop them. */
 const PER_PAGE = 100;
+const FALLBACK_REVALIDATE = 300;
 
 export interface IssueRow {
     title: string;
@@ -44,7 +45,7 @@ export function parseRepos(value: string | undefined): string[] {
     return [...seen];
 }
 
-const issueKey = (repo: string, label: string) => `stale:github-issues:${repo.toLowerCase()}:${label}`;
+const issueKey = (repo: string, label: string) => `stale:github-issues:${repo.toLowerCase()}:${label.toLowerCase()}`;
 
 /** Open issues only: the issues endpoint also returns pull requests, and a state the API did not set is not trusted. */
 function openIssues(body: unknown, repo: string): IssueRow[] {
@@ -73,11 +74,16 @@ async function readRepo(config: PressConfig, repo: string, label: string): Promi
                 headers: { Accept: "application/vnd.github+json", "User-Agent": "barakopress" },
                 signal: AbortSignal.timeout(config.cmsTimeoutMs),
                 redirect: "error",
-                next: { revalidate: config.backstopSeconds > 0 ? config.backstopSeconds : false },
+                // Nothing tells this block that GitHub changed, so a site with no backstop still gets a window.
+                next: { revalidate: config.backstopSeconds > 0 ? config.backstopSeconds : FALLBACK_REVALIDATE },
             },
         );
         if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
-        const rows = openIssues(await res.json(), repo);
+        const body: unknown = await res.json();
+        // A 200 that is not a list is a gateway page, not an answer: it must not replace the kept one.
+        // An empty list is an answer, and is stored.
+        if (!Array.isArray(body)) throw new Error("GitHub answered with something other than a list");
+        const rows = openIssues(body, repo);
         await store.set(key, JSON.stringify(rows), 0);
         return rows;
     } catch (e) {
