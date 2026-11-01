@@ -199,9 +199,11 @@ export function cacheTagsFor(config: PressConfig, target: ReadTarget = {}): stri
  */
 export function purgeTagsFor(config: PressConfig, target: ReadTarget = {}): string[] {
     const base = cacheTagFor(config);
-    if (!target.type || !target.slug) return [base];
+    // The site settings are read as a list and never by entry, so their type tag reaches every read.
+    const listOnly = target.type !== undefined && target.type === config.sites?.settingsType;
+    if (!target.type || (!target.slug && !listOnly)) return [base];
     const tags = [narrower(base, "type", target), narrower(base, "entry", target)];
-    const narrow = tags.filter((tag): tag is string => tag !== null);
+    const narrow = [...new Set(tags.filter((tag): tag is string => tag !== null))];
     return narrow.length > 0 ? narrow : [base];
 }
 
