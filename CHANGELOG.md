@@ -33,6 +33,14 @@
   connection on port 3000. Viewer sign-in now sends `X-Barako-Visitor-IP` to the CMS when
   `sites.visitorIpHeader` is named, the same as share link redemption.
 
+- A `disclosure` opens and closes by animating `grid-template-rows` from 0fr to 1fr over .4s (#235),
+  in browsers that support `::details-content` and only when the visitor allows motion. Others get
+  the native toggle. The markup changed: the `details` carries `data-bp-disclosure`, the content sits
+  in a `data-bp-disclosure-body` wrapper `div` before the closing tag, and a `style` element follows
+  it, so a selector such as `details > div` or `details > :last-child` may need updating. `faqItem`
+  takes two new fields, `open` (`closed` or `open`, to start that question open) and `group` (items
+  sharing a group name open one at a time).
+
 - A selected theme variant now recolours the body, the built-in header and the footer (#218). When a
   theme names variants, every colour slot is also written as `--bp-c-<slot>` (`--bp-c-inverse`,
   `--bp-c-page-bg` and so on) in the base rule and in each variant rule, and those layout styles read
