@@ -48,6 +48,7 @@ const PAGES = [
 ];
 
 let bulk = 0;
+let postsFail = false;
 const bulkPage = (n: number) => ({ id: `b${n}`, slug: `p${n}`, data: { Title: `P${n}` } });
 
 const POSTS = [{ id: "p", slug: "hello", data: { Title: "Hello" } }];
@@ -69,7 +70,7 @@ function cms() {
             const path = url.searchParams.get("path") ?? "/";
             return Response.json({ contract: 2, path, entry: { contentType: "page", id: path, slug: path.slice(1), data: {} }, breadcrumbs: [] });
         }
-        if (url.pathname === "/api/public/post") return list(POSTS);
+        if (url.pathname === "/api/public/post") return postsFail ? new Response("", { status: 500 }) : list(POSTS);
         if (url.pathname === "/api/public/pages/resolve") {
             const path = url.searchParams.get("path") ?? "/";
             const found = PAGES.find((p) => `/${p.slug}` === path && p.slug !== "team");
@@ -91,6 +92,7 @@ afterEach(() => {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
     bulk = 0;
+    postsFail = false;
 });
 
 async function urls(): Promise<string[]> {
@@ -179,6 +181,23 @@ describe("the feed", () => {
         const body = await feed();
         expect(body).toContain("<link>https://studio.example/blog/hello</link>");
         expect(body).toContain('<guid isPermaLink="true">https://studio.example/blog/hello</guid>');
+    });
+});
+
+describe("the feed when the CMS cannot be read", () => {
+    it("answers 503 that no cache keeps, not an empty feed with a public cache time", async () => {
+        postsFail = true;
+        const res = await createFeed(config)();
+        expect(res.status).toBe(503);
+        expect(res.headers.get("cache-control")).toBe("no-store");
+        expect(res.headers.get("retry-after")).toBeTruthy();
+        expect(await res.text()).not.toContain("<rss");
+    });
+
+    it("still caches a feed that was read", async () => {
+        const res = await createFeed(config)();
+        expect(res.status).toBe(200);
+        expect(res.headers.get("cache-control")).toBe("public, max-age=300");
     });
 });
 

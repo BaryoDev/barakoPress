@@ -326,6 +326,25 @@ describe("source, repeat and paging", () => {
         expect(second).toContain('href="?p=1"');
     });
 
+    it("keeps the other query parameters in the pager's links", async () => {
+        const blocks = [
+            {
+                type: "source",
+                props: {
+                    collection: "enrolments",
+                    mode: "list",
+                    pageSize: 2,
+                    pageParam: "p",
+                    content: [[{ type: "pager", props: {} }]],
+                },
+            },
+        ];
+
+        const second = await page("academy.example", blocks, { p: "2", term: "fall 1" });
+        expect(second).toContain('href="?term=fall+1&amp;p=1"');
+        expect(second).toContain('rel="next"');
+    });
+
     it("formats a bound value in the tenant's currency and locale", async () => {
         const html = await page("academy.example", [
             list({}, [text("{{item.Fee | money}}"), text("{{item.Joined | date ?? Not yet}}")]),
