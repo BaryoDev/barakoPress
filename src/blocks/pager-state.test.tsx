@@ -40,6 +40,14 @@ describe("writePagerState and readPagerState", () => {
         expect(readPagerState(text)).toEqual({ param: "p", page: 2, hasNext: true, query });
     });
 
+    it("keeps a colon, an ampersand and an equals sign in a query key", () => {
+        const query = { "a:b": "1", "c&d": "2", "e=f": "3" };
+        const text = writePagerState({ param: "p", page: 2, hasNext: true, query });
+
+        expect(text.split(":")).toHaveLength(4);
+        expect(readPagerState(text)).toEqual({ param: "p", page: 2, hasNext: true, query });
+    });
+
     it("keeps the last of a repeated query parameter", () => {
         expect(readPagerState("page:2:1:tag=a&tag=b")?.query).toEqual({ tag: "b" });
     });
