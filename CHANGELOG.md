@@ -41,6 +41,11 @@
   takes two new fields, `open` (`closed` or `open`, to start that question open) and `group` (items
   sharing a group name open one at a time).
 
+- A new `issueList` block (#234) lists open issues with one label from public GitHub repositories,
+  with the title, number, age, repo name and a link on each row. Pull requests are left out, no token is
+  sent, and a failed read serves the last good answer. It makes a server side read of `api.github.com`,
+  so a host that limits outbound requests has to allow it.
+
 - A selected theme variant now recolours the body, the built-in header and the footer (#218). When a
   theme names variants, every colour slot is also written as `--bp-c-<slot>` (`--bp-c-inverse`,
   `--bp-c-page-bg` and so on) in the base rule and in each variant rule, and those layout styles read
