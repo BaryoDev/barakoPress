@@ -20,7 +20,7 @@ vi.mock("next/navigation", () => ({
 const { defineConfig } = await import("./config.js");
 const { listPosts } = await import("./cms.js");
 const { forgetCachedReads, tenantForHost } = await import("./delivery.js");
-const { applySiteSettings, normaliseHost, resolveSite, siteConfig, siteFromRoute, tenantFromHeaders } = await import("./site.js");
+const { applySiteSettings, getGlobals, normaliseHost, resolveSite, siteConfig, siteFromRoute, tenantFromHeaders } = await import("./site.js");
 const { createFeed } = await import("./routes/feed.js");
 const { createSitemap } = await import("./routes/sitemap.js");
 const { createRobots } = await import("./routes/robots.js");
@@ -521,6 +521,21 @@ describe("while the CMS is down", () => {
         expect(await resolveSite(config, headers)).toBeNull();
         onHost("anything.example", { "x-press-tenant": "baryo" });
         await expect(siteConfig(config)).rejects.toThrow("NEXT_NOT_FOUND");
+    });
+
+    it("answers not found for a failed read of any status, not only a dropped connection", async () => {
+        const config = defineConfig({ sites: {}, cmsUrl: CMS });
+        vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 500 })));
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+
+        await expect(siteFromRoute(config, { tenant: "baryo", gate: "public", host: "baryo.dev" })).resolves.toBeNull();
+    });
+
+    it("reads an empty globals object, not a marker, when the settings cannot be read", async () => {
+        vi.stubGlobal("fetch", cms({ down: true }).fetchMock);
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+
+        expect(await getGlobals({ ...requestTime(), tenant: "baryo" })).toEqual({});
     });
 
     it("keeps a holding tenant holding when the CMS goes down after the settings were read", async () => {
