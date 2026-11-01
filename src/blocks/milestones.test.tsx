@@ -143,6 +143,19 @@ describe("milestonesOf, hardening", () => {
         expect(url).toContain("per_page=30");
     });
 
+    it("asks for a revalidate window of the backstop, or none when the backstop is off", async () => {
+        const fetcher = vi.fn(async (..._args: unknown[]) => answer([]));
+        vi.stubGlobal("fetch", fetcher);
+
+        await milestonesOf(config, "o/p", "open", 5);
+        const off = defineConfig({ site: { name: "Test", url: "https://test.example" }, backstopSeconds: 0 });
+        await milestonesOf(off, "o/p", "open", 5);
+
+        const nextOf = (i: number) => (fetcher.mock.calls[i] as unknown as [string, { next: { revalidate: number | false } }])[1].next;
+        expect(nextOf(0)).toEqual({ revalidate: config.backstopSeconds });
+        expect(nextOf(1)).toEqual({ revalidate: false });
+    });
+
     it("clamps a limit above the cap", async () => {
         const many = Array.from({ length: 31 }, (_, i) => milestone(i + 1));
         vi.stubGlobal("fetch", vi.fn(async () => answer(many)));
