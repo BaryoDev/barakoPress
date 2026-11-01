@@ -240,6 +240,61 @@ describe("motion blocks render their final state", () => {
     });
 });
 
+const BODY = [[{ type: "text", props: { value: "The answer" } }]];
+
+describe("a disclosure opens and closes with motion where motion is welcome", () => {
+    it("animates grid-template-rows from 0fr to 1fr over .4s, only for a visitor who allows motion", async () => {
+        const html = await page([{ type: "disclosure", props: { label: "One", content: BODY } }]);
+        const css = styles(html);
+
+        expect(css).toContain("grid-template-rows:0fr");
+        expect(css).toContain("grid-template-rows:1fr");
+        expect(css).toContain("grid-template-rows .4s cubic-bezier(.2,.8,.2,1)");
+        expect(css).toContain("::details-content");
+
+        const rest = unguarded(css);
+        expect(rest).not.toContain("grid-template-rows");
+        expect(rest).not.toContain("transition");
+    });
+
+    it("keeps the answer in the markup, inside the details, with the summary first", async () => {
+        const html = await page([{ type: "disclosure", props: { label: "One", content: BODY } }]);
+
+        expect(html).toMatch(/<details[^>]*><summary[^>]*>One<\/summary>/);
+        expect(readable(html)).toContain("The answer");
+        // Nothing hides it from find in page or the keyboard: no script, no hidden, no tabindex.
+        expect(html).not.toContain("<script");
+        const markup = html.replace(/<style[^>]*>[\s\S]*?<\/style>/g, "");
+        expect(markup).not.toMatch(/hidden|tabindex|display:none/);
+    });
+
+    it("shares one name across a group, which is what closes the others with nothing loaded", async () => {
+        const item = (label: string, open?: boolean) => ({
+            type: "disclosure",
+            props: { label, group: "ledger", ...(open ? { open } : {}), content: BODY },
+        });
+        const html = await page([{ type: "stack", props: { content: [[item("A", true), item("B"), item("C")]] } }]);
+
+        expect(html.match(/<details[^>]*name="ledger"/g)).toHaveLength(3);
+        expect(html.match(/<details[^>]*open=""/g)).toHaveLength(1);
+        expect(html).not.toContain("<script");
+    });
+
+    it("builds a nine item ledger from faqItem with the first one open", async () => {
+        const items = Array.from({ length: 9 }, (_, i) => ({
+            type: "faqItem",
+            props: { question: `Item ${i + 1}?`, answer: `Answer ${i + 1}`, group: "ledger", ...(i === 0 ? { open: "open" } : {}) },
+        }));
+        const html = await page([{ type: "faq", props: { heading: "Ledger", items: [items] } }]);
+
+        expect(html.match(/<details/g)).toHaveLength(9);
+        expect(html.match(/<details[^>]*name="ledger"/g)).toHaveLength(9);
+        const opened = html.match(/<details[^>]*open=""[^>]*><summary[^>]*>([^<]*)</g) ?? [];
+        expect(opened).toHaveLength(1);
+        expect(opened[0]).toContain("Item 1?");
+    });
+});
+
 describe("the tokens the motion blocks read", () => {
     it("draws a gradient band from the theme's own colours, and names none of its own", async () => {
         const html = await page([

@@ -8,6 +8,7 @@ import { recipeLook } from "../recipes.js";
 import type { PressTheme } from "../theme.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
 import { CopyButton } from "./copy-button.js";
+import { disclosureCss } from "./disclosure-motion.js";
 import {
     HIDDEN_CLASS,
     HUE_STEPS,
@@ -1238,6 +1239,7 @@ const disclosure = defineBlock<DisclosureProps, "content">({
         const tone = toneOf(theme, props.tone);
         return (
             <details
+                data-bp-disclosure=""
                 name={props.group}
                 open={props.open === true}
                 {...look(theme, props.recipe, { borderTop: `1px solid ${tone.hairline}`, padding: `${theme.space.sm} 0` })}
@@ -1253,7 +1255,10 @@ const disclosure = defineBlock<DisclosureProps, "content">({
                 >
                     {props.label}
                 </summary>
-                <div style={{ paddingTop: theme.space.sm }}>{slots.content?.[0]}</div>
+                <div data-bp-disclosure-body="">
+                    <div style={{ paddingTop: theme.space.sm }}>{slots.content?.[0]}</div>
+                </div>
+                <style dangerouslySetInnerHTML={{ __html: disclosureCss() }} />
             </details>
         );
     },

@@ -691,10 +691,24 @@ const faq: BlockPreset = {
 const faqItem: BlockPreset = {
     type: "faqItem",
     label: "Question",
-    fields: [text("question", "Question", true), text("answer", "Answer", true), tone],
+    fields: [
+        text("question", "Question", true),
+        text("answer", "Answer", true),
+        tone,
+        choice("open", "Starts", ["closed", "open"]),
+        text("group", "Only one open in this group"),
+    ],
+    // A preset prop reaches a block as text and `disclosure`'s `open` is a boolean, so two branches.
     blocks: [
-        holding("disclosure", { label: p("question"), tone: p("tone") }, [
-            b("richText", { markdown: p("answer"), width: "full" }),
+        showIf({ value: p("open", "closed"), equals: "open" }, [
+            holding("disclosure", { label: p("question"), tone: p("tone"), group: p("group"), open: true }, [
+                b("richText", { markdown: p("answer"), width: "full" }),
+            ]),
+        ]),
+        showIf({ value: p("open", "closed"), equals: "open", unless: true }, [
+            holding("disclosure", { label: p("question"), tone: p("tone"), group: p("group") }, [
+                b("richText", { markdown: p("answer"), width: "full" }),
+            ]),
         ]),
     ],
 };
