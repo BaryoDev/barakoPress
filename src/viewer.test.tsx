@@ -188,6 +188,20 @@ describe("the login route", () => {
         expect(sets).toHaveLength(0);
     });
 
+    it("passes the visitor address from the named header on to the CMS", async () => {
+        const behindProxy = defineConfig({
+            site: { name: "Test", url: "https://test.example" },
+            cmsUrl: CMS,
+            tenant: "t",
+            viewerSessions: true,
+            sites: { visitorIpHeader: "x-real-ip" },
+        });
+        await createViewerLoginRoute(behindProxy)(post({ username: "ana", password: "pw" }, { "x-real-ip": "203.0.113.7" }));
+        expect(loginHeaders()?.get("x-barako-visitor-ip")).toBe("203.0.113.7");
+        await createViewerLoginRoute(on)(post({ username: "ana", password: "pw" }, { "x-real-ip": "203.0.113.7" }));
+        expect(loginHeaders()?.get("x-barako-visitor-ip")).toBeNull();
+    });
+
     it("refuses a post that came from another site", async () => {
         const res = await createViewerLoginRoute(on)(post({ username: "ana", password: "pw" }, { "sec-fetch-site": "cross-site" }));
         expect(res.status).toBe(403);

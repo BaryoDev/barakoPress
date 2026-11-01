@@ -10,7 +10,9 @@ import { describe, expect, it } from "vitest";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dockerfile = readFileSync(resolve(root, "Dockerfile"), "utf8");
-const installs = dockerfile.split("\n").filter((line) => /^RUN\b.*\bnpm (ci|install)\b/.test(line));
+const installs = dockerfile
+    .replace(/\\\n\s*/g, " ")
+    .split("\n").filter((line) => /^RUN\b.*\bnpm (ci|install)\b/.test(line));
 
 describe("the engine Dockerfile", () => {
     it("installs with npm ci in every stage that installs", () => {
