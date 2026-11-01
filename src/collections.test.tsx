@@ -199,6 +199,33 @@ const TENANTS: Record<string, Tenant> = {
         },
         content: { notice: NOTICES, post: [] },
     },
+    // Sixty doctors in one department: more than one archive page holds.
+    roster: {
+        host: "roster.example",
+        settings: {
+            Name: "Big Hospital",
+            Url: "https://roster.example",
+            Collections: {
+                departments: { type: "department", route: "/departments", fields: { title: "Name", body: "About" }, noun: ["department", "departments"] },
+                doctors: {
+                    type: "doctor",
+                    route: "/doctors",
+                    fields: { title: "Name", summary: "Specialty" },
+                    references: { Department: { collection: "departments", label: "in" } },
+                    noun: ["doctor", "doctors"],
+                },
+            },
+        },
+        content: {
+            department: DEPARTMENTS,
+            doctor: Array.from({ length: 60 }, (_, i) => ({
+                id: `r${i + 1}`,
+                slug: `dr-${i + 1}`,
+                data: { Name: `Dr ${i + 1}`, Slug: `dr-${i + 1}`, Department: DEPARTMENTS[0] },
+            })),
+            post: [],
+        },
+    },
     soon: {
         host: "soon.example",
         settings: { Name: "Soon Club", Url: "https://soon.example", Mode: "Holding", Collections: { projects: PROJECTS_COLLECTION } },
@@ -904,6 +931,45 @@ describe("collections from a tenant's settings", () => {
         const doctors = await listRelated(hospital, "doctors", { id: "d1" }, { via: "Department" });
         expect(doctors).toHaveLength(1);
         expect(doctors.map((d) => d.title)).toEqual(["Dr Reyes"]);
+    });
+
+    it("counts every item that references an entry, not only the page it draws", async () => {
+        visit("roster.example");
+        const html = await route(config, ["departments", "cardiology"]);
+        expect(html).toContain("60 doctors");
+        expect(html).not.toContain("50 doctors");
+    });
+
+    it("draws the page of an index that ?page= names, with a link each way", async () => {
+        const paged = createCollectionIndex(config, "notices", { paging: true });
+        const at = async (page?: string) => {
+            visit("school.example");
+            return outcome(() => paged({ searchParams: Promise.resolve(page ? { page } : {}) }));
+        };
+
+        const second = await at("2");
+        expect(second).toContain("Notice 21");
+        expect(second).toContain("Notice 40");
+        expect(second).not.toContain("Notice 20<");
+        expect(second).toContain('href="/notices?page=3"');
+        expect(second).toContain('href="/notices"');
+        expect(listed("notice").some((c) => c.path.includes("page=2"))).toBe(true);
+
+        const first = await at();
+        expect(first).toContain("Notice 1<");
+        expect(first).toContain('href="/notices?page=2"');
+        expect(first).not.toContain("Previous");
+
+        const last = await at("13");
+        expect(last).toContain("Notice 250");
+        expect(last).not.toContain("Next");
+    });
+
+    it("lists the first page, with no pager, on an index that did not ask for paging", async () => {
+        visit("school.example");
+        const html = await outcome(() => createCollectionIndex(config, "notices")({ searchParams: Promise.resolve({ page: "2" }) }));
+        expect(html).toContain("Notice 1<");
+        expect(html).not.toContain("?page=");
     });
 
     it("reads the tenant's settings entry through getGlobals, and refuses a config nobody resolved", async () => {
