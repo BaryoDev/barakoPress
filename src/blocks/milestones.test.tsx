@@ -61,6 +61,39 @@ describe("milestonesOf", () => {
         expect((await milestonesOf(config, "o/p", "open", 2)).map((r) => r.number)).toEqual([1, 2]);
     });
 
+    it("keeps only the first row at a limit of one", async () => {
+        vi.stubGlobal("fetch", vi.fn(async () => answer([milestone(1), milestone(2), milestone(3)])));
+
+        const rows = await milestonesOf(config, "o/p", "open", 1);
+
+        expect(rows).toHaveLength(1);
+        expect(rows[0].number).toBe(1);
+    });
+
+    it("keeps open and closed answers apart", async () => {
+        vi.stubGlobal("fetch", vi.fn(async () => answer([milestone(1)])));
+        await milestonesOf(config, "o/p", "open", 10);
+
+        vi.stubGlobal("fetch", vi.fn(async () => answer({}, 500)));
+
+        expect(await milestonesOf(config, "o/p", "closed", 10)).toEqual([]);
+        expect(await milestonesOf(config, "o/p", "open", 10)).toHaveLength(1);
+    });
+
+    it("drops a milestone whose issue count is negative or fractional, and keeps the rest", async () => {
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () =>
+                answer([milestone(1, { open_issues: -2 }), milestone(2, { closed_issues: 1.5 }), milestone(3)]),
+            ),
+        );
+
+        const rows = await milestonesOf(config, "o/p", "open", 10);
+
+        expect(rows).toHaveLength(1);
+        expect(rows[0].number).toBe(3);
+    });
+
     it("serves the last good answer when a later read fails", async () => {
         vi.stubGlobal("fetch", vi.fn(async () => answer([milestone(1)])));
         await milestonesOf(config, "o/p", "open", 10);
@@ -155,7 +188,16 @@ describe("MilestonesView", () => {
         renderToStaticMarkup(<MilestonesView rows={rows} heading={heading} config={config} theme={config.theme} />);
 
     it("draws 3 closed and 1 open as a 75 percent progressbar, with title, counts and due date", () => {
-        const html = view([{ title: "v1.0", number: 1, open: 1, closed: 3, dueOn: "2026-12-31T00:00:00Z" }], "Roadmap");
+        // readRows hands the view a bare date, so the view is given one, on a site in a west zone.
+        const west = defineConfig({ site: { name: "Test", url: "https://test.example" }, timeZone: "America/Los_Angeles" });
+        const html = renderToStaticMarkup(
+            <MilestonesView
+                rows={[{ title: "v1.0", number: 1, open: 1, closed: 3, dueOn: "2026-12-31" }]}
+                heading="Roadmap"
+                config={west}
+                theme={west.theme}
+            />,
+        );
 
         expect(html).toContain("Roadmap");
         expect(html).toContain('role="progressbar"');
