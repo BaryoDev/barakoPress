@@ -378,10 +378,29 @@ describe("the tags a delivery drops", () => {
         expect(dropped()).toEqual(["cms"]);
     });
 
+    // The reference is written into the config here, not taken from the defaults, so the test holds
+    // if the defaults change.
+    const withAuthors = (authorField: string | undefined) =>
+        createRevalidateRoute(
+            defineConfig({
+                site: { name: "Test", url: "https://example.com" },
+                cmsUrl: "http://cms.test",
+                types: { post: "post", author: "writer" },
+                fields: { author: authorField },
+            }),
+            { secret: SECRET },
+        );
+
     it("drops the whole tenant for a type that other collections point at", async () => {
-        await site().POST(about({ contentType: "author", data: { Slug: "jane" } }));
+        await withAuthors("Byline").POST(about({ contentType: "writer", data: { Slug: "jane" } }));
 
         expect(dropped()).toEqual(["cms"]);
+    });
+
+    it("drops only the narrow tags for the author type once no field points at it", async () => {
+        await withAuthors(undefined).POST(about({ contentType: "writer", data: { Slug: "jane" } }));
+
+        expect(dropped()).toEqual(["cms:type:writer", "cms:entry:writer:jane"]);
     });
 
     it("drops only the type tag for the site settings, which are read as a list and never by entry", async () => {
