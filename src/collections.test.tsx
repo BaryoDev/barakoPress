@@ -995,6 +995,12 @@ describe("collections from a tenant's settings", () => {
         const html = await outcome(() => createCollectionIndex(config, "notices")({ searchParams: Promise.resolve({ page: "2" }) }));
         expect(html).toContain("Notice 1<");
         expect(html).not.toContain("?page=");
+        // The tenant holds 250 notices, so a pager would have been drawn had the index paged. The CMS
+        // was asked for the first page only, and page 2 in the address was not passed on.
+        expect(NOTICES.length).toBeGreaterThan(20);
+        const asked = listed("notice");
+        expect(asked.length).toBeGreaterThan(0);
+        expect(asked.some((c) => c.path.includes("page=2"))).toBe(false);
     });
 
     it("reads the tenant's settings entry through getGlobals, and refuses a config nobody resolved", async () => {
