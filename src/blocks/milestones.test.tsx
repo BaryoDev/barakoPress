@@ -41,7 +41,7 @@ describe("milestonesOf", () => {
 
         const rows = await milestonesOf(config, "o/p", "all", 10);
 
-        expect(rows).toEqual([{ title: "v1.0", number: 1, open: 1, closed: 3, dueOn: "2026-12-31T00:00:00Z" }]);
+        expect(rows).toEqual([{ title: "v1.0", number: 1, open: 1, closed: 3, dueOn: "2026-12-31" }]);
         const [url, init] = fetcher.mock.calls[0] as [string, { headers: Record<string, string> }];
         expect(url).toContain("https://api.github.com/repos/o/p/milestones?state=all");
         expect(Object.keys(init.headers).map((h) => h.toLowerCase())).not.toContain("authorization");
