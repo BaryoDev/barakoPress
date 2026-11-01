@@ -973,13 +973,21 @@ describe("collections from a tenant's settings", () => {
         };
 
         expect(await at("99")).toBe("NEXT_NOT_FOUND");
-        expect(await at("99999999")).toBe("NEXT_NOT_FOUND");
-        for (const odd of ["abc", "", "0", "-3", "2.5", "1e3", "0x10", ["2", "3"]]) {
+        // Past the four digit cap the value is not a page at all, so it lists page one.
+        for (const odd of ["99999999", "10000", "abc", "", "0", "-3", "2.5", "1e3", "0x10", " 2", "2 ", ["2", "3"]]) {
             const html = await at(odd);
             expect(html, JSON.stringify(odd)).toContain("Notice 1<");
         }
         // A value that is not plain digits never reaches the API.
-        expect(listed("notice").some((c) => /page=(1000|16|0|-3|2\.5)(&|$)/.test(c.path))).toBe(false);
+        expect(listed("notice").some((c) => /page=(1000|10000|99999999|16|0|-3|2\.5|%202|\+2)(&|$)/.test(c.path))).toBe(false);
+    });
+
+    it("takes a page value written with a leading zero as the page it names", async () => {
+        const paged = createCollectionIndex(config, "notices", { paging: true });
+        visit("school.example");
+        const html = await outcome(() => paged({ searchParams: Promise.resolve({ page: "02" }) }));
+        expect(html).toContain("Notice 21");
+        expect(html).not.toContain("Notice 1<");
     });
 
     it("lists the first page, with no pager, on an index that did not ask for paging", async () => {
