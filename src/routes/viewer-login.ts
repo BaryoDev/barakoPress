@@ -2,7 +2,7 @@ import type { PressConfig } from "../config.js";
 import { resolveSite } from "../site.js";
 import { signIn } from "../viewer.js";
 import { sitePath } from "../site-path.js";
-import { sameOrigin } from "./share.js";
+import { sameOrigin, visitorIp } from "./share.js";
 
 /*
  * POST: sign a viewer in (barakoPress #7). Body is JSON `{ "username", "password" }`, or a form
@@ -56,7 +56,7 @@ export function createViewerLoginRoute(base: PressConfig) {
         const form = isForm(request);
         const credentials = await readCredentials(request);
         if (!credentials) return form ? see(withReason("/", "invalid")) : reply(400, { error: "bad request" });
-        const result = await signIn(config, { username: credentials.username, password: credentials.password });
+        const result = await signIn(config, { username: credentials.username, password: credentials.password }, { visitorIp: visitorIp(config, request) });
         if (form) return see(result.ok ? credentials.next : withReason(credentials.next, result.reason));
         if (result.ok) return reply(200, { signedIn: true });
         if (result.reason === "invalid") return reply(401, { error: "invalid" });
