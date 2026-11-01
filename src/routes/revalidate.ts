@@ -131,6 +131,12 @@ function changedBy(config: PressConfig, body: unknown): ReadTarget {
         type === (config.sites?.settingsType ?? "") ||
         Object.values(config.collections).some((c: CollectionConfig) => c.type === type);
     if (!known) return {};
+    // A list embeds the entries its references point at, and carries only its own type tag, so an
+    // edit to a referenced type can reach lists no narrow tag names.
+    const referenced = Object.values(config.collections).some((c: CollectionConfig) =>
+        Object.values(c.references ?? {}).some((ref) => Object.hasOwn(config.collections, ref.collection) && config.collections[ref.collection].type === type),
+    );
+    if (referenced) return {};
     return { type, slug: slugFrom((body as { data?: unknown }).data, slugField(config, type)) };
 }
 

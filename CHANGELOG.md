@@ -10,6 +10,11 @@
   first page. `listReferencingPage` returns that page with its total. `?page=` takes plain digits only,
   and a page past the last is a 404.
 
+- A delivery that names a type and no entry now drops the whole tenant's cache, and so does one for a
+  type another collection references (an author edit reaches the post lists that show the name). Before,
+  the first dropped only the type tag, which an entry page does not carry, so the page stayed stale until
+  the backstop ran out, and the second left embedded names stale in lists.
+
 - A selected theme variant now recolours the body, the built-in header and the footer (#218). When a
   theme names variants, every colour slot is also written as `--bp-c-<slot>` (`--bp-c-inverse`,
   `--bp-c-page-bg` and so on) in the base rule and in each variant rule, and those layout styles read
