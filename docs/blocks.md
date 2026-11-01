@@ -105,7 +105,14 @@ gives two counts instead, `progressCount` and `progressTotal` carry those throug
 the division. It needs a total: there is no field role for what is left, so a source that counts
 closed and open issues, as a GitHub milestone does, needs a field holding the total before
 `progressList` can draw it. Mapping the open count to `progressTotal` draws the wrong bar. A
-`progressBar` placed on its own takes `remaining` in place of `total`. `changelogList` does not group by itself, because grouping means knowing which field holds
+`progressBar` placed on its own takes `remaining` in place of `total`.
+
+`milestones` lists the milestones of one public GitHub repository (`repo` as `owner/name`, `state` of
+open, closed or all, `limit`, `heading`). Each is a `progressBar` with the closed count as `count` and
+the open count as `remaining`, and a line under it with percent closed, both counts and the due date.
+A milestone with no due date shows none, and one with no issues reads 0 percent with no bar. It reads
+GitHub without a token and keeps the last good answer, as `issueList` does; a failed read with nothing
+kept lists nothing. `changelogList` does not group by itself, because grouping means knowing which field holds
 the kind and that is the tenant's field name. One band per kind with `filterField` and `filterValue`
 is the grouping, and the chip on each entry is the option's own word.
 

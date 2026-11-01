@@ -328,6 +328,7 @@ describe("createBlockRegistry", () => {
             "callToAction",
             "collection",
             "issueList",
+            "milestones",
             "docsSidebar",
             "docsSwitcher",
             "search",
