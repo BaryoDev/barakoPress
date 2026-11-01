@@ -97,12 +97,56 @@ describe("milestonesOf", () => {
     });
 });
 
+describe("milestonesOf, hardening", () => {
+    it("refuses redirects, sets a timeout and caps the page size", async () => {
+        const fetcher = vi.fn(async (..._args: unknown[]) => answer([]));
+        vi.stubGlobal("fetch", fetcher);
+
+        await milestonesOf(config, "o/p", "open", 500);
+
+        const [url, init] = fetcher.mock.calls[0] as [string, { redirect: string; signal: unknown }];
+        expect(init.redirect).toBe("error");
+        expect(init.signal).toBeInstanceOf(AbortSignal);
+        expect(url).toContain("per_page=30");
+    });
+
+    it("clamps a limit above the cap", async () => {
+        const many = Array.from({ length: 31 }, (_, i) => milestone(i + 1));
+        vi.stubGlobal("fetch", vi.fn(async () => answer(many)));
+
+        expect(await milestonesOf(config, "o/p", "open", 500)).toHaveLength(30);
+    });
+
+    it("keeps the last good answer when a later 200 is not a list", async () => {
+        vi.stubGlobal("fetch", vi.fn(async () => answer([milestone(1)])));
+        await milestonesOf(config, "o/p", "open", 10);
+
+        vi.stubGlobal("fetch", vi.fn(async () => answer({ message: "odd" })));
+        await milestonesOf(config, "o/p", "open", 10);
+
+        vi.stubGlobal("fetch", vi.fn(async () => answer({}, 502)));
+        expect(await milestonesOf(config, "o/p", "open", 10)).toHaveLength(1);
+    });
+
+    it("lists nothing when the kept answer is not JSON", async () => {
+        const { storeFor } = await import("../store.js");
+        await storeFor(config).set("stale:github-milestones:o/p:open", "{not json", 0);
+        vi.stubGlobal("fetch", vi.fn(async () => answer({}, 500)));
+
+        expect(await milestonesOf(config, "o/p", "open", 10)).toEqual([]);
+    });
+});
+
 describe("percentClosed", () => {
     it("is closed over the whole, and 0 for no issues", () => {
         expect(percentClosed(3, 1)).toBe(75);
         expect(percentClosed(0, 0)).toBe(0);
         expect(percentClosed(0, 4)).toBe(0);
         expect(percentClosed(2, 0)).toBe(100);
+    });
+
+    it("reads 99 until every issue is closed", () => {
+        expect(percentClosed(199, 1)).toBe(99);
     });
 });
 
@@ -123,6 +167,16 @@ describe("MilestonesView", () => {
         expect(html).toContain("75% closed");
         expect(html).toContain("3 closed");
         expect(html).toContain("1 open");
+        expect(html).toContain("due December 31, 2026");
+    });
+
+    it("prints the due date on the day GitHub sent, whatever the site zone", async () => {
+        const west = defineConfig({ site: { name: "Test", url: "https://test.example" }, timeZone: "America/Los_Angeles" });
+        vi.stubGlobal("fetch", vi.fn(async () => answer([milestone(1, { due_on: "2026-12-31T00:00:00Z" })])));
+
+        const rows = await milestonesOf(west, "o/p", "open", 10);
+        const html = renderToStaticMarkup(<MilestonesView rows={rows} config={west} theme={west.theme} />);
+
         expect(html).toContain("due December 31, 2026");
     });
 

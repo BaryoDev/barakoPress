@@ -107,6 +107,17 @@ describe("issuesByLabel", () => {
         expect((await issuesByLabel(config, ["o/p"], "known-gap", 10)).map((r) => r.number)).toEqual([4]);
     });
 
+    it("keeps the last good answer when a later 200 is not a list", async () => {
+        vi.stubGlobal("fetch", vi.fn(async () => answer(MIXED)));
+        await issuesByLabel(config, ["o/p"], "known-gap", 10);
+
+        vi.stubGlobal("fetch", vi.fn(async () => answer({ message: "odd" })));
+        await issuesByLabel(config, ["o/p"], "known-gap", 10);
+
+        vi.stubGlobal("fetch", vi.fn(async () => answer({}, 502)));
+        expect((await issuesByLabel(config, ["o/p"], "known-gap", 10)).map((r) => r.number)).toEqual([4, 1]);
+    });
+
     it("reads nothing for an empty label or no repo", async () => {
         const fetcher = vi.fn(async () => answer([]));
         vi.stubGlobal("fetch", fetcher);
