@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { cmsUrlFor, pinnedTenant, type PressConfig } from "./config.js";
-import { carriesSecretsSafely, deliveryHeaders } from "./delivery.js";
+import { carriesSecretsSafely, deliveryHeaders, singleIp } from "./delivery.js";
 import { readEnv } from "./env.js";
 
 /*
@@ -49,15 +49,24 @@ function sessionSeconds(expiry: unknown): number {
     return Math.min(LONGEST_SESSION_SECONDS, Math.floor((at - Date.now()) / 1000));
 }
 
-export async function signIn(config: PressConfig, credentials: ViewerCredentials): Promise<SignInResult> {
+/** Who is signing in, so barakoCMS can rate limit the visitor rather than the renderer's own address. */
+export interface ViewerCaller {
+    /** The visitor's IP address. Anything but exactly one IP literal is dropped. */
+    visitorIp?: string;
+}
+
+export async function signIn(config: PressConfig, credentials: ViewerCredentials, caller: ViewerCaller = {}): Promise<SignInResult> {
     if (config.viewerSessions !== true) return { ok: false, reason: "off" };
     // A password does not travel over plain http to a CMS that is not on this machine.
     if (!carriesSecretsSafely(cmsUrlFor(config))) return { ok: false, reason: "unavailable" };
+    const sent: Record<string, string> = { ...(deliveryHeaders(config) as Record<string, string>), "content-type": "application/json" };
+    const visitorIp = singleIp(caller.visitorIp);
+    if (visitorIp) sent["X-Barako-Visitor-IP"] = visitorIp;
     let res: Response;
     try {
         res = await fetch(`${cmsUrlFor(config)}/api/auth/login`, {
             method: "POST",
-            headers: { ...(deliveryHeaders(config) as Record<string, string>), "content-type": "application/json" },
+            headers: sent,
             body: JSON.stringify({ username: credentials.username, password: credentials.password }),
             cache: "no-store",
             redirect: "manual",

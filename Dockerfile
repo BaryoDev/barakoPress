@@ -3,12 +3,6 @@
 # Next's standalone output traces the files actually imported and copies them, so the final image
 # is the server plus the modules it reaches, rather than every dependency in package.json.
 
-FROM node:22.23.4-alpine AS deps
-WORKDIR /app
-COPY package.json package-lock.json* ./
-# npm ci needs a lockfile; fall back so a fresh clone without one still builds.
-RUN npm ci --omit=dev --ignore-scripts 2>/dev/null || npm install --omit=dev --ignore-scripts
-
 # Empty unless the build names a context for it: `--build-context overlay=<dir>` replaces this stage.
 # That is how a site keeps its theme in its own repository and still builds the published engine.
 FROM scratch AS overlay
@@ -22,8 +16,8 @@ FROM scratch AS plugins
 # an overlay from `FROM` that tag, with no checkout of this repository. See examples/derived-image.
 FROM node:22.23.4-alpine AS source
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
 COPY . .
 
 FROM source AS build
@@ -85,6 +79,11 @@ RUN mkdir -p .next/cache && chown -R nextjs:nodejs .next
 
 USER nextjs
 EXPOSE 3000
+
+# Healthy when the server accepts a connection. It reads no page, so a CMS that is down does not
+# mark the renderer unhealthy.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD node -e "require('net').connect(3000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"
 
 # No shell form: the server should be PID 1 so a stop signal reaches it rather than a shell.
 CMD ["node", "server.js"]

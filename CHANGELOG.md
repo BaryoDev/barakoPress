@@ -27,6 +27,12 @@
   read from the CMS fails now answers 503 with `no-store` and `retry-after`, where it used to answer an
   empty feed that was cached for five minutes.
 
+- The image installs with `npm ci` and no fallback. `package-lock.json` must be present and in step
+  with `package.json`, or the build fails instead of resolving fresh versions. The unused `deps`
+  stage is gone and the runtime stage has a `HEALTHCHECK` that checks the server accepts a
+  connection on port 3000. Viewer sign-in now sends `X-Barako-Visitor-IP` to the CMS when
+  `sites.visitorIpHeader` is named, the same as share link redemption.
+
 - A selected theme variant now recolours the body, the built-in header and the footer (#218). When a
   theme names variants, every colour slot is also written as `--bp-c-<slot>` (`--bp-c-inverse`,
   `--bp-c-page-bg` and so on) in the base rule and in each variant rule, and those layout styles read

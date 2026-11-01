@@ -267,7 +267,7 @@ export interface SitesConfig {
     tenantHeader?: string;
     /**
      * A request header carrying the visitor's IP address, sent on to barakoCMS when a share link is
-     * redeemed so its rate limit counts that visitor rather than this container. Off unless named,
+     * redeemed or signs in as a viewer so its rate limit counts that visitor rather than this container. Off unless named,
      * and only safe when a proxy in front sets it and strips any value a caller sent. A value that
      * is not exactly one IP address is not sent.
      */

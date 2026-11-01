@@ -490,9 +490,9 @@ other. It needs one setting:
 | Variable | What |
 | --- | --- |
 | `PRESS_SECRET` | The HMAC key, at least 32 characters, for example `openssl rand -base64 48`. Read per request. Unset or shorter, no session is issued or accepted and everyone gets the holding page. Every instance behind one domain needs the same value. `PRESS_PREVIEW_SECRET` is read in its place when `PRESS_SECRET` is unset. See [One secret](caching.md#one-secret) |
-| `CMS_RENDERER_KEY` | Optional. Sent to barakoCMS as `X-Barako-Renderer-Key` when a link is redeemed, and on every delivery read when the CMS URL is https or loopback, and must match the renderer key barakoCMS is configured with. Read per request and never logged. Unset, no key header is sent |
+| `CMS_RENDERER_KEY` | Optional. Sent to barakoCMS as `X-Barako-Renderer-Key` when a link is redeemed or a viewer signs in, and on every delivery read when the CMS URL is https or loopback, and must match the renderer key barakoCMS is configured with. Read per request and never logged. Unset, no key header is sent |
 
-**Redemption is rate limited per tenant and visitor.** Every redemption leaves this container from the
+**Redemption and viewer sign-in are rate limited per tenant and visitor.** Every redemption and every viewer sign-in leaves this container from the
 same address, so barakoCMS needs the visitor's address to tell visitors apart. Name the header a
 proxy in front sets it in, `sites: { visitorIpHeader: "x-real-ip" }`, and it is sent on as
 `X-Barako-Visitor-IP`. Name it only behind a proxy that sets that header and strips a caller's value,

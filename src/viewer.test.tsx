@@ -110,6 +110,11 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
+const loginHeaders = () => {
+    const call = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith("/api/auth/login")).at(-1);
+    return call ? new Headers(call[1]?.headers) : null;
+};
+
 const post = (body: unknown, headers: Record<string, string> = {}) =>
     new Request("http://viewer.example/api/viewer/login", {
         method: "POST",
@@ -151,6 +156,18 @@ describe("signing a viewer in", () => {
         expect(await signIn(on, { username: "ana", password: "pw" })).toEqual({ ok: false, reason: "unavailable" });
         expect(sets).toHaveLength(0);
     });
+
+    it("sends the visitor's address to the CMS when one is given", async () => {
+        await signIn(on, { username: "ana", password: "pw" }, { visitorIp: "203.0.113.7" });
+        expect(loginHeaders()?.get("x-barako-visitor-ip")).toBe("203.0.113.7");
+    });
+
+    it("sends no visitor address when it is missing or is not one address", async () => {
+        await signIn(on, { username: "ana", password: "pw" });
+        expect(loginHeaders()?.get("x-barako-visitor-ip")).toBeNull();
+        await signIn(on, { username: "ana", password: "pw" }, { visitorIp: "203.0.113.7, 198.51.100.1" });
+        expect(loginHeaders()?.get("x-barako-visitor-ip")).toBeNull();
+    });
 });
 
 describe("the login route", () => {
@@ -169,6 +186,20 @@ describe("the login route", () => {
         expect((await createViewerLoginRoute(on)(post({ username: "ana", password: "bad" }))).status).toBe(401);
         expect((await createViewerLoginRoute(on)(post({ username: "ana" }))).status).toBe(400);
         expect(sets).toHaveLength(0);
+    });
+
+    it("passes the visitor address from the named header on to the CMS", async () => {
+        const behindProxy = defineConfig({
+            site: { name: "Test", url: "https://test.example" },
+            cmsUrl: CMS,
+            tenant: "t",
+            viewerSessions: true,
+            sites: { visitorIpHeader: "x-real-ip" },
+        });
+        await createViewerLoginRoute(behindProxy)(post({ username: "ana", password: "pw" }, { "x-real-ip": "203.0.113.7" }));
+        expect(loginHeaders()?.get("x-barako-visitor-ip")).toBe("203.0.113.7");
+        await createViewerLoginRoute(on)(post({ username: "ana", password: "pw" }, { "x-real-ip": "203.0.113.7" }));
+        expect(loginHeaders()?.get("x-barako-visitor-ip")).toBeNull();
     });
 
     it("refuses a post that came from another site", async () => {

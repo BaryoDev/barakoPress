@@ -81,7 +81,7 @@ export function sameOrigin(request: Request, hostHeader: string): boolean {
  * caller's value. A route handler is never given the socket's address, and the X-Forwarded-For Next
  * adds keeps whatever a caller sent, so with no header named nothing is sent.
  */
-function visitorIp(config: PressConfig, request: Request): string | undefined {
+export function visitorIp(config: PressConfig, request: Request): string | undefined {
     const named = config.sites?.visitorIpHeader;
     return named ? (request.headers.get(named) ?? undefined) : undefined;
 }
