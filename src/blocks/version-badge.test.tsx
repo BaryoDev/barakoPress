@@ -77,6 +77,40 @@ describe("versionOf", () => {
         expect(fetcher).not.toHaveBeenCalled();
     });
 
+    it("asks NuGet for a lowercase id", async () => {
+        const fetcher = vi.fn(async (..._a: unknown[]) => json({ versions: ["1.0.0"] }));
+        vi.stubGlobal("fetch", fetcher);
+
+        await versionOf(config, "nuget", "Baryo.Press");
+
+        expect(fetcher.mock.calls[0]![0]).toBe("https://api.nuget.org/v3-flatcontainer/baryo.press/index.json");
+    });
+
+    it("does not fetch a GitHub repo segment made of dots", async () => {
+        const fetcher = vi.fn();
+        vi.stubGlobal("fetch", fetcher);
+
+        expect(await versionOf(config, "github", "o/..")).toBeNull();
+        expect(await versionOf(config, "github", "../p")).toBeNull();
+        expect(fetcher).not.toHaveBeenCalled();
+    });
+
+    it("returns a good read when the store refuses to keep it", async () => {
+        vi.stubGlobal("fetch", vi.fn(async () => json({ version: "1.2.3" })));
+        const store = { get: vi.fn(async () => null), set: vi.fn(async () => Promise.reject(new Error("down"))), delete: vi.fn(), add: vi.fn() };
+        const shared = defineConfig({ site: { name: "Test", url: "https://test.example" }, store });
+
+        expect((await versionOf(shared, "npm", "pkg"))?.version).toBe("1.2.3");
+    });
+
+    it("does not throw when the store fails while the registry is down", async () => {
+        vi.stubGlobal("fetch", offline());
+        const store = { get: vi.fn(async () => Promise.reject(new Error("down"))), set: vi.fn(), delete: vi.fn(), add: vi.fn() };
+        const shared = defineConfig({ site: { name: "Test", url: "https://test.example" }, store });
+
+        expect(await versionOf(shared, "npm", "pkg")).toBeNull();
+    });
+
     it("answers from the kept value when the registry answers an error", async () => {
         await storeFor(config).set("stale:version:nuget:pkg", JSON.stringify({ version: "9.0.0", checkedAt: CHECKED }), 0);
         vi.stubGlobal("fetch", vi.fn(async () => json({}, 503)));
