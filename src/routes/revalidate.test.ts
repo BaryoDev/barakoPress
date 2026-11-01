@@ -83,6 +83,40 @@ describe("a signed delivery to a request-time site", () => {
         expect(revalidateTag).toHaveBeenCalledTimes(1);
     });
 
+    it("still purges the whole tenant when its settings cannot be read, since that read is only for narrowing", async () => {
+        const { POST } = requestTime();
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async (input: string | URL | Request) =>
+                new URL(String(input)).pathname === "/api/tenants/by-host/baryo.dev"
+                    ? Response.json({ handle: "baryo" })
+                    : new Response("", { status: 500 }),
+            ),
+        );
+        const res = await POST(delivery("baryo.dev", revalidateKeyFor(SECRET, "baryo")));
+
+        expect(res.status).toBe(200);
+        expect(await res.json()).toMatchObject({ revalidated: true, tag: "cms:baryo" });
+        expect(revalidateTag).toHaveBeenCalledWith("cms:baryo", { expire: 0 });
+    });
+
+    it("still refuses a tenant barakoCMS no longer serves, and a bad signature when settings cannot be read", async () => {
+        const { POST } = requestTime();
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async (input: string | URL | Request) =>
+                new URL(String(input)).pathname === "/api/tenants/by-host/baryo.dev"
+                    ? Response.json({ handle: "baryo" })
+                    : new Response("", { status: 500 }),
+            ),
+        );
+        const forged = await POST(delivery("baryo.dev", "not-the-key"));
+        expect(forged.status).toBe(401);
+        expect(revalidateTag).not.toHaveBeenCalled();
+    });
+
     it("verifies with the key of the tenant its host resolves to, so one tenant cannot purge another", async () => {
         const { POST } = requestTime();
         cmsWithTwoTenants();

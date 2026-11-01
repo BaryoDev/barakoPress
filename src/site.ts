@@ -201,6 +201,27 @@ export async function resolveSite(
 }
 
 /**
+ * The tenant a signed purge is for, and whether its settings could be read. A purge has no page to
+ * hold back, so an unreadable settings read does not refuse it: the tenant is returned with the
+ * configured values and the caller drops the whole tenant instead of narrowing. A tenant barakoCMS
+ * refuses is still null.
+ */
+export async function resolveSiteForPurge(
+    config: PressConfig,
+    requestHeaders: Headers,
+): Promise<{ site: PressConfig; unreadable: boolean } | null> {
+    if (!config.sites) return { site: config, unreadable: false };
+    const found = await tenantFromHeaders(config, requestHeaders);
+    if (!found) return null;
+
+    const scoped: PressConfig = { ...config, tenant: found.tenant };
+    const read = await readSettingsOrRefused(scoped);
+    if (read === REFUSED) return null;
+    if (read === UNREADABLE) return { site: scoped, unreadable: true };
+    return { site: applySiteSettings(scoped, read, found.host), unreadable: false };
+}
+
+/**
  * The config for this request in a server component or route handler.
  *
  * A request with no tenant is a not-found, and so is one the tenant's holding mode holds back.
@@ -390,7 +411,9 @@ export async function getGlobals(config: PressConfig): Promise<Record<string, un
  */
 async function readSiteSettings(config: PressConfig): Promise<Record<string, unknown> | undefined | null> {
     const read = await readSettingsOrRefused(config);
-    return read === REFUSED ? null : read;
+    // An outage with nothing kept cannot say whether the tenant is holding, so it is no site rather
+    // than an open one.
+    return read === REFUSED || read === UNREADABLE ? null : read;
 }
 
 async function readSettings(
@@ -398,29 +421,31 @@ async function readSettings(
     type: string | undefined = config.sites?.settingsType,
 ): Promise<Record<string, unknown> | undefined> {
     const read = await readSettingsOrRefused(config, type);
-    return read === REFUSED ? undefined : read;
+    return read === REFUSED || read === UNREADABLE ? undefined : read;
 }
 
 const REFUSED = Symbol("refused");
+const UNREADABLE = Symbol("unreadable");
 
 async function readSettingsOrRefused(
     config: PressConfig,
     type: string | undefined = config.sites?.settingsType,
-): Promise<Record<string, unknown> | undefined | typeof REFUSED> {
+): Promise<Record<string, unknown> | undefined | typeof REFUSED | typeof UNREADABLE> {
     if (!type) return undefined;
     try {
         const res = await list(config, type, { pageSize: 1 });
         return res.items[0]?.data;
     } catch (e) {
         if (e && typeof e === "object" && "digest" in e) throw e;
-        // No settings type in this tenant is a site that has not been set up yet, and a failed read
-        // with nothing kept is an outage. Both render with the configured identity and theme rather
-        // than failing the page (#14: fall back to the configured theme, not to the defaults).
+        // No settings type in this tenant is a site that has not been set up yet, and it renders with
+        // the configured identity and theme (#14: fall back to the configured theme, not to the defaults).
+        // A failed read with nothing kept is different: holding mode lives in these settings, so a
+        // site that cannot read them does not render.
         if (refusesTenant(e)) return REFUSED;
         if (e instanceof CmsError && e.status === 404) return undefined;
         const why = e instanceof Error ? e.message : String(e);
         console.warn(`site: settings for tenant "${pinnedTenant(config) ?? ""}" could not be read (${why})`);
-        return undefined;
+        return UNREADABLE;
     }
 }
 

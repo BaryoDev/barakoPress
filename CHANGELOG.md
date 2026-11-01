@@ -15,6 +15,13 @@
   the first dropped only the type tag, which an entry page does not carry, so the page stayed stale until
   the backstop ran out, and the second left embedded names stale in lists.
 
+- A request-time site whose settings cannot be read, with no earlier read kept, now answers not found
+  instead of rendering open. Holding mode is stored in those settings, so a held tenant used to show its
+  site during a settings outage. A tenant with no settings type still renders with the configured
+  identity, and a kept earlier read still holds. Any failed read other than not found counts, and the
+  kept reads live in the process, so a restart during an outage closes every tenant until the CMS answers.
+  A signed purge is not refused by this: it drops the whole tenant when the settings cannot be read.
+
 - A selected theme variant now recolours the body, the built-in header and the footer (#218). When a
   theme names variants, every colour slot is also written as `--bp-c-<slot>` (`--bp-c-inverse`,
   `--bp-c-page-bg` and so on) in the base rule and in each variant rule, and those layout styles read

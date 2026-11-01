@@ -5,7 +5,7 @@ import { pinnedTenant, type CollectionConfig, type FieldNames, type PressConfig 
 import { markPurged, purgeTagsFor, type ReadTarget } from "../delivery.js";
 import { revalidateKeyFor } from "../revalidate-key.js";
 import { MIN_SECRET_LENGTH, readSecret, type PressSecret } from "../secret.js";
-import { resolveSite } from "../site.js";
+import { resolveSiteForPurge } from "../site.js";
 import { storeFor } from "../store.js";
 
 /*
@@ -234,15 +234,17 @@ export function createRevalidateRoute(config: PressConfig, options: RevalidateOp
          */
         let site = config;
         let key = secret;
+        let unreadable = false;
         if (config.sites) {
             // The whole config, not the handle alone: which field of a type holds a slug is the
             // tenant's `Collections` setting, and without it a delivery naming one entry can only be
             // read as "something in this tenant changed". The settings read it costs is the cached,
             // tagged one every page of this tenant makes.
-            const resolved = await resolveSite(config, request.headers);
-            if (!resolved?.tenant) return NextResponse.json({ error: "no site for this host" }, { status: 404 });
-            site = resolved;
-            key = revalidateKeyFor(secret, resolved.tenant);
+            const resolved = await resolveSiteForPurge(config, request.headers);
+            if (!resolved?.site.tenant) return NextResponse.json({ error: "no site for this host" }, { status: 404 });
+            site = resolved.site;
+            unreadable = resolved.unreadable;
+            key = revalidateKeyFor(secret, resolved.site.tenant);
         }
 
         const material = Buffer.concat([Buffer.from(`${timestamp}.`, "utf8"), raw]);
@@ -275,7 +277,8 @@ export function createRevalidateRoute(config: PressConfig, options: RevalidateOp
             console.warn(`revalidate: a delivery for tenant ${JSON.stringify(tenantNamed(body))} reached tenant ${JSON.stringify(pinnedTenant(site) ?? "")}, ignored`);
             return NextResponse.json({ revalidated: false, ignored: "another tenant" });
         }
-        const tags = purgeTagsFor(site, changedBy(site, body));
+        // With the tenant's settings unread, which tags a delivery names cannot be worked out.
+        const tags = purgeTagsFor(site, unreadable ? {} : changedBy(site, body));
 
         // After the tenant resolved, so a lookup that failed with the CMS down leaves the retry free to purge.
         const claim = claimKey(tags, signature);
