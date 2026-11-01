@@ -384,6 +384,22 @@ describe("the tags a delivery drops", () => {
         expect(dropped()).toEqual(["cms"]);
     });
 
+    it("drops only the type tag for the site settings, which are read as a list and never by entry", async () => {
+        cmsWithTwoTenants();
+        const raw = JSON.stringify({ contentType: "site", data: { Name: "Baryo" } });
+        const timestamp = String(Math.floor(Date.now() / 1000));
+        const signature = "sha256=" + createHmac("sha256", revalidateKeyFor(SECRET, "baryo")).update(`${timestamp}.${raw}`).digest("hex");
+        const request = new Request("http://internal:3000/api/revalidate", {
+            method: "POST",
+            headers: { host: "baryo.dev", "content-type": "application/json", "x-barako-timestamp": timestamp, "x-barako-signature": signature },
+            body: raw,
+        }) as unknown as NextRequest;
+
+        await requestTime().POST(request);
+
+        expect(dropped()).toEqual(["cms:baryo:type:site"]);
+    });
+
     it("keeps the narrow tags for a type nothing points at", async () => {
         await site().POST(about({ contentType: "page", data: { Slug: "about" } }));
 
