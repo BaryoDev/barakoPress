@@ -77,7 +77,9 @@ async function readRepo(config: PressConfig, repo: string, label: string): Promi
             },
         );
         if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
-        const rows = openIssues(await res.json(), repo);
+        const body = await res.json();
+        if (!Array.isArray(body)) throw new Error("GitHub answered something other than a list");
+        const rows = openIssues(body, repo);
         await store.set(key, JSON.stringify(rows), 0);
         return rows;
     } catch (e) {

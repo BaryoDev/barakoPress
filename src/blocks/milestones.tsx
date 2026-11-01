@@ -30,7 +30,7 @@ export interface MilestoneRow {
     number: number;
     open: number;
     closed: number;
-    /** ISO date, or null when the milestone has none. */
+    /** `YYYY-MM-DD`, or null when the milestone has none. A bare date prints as sent, in any site zone. */
     dueOn: string | null;
 }
 
@@ -47,7 +47,7 @@ function readRows(body: unknown): MilestoneRow[] {
         const open = count(m.open_issues);
         const closed = count(m.closed_issues);
         if (typeof m.title !== "string" || !Number.isInteger(m.number) || open === null || closed === null) continue;
-        const due = typeof m.due_on === "string" && !Number.isNaN(Date.parse(m.due_on)) ? m.due_on : null;
+        const due = typeof m.due_on === "string" && !Number.isNaN(Date.parse(m.due_on)) ? m.due_on.slice(0, 10) : null;
         rows.push({ title: m.title, number: m.number as number, open, closed, dueOn: due });
     }
     return rows;
@@ -81,7 +81,9 @@ export async function milestonesOf(
             next: { revalidate: config.backstopSeconds > 0 ? config.backstopSeconds : false },
         });
         if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
-        const rows = readRows(await res.json());
+        const body = await res.json();
+        if (!Array.isArray(body)) throw new Error("GitHub answered something other than a list");
+        const rows = readRows(body);
         await store.set(key, JSON.stringify(rows), 0);
         return rows.slice(0, take);
     } catch (e) {
@@ -103,7 +105,7 @@ export async function milestonesOf(
 /** Closed over the whole, as a whole number. No issues is 0, never NaN. */
 export function percentClosed(closed: number, open: number): number {
     const total = closed + open;
-    return total === 0 ? 0 : Math.round((closed / total) * 100);
+    return total === 0 ? 0 : Math.floor((closed / total) * 100);
 }
 
 export function MilestonesView({
