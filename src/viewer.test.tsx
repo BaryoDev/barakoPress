@@ -110,6 +110,11 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
+const loginHeaders = () => {
+    const call = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith("/api/auth/login")).at(-1);
+    return call ? new Headers(call[1]?.headers) : null;
+};
+
 const post = (body: unknown, headers: Record<string, string> = {}) =>
     new Request("http://viewer.example/api/viewer/login", {
         method: "POST",
@@ -150,6 +155,18 @@ describe("signing a viewer in", () => {
         loginAnswer = () => new Response("", { status: 503 });
         expect(await signIn(on, { username: "ana", password: "pw" })).toEqual({ ok: false, reason: "unavailable" });
         expect(sets).toHaveLength(0);
+    });
+
+    it("sends the visitor's address to the CMS when one is given", async () => {
+        await signIn(on, { username: "ana", password: "pw" }, { visitorIp: "203.0.113.7" });
+        expect(loginHeaders()?.get("x-barako-visitor-ip")).toBe("203.0.113.7");
+    });
+
+    it("sends no visitor address when it is missing or is not one address", async () => {
+        await signIn(on, { username: "ana", password: "pw" });
+        expect(loginHeaders()?.get("x-barako-visitor-ip")).toBeNull();
+        await signIn(on, { username: "ana", password: "pw" }, { visitorIp: "203.0.113.7, 198.51.100.1" });
+        expect(loginHeaders()?.get("x-barako-visitor-ip")).toBeNull();
     });
 });
 
