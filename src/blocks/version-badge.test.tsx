@@ -36,6 +36,19 @@ describe("readVersion", () => {
         expect(readVersion("nuget", { versions: ["1.0.0", "1.1.0", "2.0.0-beta.1"] })).toBe("1.1.0");
         expect(readVersion("nuget", { versions: ["1.0.0-rc.1", "1.0.0-rc.2"] })).toBe("1.0.0-rc.2");
     });
+    it("trims a padded version, and refuses one over 64 characters", () => {
+        expect(readVersion("npm", { version: "  1.2.3  " })).toBe("1.2.3");
+        expect(readVersion("npm", { version: "1".repeat(64) })).toBe("1".repeat(64));
+        expect(readVersion("npm", { version: "1".repeat(65) })).toBeNull();
+        // The length is taken before the trim, so padding can push a short version over.
+        expect(readVersion("github", { tag_name: `  ${"1".repeat(64)}` })).toBeNull();
+        expect(readVersion("npm", { version: "   " })).toBeNull();
+    });
+    it("trusts the order NuGet sent, which is oldest first", () => {
+        // An unordered list is not sorted here: the last stable entry wins, not the highest.
+        expect(readVersion("nuget", { versions: ["2.0.0", "1.0.0"] })).toBe("1.0.0");
+        expect(readVersion("nuget", { versions: ["2.0.0-rc.1", "1.0.0", "3.0.0-rc.1"] })).toBe("1.0.0");
+    });
     it("reads npm and GitHub, and refuses a body with none", () => {
         expect(readVersion("npm", { version: "0.15.1" })).toBe("0.15.1");
         expect(readVersion("github", { tag_name: "v3.2.0" })).toBe("v3.2.0");
@@ -93,6 +106,47 @@ describe("versionOf", () => {
         expect(await versionOf(config, "github", "o/..")).toBeNull();
         expect(await versionOf(config, "github", "../p")).toBeNull();
         expect(fetcher).not.toHaveBeenCalled();
+    });
+
+    it("does not fetch an npm id with capitals or over 100 characters", async () => {
+        const fetcher = vi.fn();
+        vi.stubGlobal("fetch", fetcher);
+
+        expect(await versionOf(config, "npm", "Barakopress")).toBeNull();
+        expect(await versionOf(config, "npm", "a".repeat(101))).toBeNull();
+        expect(await versionOf(config, "npm", "@Scope/pkg")).toBeNull();
+        expect(fetcher).not.toHaveBeenCalled();
+    });
+
+    it("takes an npm id of exactly 100 characters", async () => {
+        const fetcher = vi.fn(async (..._a: unknown[]) => json({ version: "1.0.0" }));
+        vi.stubGlobal("fetch", fetcher);
+
+        expect((await versionOf(config, "npm", "a".repeat(100)))?.version).toBe("1.0.0");
+    });
+
+    it("refuses redirects, sets a timeout and a revalidate window", async () => {
+        const fetcher = vi.fn(async (..._a: unknown[]) => json({ version: "1.0.0" }));
+        vi.stubGlobal("fetch", fetcher);
+        const timeout = vi.spyOn(AbortSignal, "timeout");
+
+        await versionOf(config, "npm", "pkg");
+
+        const init = fetcher.mock.calls[0]![1] as { redirect: string; signal: unknown; next: { revalidate: number | false } };
+        expect(init.redirect).toBe("error");
+        expect(init.signal).toBeInstanceOf(AbortSignal);
+        expect(timeout).toHaveBeenCalledWith(config.cmsTimeoutMs);
+        expect(init.next).toEqual({ revalidate: config.backstopSeconds });
+    });
+
+    it("asks for no revalidate window when the backstop is off", async () => {
+        const fetcher = vi.fn(async (..._a: unknown[]) => json({ version: "1.0.0" }));
+        vi.stubGlobal("fetch", fetcher);
+        const off = defineConfig({ site: { name: "Test", url: "https://test.example" }, backstopSeconds: 0 });
+
+        await versionOf(off, "npm", "pkg");
+
+        expect((fetcher.mock.calls[0]![1] as { next: unknown }).next).toEqual({ revalidate: false });
     });
 
     it("returns a good read when the store refuses to keep it", async () => {
