@@ -194,11 +194,12 @@ export function cacheTagsFor(config: PressConfig, target: ReadTarget = {}): stri
 /**
  * The tags a delivery drops. The entry's own tag and its type's, since the entry's page reads the
  * one and every list it appears in reads the other. A delivery that names no type drops the tenant
- * tag, which is every read this site has cached.
+ * tag, which is every read this site has cached. So does one that names a type and no entry, because
+ * an entry page carries only its entry tag and a type tag would leave that page cached.
  */
 export function purgeTagsFor(config: PressConfig, target: ReadTarget = {}): string[] {
     const base = cacheTagFor(config);
-    if (!target.type) return [base];
+    if (!target.type || !target.slug) return [base];
     const tags = [narrower(base, "type", target), narrower(base, "entry", target)];
     const narrow = tags.filter((tag): tag is string => tag !== null);
     return narrow.length > 0 ? narrow : [base];
