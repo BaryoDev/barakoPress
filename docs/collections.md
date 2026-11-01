@@ -269,6 +269,13 @@ only where the route may be dynamic: a request-time site rewrites to a kept rout
 asking for the query fails rather than bailing out, so there the index lists and a page of blocks
 holding the `search` block is where a reader searches.
 
+**Paging.** An index lists one page, `pageSizes.index` items. `createCollectionIndex(config, key, { paging: true })`
+reads `?page=` and draws previous and next under the list, from the API's `hasNextPage`. Like `search`, it
+reads the query, so the route is dynamic and `output: "export"` refuses it, which is why it is off unless
+asked for. Only plain digits count as a page, anything else is page one, and a page past the last is a 404.
+The catch-all does not page. The list under an entry (a department's doctors) shows its first
+`pageSizes.archive` items under a heading that counts all of them.
+
 Which is why `searchPath` exists rather than the box pointing at the collection's own route. Only the
 site knows which of its routes reads the query, and a box submitting somewhere that ignores `q` sends
 a reader to an unfiltered index that looks like a search which matched everything. Name the route that

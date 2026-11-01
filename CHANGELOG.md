@@ -6,8 +6,9 @@
   and draws previous and next under the list, from what the API says about a next page. Off by default
   because reading the query makes the route dynamic, so an index that did not ask lists its first page
   as before. The count over the items listed under an entry (a department's doctors) is now the total
-  the API holds, not the length of the page that was read. `listReferencingPage` returns that page with
-  its total.
+  the API holds, not the length of the page that was read, though the cards under it still stop at the
+  first page. `listReferencingPage` returns that page with its total. `?page=` takes plain digits only,
+  and a page past the last is a 404.
 
 - A selected theme variant now recolours the body, the built-in header and the footer (#218). When a
   theme names variants, every colour slot is also written as `--bp-c-<slot>` (`--bp-c-inverse`,

@@ -409,6 +409,9 @@ export async function CollectionIndexView({
         failure = true;
     }
 
+    // The API answers a page past the last with an empty 200, so a made-up page number is a missing page.
+    if (!typed && !failure && at > 1 && items.length === 0) notFound();
+
     // A search answers with what matched, in the order the API ranked it. Lifting a featured row to
     // the top there would put a worse match above a better one.
     const featured = typed ? [] : items.filter((i) => i.featured);
@@ -604,7 +607,8 @@ export function createCollectionIndex(base: PressConfig, collection: string, opt
         const read = options.search || options.paging ? await searchParams : undefined;
         const asked = options.search ? read?.q : undefined;
         // A repeated or non-numeric `?page=` is the first page.
-        const page = options.paging && typeof read?.page === "string" ? Number(read.page) : undefined;
+        // Plain digits only, so one page has one address and nothing odd reaches the API.
+        const page = options.paging && typeof read?.page === "string" && /^\d{1,4}$/.test(read.page) ? Number(read.page) : undefined;
         // Repeated `?q=` arrives as an array, which nothing downstream can trim. Search was not asked
         // for in a shape this answers, so the index lists.
         const query = typeof asked === "string" ? asked : options.search ? "" : undefined;
