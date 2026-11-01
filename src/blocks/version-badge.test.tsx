@@ -101,6 +101,8 @@ describe("versionOf", () => {
         const shared = defineConfig({ site: { name: "Test", url: "https://test.example" }, store });
 
         expect((await versionOf(shared, "npm", "pkg"))?.version).toBe("1.2.3");
+        // The store was the one defineConfig took, and it was asked to keep the read and refused.
+        expect(store.set).toHaveBeenCalledTimes(1);
     });
 
     it("does not throw when the store fails while the registry is down", async () => {
@@ -109,6 +111,7 @@ describe("versionOf", () => {
         const shared = defineConfig({ site: { name: "Test", url: "https://test.example" }, store });
 
         expect(await versionOf(shared, "npm", "pkg")).toBeNull();
+        expect(store.get).toHaveBeenCalledTimes(1);
     });
 
     it("answers from the kept value when the registry answers an error", async () => {
