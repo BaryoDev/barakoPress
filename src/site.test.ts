@@ -511,6 +511,40 @@ describe("while the CMS is down", () => {
         expect(down.calls).toHaveLength(2);
     });
 
+    it("answers not found for a tenant whose settings cannot be read and were never kept, rather than render it open", async () => {
+        const config = defineConfig({ sites: { tenantHeader: "X-Press-Tenant" }, cmsUrl: CMS });
+        vi.stubGlobal("fetch", cms({ down: true }).fetchMock);
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+
+        await expect(siteFromRoute(config, { tenant: "baryo", gate: "public", host: "baryo.dev" })).resolves.toBeNull();
+        const headers = new Headers({ host: "anything.example", "x-press-tenant": "baryo" });
+        expect(await resolveSite(config, headers)).toBeNull();
+        onHost("anything.example", { "x-press-tenant": "baryo" });
+        await expect(siteConfig(config)).rejects.toThrow("NEXT_NOT_FOUND");
+    });
+
+    it("keeps a holding tenant holding when the CMS goes down after the settings were read", async () => {
+        const config = requestTime();
+        const holdingSettings = { Name: "BaryoDev", Url: "https://baryo.dev", Mode: "Holding" };
+        const up = vi.fn(async () =>
+            Response.json({
+                items: [{ id: "s", data: holdingSettings }],
+                page: 1,
+                pageSize: 1,
+                totalItems: 1,
+                totalPages: 1,
+                hasNextPage: false,
+            }),
+        );
+        vi.stubGlobal("fetch", up);
+        const route = { tenant: "baryo", gate: "public" as const, host: "baryo.dev" };
+        expect((await siteFromRoute(config, route))?.holding).toBeDefined();
+
+        vi.stubGlobal("fetch", cms({ down: true }).fetchMock);
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        expect((await siteFromRoute(config, route))?.holding).toBeDefined();
+    });
+
     it("replaces the kept answer on the next successful read", async () => {
         const config = requestTime();
         let title = "first";
