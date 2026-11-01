@@ -239,8 +239,8 @@ function html(redeemPath: string, labels: Labels, locale: string): string {
  * showing English to the one visitor who follows a share link, which is the visitor most likely to
  * be a client being shown their own site.
  *
- * A host that belongs to no tenant is a 404, the same as every other route. A CMS that cannot be
- * reached is not: the page falls back to the words the config file carries, because a share link
+ * A host that belongs to no tenant is a 404, the same as every other route, and so is a tenant whose
+ * settings cannot be read with nothing kept. A host lookup that fails is not: the page falls back to the words the config file carries, because a share link
  * that opens in English beats one that answers 500.
  */
 export function createSharePage(base: PressConfig, options: SharePageOptions = {}) {

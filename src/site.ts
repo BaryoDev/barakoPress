@@ -201,6 +201,27 @@ export async function resolveSite(
 }
 
 /**
+ * The tenant a signed purge is for, and whether its settings could be read. A purge has no page to
+ * hold back, so an unreadable settings read does not refuse it: the tenant is returned with the
+ * configured values and the caller drops the whole tenant instead of narrowing. A tenant barakoCMS
+ * refuses is still null.
+ */
+export async function resolveSiteForPurge(
+    config: PressConfig,
+    requestHeaders: Headers,
+): Promise<{ site: PressConfig; unreadable: boolean } | null> {
+    if (!config.sites) return { site: config, unreadable: false };
+    const found = await tenantFromHeaders(config, requestHeaders);
+    if (!found) return null;
+
+    const scoped: PressConfig = { ...config, tenant: found.tenant };
+    const read = await readSettingsOrRefused(scoped);
+    if (read === REFUSED) return null;
+    if (read === UNREADABLE) return { site: scoped, unreadable: true };
+    return { site: applySiteSettings(scoped, read, found.host), unreadable: false };
+}
+
+/**
  * The config for this request in a server component or route handler.
  *
  * A request with no tenant is a not-found, and so is one the tenant's holding mode holds back.
