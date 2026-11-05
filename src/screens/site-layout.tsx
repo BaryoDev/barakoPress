@@ -661,7 +661,18 @@ export function createSiteLayout(config: PressConfig, options: SiteLayoutOptions
         return (
             <html lang={cfg.locale} suppressHydrationWarning>
                 <ThemeHead theme={cfg.theme} loadFonts={loadFonts} analytics={analyticsTag(cfg.site, allowedScriptOrigins())} />
-                <body style={{ margin: 0, background: c.pageBg, color: c.ink, fontFamily: t.fonts.body }}>
+                {/* A column the height of the window, so a short page keeps its footer at the bottom. */}
+                <body
+                    style={{
+                        margin: 0,
+                        background: c.pageBg,
+                        color: c.ink,
+                        fontFamily: t.fonts.body,
+                        display: "flex",
+                        flexDirection: "column",
+                        minHeight: "100vh",
+                    }}
+                >
                     {cfg.site.iconSprite && <IconSprite symbols={cfg.site.iconSprite} />}
                     {cfg.site.revealOnScroll && (
                         <style dangerouslySetInnerHTML={{ __html: revealOnScrollCss(cfg.site.revealOnScroll) }} />
@@ -672,7 +683,7 @@ export function createSiteLayout(config: PressConfig, options: SiteLayoutOptions
                         <BuiltInHeader cfg={cfg} nav={nav} />
                     )}
 
-                    <main>{children}</main>
+                    <main style={{ flex: "1 0 auto" }}>{children}</main>
 
                     {footerPage && footerRegion && registry ? (
                         await RegionBand({ cfg, region: footerRegion, page: footerPage, registry, tag: "footer" })
