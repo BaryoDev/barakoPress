@@ -338,10 +338,11 @@ describe("reading from a CMS that stops answering", () => {
 });
 
 describe("speaksPagesContract", () => {
-    it("reads Pages contracts 1 and 2, and nothing else", () => {
+    it("reads Pages contracts 1 to 3, and nothing else", () => {
         expect(speaksPagesContract(1)).toBe(true);
         expect(speaksPagesContract(2)).toBe(true);
-        for (const other of [0, 3, 1.5, "2", null, undefined, Number.NaN]) expect(speaksPagesContract(other)).toBe(false);
+        expect(speaksPagesContract(3)).toBe(true);
+        for (const other of [0, 4, 1.5, "2", null, undefined, Number.NaN]) expect(speaksPagesContract(other)).toBe(false);
     });
 });
 
@@ -474,14 +475,15 @@ describe("the delivery contract", () => {
     });
 
     it("reads the delivery header, and the admin header from an API that predates the split", () => {
+        expect(classifyDeliveryContract(new Headers({ "X-Delivery-Contract-Version": "10" }))).toEqual({ kind: "ok", version: 10 });
         expect(classifyDeliveryContract(new Headers({ "X-Delivery-Contract-Version": "9" }))).toEqual({ kind: "ok", version: 9 });
         expect(classifyDeliveryContract(new Headers({ "X-Delivery-Contract-Version": "8" }))).toEqual({ kind: "ok", version: 8 });
         expect(classifyDeliveryContract(new Headers({ "X-Delivery-Contract-Version": "7" }))).toEqual({ kind: "ok", version: 7 });
         expect(classifyDeliveryContract(new Headers({ "X-Delivery-Contract-Version": "6" }))).toEqual({ kind: "ok", version: 6 });
         expect(classifyDeliveryContract(new Headers({ "X-Api-Contract-Version": "5" }))).toEqual({ kind: "ok", version: 5 });
-        expect(classifyDeliveryContract(new Headers({ "X-Api-Contract-Version": "9", "X-Delivery-Contract-Version": "10" }))).toEqual({
+        expect(classifyDeliveryContract(new Headers({ "X-Api-Contract-Version": "9", "X-Delivery-Contract-Version": "11" }))).toEqual({
             kind: "api-newer",
-            version: 10,
+            version: 11,
         });
     });
 
@@ -492,12 +494,12 @@ describe("the delivery contract", () => {
 
     it("says once, plainly, that the API is newer, and still answers the read", async () => {
         const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-        answering({ "X-Delivery-Contract-Version": "10" });
+        answering({ "X-Delivery-Contract-Version": "11" });
 
         await expect(list(config, "post")).resolves.toMatchObject({ items: [] });
         await list(config, "post", { page: 2 });
 
-        const said = warn.mock.calls.filter(([m]) => String(m).includes("delivery contract 10"));
+        const said = warn.mock.calls.filter(([m]) => String(m).includes("delivery contract 11"));
         expect(said).toHaveLength(1);
         expect(String(said[0][0])).toContain("upgrade barakoPress");
     });
