@@ -480,11 +480,8 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
                             s.name
                         )}
                     </Link>
-                    {/* The page menu and the header links are one group, so the space between the brand and the
-                        actions falls outside them rather than after the first menu item. */}
-                    <span style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px 28px" }}>
-                        <Navigation config={cfg} items={nav} />
-                        <span className={row.className} style={row.style}>
+                    <Navigation config={cfg} items={nav} />
+                    <span className={row.className} style={row.style}>
                         {(s.headerLinks ?? []).map((l) =>
                             l.activeOn || l.children?.length ? (
                                 <HeaderLink key={l.href} link={l} styles={linkStyles} submenu={cfg.labels.submenu} />
@@ -504,7 +501,6 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
                                 {cfg.labels.feed}
                             </a>
                         )}
-                        </span>
                     </span>
                     {actionStyles && actions.length > 0 && (
                         <span className="bp-header-actions" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px" }}>
