@@ -865,8 +865,10 @@ export async function pageAtPath(config: PressConfig, path: string): Promise<Res
         if (e instanceof CmsError && e.status === 404) return null;
         // Pages contract 3 (barakoCMS 5.2): a viewer token that is invalid, expired or another tenant's
         // answers 401 where it used to answer 200. That viewer cannot see the page, which is what a
-        // visitor who is not signed in gets.
-        if (e instanceof CmsError && e.status === 401 && viewerReads.getStore()) return null;
+        // visitor who is not signed in gets. Only when the token was really sent: get drops it for a CMS
+        // it cannot reach safely, and a 401 to that anonymous read is a real failure.
+        const tokenSent = Boolean(viewerReads.getStore()) && carriesSecretsSafely(cmsUrlFor(config));
+        if (e instanceof CmsError && e.status === 401 && tokenSent) return null;
         throw e;
     }
 }
