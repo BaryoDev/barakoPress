@@ -403,7 +403,7 @@ export function forgetCachedReads() {
  * helps nobody; the server log saying so plainly, once, is what tells the operator to upgrade. The
  * range is typed as numbers rather than `as const`, because it is the ends of a range that moves.
  */
-export const DELIVERY_CONTRACT: { readonly min: number; readonly max: number } = { min: 1, max: 9 };
+export const DELIVERY_CONTRACT: { readonly min: number; readonly max: number } = { min: 1, max: 10 };
 
 export type DeliveryContract =
     | { kind: "absent" }
@@ -817,7 +817,7 @@ export async function bySlugPreview(
  * moves it only on a breaking change, so a body outside this range is read as absent: no menu, no
  * page. A public site should not refuse to render because a menu shape moved.
  */
-export const PAGES_CONTRACT = { min: 1, max: 2 } as const;
+export const PAGES_CONTRACT = { min: 1, max: 3 } as const;
 
 export function speaksPagesContract(contract: unknown): boolean {
     return (
@@ -863,6 +863,12 @@ export async function pageAtPath(config: PressConfig, path: string): Promise<Res
             : null;
     } catch (e) {
         if (e instanceof CmsError && e.status === 404) return null;
+        // Pages contract 3 (barakoCMS 5.2): a viewer token that is invalid, expired or another tenant's
+        // answers 401 where it used to answer 200. That viewer cannot see the page, which is what a
+        // visitor who is not signed in gets. Only when the token was really sent: get drops it for a CMS
+        // it cannot reach safely, and a 401 to that anonymous read is a real failure.
+        const tokenSent = Boolean(viewerReads.getStore()) && carriesSecretsSafely(cmsUrlFor(config));
+        if (e instanceof CmsError && e.status === 401 && tokenSent) return null;
         throw e;
     }
 }

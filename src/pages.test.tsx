@@ -108,8 +108,8 @@ const TENANTS: Record<string, Tenant> = {
     future: {
         host: "future.example",
         settings: { Name: "Future Club", Url: "https://future.example" },
-        navigation: { contract: 3, items: [{ id: "a", title: "About", slug: "about", path: "/about", order: 1, children: [] }] },
-        pages: { "/about": { ...pageEntry("About", "From a newer module"), contract: 3 } },
+        navigation: { contract: 4, items: [{ id: "a", title: "About", slug: "about", path: "/about", order: 1, children: [] }] },
+        pages: { "/about": { ...pageEntry("About", "From a newer module"), contract: 4 } },
     },
     plain: {
         host: "plain.example",
@@ -298,7 +298,7 @@ describe("navigation", () => {
         expect(html).toContain("child");
         expect(html).not.toContain('data-press="navigation"');
         expect(html).not.toContain('href="/about"');
-        expect(warn).toHaveBeenCalledWith(expect.stringContaining("contract 3"));
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining("contract 4"));
     });
 
     it("shows no menu when the Pages module is not installed, or the navigation cannot be read", async () => {

@@ -276,6 +276,40 @@ describe("the Pages module path", () => {
         expect(lookup[0].cache).toBe("no-store");
     });
 
+    it("reads a 401 on the path lookup with a viewer token as no page, not a failure", async () => {
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () => new Response("", { status: 401 })),
+        );
+        await withViewerToken(minted(), async () => {
+            await expect(pageAtPath(on, "/members/report")).resolves.toBeNull();
+        });
+    });
+
+    it("still fails a 401 on the path lookup when no viewer token was sent", async () => {
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () => new Response("", { status: 401 })),
+        );
+        await expect(pageAtPath(on, "/members/report")).rejects.toMatchObject({ status: 401 });
+    });
+
+    it("still fails a 401 inside a viewer scope when the CMS is plain http and the token was not sent", async () => {
+        const plain = defineConfig({
+            site: { name: "Test", url: "https://test.example" },
+            cmsUrl: "http://cms.example",
+            tenant: "t",
+            viewerSessions: true,
+        });
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () => new Response("", { status: 401 })),
+        );
+        await withViewerToken(minted(), async () => {
+            await expect(pageAtPath(plain, "/members/report")).rejects.toMatchObject({ status: 401 });
+        });
+    });
+
     it("carries none outside one", async () => {
         await pageAtPath(on, "/members/report");
         const lookup = calls.filter((c) => c.path === "/api/public/pages/resolve");

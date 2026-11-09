@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Reads barakoCMS 5.5. `PAGES_CONTRACT` is 1 to 3, so an API on Pages contract 3 (barakoCMS 5.2 and
+  later) no longer reads as "Nothing published yet". `DELIVERY_CONTRACT` is 1 to 10, which only stops
+  the contract warning for barakoCMS 5.5; delivery content rendered the same before. Pages 3 answers 401 to
+  a page lookup carrying an invalid or other-tenant viewer token; the renderer reads that as no page
+  for that viewer. Delivery 10 answers 403 when `X-Tenant` names a tenant other than the owner of a
+  verified request host; the renderer's tenant for a host always comes from the CMS's own host lookup.
+
 - Style recipes can draw a horizontal snap-scroll row and a clamped text block. The allowlist adds a
   `scroll` group (`scroll-snap-type`, `scroll-snap-align`, `scroll-padding`, `scroll-padding-inline`,
   `overscroll-behavior-x`, `scroll-behavior`), `object-fit`, and `line-clamp`, `-webkit-line-clamp` and
