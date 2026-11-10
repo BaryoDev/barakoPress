@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.16.0 (2026-11-10)
 
 - Reads barakoCMS 5.5. `PAGES_CONTRACT` is 1 to 3, so an API on Pages contract 3 (barakoCMS 5.2 and
   later) no longer reads as "Nothing published yet". `DELIVERY_CONTRACT` is 1 to 10, which only stops
