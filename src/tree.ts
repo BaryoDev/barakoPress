@@ -327,6 +327,8 @@ export interface TreeSearchEntry {
     heading?: string;
     /** The page, and the heading's anchor when there is one. */
     href: string;
+    /** The product key the page belongs to, when its collection names a product field and the page has one. */
+    product?: string;
 }
 
 /** The most entries an index holds, pages and headings together, since every one is markup in the page. */
@@ -366,14 +368,15 @@ export function treeSearchIndex(tree: CollectionTreeResult): readonly TreeSearch
     let dropped = pages.length - listed.length;
     const out: TreeSearchEntry[] = [];
     for (const node of listed) {
-        out.push({ title: node.item.title, href: node.href as string });
+        const product = node.item.product ? { product: node.item.product } : {};
+        out.push({ title: node.item.title, href: node.href as string, ...product });
         for (const h of itemHeadings(node.item)) {
             if (room <= 0) {
                 dropped++;
                 continue;
             }
             room--;
-            out.push({ title: node.item.title, heading: h.text, href: `${node.href}#${h.id}` });
+            out.push({ title: node.item.title, heading: h.text, href: `${node.href}#${h.id}`, ...product });
         }
     }
 
@@ -387,4 +390,31 @@ export function treeSearchIndex(tree: CollectionTreeResult): readonly TreeSearch
     }
     indexes.set(tree, out);
     return out;
+}
+
+export interface TreeSearchGroup {
+    /** The product key, or "" for pages with no product the tree lists. */
+    key: string;
+    /** The product's label. Unset for the group of pages with none, and for a tree with no products. */
+    label?: string;
+    /** The group's pages, in reading order. Headings are not listed: a group is a list of pages. */
+    entries: readonly TreeSearchEntry[];
+}
+
+/**
+ * The tree's pages grouped by product, in the order the tree lists its products, for a search over
+ * a landing page. A product with no pages is left out, since there is nothing in it to filter. Pages
+ * with no product, or one the tree does not list, follow in a group of their own. A tree with no
+ * products is one group with no label.
+ */
+export function treeSearchGroups(config: PressConfig, key: string, tree: CollectionTreeResult): TreeSearchGroup[] {
+    const pages = treeSearchIndex(tree).filter((e) => e.heading === undefined);
+    const products = treeProducts(config, key);
+    const groups: TreeSearchGroup[] = products
+        .map((p) => ({ key: p.key, label: p.label, entries: pages.filter((e) => e.product === p.key) }))
+        .filter((g) => g.entries.length > 0);
+    const listed = new Set(products.map((p) => p.key));
+    const rest = pages.filter((e) => e.product === undefined || !listed.has(e.product));
+    if (rest.length > 0) groups.push({ key: "", entries: rest });
+    return groups;
 }

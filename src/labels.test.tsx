@@ -230,7 +230,7 @@ describe("visitor text from the tenant's labels", () => {
             const written = copy(readFileSync(file, "utf8"));
             expect(written.length).toBeGreaterThan(0);
             for (const key of LABEL_KEYS) {
-                const word = DEFAULT_LABELS[key].split(".")[0];
+                const word = (DEFAULT_LABELS[key] ?? "").split(".")[0];
                 const pattern = new RegExp(`(^|[^A-Za-z])${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^A-Za-z])`);
                 if (written.some((text) => pattern.test(text))) found.push(`${file}: ${key}`);
             }

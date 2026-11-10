@@ -279,6 +279,34 @@ taking a collection key. `search` takes a bindable `query`, so a landing page bi
 the route file passes the query with `createPage(config, blocks, { query: true })`. `docsSwitcher`
 takes a `variant`, `tabs` or `list`, and follows the collection's own when it is left unset.
 
+**Search on an index page.** A collection's `indexPage` can hold a `search` block. An index that read
+its search params (`createCollectionIndex(config, key, { search: true })`) binds `{{query.q}}` there, so
+the block's `query` is what the reader submitted. Two options on the block draw the tree's pages in the
+page instead of listing hits from the API:
+
+- `groupBy: "product"` lists the tree's pages under the product labels from `tree.products`, in that
+  order, each group filtered by the query. Pages with no listed product follow in a group with no label,
+  and a collection with no `products` is one group with no label. A group with nothing left says "No
+  match here" (the `searchGroupEmpty` label). With script, the lists filter as the reader types. With
+  none, the box is a GET form to the collection's route: the index answers with the lists filtered by
+  `?q=`, which needs `search: true` on the index. Matching is on page titles, every word typed.
+- `searchIndex: true` draws the tree's titles and headings hidden and filters them as the reader types,
+  the same index the sidebar box uses with `tree.searchIndex`. It needs no route and no query, so it
+  works on a static build.
+
+If both are set, `groupBy` wins and the hidden index is not drawn. Groups match page titles only, not
+headings or bodies, and what is listed is capped at 2000 pages (`TREE_INDEX_LIMIT`). Matching ignores
+case and accents on the server and in the browser. A change is announced in a polite live region
+("{count} found", the `searchCount` label). The query is read to 200 characters.
+
+On an index with `search: true`, a grouped block on the index page answers the query itself: the
+list under it is not searched through the API as well, so there is one answer, by title. Without a
+grouped block the list is the API's search, which matches bodies as well.
+
+Both are off unless set, and a `search` block without them runs the API's search as before. The box is
+labelled and keyboard reachable ("/" focuses it, the groups' links are ordinary links), and the groups
+stack to one column on a phone.
+
 **Styling the tree.** A site restyles the tree screens without drawing them itself, three ways.
 
 *Tokens.* Every colour, gap, padding, margin, radius, font size, weight and line height in them is read as

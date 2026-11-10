@@ -19,8 +19,18 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { defineConfig } from "../dist/config.js";
 import { ItemView } from "../dist/screens/collection.js";
-import { filterIndex, focusable, wireSearch } from "../dist/blocks/search-keys.js";
-import { SEARCH_EMPTY_ATTR, SEARCH_INDEX_ATTR, SEARCH_ROOT_ATTR } from "../dist/blocks/search-attrs.js";
+import { SearchBox } from "../dist/screens/tree.js";
+import { filterGroups, filterIndex, focusable, wireSearch } from "../dist/blocks/search-keys.js";
+import {
+    foldText,
+    SEARCH_COUNT_ATTR,
+    SEARCH_EMPTY_ATTR,
+    SEARCH_GROUP_ATTR,
+    SEARCH_GROUP_EMPTY_ATTR,
+    SEARCH_GROUPS_ATTR,
+    SEARCH_INDEX_ATTR,
+    SEARCH_ROOT_ATTR,
+} from "../dist/blocks/search-attrs.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -149,8 +159,14 @@ const filterScript = `<script>
 const SEARCH_ROOT_ATTR = ${JSON.stringify(SEARCH_ROOT_ATTR)};
 const SEARCH_INDEX_ATTR = ${JSON.stringify(SEARCH_INDEX_ATTR)};
 const SEARCH_EMPTY_ATTR = ${JSON.stringify(SEARCH_EMPTY_ATTR)};
+const SEARCH_GROUPS_ATTR = ${JSON.stringify(SEARCH_GROUPS_ATTR)};
+const SEARCH_GROUP_ATTR = ${JSON.stringify(SEARCH_GROUP_ATTR)};
+const SEARCH_GROUP_EMPTY_ATTR = ${JSON.stringify(SEARCH_GROUP_EMPTY_ATTR)};
+const SEARCH_COUNT_ATTR = ${JSON.stringify(SEARCH_COUNT_ATTR)};
+${foldText.toString()}
 ${focusable.toString()}
 ${filterIndex.toString()}
+${filterGroups.toString()}
 ${wireSearch.toString()}
 wireSearch(document.querySelector('input[type="search"]'));
 </script>`;
@@ -183,3 +199,26 @@ writeFileSync(
         filterScript,
     ),
 );
+
+// A grouped search, as a landing page draws it: a GET form over visible product lists, wired to the same
+// code. The accent in "Café menu" is there for the folding.
+const entry = (slug, title, product) => ({ title, href: `/docs/${product}/${slug}`, product });
+const groups = [
+    { key: "cms", label: "barakoCMS", entries: [entry("quickstart", "Quickstart", "cms"), entry("delivery", "Public delivery API", "cms")] },
+    { key: "press", label: "barakoPress", entries: [entry("install", "Install the press", "press"), entry("menu", "Café menu", "press")] },
+];
+{
+    const cfg = config();
+    const t = cfg.theme;
+    const body = renderToStaticMarkup(
+        h(
+            "div",
+            { style: { background: t.colors.pageBg, color: t.colors.ink, fontFamily: t.fonts.body, padding: "16px" } },
+            h(SearchBox, { config: cfg, action: "/docs", param: "q", id: "bp-search-block-docs", groups }),
+        ),
+    );
+    writeFileSync(
+        join(here, "tree-groups.generated.html"),
+        `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0">${body}${filterScript}</body></html>`,
+    );
+}

@@ -40,7 +40,8 @@ import { itemScope } from "../blocks/bind.js";
 import { createBlockRegistry, registryFor } from "../blocks/registry.js";
 import type { BlockRegistry } from "../blocks/schema.js";
 import { proseCss } from "../theme.js";
-import { pageBlocks } from "./page-blocks.js";
+import { MAX_QUERY } from "../blocks/search-attrs.js";
+import { pageBlocks, type SearchParams } from "./page-blocks.js";
 import { StructuredData } from "../structured-data.js";
 
 /*
@@ -353,12 +354,22 @@ export async function CollectionIndexView({
     const col = collectionOf(config, collection);
     if (!col) notFound();
     const copy = indexCopy(col);
-    const typed = (query ?? "").trim();
+    const typed = (query ?? "").trim().slice(0, MAX_QUERY);
     let items: Item[] = [];
     let failure = false;
 
+    // Bound only where the route asked for search, the same as the results below: `query` is
+    // undefined on an index that never read its search params, and it stays unbound there.
+    const led = col.indexPage
+        ? await indexLead(config, col.indexPage, blocks, collection, query === undefined ? undefined : Promise.resolve({ q: typed }))
+        : { node: null, grouped: false };
+    const lead = led.node;
+    // A grouped search block on the index page is the answer to the query, matching page titles in the
+    // page. Running the API's body search for the list below as well would give two answers.
+    const listSearch = typed !== "" && !led.grouped;
+
     try {
-        ({ items } = typed
+        ({ items } = listSearch
             ? { items: await searchCollection(config, collection, typed, SEARCH_LIMIT) }
             : await listCollection(config, collection, { filter }));
     } catch (e) {
@@ -377,12 +388,10 @@ export async function CollectionIndexView({
 
     // A search answers with what matched, in the order the API ranked it. Lifting a featured row to
     // the top there would put a worse match above a better one.
-    const featured = typed ? [] : items.filter((i) => i.featured);
-    const rest = typed ? items : items.filter((i) => !i.featured);
+    const featured = listSearch ? [] : items.filter((i) => i.featured);
+    const rest = listSearch ? items : items.filter((i) => !i.featured);
     const title = heading ?? copy.heading ?? col.label;
     const lede = copy.lede ?? (title === undefined ? config.site.tagline : undefined);
-    const lead = col.indexPage ? await indexLead(config, col.indexPage, blocks) : null;
-
     const shell = (
         <div className="shell">
             <header className="masthead">
@@ -407,16 +416,16 @@ export async function CollectionIndexView({
 
             {!failure &&
                 items.length === 0 &&
-                (!typed && copy.empty ? (
+                (!listSearch && copy.empty ? (
                     <div className="notice">
                         <p>{copy.empty}</p>
                     </div>
                 ) : (
                     <div className="notice">
                         <p>
-                            <strong>{typed ? config.labels.searchEmpty : config.labels.empty}</strong>
+                            <strong>{listSearch ? config.labels.searchEmpty : config.labels.empty}</strong>
                         </p>
-                        {!typed && <p>{config.labels.emptyNote}</p>}
+                        {!listSearch && <p>{config.labels.emptyNote}</p>}
                     </div>
                 ))}
 
@@ -481,26 +490,39 @@ export async function CollectionIndexView({
  * is missing or cannot be read leaves the index as it would be without one, the way a region falls
  * back to the built-in chrome.
  */
-async function indexLead(config: PressConfig, path: string, blocks: BlockRegistry | undefined): Promise<ReactNode> {
+async function indexLead(
+    config: PressConfig,
+    path: string,
+    blocks: BlockRegistry | undefined,
+    collection: string,
+    searchParams?: SearchParams,
+): Promise<{ node: ReactNode; grouped: boolean }> {
     let page;
     try {
         page = await getPageAtPath(config, path);
     } catch (e) {
         if (e && typeof e === "object" && "digest" in e) throw e;
         console.warn(`collection: the index page at ${path} could not be read (${e instanceof Error ? e.message : String(e)})`);
-        return null;
+        return { node: null, grouped: false };
     }
-    if (!page) return null;
+    if (!page) return { node: null, grouped: false };
     const resolved = await pageBlocks(config, page, registryFor(config, blocks ?? createBlockRegistry(config, [], { presets: [] })), {
         scope: "index",
+        ...(searchParams ? { searchParams } : {}),
     });
-    if (resolved.length === 0) return null;
-    return (
-        <>
-            <style dangerouslySetInnerHTML={{ __html: proseCss(config.theme, BLOCK_PROSE_CLASS) }} />
-            <BlockList blocks={resolved} theme={config.theme} />
-        </>
+    if (resolved.length === 0) return { node: null, grouped: false };
+    const grouped = resolved.some(
+        (b) => b.definition.type === "search" && b.props.groupBy === "product" && b.props.collection === collection,
     );
+    return {
+        grouped,
+        node: (
+            <>
+                <style dangerouslySetInnerHTML={{ __html: proseCss(config.theme, BLOCK_PROSE_CLASS) }} />
+                <BlockList blocks={resolved} theme={config.theme} />
+            </>
+        ),
+    };
 }
 
 /*

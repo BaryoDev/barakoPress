@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
-import type { PressConfig, TreeVariant } from "../config.js";
+import { DEFAULT_LABELS, type PressConfig, type TreeVariant } from "../config.js";
 import type { Item } from "../collections.js";
 import { collectionOf } from "../collections.js";
 import type { MarkdownHeading } from "../markdown.js";
@@ -11,9 +11,10 @@ import {
     type CollectionTreeResult,
     type TreeNode,
     type TreeSearchEntry,
+    type TreeSearchGroup,
 } from "../tree.js";
 import { SearchKeys } from "../blocks/search-keys.js";
-import { SEARCH_EMPTY_ATTR, SEARCH_INDEX_ATTR, SEARCH_ROOT_ATTR } from "../blocks/search-attrs.js";
+import { foldText, SEARCH_COUNT_ATTR, SEARCH_EMPTY_ATTR, SEARCH_GROUP_ATTR, SEARCH_GROUP_EMPTY_ATTR, SEARCH_GROUPS_ATTR, SEARCH_INDEX_ATTR, SEARCH_ROOT_ATTR } from "../blocks/search-attrs.js";
 
 /*
  * The chrome a documentation collection draws around its pages (#23): a sidebar of the tree, a
@@ -596,6 +597,13 @@ export interface SearchBoxProps {
      * as the reader types by the same client code that handles the keys.
      */
     index?: readonly TreeSearchEntry[];
+    /**
+     * The tree's pages grouped by product, from `treeSearchGroups`. Unlike an `index` these are drawn
+     * in the page, visible, and the box filters them: on the server by `query` (a reader with no
+     * script submits the form and gets the filtered lists), and in the browser as the reader types.
+     * A group left with nothing says so.
+     */
+    groups?: readonly TreeSearchGroup[];
     /** A stable id, so the key handling finds this box and not another one on the same page. */
     id: string;
     /** `box`, a labelled input, unless this says `compact`. */
@@ -652,7 +660,7 @@ function emptyLine(template: string, typed: string): string {
  * key hint in one well, the input named by `aria-label` rather than a label on screen, and the results
  * in a panel floating over whatever comes next rather than pushing it down.
  */
-export function SearchBox({ config, action, param, query, results, index, id, variant = "box", icon }: SearchBoxProps) {
+export function SearchBox({ config, action, param, query, results, index, groups, id, variant = "box", icon }: SearchBoxProps) {
     const t = config.theme;
     const c = t.colors;
     const typed = (query ?? "").trim();
@@ -694,6 +702,14 @@ export function SearchBox({ config, action, param, query, results, index, id, va
               boxShadow: tok("search-panel-shadow", "0 10px 24px -12px rgba(16,18,35,.25)"),
           }
         : { marginTop: tok("search-results-gap", t.space.sm) };
+
+    const words = foldText(typed).split(/\s+/).filter(Boolean);
+    const countLabel = config.labels.searchCount ?? DEFAULT_LABELS.searchCount ?? "";
+    const shownGroups = (groups ?? []).map((group) => ({
+        group,
+        shown: group.entries.filter((e) => words.every((w) => foldText(e.title).includes(w))),
+    }));
+    const matched = shownGroups.reduce((n, g) => n + g.shown.length, 0);
 
     const field = compact ? (
         <div
@@ -882,6 +898,78 @@ export function SearchBox({ config, action, param, query, results, index, id, va
                     >
                         {emptyLine(config.labels.searchEmpty, "")}
                     </p>
+                </div>
+            )}
+
+            {groups && groups.length > 0 && (
+                <div
+                    className={`bp-tree-search-groups ${indexClass}`}
+                    style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 16rem), 1fr))",
+                        gap: tok("search-group-gap", t.space.md),
+                        marginTop: tok("search-results-gap", t.space.sm),
+                    }}
+                    {...{ [SEARCH_GROUPS_ATTR]: "" }}
+                >
+                    <style
+                        dangerouslySetInnerHTML={{
+                            __html: indexCss(`.${indexClass}`, {
+                                list: listStyle,
+                                hit: hitStyle,
+                                title: { fontWeight: tok("search-hit-weight", "600") },
+                                page: { color: tok("search-empty-ink", c.muted) },
+                            }),
+                        }}
+                    />
+                    <p
+                        role="status"
+                        aria-live="polite"
+                        className="bp-tree-search-count"
+                        style={{ ...emptyStyle, gridColumn: "1 / -1" }}
+                        {...{ [SEARCH_COUNT_ATTR]: countLabel }}
+                    >
+                        {typed ? countLabel.split("{count}").join(String(matched)) : ""}
+                    </p>
+                    {shownGroups.map(({ group, shown }) => {
+                        return (
+                            <section key={group.key} className="bp-tree-search-group" {...{ [SEARCH_GROUP_ATTR]: group.key }}>
+                                {group.label && (
+                                    <h3
+                                        className="bp-tree-search-group-label"
+                                        style={{
+                                            margin: `0 0 ${tok("search-label-gap", t.space.xs)}`,
+                                            fontFamily: t.fonts.mono,
+                                            fontSize: tok("label-size", t.text.meta),
+                                            fontWeight: 400,
+                                            letterSpacing: ".12em",
+                                            textTransform: "uppercase",
+                                            color: tok("search-label-ink", c.muted),
+                                        }}
+                                    >
+                                        {group.label}
+                                    </h3>
+                                )}
+                                <ul>
+                                    {shown.map((entry) => (
+                                        <li key={entry.href}>
+                                            <a href={entry.href}>
+                                                <span>{entry.title}</span>
+                                            </a>
+                                        </li>
+                                    ))}
+                                </ul>
+                                <p
+                                    className="bp-tree-search-empty"
+                                    hidden={shown.length > 0}
+                                    style={emptyStyle}
+                                    {...{ [SEARCH_GROUP_EMPTY_ATTR]: "" }}
+                                >
+                                    {config.labels.searchGroupEmpty ?? DEFAULT_LABELS.searchGroupEmpty}
+                                </p>
+                            </section>
+                        );
+                    })}
                 </div>
             )}
 
