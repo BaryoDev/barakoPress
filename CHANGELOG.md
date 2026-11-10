@@ -2,10 +2,12 @@
 
 ## Unreleased
 
-- Two products of a collection can hold the same slug (#99). A by-slug read answers with one entry, so
-  for a collection that declares products the catch-all and `getItem` now ask the list for the entry
-  of the product in the path first (a product filter plus the slug field), and fall back to the
-  by-slug read when the list has none. A collection without products reads as before.
+- Two products of a collection can hold the same slug (#99). barakoCMS refuses a new duplicate slug
+  in a tenant, so this covers duplicates that already exist. A by-slug read answers with one entry, so
+  for a collection that declares products `getItem` reads by slug first and, only when that entry is
+  another product's, asks the list for the product's entry (a product filter plus the slug field). A
+  list the API refuses reads as not found. Preview of a twin slug stays single-slug. A collection
+  without products reads as before, and the common case makes no extra request.
 
 ## 0.16.0 (2026-11-10)
 

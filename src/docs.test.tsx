@@ -118,7 +118,7 @@ const SETTINGS = {
 type Call = { path: string };
 let calls: Call[] = [];
 
-function cms(settings: Record<string, unknown> = SETTINGS, DOCS: Entry[] = ALL_DOCS) {
+function cms(settings: Record<string, unknown> = SETTINGS, docs: Entry[] = ALL_DOCS, refuseFilters = false) {
     return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const url = new URL(String(input));
         const tenant = new Headers(init?.headers).get("x-tenant");
@@ -145,7 +145,7 @@ function cms(settings: Record<string, unknown> = SETTINGS, DOCS: Entry[] = ALL_D
         if (url.pathname === "/api/public/site") return paged([{ id: "s", data: settings }]);
         if (url.pathname === "/api/public/doc/search") {
             const q = (url.searchParams.get("q") ?? "").toLowerCase();
-            const results = DOCS.filter((d) => String(d.data.Title).toLowerCase().includes(q));
+            const results = docs.filter((d) => String(d.data.Title).toLowerCase().includes(q));
             return Response.json({ results, count: results.length, query: q });
         }
         if (url.pathname === "/api/public/pages/resolve") {
@@ -158,13 +158,14 @@ function cms(settings: Record<string, unknown> = SETTINGS, DOCS: Entry[] = ALL_D
         const [type, slug] = url.pathname.replace(/^\/api\/public\//, "").split("/");
         if (type !== "doc") return new Response("", { status: 404 });
         if (slug) {
-            const found = DOCS.find((d) => d.slug === decodeURIComponent(slug));
+            const found = docs.find((d) => d.slug.toLowerCase() === decodeURIComponent(slug).toLowerCase());
             return found ? Response.json(found) : new Response("", { status: 404 });
         }
-        let listed = DOCS;
+        let listed = docs;
         for (const [key, value] of url.searchParams) {
             const m = key.match(/^filter\[(.+)\]\[eq\]$/);
-            if (m) listed = listed.filter((d) => d.data[m[1]] === value);
+            if (m && refuseFilters) return new Response("unknown field", { status: 400 });
+            if (m) listed = listed.filter((d) => String(d.data[m[1]]).toLowerCase() === value.toLowerCase());
         }
         return paged(listed);
     });
@@ -471,6 +472,27 @@ describe("two products holding the same slug", () => {
         const html = await markup(createPage(base)({ params: Promise.resolve({ path: ["docs", "press", "quickstart"] }) }));
         expect(html).toContain("Install press.");
         expect(html).not.toContain("Start here.");
+    });
+
+    it("matches the slug without regard to case", async () => {
+        twin();
+        const config = await site();
+        expect((await getItem(config, "docs", "QuickStart", "press"))?.title).toBe("Press quickstart");
+    });
+
+    it("does not ask the list when the by-slug read already holds the product", async () => {
+        vi.stubGlobal("fetch", cms(SETTINGS, TWIN, true));
+        requestHeaders = new Headers({ host: "barakocms.com" });
+        const config = await site();
+        expect((await getItem(config, "docs", "quickstart", "cms"))?.title).toBe("Quickstart");
+        expect(calls.some((c) => c.path.includes("filter["))).toBe(false);
+    });
+
+    it("answers not found, not an error, when the API refuses the filter", async () => {
+        vi.stubGlobal("fetch", cms(SETTINGS, TWIN, true));
+        requestHeaders = new Headers({ host: "barakocms.com" });
+        const config = await site();
+        expect(await getItem(config, "docs", "quickstart", "press")).toBeNull();
     });
 
     it("links and lists the two apart", async () => {
