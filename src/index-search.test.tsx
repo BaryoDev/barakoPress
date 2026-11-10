@@ -36,6 +36,7 @@ vi.mock("next/link", () => ({
 const { defineConfig } = await import("./config.js");
 const { forgetCachedReads } = await import("./delivery.js");
 const { createCollectionIndex } = await import("./screens/collection.js");
+import type { Labels } from "./config.js";
 
 const CMS = "http://cms.test";
 
@@ -46,6 +47,7 @@ const DOCS: Entry[] = [
     { id: "d2", slug: "delivery-api", data: { Title: "Public delivery API", Slug: "delivery-api", Body: "Read.", Section: "Start", Product: "cms" } },
     { id: "d3", slug: "press-quickstart", data: { Title: "Rendering with the press", Slug: "press-quickstart", Body: "Install.", Section: "Start", Product: "press" } },
 ];
+DOCS.push({ id: "d4", slug: "menu", data: { Title: "Café menu", Slug: "menu", Body: "Food.", Section: "Start", Product: "press" } });
 const GUIDES: Entry[] = [
     { id: "g1", slug: "one", data: { Title: "Guide one", Slug: "one", Body: "One.", Section: "Start" } },
     { id: "g2", slug: "two", data: { Title: "Guide two", Slug: "two", Body: "Two.", Section: "Start" } },
@@ -76,6 +78,7 @@ const GUIDES_COLLECTION = {
 };
 
 let landing: Record<string, unknown>[] = [];
+let fetched: string[] = [];
 
 function pageOf(slug: string, blocks: Record<string, unknown>[]) {
     return { id: slug, slug, data: { Title: slug, Slug: slug, Blocks: blocks } };
@@ -84,6 +87,7 @@ function pageOf(slug: string, blocks: Record<string, unknown>[]) {
 function cms() {
     return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const url = new URL(String(input));
+        fetched.push(url.pathname);
         const tenant = new Headers(init?.headers).get("x-tenant");
         if (url.pathname === "/api/tenants/by-host/site.example") return Response.json({ handle: "t" });
         if (tenant !== "t") return new Response("", { status: 404 });
@@ -147,6 +151,7 @@ function group(html: string, label: string): string {
 beforeEach(() => {
     forgetCachedReads();
     requestHeaders = null;
+    fetched = [];
     vi.stubGlobal("fetch", cms());
     landing = [{ type: "search", props: { collection: "docs", query: "{{query.q}}", groupBy: "product" } }];
 });
@@ -226,5 +231,52 @@ describe("the search block on a collection index page", () => {
         expect(html).not.toContain("data-bp-search-group");
         expect(html).not.toMatch(/data-bp-search-index="\d+"/);
         expect(html).not.toContain("No match here");
+    });
+
+    it("announces the match count in a polite live region, from the server", async () => {
+        const html = lead(await draw("docs", "delivery"));
+        const tag = html.match(/<[a-z]+[^>]*data-bp-search-count[^>]*>[^<]*/)?.[0] ?? "";
+        expect(tag).toContain('role="status"');
+        expect(tag).toContain('aria-live="polite"');
+        expect(tag).toContain("1 found");
+        const none = lead(await draw("docs"));
+        expect(none).toContain("data-bp-search-count");
+        expect(none.match(/<[a-z]+[^>]*data-bp-search-count[^>]*>[^<]*/)?.[0]).not.toContain("found");
+    });
+
+    it("matches without regard to accents", async () => {
+        const html = lead(await draw("docs", "cafe"));
+        expect(group(html, "Beta product")).toContain("Café menu");
+        const folded = lead(await draw("docs", "CAFÉ"));
+        expect(group(folded, "Beta product")).toContain("Café menu");
+    });
+
+    it("does not also run the API search for the list below when a grouped block answers", async () => {
+        await draw("docs", "delivery");
+        expect(fetched).not.toContain("/api/public/doc/search");
+    });
+
+    it("still runs the API search for the list when the block is not grouped", async () => {
+        landing = [{ type: "search", props: { collection: "docs", query: "{{query.q}}" } }];
+        await draw("docs", "delivery");
+        expect(fetched).toContain("/api/public/doc/search");
+    });
+
+    it("caps the query at 200 characters", async () => {
+        const html = lead(await draw("docs", "x".repeat(300)));
+        const value = html.match(/id="bp-search-block-docs"[^>]*value="(x*)"/)?.[1] ?? "";
+        expect(value).toHaveLength(200);
+    });
+
+    it("draws a plain search block with the same markup as before", async () => {
+        landing = [{ type: "search", props: { collection: "docs", query: "delivery" } }];
+        const html = lead(await draw("docs"));
+        expect(html).toMatch(/^data-block="search"[^>]*><div class="bp-tree-search" data-bp-search="bp-search-block-docs"><form role="search" action="\/docs" method="get"><label for="bp-search-block-docs"/);
+        expect(html).toMatch(/<\/form><div aria-live="polite" class="bp-tree-search-results"[^>]*><ul[^>]*><li><a href="\/docs\/cms\/delivery-api"[^>]*>Public delivery API<\/a><\/li><\/ul><\/div><\/div><\/div>/);
+    });
+
+    it("lets a full Labels literal omit the new keys", () => {
+        const labels = { ...({} as Omit<Labels, "searchGroupEmpty" | "searchCount">) } satisfies Labels;
+        expect(labels).toBeDefined();
     });
 });
