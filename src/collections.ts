@@ -1,5 +1,5 @@
 import { REFERENCE_FIELDS, type CollectionConfig, type FieldNames, type OptionStyle, type PressConfig } from "./config.js";
-import { bySlug, bySlugPreview, describeType, list, search, type PublicContent, type Seo, type TypeDescription } from "./delivery.js";
+import { bySlug, bySlugPreview, CmsError, describeType, list, search, type PublicContent, type Seo, type TypeDescription } from "./delivery.js";
 import type { Ref } from "./cms.js";
 import { readFileLink, readImage, type DeliveredImage } from "./media.js";
 import { siteHref } from "./site.js";
@@ -518,10 +518,53 @@ export async function listAllCollection(
 export async function getItem(config: PressConfig, key: string, slug: string, product?: string): Promise<Item | null> {
     const col = collectionOf(config, key);
     if (!col) return null;
-    const [c, description] = await Promise.all([bySlug(config, col.type, slug), described(config, key, col)]);
+    const [first, description] = await Promise.all([bySlug(config, col.type, slug), described(config, key, col)]);
+    let c = first;
+    // The by-slug read answers with one entry. Only when it is another product's does the list get asked.
+    if (product && hasProducts(col) && !(c && productOf(col, c)?.toLowerCase() === product.toLowerCase())) {
+        c = await listedInProduct(config, col, slug, product);
+    }
     if (!c) return null;
     const item = toItem(config, key, c, description);
     return productMatches(item, product) ? item : null;
+}
+
+/**
+ * The entry of a product holding a slug that another product also holds, through the list. Null when
+ * there is none, and null when the API refuses the filter (barakoCMS answers 400 for a field that is not
+ * Public), since the page then reads as not found rather than broken.
+ */
+async function listedInProduct(
+    config: PressConfig,
+    col: CollectionConfig,
+    slug: string,
+    product: string,
+): Promise<PublicContent | null> {
+    const productField = col.tree?.product;
+    const slugField = [col.fields.slug ?? REFERENCE_FIELDS.slug].flat()[0];
+    if (!productField || !slugField) return null;
+    const declared = col.tree?.products?.find((p) => p.key.toLowerCase() === product.toLowerCase());
+    try {
+        const res = await list(config, col.type, {
+            page: 1,
+            pageSize: 20,
+            include: includesOf(config, col),
+            filter: [
+                [productField, "eq", declared?.key ?? product],
+                [slugField, "eq", slug],
+            ],
+        });
+        return (
+            res.items.find(
+                (c) =>
+                    slugOf(c, col.fields.slug).toLowerCase() === slug.toLowerCase() &&
+                    productOf(col, c)?.toLowerCase() === product.toLowerCase(),
+            ) ?? null
+        );
+    } catch (e) {
+        if (e instanceof CmsError) return null;
+        throw e;
+    }
 }
 
 function productMatches(item: Item, product: string | undefined): boolean {

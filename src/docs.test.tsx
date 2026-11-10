@@ -67,6 +67,8 @@ const DOCS: Entry[] = [
     { id: "d6", slug: "orphan", data: { Title: "Orphaned note", Slug: "orphan", Body: "Still here.", Section: "Reference", Order: 9, Parent: "never-written", Product: "cms" } },
 ];
 
+const ALL_DOCS = DOCS;
+
 const DOCS_COLLECTION = {
     type: "doc",
     route: "/docs",
@@ -116,7 +118,7 @@ const SETTINGS = {
 type Call = { path: string };
 let calls: Call[] = [];
 
-function cms(settings: Record<string, unknown> = SETTINGS) {
+function cms(settings: Record<string, unknown> = SETTINGS, docs: Entry[] = ALL_DOCS, refuseFilters = false) {
     return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const url = new URL(String(input));
         const tenant = new Headers(init?.headers).get("x-tenant");
@@ -143,7 +145,7 @@ function cms(settings: Record<string, unknown> = SETTINGS) {
         if (url.pathname === "/api/public/site") return paged([{ id: "s", data: settings }]);
         if (url.pathname === "/api/public/doc/search") {
             const q = (url.searchParams.get("q") ?? "").toLowerCase();
-            const results = DOCS.filter((d) => String(d.data.Title).toLowerCase().includes(q));
+            const results = docs.filter((d) => String(d.data.Title).toLowerCase().includes(q));
             return Response.json({ results, count: results.length, query: q });
         }
         if (url.pathname === "/api/public/pages/resolve") {
@@ -156,13 +158,14 @@ function cms(settings: Record<string, unknown> = SETTINGS) {
         const [type, slug] = url.pathname.replace(/^\/api\/public\//, "").split("/");
         if (type !== "doc") return new Response("", { status: 404 });
         if (slug) {
-            const found = DOCS.find((d) => d.slug === decodeURIComponent(slug));
+            const found = docs.find((d) => d.slug.toLowerCase() === decodeURIComponent(slug).toLowerCase());
             return found ? Response.json(found) : new Response("", { status: 404 });
         }
-        let listed = DOCS;
+        let listed = docs;
         for (const [key, value] of url.searchParams) {
             const m = key.match(/^filter\[(.+)\]\[eq\]$/);
-            if (m) listed = listed.filter((d) => d.data[m[1]] === value);
+            if (m && refuseFilters) return new Response("unknown field", { status: 400 });
+            if (m) listed = listed.filter((d) => String(d.data[m[1]]).toLowerCase() === value.toLowerCase());
         }
         return paged(listed);
     });
@@ -440,6 +443,69 @@ describe("what else reads an item of a tree", () => {
         const urls = entries.map((e) => e.url);
         expect(urls).toContain("https://barakocms.com/docs/cms/webhooks");
         expect(urls).toContain("https://barakocms.com/docs/press/press-quickstart");
+    });
+});
+
+/*
+ * Two products may each hold a "quickstart" (#99). A by-slug read answers with one entry, so the
+ * product in the path has to pick the entry, not just reject the wrong one.
+ */
+describe("two products holding the same slug", () => {
+    const TWIN: Entry[] = [
+        ...DOCS,
+        { id: "d7", slug: "quickstart", data: { Title: "Press quickstart", Slug: "quickstart", Body: "Install press.", Section: "Getting started", Order: 2, Product: "press" } },
+    ];
+
+    function twin() {
+        vi.stubGlobal("fetch", cms(SETTINGS, TWIN));
+        requestHeaders = new Headers({ host: "barakocms.com" });
+    }
+
+    it("resolves each product's path to its own entry", async () => {
+        twin();
+        const config = await site();
+        const cmsItem = await getItem(config, "docs", "quickstart", "cms");
+        const pressItem = await getItem(config, "docs", "quickstart", "press");
+        expect(cmsItem?.title).toBe("Quickstart");
+        expect(pressItem?.title).toBe("Press quickstart");
+
+        const html = await markup(createPage(base)({ params: Promise.resolve({ path: ["docs", "press", "quickstart"] }) }));
+        expect(html).toContain("Install press.");
+        expect(html).not.toContain("Start here.");
+    });
+
+    it("matches the slug without regard to case", async () => {
+        twin();
+        const config = await site();
+        expect((await getItem(config, "docs", "QuickStart", "press"))?.title).toBe("Press quickstart");
+    });
+
+    it("does not ask the list when the by-slug read already holds the product", async () => {
+        vi.stubGlobal("fetch", cms(SETTINGS, TWIN, true));
+        requestHeaders = new Headers({ host: "barakocms.com" });
+        const config = await site();
+        expect((await getItem(config, "docs", "quickstart", "cms"))?.title).toBe("Quickstart");
+        expect(calls.some((c) => c.path.includes("filter["))).toBe(false);
+    });
+
+    it("answers not found, not an error, when the API refuses the filter", async () => {
+        vi.stubGlobal("fetch", cms(SETTINGS, TWIN, true));
+        requestHeaders = new Headers({ host: "barakocms.com" });
+        const config = await site();
+        expect(await getItem(config, "docs", "quickstart", "press")).toBeNull();
+    });
+
+    it("links and lists the two apart", async () => {
+        twin();
+        const config = await site();
+        const press = await collectionTree(config, "docs", { product: "press" });
+        const hrefs = press.sections.flatMap((s) => s.nodes).map((n) => n.href);
+        expect(hrefs).toContain("/docs/press/quickstart");
+        expect(hrefs).not.toContain("/docs/cms/quickstart");
+
+        const urls = (await createSitemap(base)()).map((e) => e.url);
+        expect(urls).toContain("https://barakocms.com/docs/cms/quickstart");
+        expect(urls).toContain("https://barakocms.com/docs/press/quickstart");
     });
 });
 
