@@ -35,6 +35,16 @@ export const RECIPE_PROPERTY_GROUPS = {
         "overflow-y",
         "vertical-align",
         "opacity",
+        "object-fit",
+    ],
+    /* A horizontal row that snaps card to card: overflow-x on the row, snap on the row and its cards. */
+    scroll: [
+        "scroll-snap-type",
+        "scroll-snap-align",
+        "scroll-padding",
+        "scroll-padding-inline",
+        "overscroll-behavior-x",
+        "scroll-behavior",
     ],
     spacing: [
         "margin",
@@ -72,6 +82,9 @@ export const RECIPE_PROPERTY_GROUPS = {
         "white-space",
         "overflow-wrap",
         "word-break",
+        "line-clamp",
+        "-webkit-line-clamp",
+        "-webkit-box-orient",
     ],
     colour: ["color", "background", "background-color"],
     border: [
@@ -169,9 +182,23 @@ const FUNCTIONS: ReadonlySet<string> = new Set([
  * would let a block cover the page, a sticky band already exists for the one case that needs to
  * leave it, and a recipe on it cannot take its stickiness away (see `keep` in primitives.tsx).
  */
-const ONLY: Readonly<Record<string, ReadonlySet<string>>> = {
+const LINE_CLAMP = /^(?:none|[1-9]|1[0-2])$/;
+const ONLY: Readonly<Record<string, ReadonlySet<string> | RegExp>> = {
     position: new Set(["static", "relative"]),
+    // Line clamp is a count of lines, 1 to 12, or `none`. It is drawn with `display: -webkit-box`.
+    "line-clamp": LINE_CLAMP,
+    "-webkit-line-clamp": LINE_CLAMP,
+    "-webkit-box-orient": new Set(["vertical"]),
+    "scroll-snap-type": /^(?:none|(?:x|y|both|inline|block)(?: (?:mandatory|proximity))?)$/,
+    "scroll-snap-align": /^(?:none|(?:start|end|center)(?: (?:start|end|center))?)$/,
+    "overscroll-behavior-x": new Set(["auto", "contain", "none"]),
+    "scroll-behavior": new Set(["auto", "smooth"]),
+    "object-fit": new Set(["fill", "contain", "cover", "none", "scale-down"]),
 };
+
+function onlyOk(rule: ReadonlySet<string> | RegExp, value: string): boolean {
+    return rule instanceof RegExp ? rule.test(value) : rule.has(value);
+}
 
 /** A recipe name, stored on a block as `recipe`. Lower case, as a tone name is. */
 export const RECIPE_NAME = /^[a-z][a-z0-9-]{0,39}$/;
@@ -246,7 +273,7 @@ function declarationsFrom(v: unknown): Record<string, string> {
         if (!PROPERTIES.has(property) || typeof rawValue !== "string") continue;
         const value = rawValue.trim();
         const only = ONLY[property];
-        if (only ? only.has(value) : storedValueOk(value)) out[property] = value;
+        if (only ? onlyOk(only, value) : storedValueOk(value)) out[property] = value;
     }
     return out;
 }
@@ -338,7 +365,8 @@ export function recipeLook(theme: PressTheme, name: string | undefined): RecipeL
         const style: Record<string, string> = {};
         for (const [property, value] of Object.entries(recipe.style)) {
             if (!PROPERTIES.has(property)) continue;
-            const resolved = ONLY[property] ? (ONLY[property].has(value) ? value : undefined) : resolveRecipeValue(theme, value);
+            const only = ONLY[property];
+            const resolved = only ? (onlyOk(only, value) ? value : undefined) : resolveRecipeValue(theme, value);
             if (resolved !== undefined) style[camel(property)] = resolved;
         }
         const className = classesFrom(recipe.class);

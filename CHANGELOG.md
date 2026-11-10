@@ -9,6 +9,13 @@
   for that viewer. Delivery 10 answers 403 when `X-Tenant` names a tenant other than the owner of a
   verified request host; the renderer's tenant for a host always comes from the CMS's own host lookup.
 
+- Style recipes can draw a horizontal snap-scroll row and a clamped text block. The allowlist adds a
+  `scroll` group (`scroll-snap-type`, `scroll-snap-align`, `scroll-padding`, `scroll-padding-inline`,
+  `overscroll-behavior-x`, `scroll-behavior`), `object-fit`, and `line-clamp`, `-webkit-line-clamp` and
+  `-webkit-box-orient`. Each is held to a small set of values: a line count is 1 to 12 or `none`,
+  `-webkit-box-orient` is `vertical`, and snap type and align take only their keywords. `clamp()` was
+  already allowed in lengths, so `flex: 0 0 clamp(240px, 78%, 300px)` passes unchanged.
+
 - A selected theme variant now recolours the body, the built-in header and the footer (#218). When a
   theme names variants, every colour slot is also written as `--bp-c-<slot>` (`--bp-c-inverse`,
   `--bp-c-page-bg` and so on) in the base rule and in each variant rule, and those layout styles read

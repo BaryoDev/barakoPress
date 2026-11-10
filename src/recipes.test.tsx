@@ -155,6 +155,84 @@ describe("reading recipes", () => {
         expect(read?.c).toBeUndefined();
     });
 
+    it("holds the scroll, clamp and fit properties to their small sets of values", () => {
+        const read = recipesFrom(undefined, {
+            row: {
+                style: {
+                    display: "flex",
+                    "overflow-x": "auto",
+                    "scroll-snap-type": "x mandatory",
+                    "scroll-padding": "16px",
+                    "scroll-padding-inline": "16px",
+                    "overscroll-behavior-x": "contain",
+                    "scroll-behavior": "smooth",
+                },
+            },
+            card: { style: { flex: "0 0 clamp(240px, 78%, 300px)", "scroll-snap-align": "start", "object-fit": "cover" } },
+            clamp: {
+                style: { display: "-webkit-box", "-webkit-box-orient": "vertical", "-webkit-line-clamp": "4", "line-clamp": "4" },
+            },
+        });
+
+        expect(read?.row.style["scroll-snap-type"]).toBe("x mandatory");
+        expect(Object.keys(read?.row.style ?? {})).toHaveLength(7);
+        expect(read?.card.style.flex).toBe("0 0 clamp(240px, 78%, 300px)");
+        expect(read?.card.style["scroll-snap-align"]).toBe("start");
+        expect(read?.card.style["object-fit"]).toBe("cover");
+        expect(read?.clamp.style.display).toBe("-webkit-box");
+        expect(read?.clamp.style["-webkit-box-orient"]).toBe("vertical");
+        expect(read?.clamp.style["-webkit-line-clamp"]).toBe("4");
+        expect(read?.clamp.style["line-clamp"]).toBe("4");
+    });
+
+    it("accepts the other good values of the scroll, clamp and fit properties", () => {
+        const good: Record<string, string[]> = {
+            "scroll-snap-type": ["none", "x", "y", "both", "inline", "block", "y proximity", "both mandatory"],
+            "scroll-snap-align": ["none", "start", "end", "center", "start end"],
+            "-webkit-line-clamp": ["1", "12", "none"],
+            "line-clamp": ["1", "12", "none"],
+            "object-fit": ["fill", "contain", "cover", "none", "scale-down"],
+            "overscroll-behavior-x": ["auto", "contain", "none"],
+            "scroll-behavior": ["auto", "smooth"],
+        };
+        for (const [property, values] of Object.entries(good)) {
+            for (const value of values) {
+                expect(recipesFrom(undefined, { r: { style: { [property]: value } } })?.r.style[property], `${property}: ${value}`).toBe(value);
+            }
+        }
+    });
+
+    it("refuses bad values of the scroll, clamp and fit properties", () => {
+        const bad: Record<string, string[]> = {
+            "-webkit-box-orient": ["horizontal", "inline-axis", "vertical evil", "var(--x)"],
+            "line-clamp": ["99", "0", "13", "-1", "4.5", "04", "4 5", "calc(2 + 2)"],
+            "-webkit-line-clamp": ["99", "0", "13", "-1", "auto"],
+            "scroll-snap-type": ["x evil", "x mandatory evil", "mandatory", "x y", "x mandatory proximity", "var(--x)"],
+            "scroll-snap-align": ["evil", "start evil", "start end center", "left"],
+            "object-fit": ["url(x)", "cover url(x)", "stretch", "inherit"],
+            "overscroll-behavior-x": ["scroll", "contain none"],
+            "scroll-behavior": ["fast", "smooth;color:red"],
+        };
+        for (const [property, values] of Object.entries(bad)) {
+            for (const value of values) {
+                expect(recipesFrom(undefined, { r: { style: { [property]: value, padding: "1px" } } })?.r.style[property], `${property}: ${value}`).toBeUndefined();
+            }
+        }
+    });
+
+    it("draws a row of cards and a clamped block with the new properties", () => {
+        const cfg = configWith({
+            row: { style: { display: "flex", "overflow-x": "auto", "scroll-snap-type": "x mandatory" } },
+            clamp: { style: { display: "-webkit-box", "-webkit-box-orient": "vertical", "-webkit-line-clamp": "4", "line-clamp": "99" } },
+        });
+        const html = render([panel({ recipe: "row" }), panel({ recipe: "clamp" })], cfg);
+
+        expect(html).toContain("scroll-snap-type:x mandatory");
+        expect(html).toContain("-webkit-line-clamp:4");
+        expect(html).toContain("-webkit-box-orient:vertical");
+        expect(html).not.toContain("line-clamp:99");
+    });
+
     it("refuses a bad name and a bad class, and drops a recipe left with nothing", () => {
         const read = recipesFrom(undefined, {
             "Card": { style: { padding: "1px" } },

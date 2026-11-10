@@ -204,9 +204,10 @@ The properties a recipe may set:
 
 | Group | Properties |
 | --- | --- |
-| box | `display`, `position` (`static` or `relative` only), `box-sizing`, `width`, `min-width`, `max-width`, `height`, `min-height`, `max-height`, `aspect-ratio`, `overflow`, `overflow-x`, `overflow-y`, `vertical-align`, `opacity` |
+| box | `display`, `position` (`static` or `relative` only), `box-sizing`, `width`, `min-width`, `max-width`, `height`, `min-height`, `max-height`, `aspect-ratio`, `overflow`, `overflow-x`, `overflow-y`, `vertical-align`, `opacity`, `object-fit` (`fill`, `contain`, `cover`, `none` or `scale-down` only) |
 | spacing | `margin`, `padding` and their four sides, `margin-block`, `margin-inline`, `padding-block`, `padding-inline`, `gap`, `row-gap`, `column-gap` |
-| typography | `font-family`, `font-size`, `font-weight`, `font-style`, `font-variant-numeric`, `line-height`, `letter-spacing`, `text-align`, `text-transform`, `text-decoration`, `text-underline-offset`, `text-wrap`, `text-overflow`, `white-space`, `overflow-wrap`, `word-break` |
+| typography | `font-family`, `font-size`, `font-weight`, `font-style`, `font-variant-numeric`, `line-height`, `letter-spacing`, `text-align`, `text-transform`, `text-decoration`, `text-underline-offset`, `text-wrap`, `text-overflow`, `white-space`, `overflow-wrap`, `word-break`, `line-clamp`, `-webkit-line-clamp` (a whole number 1 to 12, or `none`), `-webkit-box-orient` (`vertical` only) |
+| scroll | `scroll-snap-type` (`none`, or `x`, `y`, `both`, `inline` or `block` with an optional `mandatory` or `proximity`), `scroll-snap-align` (`none`, or one or two of `start`, `end`, `center`), `scroll-padding`, `scroll-padding-inline`, `overscroll-behavior-x` (`auto`, `contain` or `none`), `scroll-behavior` (`auto` or `smooth`) |
 | colour | `color`, `background`, `background-color` |
 | border | `border`, `border-top`, `border-right`, `border-bottom`, `border-left`, `border-color`, `border-style`, `border-width` |
 | radius | `border-radius` |
@@ -216,6 +217,32 @@ The properties a recipe may set:
 | engine | `--bp-ink`, `--bp-ink-soft`, `--bp-muted`, `--bp-hairline`, `--bp-accent`, `--bp-on-accent` (the tone the blocks inside read), `--bp-gap`, `--bp-list` (a block list's gap and display), `--bp-code-ink`, `--bp-code-bg`, `--bp-code-size`, `--bp-code-pad`, `--bp-code-radius` (inline code in a text block) |
 
 The list is also exported as `RECIPE_PROPERTY_GROUPS`, for an editor.
+
+A horizontal row of post cards, one snap stop per card, is two recipes: the row scrolls and snaps, and
+each card holds its width and snaps to the start.
+
+```json
+"StyleRecipes": {
+  "card-row": { "style": {
+    "display": "flex", "gap": "{space.md}", "overflow-x": "auto",
+    "scroll-snap-type": "x mandatory", "scroll-padding-inline": "16px",
+    "overscroll-behavior-x": "contain"
+  } },
+  "card-row-item": { "style": {
+    "flex": "0 0 clamp(240px, 78%, 300px)", "scroll-snap-align": "start"
+  } }
+}
+```
+
+A block of text cut to four lines is one recipe. `-webkit-line-clamp` only works on a
+`-webkit-box` with a `vertical` orient, and `overflow: hidden` hides the rest.
+
+```json
+"clamp-4": { "style": {
+  "display": "-webkit-box", "-webkit-box-orient": "vertical",
+  "-webkit-line-clamp": "4", "line-clamp": "4", "overflow": "hidden"
+} }
+```
 
 The values reach a style attribute, which React writes by joining `name:value;` with no CSS
 escaping, so a value is held to a narrow shape rather than cleaned. It is letters, digits, spaces
