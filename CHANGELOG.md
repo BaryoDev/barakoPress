@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- The `search` block works on a collection's index page (#251). An index that reads its search params
+  now binds `{{query.q}}` in its `indexPage` blocks. `groupBy: "product"` lists the tree's pages under
+  the product labels and filters each group by the query, with a "No match here" line (the new
+  `searchGroupEmpty` label) for an empty one: in the page as the reader types, or by a GET form with
+  no script. `searchIndex: true` draws the tree's in-page index with no route or query. Both are
+  off by default and an existing `search` block draws as before.
+
 - Two products of a collection can hold the same slug (#99). barakoCMS refuses a new duplicate slug
   in a tenant, so this covers duplicates that already exist. A by-slug read answers with one entry, so
   for a collection that declares products `getItem` reads by slug first and, only when that entry is

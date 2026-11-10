@@ -139,6 +139,7 @@ some collection has `feed` on, so a clinic with no posts stops advertising an em
 | `shareOpening` | `Opening the site.`: what it shows while the link is redeemed |
 | `search` | `Search`: the label and placeholder on the search box |
 | `searchEmpty` | `Nothing matches that.`: a search that matched nothing. A tree's search box puts what was typed in place of `{query}` |
+| `searchGroupEmpty` | `No match here`: a product group of a grouped `search` block with nothing left in it |
 | `previous`, `next` | `Previous`, `Next`: a tree page's links along the reading order |
 | `editPage` | `Edit this page`: the link to where a tree page is written |
 | `contents` | `Contents`: the collapsed tree sidebar on a phone |

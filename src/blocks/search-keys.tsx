@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { SEARCH_EMPTY_ATTR, SEARCH_INDEX_ATTR, SEARCH_ROOT_ATTR } from "./search-attrs.js";
+import { SEARCH_GROUP_ATTR, SEARCH_EMPTY_ATTR, SEARCH_GROUP_EMPTY_ATTR, SEARCH_GROUPS_ATTR, SEARCH_INDEX_ATTR, SEARCH_ROOT_ATTR } from "./search-attrs.js";
 
 /*
  * Keyboard handling for the search box, and the in-page filter over a tree's index.
@@ -53,6 +53,25 @@ export function filterIndex(index: HTMLElement, typed: string): void {
 }
 
 /**
+ * Filters a grouped search in place. Every entry of every group shows while the box is empty; typed,
+ * an entry shows when its text holds every word, and a group left with none shows its "no match" line.
+ */
+export function filterGroups(groups: HTMLElement, typed: string): void {
+    const words = typed.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    for (const group of groups.querySelectorAll<HTMLElement>(`[${SEARCH_GROUP_ATTR}]`)) {
+        let count = 0;
+        for (const entry of group.querySelectorAll<HTMLElement>("li")) {
+            const text = (entry.textContent ?? "").toLowerCase();
+            const match = words.every((w) => text.includes(w));
+            entry.hidden = !match;
+            if (match) count++;
+        }
+        const empty = group.querySelector<HTMLElement>(`[${SEARCH_GROUP_EMPTY_ATTR}]`);
+        if (empty) empty.hidden = words.length === 0 || count > 0;
+    }
+}
+
+/**
  * Everything the box does in the browser, wired to one input. Returns what undoes it.
  *
  * A plain function rather than the body of an effect, so it can be run, and tested, on markup with
@@ -62,10 +81,12 @@ export function wireSearch(input: HTMLInputElement): (() => void) | undefined {
     const root = input.closest(`[${SEARCH_ROOT_ATTR}]`);
     if (!root) return undefined;
     const index = root.querySelector<HTMLElement>(`[${SEARCH_INDEX_ATTR}]`);
+    const groups = root.querySelector<HTMLElement>(`[${SEARCH_GROUPS_ATTR}]`);
     const form = input.form;
 
     const onInput = () => {
         if (index) filterIndex(index, input.value);
+        if (groups) filterGroups(groups, input.value);
     };
     // Put away, not cleared: what was typed stays in the box and comes back when the box does.
     const hide = () => {
@@ -123,6 +144,11 @@ export function wireSearch(input: HTMLInputElement): (() => void) | undefined {
     // With an index, the box answers in the page. Enter goes to the first match. With no route behind
     // the box it never submits; with one, it submits there only when nothing matched.
     const onSubmit = (e: Event) => {
+        // Grouped, the page is already filtered as the reader types, so Enter does not reload it.
+        if (groups) {
+            e.preventDefault();
+            return;
+        }
         if (!index) return;
         const link = first();
         if (!link) return;

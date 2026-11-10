@@ -123,12 +123,17 @@ async function draw(collection: string, q?: string): Promise<string> {
     return new TextDecoder().decode(await new Response(stream).arrayBuffer());
 }
 
-/** What the search block drew, and nothing the index's own list or results drew. */
+/** What the search block drew: the index page's lead, not the sidebar, tabs or list beside it. */
 function lead(html: string): string {
-    const from = html.indexOf("bp-search-block-");
-    const start = html.lastIndexOf("<div", html.lastIndexOf('role="search"', from) > 0 ? html.lastIndexOf('role="search"', from) : from);
+    const from = html.indexOf('data-block="search"');
     const end = html.indexOf('class="shell"', from);
-    return html.slice(start, end < 0 ? undefined : end);
+    return from < 0 ? "" : html.slice(from, end < 0 ? undefined : end);
+}
+
+/** Whether a group's "No match here" line is showing. */
+function shown(group: string): boolean {
+    const tag = group.match(/<p[^>]*data-bp-search-group-empty[^>]*>/)?.[0];
+    return tag !== undefined && !tag.includes("hidden");
 }
 
 /** One product group: from its label to the next group or the end of the block. */
@@ -153,8 +158,8 @@ afterEach(() => {
 describe("the search block on a collection index page", () => {
     it("binds the query the index was asked for", async () => {
         const html = await draw("docs", "delivery");
-        expect(html).toContain('value="delivery"');
-        expect(html).toContain("Public delivery API");
+        const input = html.match(/<input[^>]*id="bp-search-block-docs"[^>]*>/)?.[0] ?? "";
+        expect(input).toContain('value="delivery"');
     });
 
     it("draws the index page with no query when the box is empty", async () => {
@@ -164,7 +169,7 @@ describe("the search block on a collection index page", () => {
     });
 
     it("groups under the product labels, in the order the collection lists its products", async () => {
-        const html = await draw("docs");
+        const html = lead(await draw("docs"));
         const alpha = html.indexOf("Alpha product");
         const beta = html.indexOf("Beta product");
         expect(alpha).toBeGreaterThan(-1);
@@ -176,13 +181,14 @@ describe("the search block on a collection index page", () => {
     });
 
     it("filters each group by the query and says No match here for a group left empty", async () => {
-        const html = await draw("docs", "delivery");
+        const html = lead(await draw("docs", "delivery"));
         const alpha = group(html, "Alpha product");
         const beta = group(html, "Beta product");
         expect(alpha).toContain("Public delivery API");
         expect(alpha).not.toContain("Quickstart");
-        expect(alpha).not.toContain("No match here");
+        expect(shown(alpha)).toBe(false);
         expect(beta).not.toContain("Rendering with the press");
+        expect(shown(beta)).toBe(true);
         expect(beta).toContain("No match here");
     });
 
@@ -197,15 +203,17 @@ describe("the search block on a collection index page", () => {
 
     it("lists every entry under one unlabelled group for a collection with no products", async () => {
         landing = [{ type: "search", props: { collection: "guides", query: "{{query.q}}", groupBy: "product" } }];
-        const html = await draw("guides");
+        const html = lead(await draw("guides"));
         expect(html).toContain("Guide one");
         expect(html).toContain("Guide two");
-        expect(html).not.toContain("No match here");
+        expect(html.match(/data-bp-search-group=/g)).toHaveLength(1);
+        expect(html).not.toContain("bp-tree-search-group-label");
+        expect(shown(html)).toBe(false);
     });
 
     it("draws the in-page index, hidden, for searchIndex with no grouping", async () => {
         landing = [{ type: "search", props: { collection: "docs", searchIndex: true } }];
-        const html = await draw("docs");
+        const html = lead(await draw("docs"));
         expect(html).toMatch(/data-bp-search-index="\d+"/);
         expect(html).toContain("Quickstart");
         expect(html).not.toContain("data-bp-search-group=");
@@ -213,9 +221,9 @@ describe("the search block on a collection index page", () => {
 
     it("leaves an existing search block as it was", async () => {
         landing = [{ type: "search", props: { collection: "docs", query: "delivery" } }];
-        const html = await draw("docs");
+        const html = lead(await draw("docs"));
         expect(html).toContain("Public delivery API");
-        expect(html).not.toContain("data-bp-search-group=");
+        expect(html).not.toContain("data-bp-search-group");
         expect(html).not.toMatch(/data-bp-search-index="\d+"/);
         expect(html).not.toContain("No match here");
     });

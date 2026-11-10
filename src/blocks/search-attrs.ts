@@ -12,3 +12,9 @@ export const SEARCH_ROOT_ATTR = "data-bp-search";
 export const SEARCH_INDEX_ATTR = "data-bp-search-index";
 /** The line an index shows when nothing matched, holding the label it is written from. */
 export const SEARCH_EMPTY_ATTR = "data-bp-search-empty";
+/** Marks the container of a grouped search's product groups. */
+export const SEARCH_GROUPS_ATTR = "data-bp-search-groups";
+/** Marks one product group, and holds its product key. */
+export const SEARCH_GROUP_ATTR = "data-bp-search-group";
+/** The line a group shows when nothing in it matched. */
+export const SEARCH_GROUP_EMPTY_ATTR = "data-bp-search-group-empty";

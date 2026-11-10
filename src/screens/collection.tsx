@@ -40,7 +40,7 @@ import { itemScope } from "../blocks/bind.js";
 import { createBlockRegistry, registryFor } from "../blocks/registry.js";
 import type { BlockRegistry } from "../blocks/schema.js";
 import { proseCss } from "../theme.js";
-import { pageBlocks } from "./page-blocks.js";
+import { pageBlocks, type SearchParams } from "./page-blocks.js";
 import { StructuredData } from "../structured-data.js";
 
 /*
@@ -381,7 +381,11 @@ export async function CollectionIndexView({
     const rest = typed ? items : items.filter((i) => !i.featured);
     const title = heading ?? copy.heading ?? col.label;
     const lede = copy.lede ?? (title === undefined ? config.site.tagline : undefined);
-    const lead = col.indexPage ? await indexLead(config, col.indexPage, blocks) : null;
+    // Bound only where the route asked for search, the same as the results above: `query` is
+    // undefined on an index that never read its search params, and it stays unbound there.
+    const lead = col.indexPage
+        ? await indexLead(config, col.indexPage, blocks, query === undefined ? undefined : Promise.resolve({ q: typed }))
+        : null;
 
     const shell = (
         <div className="shell">
@@ -481,7 +485,12 @@ export async function CollectionIndexView({
  * is missing or cannot be read leaves the index as it would be without one, the way a region falls
  * back to the built-in chrome.
  */
-async function indexLead(config: PressConfig, path: string, blocks: BlockRegistry | undefined): Promise<ReactNode> {
+async function indexLead(
+    config: PressConfig,
+    path: string,
+    blocks: BlockRegistry | undefined,
+    searchParams?: SearchParams,
+): Promise<ReactNode> {
     let page;
     try {
         page = await getPageAtPath(config, path);
@@ -493,6 +502,7 @@ async function indexLead(config: PressConfig, path: string, blocks: BlockRegistr
     if (!page) return null;
     const resolved = await pageBlocks(config, page, registryFor(config, blocks ?? createBlockRegistry(config, [], { presets: [] })), {
         scope: "index",
+        ...(searchParams ? { searchParams } : {}),
     });
     if (resolved.length === 0) return null;
     return (

@@ -1,6 +1,6 @@
 import { TREE_SWITCHERS, type PressConfig } from "../config.js";
 import { collectionOf, itemPath, searchCollection } from "../collections.js";
-import { collectionTree } from "../tree.js";
+import { collectionTree, treeSearchGroups, treeSearchIndex } from "../tree.js";
 import { SearchBox, TreeSidebar, TreeSwitcher } from "../screens/tree.js";
 import { boundToConfig } from "./built-in.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
@@ -65,7 +65,7 @@ function docsSwitcher(config: PressConfig, holding: boolean): BlockDefinition {
     return boundToConfig(definition, docsSwitcher);
 }
 
-type SearchProps = { collection: string; query?: string; limit?: number };
+type SearchProps = { collection: string; query?: string; limit?: number; searchIndex?: boolean; groupBy?: "product" };
 
 function search(config: PressConfig, holding: boolean): BlockDefinition {
     const definition = defineBlock<SearchProps>({
@@ -78,6 +78,11 @@ function search(config: PressConfig, holding: boolean): BlockDefinition {
             // file passes the query. Empty, the box renders and no search runs.
             { name: "query", kind: "text", label: "What was searched for" },
             { name: "limit", kind: "number", label: "How many results", min: 1, max: MAX_SEARCH_ITEMS },
+            // The tree's titles and headings drawn into the page and filtered as the reader types.
+            // Needs no route and no query, so it also works on a static build.
+            { name: "searchIndex", kind: "boolean", label: "Filter the pages in the page as the reader types" },
+            // Lists the tree's pages under their product labels, visible, and filters each group.
+            { name: "groupBy", kind: "select", label: "Group by", options: ["product"] },
         ],
         component: async ({ props }) => {
             if (holding) return null;
@@ -85,13 +90,25 @@ function search(config: PressConfig, holding: boolean): BlockDefinition {
             if (!col) return null;
             const typed = (props.query ?? "").trim();
             const route = col.route ?? "";
-            const found = typed ? await searchCollection(config, props.collection, typed, props.limit ?? 8) : undefined;
+            const grouped = props.groupBy === "product";
+            const tree = grouped || props.searchIndex ? await collectionTree(config, props.collection) : undefined;
+            const groups = grouped && tree ? treeSearchGroups(config, props.collection, tree) : [];
+            /*
+             * Grouped, the pages are the answer and are filtered by title in the page, so there is no
+             * read of the API's search and no list of hits under the box. A tree that read nothing
+             * falls back to the plain box.
+             */
+            const useGroups = groups.length > 0;
+            const found = typed && !useGroups ? await searchCollection(config, props.collection, typed, props.limit ?? 8) : undefined;
+            const index = props.searchIndex && !useGroups && tree ? treeSearchIndex(tree) : undefined;
             return (
                 <SearchBox
                     config={config}
                     action={route || "/"}
                     param="q"
                     query={props.query}
+                    groups={useGroups ? groups : undefined}
+                    index={index}
                     id={`bp-search-block-${props.collection}`}
                     results={found?.map((item) => ({
                         title: item.title,
