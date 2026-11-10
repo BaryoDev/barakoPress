@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.17.0 (2026-11-10)
 
 - The `search` block works on a collection's index page (#251). An index that reads its search params
   now binds `{{query.q}}` in its `indexPage` blocks. `groupBy: "product"` lists the tree's pages under
