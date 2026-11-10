@@ -286,3 +286,77 @@ test("a result followed puts the results away, even one that stays on this page"
     await expect(input).toHaveValue("configure");
     await context.close();
 });
+
+test.describe("a grouped search", () => {
+    const groupLocator = (page: Page, key: string) => page.locator(`[data-bp-search-group="${key}"]`);
+
+    test("shows every page before anything is typed, with the count silent", async ({ browser }) => {
+        const { context, page } = await open(browser, "groups", 390, true);
+        await expect(page.locator("[data-bp-search-group] li:visible")).toHaveCount(4);
+        await expect(page.locator("[data-bp-search-group-empty]:visible")).toHaveCount(0);
+        await expect(page.locator("[data-bp-search-count]")).toHaveText("");
+        // Phone width: no sideways scroll.
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+        await context.close();
+    });
+
+    test("typing filters each group, says No match here for an empty one, and announces the count", async ({ browser }) => {
+        const { context, page } = await open(browser, "groups", 1280, true);
+        const input = page.getByRole("searchbox");
+        const count = page.locator("[data-bp-search-count]");
+        await expect(count).toHaveAttribute("role", "status");
+
+        await input.fill("delivery");
+        await expect(groupLocator(page, "cms").locator("li:visible")).toHaveCount(1);
+        await expect(groupLocator(page, "press").locator("li:visible")).toHaveCount(0);
+        await expect(groupLocator(page, "press").locator("[data-bp-search-group-empty]")).toBeVisible();
+        await expect(groupLocator(page, "press").locator("[data-bp-search-group-empty]")).toHaveText("No match here");
+        await expect(groupLocator(page, "cms").locator("[data-bp-search-group-empty]")).toBeHidden();
+        await expect(count).toHaveText("1 found");
+
+        await input.fill("e");
+        await expect(count).toHaveText("3 found");
+
+        // Accents do not matter.
+        await input.fill("cafe");
+        await expect(groupLocator(page, "press").locator("li:visible")).toHaveCount(1);
+        await expect(count).toHaveText("1 found");
+        await context.close();
+    });
+
+    test("Escape clears the box and shows every page again", async ({ browser }) => {
+        const { context, page } = await open(browser, "groups", 1280, true);
+        const input = page.getByRole("searchbox");
+        await input.fill("zzz");
+        await expect(page.locator("[data-bp-search-group-empty]:visible")).toHaveCount(2);
+        await input.press("Escape");
+        await expect(input).toHaveValue("");
+        await expect(page.locator("[data-bp-search-group] li:visible")).toHaveCount(4);
+        await expect(page.locator("[data-bp-search-group-empty]:visible")).toHaveCount(0);
+        await expect(page.locator("[data-bp-search-count]")).toHaveText("");
+        await context.close();
+    });
+
+    test("Enter does not reload the page", async ({ browser }) => {
+        const { context, page } = await open(browser, "groups", 1280, true);
+        const input = page.getByRole("searchbox");
+        let navigated = false;
+        page.on("framenavigated", () => {
+            navigated = true;
+        });
+        await input.fill("delivery");
+        await input.press("Enter");
+        await expect(page.locator("[data-bp-search-count]")).toHaveText("1 found");
+        expect(navigated).toBe(false);
+        await expect(input).toHaveValue("delivery");
+        await context.close();
+    });
+
+    test("with no script the form is a labelled GET to the route and every page is listed", async ({ browser }) => {
+        const { context, page } = await open(browser, "groups", 390, false);
+        await expect(page.locator("form[role='search'][method='get']")).toHaveAttribute("action", "/docs");
+        await expect(page.getByLabel("Search")).toBeVisible();
+        await expect(page.locator("[data-bp-search-group] li:visible")).toHaveCount(4);
+        await context.close();
+    });
+});
