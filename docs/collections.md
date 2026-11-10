@@ -294,6 +294,15 @@ page instead of listing hits from the API:
   the same index the sidebar box uses with `tree.searchIndex`. It needs no route and no query, so it
   works on a static build.
 
+If both are set, `groupBy` wins and the hidden index is not drawn. Groups match page titles only, not
+headings or bodies, and what is listed is capped at 2000 pages (`TREE_INDEX_LIMIT`). Matching ignores
+case and accents on the server and in the browser. A change is announced in a polite live region
+("{count} found", the `searchCount` label). The query is read to 200 characters.
+
+On an index with `search: true`, a grouped block on the index page answers the query itself: the
+list under it is not searched through the API as well, so there is one answer, by title. Without a
+grouped block the list is the API's search, which matches bodies as well.
+
 Both are off unless set, and a `search` block without them runs the API's search as before. The box is
 labelled and keyboard reachable ("/" focuses it, the groups' links are ordinary links), and the groups
 stack to one column on a phone.

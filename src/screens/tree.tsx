@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
-import type { PressConfig, TreeVariant } from "../config.js";
+import { DEFAULT_LABELS, type PressConfig, type TreeVariant } from "../config.js";
 import type { Item } from "../collections.js";
 import { collectionOf } from "../collections.js";
 import type { MarkdownHeading } from "../markdown.js";
@@ -14,7 +14,7 @@ import {
     type TreeSearchGroup,
 } from "../tree.js";
 import { SearchKeys } from "../blocks/search-keys.js";
-import { SEARCH_EMPTY_ATTR, SEARCH_GROUP_ATTR, SEARCH_GROUP_EMPTY_ATTR, SEARCH_GROUPS_ATTR, SEARCH_INDEX_ATTR, SEARCH_ROOT_ATTR } from "../blocks/search-attrs.js";
+import { foldText, SEARCH_COUNT_ATTR, SEARCH_EMPTY_ATTR, SEARCH_GROUP_ATTR, SEARCH_GROUP_EMPTY_ATTR, SEARCH_GROUPS_ATTR, SEARCH_INDEX_ATTR, SEARCH_ROOT_ATTR } from "../blocks/search-attrs.js";
 
 /*
  * The chrome a documentation collection draws around its pages (#23): a sidebar of the tree, a
@@ -703,6 +703,14 @@ export function SearchBox({ config, action, param, query, results, index, groups
           }
         : { marginTop: tok("search-results-gap", t.space.sm) };
 
+    const words = foldText(typed).split(/\s+/).filter(Boolean);
+    const countLabel = config.labels.searchCount ?? DEFAULT_LABELS.searchCount ?? "";
+    const shownGroups = (groups ?? []).map((group) => ({
+        group,
+        shown: group.entries.filter((e) => words.every((w) => foldText(e.title).includes(w))),
+    }));
+    const matched = shownGroups.reduce((n, g) => n + g.shown.length, 0);
+
     const field = compact ? (
         <div
             className="bp-tree-search-box"
@@ -914,9 +922,16 @@ export function SearchBox({ config, action, param, query, results, index, groups
                             }),
                         }}
                     />
-                    {groups.map((group) => {
-                        const words = typed.toLowerCase().split(/\s+/).filter(Boolean);
-                        const shown = group.entries.filter((e) => words.every((w) => e.title.toLowerCase().includes(w)));
+                    <p
+                        role="status"
+                        aria-live="polite"
+                        className="bp-tree-search-count"
+                        style={{ ...emptyStyle, gridColumn: "1 / -1" }}
+                        {...{ [SEARCH_COUNT_ATTR]: countLabel }}
+                    >
+                        {typed ? countLabel.split("{count}").join(String(matched)) : ""}
+                    </p>
+                    {shownGroups.map(({ group, shown }) => {
                         return (
                             <section key={group.key} className="bp-tree-search-group" {...{ [SEARCH_GROUP_ATTR]: group.key }}>
                                 {group.label && (
@@ -950,7 +965,7 @@ export function SearchBox({ config, action, param, query, results, index, groups
                                     style={emptyStyle}
                                     {...{ [SEARCH_GROUP_EMPTY_ATTR]: "" }}
                                 >
-                                    {config.labels.searchGroupEmpty}
+                                    {config.labels.searchGroupEmpty ?? DEFAULT_LABELS.searchGroupEmpty}
                                 </p>
                             </section>
                         );

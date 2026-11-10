@@ -7,7 +7,9 @@
   the product labels and filters each group by the query, with a "No match here" line (the new
   `searchGroupEmpty` label) for an empty one: in the page as the reader types, or by a GET form with
   no script. `searchIndex: true` draws the tree's in-page index with no route or query. Both are
-  off by default and an existing `search` block draws as before.
+  off by default and an existing `search` block draws as before. A change from before: a `search: true`
+  index whose index page already bound `{{query.q}}` now runs that search. A grouped block there is
+  the answer, so the list below is not searched as well. The query is read to 200 characters.
 
 - Two products of a collection can hold the same slug (#99). barakoCMS refuses a new duplicate slug
   in a tenant, so this covers duplicates that already exist. A by-slug read answers with one entry, so

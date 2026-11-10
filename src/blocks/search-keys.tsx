@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { SEARCH_GROUP_ATTR, SEARCH_EMPTY_ATTR, SEARCH_GROUP_EMPTY_ATTR, SEARCH_GROUPS_ATTR, SEARCH_INDEX_ATTR, SEARCH_ROOT_ATTR } from "./search-attrs.js";
+import { foldText, SEARCH_COUNT_ATTR, SEARCH_GROUP_ATTR, SEARCH_EMPTY_ATTR, SEARCH_GROUP_EMPTY_ATTR, SEARCH_GROUPS_ATTR, SEARCH_INDEX_ATTR, SEARCH_ROOT_ATTR } from "./search-attrs.js";
 
 /*
  * Keyboard handling for the search box, and the in-page filter over a tree's index.
@@ -33,11 +33,11 @@ export function focusable(root: Element): HTMLElement[] {
  * box is empty. An entry is matched on the words it shows, so nothing is written into the page twice.
  */
 export function filterIndex(index: HTMLElement, typed: string): void {
-    const words = typed.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const words = foldText(typed.trim()).split(/\s+/).filter(Boolean);
     const shown = Number(index.getAttribute(SEARCH_INDEX_ATTR)) || 8;
     let count = 0;
     for (const entry of index.querySelectorAll<HTMLElement>("li")) {
-        const text = (entry.textContent ?? "").toLowerCase();
+        const text = foldText(entry.textContent ?? "");
         const match = words.length > 0 && count < shown && words.every((w) => text.includes(w));
         entry.hidden = !match;
         if (match) count++;
@@ -57,18 +57,23 @@ export function filterIndex(index: HTMLElement, typed: string): void {
  * an entry shows when its text holds every word, and a group left with none shows its "no match" line.
  */
 export function filterGroups(groups: HTMLElement, typed: string): void {
-    const words = typed.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const words = foldText(typed.trim()).split(/\s+/).filter(Boolean);
+    let total = 0;
     for (const group of groups.querySelectorAll<HTMLElement>(`[${SEARCH_GROUP_ATTR}]`)) {
         let count = 0;
         for (const entry of group.querySelectorAll<HTMLElement>("li")) {
-            const text = (entry.textContent ?? "").toLowerCase();
+            const text = foldText(entry.textContent ?? "");
             const match = words.every((w) => text.includes(w));
             entry.hidden = !match;
             if (match) count++;
         }
+        total += count;
         const empty = group.querySelector<HTMLElement>(`[${SEARCH_GROUP_EMPTY_ATTR}]`);
         if (empty) empty.hidden = words.length === 0 || count > 0;
     }
+    // Said aloud only for a query: an empty box announces nothing.
+    const live = groups.querySelector<HTMLElement>(`[${SEARCH_COUNT_ATTR}]`);
+    if (live) live.textContent = words.length === 0 ? "" : (live.getAttribute(SEARCH_COUNT_ATTR) ?? "").split("{count}").join(String(total));
 }
 
 /**

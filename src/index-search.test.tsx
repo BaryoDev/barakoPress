@@ -241,7 +241,7 @@ describe("the search block on a collection index page", () => {
         expect(tag).toContain("1 found");
         const none = lead(await draw("docs"));
         expect(none).toContain("data-bp-search-count");
-        expect(none.match(/<[a-z]+[^>]*data-bp-search-count[^>]*>[^<]*/)?.[0]).not.toContain("found");
+        expect(none).toMatch(/data-bp-search-count="[^"]*"><\/p>/);
     });
 
     it("matches without regard to accents", async () => {
