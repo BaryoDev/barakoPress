@@ -67,6 +67,8 @@ const DOCS: Entry[] = [
     { id: "d6", slug: "orphan", data: { Title: "Orphaned note", Slug: "orphan", Body: "Still here.", Section: "Reference", Order: 9, Parent: "never-written", Product: "cms" } },
 ];
 
+const ALL_DOCS = DOCS;
+
 const DOCS_COLLECTION = {
     type: "doc",
     route: "/docs",
@@ -116,7 +118,7 @@ const SETTINGS = {
 type Call = { path: string };
 let calls: Call[] = [];
 
-function cms(settings: Record<string, unknown> = SETTINGS) {
+function cms(settings: Record<string, unknown> = SETTINGS, DOCS: Entry[] = ALL_DOCS) {
     return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const url = new URL(String(input));
         const tenant = new Headers(init?.headers).get("x-tenant");
@@ -440,6 +442,48 @@ describe("what else reads an item of a tree", () => {
         const urls = entries.map((e) => e.url);
         expect(urls).toContain("https://barakocms.com/docs/cms/webhooks");
         expect(urls).toContain("https://barakocms.com/docs/press/press-quickstart");
+    });
+});
+
+/*
+ * Two products may each hold a "quickstart" (#99). A by-slug read answers with one entry, so the
+ * product in the path has to pick the entry, not just reject the wrong one.
+ */
+describe("two products holding the same slug", () => {
+    const TWIN: Entry[] = [
+        ...DOCS,
+        { id: "d7", slug: "quickstart", data: { Title: "Press quickstart", Slug: "quickstart", Body: "Install press.", Section: "Getting started", Order: 2, Product: "press" } },
+    ];
+
+    function twin() {
+        vi.stubGlobal("fetch", cms(SETTINGS, TWIN));
+        requestHeaders = new Headers({ host: "barakocms.com" });
+    }
+
+    it("resolves each product's path to its own entry", async () => {
+        twin();
+        const config = await site();
+        const cmsItem = await getItem(config, "docs", "quickstart", "cms");
+        const pressItem = await getItem(config, "docs", "quickstart", "press");
+        expect(cmsItem?.title).toBe("Quickstart");
+        expect(pressItem?.title).toBe("Press quickstart");
+
+        const html = await markup(createPage(base)({ params: Promise.resolve({ path: ["docs", "press", "quickstart"] }) }));
+        expect(html).toContain("Install press.");
+        expect(html).not.toContain("Start here.");
+    });
+
+    it("links and lists the two apart", async () => {
+        twin();
+        const config = await site();
+        const press = await collectionTree(config, "docs", { product: "press" });
+        const hrefs = press.sections.flatMap((s) => s.nodes).map((n) => n.href);
+        expect(hrefs).toContain("/docs/press/quickstart");
+        expect(hrefs).not.toContain("/docs/cms/quickstart");
+
+        const urls = (await createSitemap(base)()).map((e) => e.url);
+        expect(urls).toContain("https://barakocms.com/docs/cms/quickstart");
+        expect(urls).toContain("https://barakocms.com/docs/press/quickstart");
     });
 });
 

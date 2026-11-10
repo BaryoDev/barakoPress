@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Two products of a collection can hold the same slug (#99). A by-slug read answers with one entry, so
+  for a collection that declares products the catch-all and `getItem` now ask the list for the entry
+  of the product in the path first (a product filter plus the slug field), and fall back to the
+  by-slug read when the list has none. A collection without products reads as before.
+
 ## 0.16.0 (2026-11-10)
 
 - Reads barakoCMS 5.5. `PAGES_CONTRACT` is 1 to 3, so an API on Pages contract 3 (barakoCMS 5.2 and

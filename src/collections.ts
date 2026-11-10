@@ -518,10 +518,44 @@ export async function listAllCollection(
 export async function getItem(config: PressConfig, key: string, slug: string, product?: string): Promise<Item | null> {
     const col = collectionOf(config, key);
     if (!col) return null;
-    const [c, description] = await Promise.all([bySlug(config, col.type, slug), described(config, key, col)]);
+    const [c, description] = await Promise.all([
+        product && hasProducts(col) ? bySlugInProduct(config, key, col, slug, product) : bySlug(config, col.type, slug),
+        described(config, key, col),
+    ]);
     if (!c) return null;
     const item = toItem(config, key, c, description);
     return productMatches(item, product) ? item : null;
+}
+
+/**
+ * A by-slug read answers with one entry, so two products holding the same slug cannot be told apart
+ * by it. For a collection that declares products, ask the list for the product's entry with that slug
+ * first, and fall back to the by-slug read when the list has none.
+ */
+async function bySlugInProduct(
+    config: PressConfig,
+    key: string,
+    col: CollectionConfig,
+    slug: string,
+    product: string,
+): Promise<PublicContent | null> {
+    const productField = col.tree?.product;
+    const slugField = [col.fields.slug ?? REFERENCE_FIELDS.slug].flat()[0];
+    if (productField && slugField) {
+        const declared = col.tree?.products?.find((p) => p.key.toLowerCase() === product.toLowerCase());
+        const res = await list(config, col.type, {
+            page: 1,
+            pageSize: 20,
+            include: includesOf(config, col),
+            filter: [
+                [productField, "eq", declared?.key ?? product],
+                [slugField, "eq", slug],
+            ],
+        });
+        const found = res.items.find((c) => slugOf(c, col.fields.slug) === slug && productOf(col, c)?.toLowerCase() === product.toLowerCase());
+        if (found) return found;
+    }
+    return bySlug(config, col.type, slug);
 }
 
 function productMatches(item: Item, product: string | undefined): boolean {
