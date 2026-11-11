@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.18.1 (2026-11-11)
 
 - A `filterInput` no longer matches the text inside a `dialog` block's panel in a row (#259). The panel
   is not drawn on the row, so a word that is only in it left every row showing. The trigger's text is
