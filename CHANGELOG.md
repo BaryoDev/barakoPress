@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- A `filterInput` no longer matches the text inside a `dialog` block's panel in a row (#259). The panel
+  is not drawn on the row, so a word that is only in it left every row showing. The trigger's text is
+  drawn on the row and still matches.
+
 ## 0.18.0 (2026-11-11)
 
 - A `dialog` block opens a modal from a button in its own place, once a row when it sits in a

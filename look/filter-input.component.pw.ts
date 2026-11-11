@@ -246,3 +246,16 @@ test("filters rows that replace the old ones under a mounted box, and counts the
     await box.press("Escape");
     expect(await visibleRows(page)).toEqual(["row Mailroom", "row Other"]);
 });
+
+test("does not match on the panel of a closed dialog in a row, but keeps its trigger", async ({ page }) => {
+    await page.setContent(fixture.wired);
+    const box = page.getByRole("searchbox", { name: "Filter" });
+
+    // "install zebra" is only inside each row's dialog panel, which is not drawn.
+    await box.fill("zebra");
+    expect(await visibleRows(page)).toEqual([]);
+
+    // The trigger "Get Auth" is drawn on the row, so it still matches.
+    await box.fill("get auth");
+    expect(await visibleRows(page)).toEqual(["row Auth"]);
+});
