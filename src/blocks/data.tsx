@@ -312,8 +312,6 @@ const filterInput = defineBlock<FilterInputProps>({
     type: FILTER_INPUT_BLOCK,
     label: "Filter text box",
     layer: "data",
-    // Drawn hidden until the script runs, so its wrapper must not take a gap in the list at rest.
-    transparent: true,
     fields: [
         { name: "label", kind: "text", label: "The box's label and placeholder" },
         { name: "countLabel", kind: "text", label: "The live count, with {count} and {total}" },
