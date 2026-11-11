@@ -116,6 +116,41 @@ between the cells, drawn as a real table with a heading on every column and ever
 `progressBar` (how far along one thing is, as `role="progressbar"` so it is read and not only seen,
 from a `value` already worked out, or from a `count` with either a `total` or what is `remaining`).
 
+**Dialog.** A `dialog` is a button that opens a modal holding its `content`, closes on Escape, on its
+close button and on a click on the backdrop, and gives focus back to the button. Put it in a `repeat`
+and each row gets its own, with `{{item.X}}` in the button and the content bound to that row.
+
+```json
+{ "type": "repeat", "props": { "content": [[
+  { "type": "dialog", "props": {
+      "trigger": "Details for {{item.Title}}",
+      "content": [[ { "type": "text", "props": { "value": "{{item.Summary}}" } } ]]
+  } }
+]] } }
+```
+
+| Prop | What it does |
+|---|---|
+| `trigger` | The button's words. Required, and it binds |
+| `label` | The dialog's name for a screen reader. Default is the button's words |
+| `closeLabel` | The close button. Default is the site's `dialogClose` label (`Close`) |
+| `recipe`, `triggerRecipe`, `closeRecipe` | A style recipe for the panel, the button and the close button, each replacing its default look outright |
+
+It is a native `<dialog>` opened with `showModal()`, so the page behind it is inert and Escape closes it
+without script. The script adds the click on the backdrop (a press and a release both on it, so a drag
+that ends there closes nothing), Tab kept inside the dialog in both directions, and focus returned to
+the button on any close. The look comes from the theme and recipes: the panel is drawn from the theme's
+surface, hairline, panel radius and a space, the backdrop is the theme's ink at 55 percent, its room
+and width come from the theme's space and prose width, and a recipe replaces the panel, the button or
+the close button. The fade and rise run only under `prefers-reduced-motion: no-preference`.
+
+With no script, the content is in the page. The trigger and the close button are not drawn, and the
+stylesheet shows the closed `<dialog>` as ordinary content in the row (`@media (scripting: none)`, and
+the same for a browser with no `showModal`). That is the smallest fallback that reaches the content: a
+`<details>` would hold it in the markup twice or move it at run time. The limit is a browser that says
+scripting is on while the script never ran, which sees no trigger and no content, as with any control
+the engine adds a script to.
+
 A comparison's first line is the column headings and the first cell of every line after it is that
 row's heading. What goes in a cell is whatever the tenant types, ticks and dashes included: a mark
 chosen inside the engine would be one more piece of English in the markup.

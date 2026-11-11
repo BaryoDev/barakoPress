@@ -1,4 +1,4 @@
-import type { PressConfig } from "../config.js";
+import { DEFAULT_LABELS, type PressConfig } from "../config.js";
 import { collectionOf, getItem, itemPath, listCollection, names, type Item } from "../collections.js";
 import type { Page } from "../cms.js";
 import {
@@ -31,6 +31,7 @@ import {
     SOURCE_BLOCK,
     writePagerState,
 } from "./data.js";
+import { DIALOG_BLOCK } from "./dialog.js";
 import { writeFilterState } from "./filter.js";
 import { holdsLink, isSafeHref } from "../markdown.js";
 import { plainLiterals } from "../literal.js";
@@ -169,6 +170,7 @@ const CONTROLS = new Set([
     "callToAction",
     "collection",
     "filterBar",
+    "dialog",
     "pager",
     "disclosure",
     "tabGroup",
@@ -261,6 +263,8 @@ async function bindBlock(block: ResolvedBlock, frame: Frame, ctx: BindContext): 
             return bindFilterBar(block, frame);
         case DATA_TABLE_BLOCK:
             return bindDataTable(block, frame, ctx);
+        case DIALOG_BLOCK:
+            return bindDialog(block, frame, ctx);
     }
 
     const bound = await bindProps(block, frame.source, { preset: Boolean(block.definition.preset) });
@@ -483,6 +487,14 @@ async function bindFilterBar(block: ResolvedBlock, frame: Frame): Promise<Resolv
     if (!props) return [];
     const state = writeFilterState({ id: filter.id, values: filter.values });
     return [{ ...block, props: { ...props, state }, slots: {} }];
+}
+
+/** A dialog binds as any block with slots does, and says Close in the site's own word unless told otherwise. */
+async function bindDialog(block: ResolvedBlock, frame: Frame, ctx: BindContext): Promise<ResolvedBlock[]> {
+    const props = await bindProps(block, frame.source, {});
+    if (!props) return [];
+    const closeLabel = props.closeLabel ?? ctx.config.labels.dialogClose ?? DEFAULT_LABELS.dialogClose;
+    return [{ ...block, props: { ...props, closeLabel }, slots: await bindSlots(block, frame, ctx) }];
 }
 
 async function bindRepeat(block: ResolvedBlock, frame: Frame, ctx: BindContext): Promise<ResolvedBlock[]> {

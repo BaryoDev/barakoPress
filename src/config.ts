@@ -676,6 +676,8 @@ export interface Labels {
     searchGroupEmpty?: string;
     /** The live count a grouped search announces. `{count}` is how many pages matched. */
     searchCount?: string;
+    /** The close button of a `dialog` block. */
+    dialogClose?: string;
     /** The link to the item before this one in a tree's reading order. */
     previous: string;
     /** The link to the item after it. */
@@ -724,6 +726,7 @@ export const DEFAULT_LABELS: Labels = {
     searchEmpty: "Nothing matches that.",
     searchGroupEmpty: "No match here",
     searchCount: "{count} found",
+    dialogClose: "Close",
     previous: "Previous",
     next: "Next",
     editPage: "Edit this page",

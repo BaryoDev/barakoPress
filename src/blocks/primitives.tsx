@@ -8,6 +8,7 @@ import { recipeLook } from "../recipes.js";
 import type { PressTheme } from "../theme.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
 import { CopyButton } from "./copy-button.js";
+import { dialogBlock } from "./dialog.js";
 import {
     HIDDEN_CLASS,
     HUE_STEPS,
@@ -1966,6 +1967,7 @@ export function primitiveBlocks(config: PressConfig): BlockDefinition[] {
         rotatingText,
         typingTerminal,
         codeSample,
+        dialogBlock,
     ];
 }
 
