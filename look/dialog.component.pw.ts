@@ -105,11 +105,15 @@ test("falls back to a drawn ancestor when the trigger can no longer take focus",
     await page.keyboard.press("Escape");
 
     await expect(openPanel(page)).toHaveCount(0);
-    const where = await page.evaluate(() => {
-        const el = document.activeElement as HTMLElement;
-        return { body: el === document.body, connected: el.isConnected, drawn: el.getClientRects().length > 0 };
-    });
-    expect(where).toEqual({ body: false, connected: true, drawn: true });
+    // The close event is queued after the dialog closes, so wait for focus to settle.
+    await expect
+        .poll(() =>
+            page.evaluate(() => {
+                const el = document.activeElement as HTMLElement;
+                return { body: el === document.body, connected: el.isConnected, drawn: el.getClientRects().length > 0 };
+            }),
+        )
+        .toEqual({ body: false, connected: true, drawn: true });
 });
 
 test("closes on the close control, which gets focus first and answers Enter and Space, and gives focus back", async ({ page }) => {

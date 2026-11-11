@@ -2,7 +2,8 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import type { PressConfig } from "../config.js";
 import { FilterButtons } from "./filter-bar.js";
-import { readFilterState } from "./filter.js";
+import { FilterInputKeys } from "./filter-input.js";
+import { FILTER_COUNT_ATTR, FILTER_EMPTY_ATTR, FILTER_INPUT_ATTR, readFilterState, textRule } from "./filter.js";
 import { BINDING_FORMATS } from "./bindings.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
 import type { PressTheme } from "../theme.js";
@@ -29,6 +30,7 @@ export const SHOW_IF_BLOCK = "showIf";
 export const SLOT_BLOCK = "slot";
 export const PAGER_BLOCK = "pager";
 export const FILTER_BAR_BLOCK = "filterBar";
+export const FILTER_INPUT_BLOCK = "filterInput";
 export const DATA_TABLE_BLOCK = "dataTable";
 
 /**
@@ -288,6 +290,88 @@ const filterBar = defineBlock<FilterBarProps>({
 });
 
 /*
+ * A text box that shows only the rows of the `source` around it whose text holds every word typed
+ * (#254). The binder numbers each row and writes the box's id and labels into `state` and its props;
+ * the rows stay server-rendered and the script marks the ones to hide, under one rule the engine
+ * writes. It works with a `filterBar` in the same source: a row shows when both let it.
+ *
+ * The root is `hidden` in the server's markup and the script shows it, so a reader with no script
+ * sees every row and no box that does nothing. The count and the no-match line are its own live
+ * regions, written from the label attributes, so no label is serialised to the client.
+ */
+type FilterInputProps = {
+    label?: string;
+    countLabel?: string;
+    emptyLabel?: string;
+    recipe?: string;
+    inputRecipe?: string;
+    state?: string;
+};
+
+const filterInput = defineBlock<FilterInputProps>({
+    type: FILTER_INPUT_BLOCK,
+    label: "Filter text box",
+    layer: "data",
+    fields: [
+        { name: "label", kind: "text", label: "The box's label and placeholder" },
+        { name: "countLabel", kind: "text", label: "The live count, with {count} and {total}" },
+        { name: "emptyLabel", kind: "text", label: "When nothing matched, with {query}" },
+        { name: "recipe", kind: "text", label: "Style recipe, the whole box" },
+        { name: "inputRecipe", kind: "text", label: "Style recipe, the text field" },
+        // Written by the binder, like the filter bar's.
+        { name: "state", kind: "text", label: "Filter state", bindable: false },
+    ],
+    component: ({ props, theme }) => {
+        const state = readFilterState(props.state);
+        if (!state) return null;
+        const c = theme.colors;
+        const own = recipeLook(theme, props.recipe);
+        const field = recipeLook(theme, props.inputRecipe);
+        const label = props.label ?? "";
+        const note: CSSProperties = { margin: 0, fontSize: theme.text.small, color: c.secondaryInk };
+        return (
+            // `hidden` on a plain outer element: a recipe may set `display`, which would beat it.
+            <div {...{ [FILTER_INPUT_ATTR]: state.id }} hidden>
+                <div
+                    // The gap goes onto a note only while it holds text, which the script does, so an empty
+                    // live region leaves no space under the box.
+                    style={{ ...(own ? own.style : {}), ["--bp-fi-gap" as string]: spaceOf(theme, "xs") }}
+                    className={own?.className || undefined}
+                >
+                    <input
+                        type="search"
+                        aria-label={label}
+                        placeholder={label}
+                        autoComplete="off"
+                        style={
+                            field
+                                ? { display: "block", ...field.style }
+                                : {
+                                      display: "block",
+                                      width: "100%",
+                                      boxSizing: "border-box",
+                                      padding: "9px 12px",
+                                      borderRadius: theme.radii.control,
+                                      border: `1px solid ${c.hairline}`,
+                                      background: c.surface,
+                                      color: c.ink,
+                                      font: "inherit",
+                                      fontSize: theme.text.small,
+                                  }
+                        }
+                        className={field?.className || undefined}
+                    />
+                    <p role="status" aria-live="polite" {...{ [FILTER_COUNT_ATTR]: props.countLabel ?? "" }} style={note} />
+                    <p role="status" aria-live="polite" {...{ [FILTER_EMPTY_ATTR]: props.emptyLabel ?? "" }} style={note} />
+                    <style dangerouslySetInnerHTML={{ __html: textRule(state.id) }} />
+                    <FilterInputKeys id={state.id} />
+                </div>
+            </div>
+        );
+    },
+});
+
+/*
  * A table over a public collection (barakoPress #26). The binder reads one page of the collection on
  * the server and writes it into `state`; the block draws a table and prev and next links, so paging
  * is a different URL and nothing in the browser calls the API. It reads what the delivery API
@@ -414,5 +498,5 @@ function dataTable(config: PressConfig): BlockDefinition {
 }
 
 export function dataBlocks(config: PressConfig): BlockDefinition[] {
-    return [source(config), repeat, showIf, slot, pager, filterBar, dataTable(config)];
+    return [source(config), repeat, showIf, slot, pager, filterBar, filterInput, dataTable(config)];
 }

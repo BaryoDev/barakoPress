@@ -142,6 +142,9 @@ some collection has `feed` on, so a clinic with no posts stops advertising an em
 | `searchCount` | `{count} found`: the live count a grouped `search` block announces. `{count}` is how many pages matched |
 | `dialogClose` | `Close`: the close button of a `dialog` block |
 | `searchGroupEmpty` | `No match here`: a product group of a grouped `search` block with nothing left in it |
+| `filterInput` | `Filter`: the label and placeholder of a `filterInput` block |
+| `filterCount` | `{count} shown`: the live count a `filterInput` announces. `{count}` is the rows showing, `{total}` all of them |
+| `filterEmpty` | `Nothing matches that.`: what a `filterInput` says when no row matched. `{query}` is what was typed |
 | `previous`, `next` | `Previous`, `Next`: a tree page's links along the reading order |
 | `editPage` | `Edit this page`: the link to where a tree page is written |
 | `contents` | `Contents`: the collapsed tree sidebar on a phone |

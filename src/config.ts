@@ -678,6 +678,12 @@ export interface Labels {
     searchCount?: string;
     /** The close button of a `dialog` block. */
     dialogClose?: string;
+    /** The label and placeholder on a `filterInput`. */
+    filterInput?: string;
+    /** The live count a `filterInput` announces. `{count}` is the rows showing, `{total}` all of them. */
+    filterCount?: string;
+    /** What a `filterInput` says when nothing matched. `{query}` is what was typed. */
+    filterEmpty?: string;
     /** The link to the item before this one in a tree's reading order. */
     previous: string;
     /** The link to the item after it. */
@@ -727,6 +733,9 @@ export const DEFAULT_LABELS: Labels = {
     searchGroupEmpty: "No match here",
     searchCount: "{count} found",
     dialogClose: "Close",
+    filterInput: "Filter",
+    filterCount: "{count} shown",
+    filterEmpty: "Nothing matches that.",
     previous: "Previous",
     next: "Next",
     editPage: "Edit this page",

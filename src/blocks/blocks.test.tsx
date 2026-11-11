@@ -323,7 +323,7 @@ describe("createBlockRegistry", () => {
             "codeSample",
             "dialog",
         ]);
-        expect(layers.data).toEqual(["source", "repeat", "showIf", "slot", "pager", "filterBar", "dataTable"]);
+        expect(layers.data).toEqual(["source", "repeat", "showIf", "slot", "pager", "filterBar", "filterInput", "dataTable"]);
         expect(layers.block).toEqual([
             "columns",
             "callToAction",

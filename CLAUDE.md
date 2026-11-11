@@ -69,8 +69,9 @@ What the build may not do, because of what is exported:
   here: `next/*` and `react` must stay external so the consumer's copies are what run, and the
   export names are what a consumer writes in its own route files. A bundler that inlines or reorders
   that hands Next something it cannot wire up. It also keeps the `"use client"` directive where Next
-  looks for it. Five files in `src` carry one (`src/blocks/search-keys.tsx`,
-  `src/blocks/filter-bar.tsx`, `src/blocks/dialog-keys.tsx`, `src/blocks/copy-button.tsx`, `src/screens/header-menu.tsx`): a
+  looks for it. Six files in `src` carry one (`src/blocks/search-keys.tsx`,
+  `src/blocks/filter-bar.tsx`, `src/blocks/filter-input.tsx`, `src/blocks/dialog-keys.tsx`, `src/blocks/copy-button.tsx`,
+  `src/screens/header-menu.tsx`): a
   directive is a file level marker Next reads off the module it resolves, and a bundler is free to
   move it. When one more may join them is in section 3.
 - **No minifying or mangling.** Same reason. An export name is load-bearing, and so is a directive.

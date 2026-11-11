@@ -10,6 +10,14 @@
   content is one click away and hydration shifts no layout. The close button's word is the new
   `dialogClose` label, and a `closeLabel` prop overrides it.
 
+- A `filterInput` block filters the rows of a `source` by typed text (#254, part 1). It matches every
+  word with the `search` block's `foldText`, combines with a `filterBar` in the same source (a row
+  shows when both let it), keeps a polite live count and a no-match line, and takes `/` to focus and
+  Escape to clear. It extends the bar's `data-bp-filter` marks with a row number and one more hide
+  rule, so there is no second mechanism. With no script every row shows and the box is not drawn.
+  Its words are the new `filterInput`, `filterCount` and `filterEmpty` labels, and a block prop
+  overrides each. A source with a `filterBar` and no box renders as before.
+
 ## 0.17.0 (2026-11-10)
 
 - The `search` block works on a collection's index page (#251). An index that reads its search params

@@ -107,7 +107,8 @@ export function wireSearch(input: HTMLInputElement): (() => void) | undefined {
             hide();
             return;
         }
-        if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+        // Another box on the page that took the slash first keeps it, whichever was wired first.
+        if (e.key !== "/" || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
         const active = document.activeElement;
         // Not while somebody is typing a slash into a field of their own.
         if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
