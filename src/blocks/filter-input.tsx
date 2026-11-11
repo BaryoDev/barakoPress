@@ -8,6 +8,7 @@ import {
     FILTER_MISS_ATTR,
     FILTER_ROW_ATTR,
 } from "./filter.js";
+import { DIALOG_PANEL_ATTR } from "./dialog-attrs.js";
 import { foldText } from "./search-attrs.js";
 
 /*
@@ -51,11 +52,17 @@ export function wireFilterInput(input: HTMLInputElement): (() => void) | undefin
     };
     collect();
 
-    // What a reader can read: a block's own stylesheet or script is in its textContent and is not text.
+    // What a reader can read: a block's own stylesheet or script is in its textContent and is not text,
+    // and neither is a dialog's panel (#259). Its trigger is drawn on the row, so that stays.
     const visibleText = (block: HTMLElement) => {
         const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
-            acceptNode: (node) =>
-                node.parentElement?.closest("style, script, noscript, template") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+            acceptNode: (node) => {
+                const parent = node.parentElement;
+                if (parent?.closest("style, script, noscript, template")) return NodeFilter.FILTER_REJECT;
+                // Only a panel inside the row: a box and its rows can sit in a dialog of their own.
+                const panel = parent?.closest(`[${DIALOG_PANEL_ATTR}]`);
+                return panel && block.contains(panel) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+            },
         });
         let out = "";
         for (let node = walker.nextNode(); node; node = walker.nextNode()) out += `${node.nodeValue} `;

@@ -19,6 +19,7 @@ import { defineConfig } from "../dist/config.js";
 import { bindBlocks } from "../dist/blocks/bind.js";
 import { filterRule } from "../dist/blocks/filter.js";
 import { FILTER_COUNT_ATTR, FILTER_EMPTY_ATTR, FILTER_INPUT_ATTR, FILTER_MISS_ATTR, FILTER_ROW_ATTR } from "../dist/blocks/filter.js";
+import { DIALOG_PANEL_ATTR } from "../dist/blocks/dialog-attrs.js";
 import { wireFilterInput } from "../dist/blocks/filter-input.js";
 import { foldText, SEARCH_COUNT_ATTR, SEARCH_EMPTY_ATTR, SEARCH_GROUP_ATTR, SEARCH_GROUP_EMPTY_ATTR, SEARCH_GROUPS_ATTR, SEARCH_INDEX_ATTR, SEARCH_ROOT_ATTR } from "../dist/blocks/search-attrs.js";
 import { filterGroups, filterIndex, focusable, wireSearch } from "../dist/blocks/search-keys.js";
@@ -71,6 +72,8 @@ async function render() {
                                         { type: "stickyBar", props: { content: [[{ type: "text", props: { value: "row {{item.Title}}" } }]] } },
                                         { type: "text", props: { value: "about {{item.Summary}}" } },
                                         // Carries a stylesheet of its own, which is not text a reader reads.
+                                        // A closed dialog: its trigger is on the row, its panel is not read (#259).
+                                        { type: "dialog", props: { trigger: "Get {{item.Title}}", content: [[{ type: "text", props: { value: "install zebra" } }]] } },
                                         { type: "reveal", props: { content: [[{ type: "text", props: { value: "tail {{item.Title}}" } }]] } },
                                     ],
                                 ],
@@ -87,6 +90,34 @@ async function render() {
     const state = JSON.parse(String(bar?.props.state ?? "null"));
     if (!state) throw new Error("the filterBar did not bind");
     const body = renderToStaticMarkup(createElement(BlockList, { blocks: bound, theme: config.theme }));
+    // A filterInput and its source inside a dialog panel: the panel is above every row (#259).
+    const inDialogRaw = [
+        {
+            type: "dialog",
+            props: {
+                trigger: "Open list",
+                content: [
+                    [
+                        {
+                            type: "source",
+                            props: {
+                                collection: "packages",
+                                mode: "list",
+                                content: [
+                                    [
+                                        { type: "filterInput", props: {} },
+                                        { type: "repeat", props: { content: [[{ type: "text", props: { value: "row {{item.Title}}" } }]] } },
+                                    ],
+                                ],
+                            },
+                        },
+                    ],
+                ],
+            },
+        },
+    ];
+    const inDialogBound = await bindBlocks(resolveBlocks(inDialogRaw, registry, { perViewer: false }), { config, registry, scopes: {} });
+    const inDialogBody = renderToStaticMarkup(createElement(BlockList, { blocks: inDialogBound, theme: config.theme }));
     const head = '<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{margin:0;font-family:sans-serif}</style>';
     const script = `<script>
 const FILTER_INPUT_ATTR = ${JSON.stringify(FILTER_INPUT_ATTR)};
@@ -94,6 +125,7 @@ const FILTER_COUNT_ATTR = ${JSON.stringify(FILTER_COUNT_ATTR)};
 const FILTER_EMPTY_ATTR = ${JSON.stringify(FILTER_EMPTY_ATTR)};
 const FILTER_MISS_ATTR = ${JSON.stringify(FILTER_MISS_ATTR)};
 const FILTER_ROW_ATTR = ${JSON.stringify(FILTER_ROW_ATTR)};
+const DIALOG_PANEL_ATTR = ${JSON.stringify(DIALOG_PANEL_ATTR)};
 ${foldText.toString()}
 ${wireFilterInput.toString()}
 wireFilterInput(document.querySelector("[data-bp-filter-input] input"));
@@ -120,6 +152,7 @@ wireSearch(document.getElementById("site-search"));
         filterFirst: `<!doctype html><html><head>${head}</head><body>${search}${body}${filterScript}${searchScript}</body></html>`,
         plain: `<!doctype html><html><head>${head}</head><body>${body}</body></html>`,
         wired: `<!doctype html><html><head>${head}</head><body>${body}${script}</body></html>`,
+        inDialog: `<!doctype html><html><head>${head}</head><body>${inDialogBody}${script}</body></html>`,
         rules: Object.fromEntries(state.values.map((value) => [value, filterRule(state.id, value)])),
     };
 }
