@@ -34,16 +34,22 @@ export function wireFilterInput(input: HTMLInputElement): (() => void) | undefin
     const count = root.querySelector<HTMLElement>(`[${FILTER_COUNT_ATTR}]`);
     const empty = root.querySelector<HTMLElement>(`[${FILTER_EMPTY_ATTR}]`);
 
-    // The rows, found once: each one's blocks, and its text folded the first time it is needed.
-    const rows = new Map<string, { blocks: HTMLElement[]; text?: string }>();
-    for (const block of scope.querySelectorAll<HTMLElement>(`[${FILTER_ROW_ATTR}]`)) {
-        for (const token of (block.getAttribute(FILTER_ROW_ATTR) ?? "").split(" ")) {
-            if (!token.startsWith(`${id}:`)) continue;
-            const row = rows.get(token) ?? { blocks: [] };
-            row.blocks.push(block);
-            rows.set(token, row);
+    // The rows: each one's blocks, and its text folded the first time it is needed. Collected again
+    // whenever the page changes under the box, since a refresh or a page of the source can replace
+    // the rows while this stays mounted.
+    let rows = new Map<string, { blocks: HTMLElement[]; text?: string }>();
+    const collect = () => {
+        rows = new Map();
+        for (const block of scope.querySelectorAll<HTMLElement>(`[${FILTER_ROW_ATTR}]`)) {
+            for (const token of (block.getAttribute(FILTER_ROW_ATTR) ?? "").split(" ")) {
+                if (!token.startsWith(`${id}:`)) continue;
+                const row = rows.get(token) ?? { blocks: [] };
+                row.blocks.push(block);
+                rows.set(token, row);
+            }
         }
-    }
+    };
+    collect();
 
     // What a reader can read: a block's own stylesheet or script is in its textContent and is not text.
     const visibleText = (block: HTMLElement) => {
@@ -139,7 +145,13 @@ export function wireFilterInput(input: HTMLInputElement): (() => void) | undefin
     // A bar writes its choice onto its own group and a rule beside it, after this ran: count again.
     let watcher: MutationObserver | undefined;
     if (typeof MutationObserver !== "undefined") {
-        watcher = new MutationObserver(settle);
+        watcher = new MutationObserver((records) => {
+            // The box's own count and no-match writes are not a change to the rows.
+            const own = (node: Node) => (count?.contains(node) ?? false) || (empty?.contains(node) ?? false);
+            if (records.every((record) => own(record.target))) return;
+            collect();
+            apply();
+        });
         watcher.observe(scope, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-bp-filter-value"] });
     }
 

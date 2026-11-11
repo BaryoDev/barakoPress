@@ -223,3 +223,26 @@ test("matches on the text a reader reads, not on a block's own stylesheet", asyn
     await box.fill("tail auth");
     expect(await visibleRows(page)).toEqual(["row Auth"]);
 });
+
+test("filters rows that replace the old ones under a mounted box, and counts them", async ({ page }) => {
+    await page.setContent(fixture.wired);
+    const box = page.getByRole("searchbox", { name: "Filter" });
+    await box.fill("mail");
+    expect(await visibleRows(page)).toEqual(["row Mail"]);
+
+    // A refresh or the next page swaps the rows while the box stays where it is.
+    await page.evaluate(() => {
+        const first = document.querySelector("[data-bp-filter-row]")!;
+        const list = first.parentElement!;
+        list.querySelectorAll("[data-bp-filter-row]").forEach((el) => el.remove());
+        const row = (n: number, text: string) =>
+            `<div data-block="text" data-bp-filter="f1-body" data-bp-filter-values="" data-bp-filter-row="f1-body:${n}"><p>${text}</p></div>`;
+        list.insertAdjacentHTML("beforeend", row(0, "row Mailroom") + row(1, "row Other"));
+    });
+
+    await expect.poll(() => visibleRows(page)).toEqual(["row Mailroom"]);
+    await expect(page.locator("[data-bp-filter-count]")).toHaveText("1 shown");
+
+    await box.press("Escape");
+    expect(await visibleRows(page)).toEqual(["row Mailroom", "row Other"]);
+});
