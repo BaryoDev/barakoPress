@@ -17,6 +17,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const fixture = JSON.parse(readFileSync(join(here, "filter-input-fixture.generated.json"), "utf8")) as {
     plain: string;
     wired: string;
+    searchFirst: string;
+    filterFirst: string;
     rules: Record<string, string>;
 };
 
@@ -163,4 +165,61 @@ test("fits a 390 pixel screen with the box inside the page", async ({ page }) =>
     expect(rect!.x).toBeGreaterThanOrEqual(0);
     expect(rect!.x + rect!.width).toBeLessThanOrEqual(390);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+for (const [order, key, winner] of [
+    ["the search box wired first", "searchFirst", "#site-search"],
+    ["this box wired first", "filterFirst", "[data-bp-filter-input] input"],
+] as const) {
+    test(`a search box on the same page shares the slash, and with ${order} that one keeps it`, async ({ page }) => {
+        await page.setContent(fixture[key]);
+        await page.keyboard.press("/");
+
+        await expect(page.locator(winner)).toBeFocused();
+        await expect(page.locator(winner)).toHaveValue("");
+    });
+}
+
+test("says the count and the no-match line only once typing pauses, while the rows follow at once", async ({ page }) => {
+    await page.setContent(fixture.wired);
+    const box = page.getByRole("searchbox", { name: "Filter" });
+    const count = page.locator("[data-bp-filter-count]");
+
+    await box.fill("sign");
+    expect(await visibleRows(page)).toEqual(["row Auth", "row SSO"]);
+    await expect(count).toHaveText("");
+    await page.waitForTimeout(150);
+    await expect(count).toHaveText("");
+    await expect(count).toHaveText("2 shown");
+});
+
+test("waits for an input method to finish a word, and Escape does not clear mid-composition", async ({ page }) => {
+    await page.setContent(fixture.wired);
+    const box = page.getByRole("searchbox", { name: "Filter" });
+
+    await box.evaluate((el: HTMLInputElement) => {
+        el.value = "mail";
+        el.dispatchEvent(new InputEvent("input", { bubbles: true, isComposing: true }));
+    });
+    expect(await visibleRows(page)).toEqual(ALL);
+
+    await box.evaluate((el: HTMLInputElement) => {
+        el.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, isComposing: true }));
+    });
+    await expect(box).toHaveValue("mail");
+
+    await box.evaluate((el: HTMLInputElement) => el.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true })));
+    expect(await visibleRows(page)).toEqual(["row Mail"]);
+});
+
+test("matches on the text a reader reads, not on a block's own stylesheet", async ({ page }) => {
+    await page.setContent(fixture.wired);
+    const box = page.getByRole("searchbox", { name: "Filter" });
+
+    // The reveal block writes "opacity" into a style element inside each row.
+    await box.fill("opacity");
+    expect(await visibleRows(page)).toEqual([]);
+
+    await box.fill("tail auth");
+    expect(await visibleRows(page)).toEqual(["row Auth"]);
 });

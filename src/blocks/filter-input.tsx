@@ -45,6 +45,17 @@ export function wireFilterInput(input: HTMLInputElement): (() => void) | undefin
         }
     }
 
+    // What a reader can read: a block's own stylesheet or script is in its textContent and is not text.
+    const visibleText = (block: HTMLElement) => {
+        const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
+            acceptNode: (node) =>
+                node.parentElement?.closest("style, script, noscript, template") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+        });
+        let out = "";
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) out += `${node.nodeValue} `;
+        return out;
+    };
+
     const say = (el: HTMLElement | null, text: string) => {
         if (!el) return;
         // Only when it changed, so the observer below does not hear its own write and loop.
@@ -60,7 +71,9 @@ export function wireFilterInput(input: HTMLInputElement): (() => void) | undefin
     };
 
     // What is on screen, counted from what the browser shows, so a bar's choice counts too.
-    const recount = (typed: string, words: string[]) => {
+    const recount = () => {
+        const typed = input.value;
+        const words = foldText(typed.trim()).split(/\s+/).filter(Boolean);
         let shown = 0;
         for (const row of rows.values()) {
             if (getComputedStyle(row.blocks[0]).display !== "none") shown++;
@@ -78,20 +91,38 @@ export function wireFilterInput(input: HTMLInputElement): (() => void) | undefin
         say(empty, narrowed && shown === 0 ? template(empty, FILTER_EMPTY_ATTR).split("{query}").join(typed.trim()) : "");
     };
 
+    /*
+     * The rows follow the keys at once; what is said aloud waits for the reader to stop, so a screen
+     * reader is not told a count for every letter. Every change of the page that could move the count
+     * lands here too, so a burst of them is one recount.
+     */
+    let pending: ReturnType<typeof setTimeout> | undefined;
+    const settle = () => {
+        clearTimeout(pending);
+        pending = setTimeout(recount, 400);
+    };
+
     const apply = () => {
         const typed = input.value;
         const words = foldText(typed.trim()).split(/\s+/).filter(Boolean);
         for (const row of rows.values()) {
-            row.text ??= foldText(row.blocks.map((block) => block.textContent ?? "").join(" "));
+            row.text ??= foldText(row.blocks.map(visibleText).join(" "));
             const text = row.text;
             const missed = !words.every((word) => text.includes(word));
             for (const block of row.blocks) mark(block, missed);
         }
-        recount(typed, words);
+        settle();
+    };
+
+    // An input method is mid-word until it says so: filtering on each candidate would hide rows
+    // for text that is not there yet.
+    const onInput = (e: Event) => {
+        if ((e as InputEvent).isComposing) return;
+        apply();
     };
 
     const onInputKey = (e: KeyboardEvent) => {
-        if (e.key !== "Escape" || input.value === "") return;
+        if (e.key !== "Escape" || e.isComposing || input.value === "") return;
         input.value = "";
         apply();
     };
@@ -108,19 +139,22 @@ export function wireFilterInput(input: HTMLInputElement): (() => void) | undefin
     // A bar writes its choice onto its own group and a rule beside it, after this ran: count again.
     let watcher: MutationObserver | undefined;
     if (typeof MutationObserver !== "undefined") {
-        watcher = new MutationObserver(() => recount(input.value, foldText(input.value.trim()).split(/\s+/).filter(Boolean)));
+        watcher = new MutationObserver(settle);
         watcher.observe(scope, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-bp-filter-value"] });
     }
 
     root.hidden = false;
     // What the browser put back in the box on a return visit is filtered too.
     apply();
-    input.addEventListener("input", apply);
+    input.addEventListener("input", onInput);
+    input.addEventListener("compositionend", apply);
     input.addEventListener("keydown", onInputKey);
     document.addEventListener("keydown", onDocumentKey);
     return () => {
         watcher?.disconnect();
-        input.removeEventListener("input", apply);
+        clearTimeout(pending);
+        input.removeEventListener("input", onInput);
+        input.removeEventListener("compositionend", apply);
         input.removeEventListener("keydown", onInputKey);
         document.removeEventListener("keydown", onDocumentKey);
         for (const row of rows.values()) for (const block of row.blocks) mark(block, false);

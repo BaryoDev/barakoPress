@@ -20,7 +20,8 @@ import { bindBlocks } from "../dist/blocks/bind.js";
 import { filterRule } from "../dist/blocks/filter.js";
 import { FILTER_COUNT_ATTR, FILTER_EMPTY_ATTR, FILTER_INPUT_ATTR, FILTER_MISS_ATTR, FILTER_ROW_ATTR } from "../dist/blocks/filter.js";
 import { wireFilterInput } from "../dist/blocks/filter-input.js";
-import { foldText } from "../dist/blocks/search-attrs.js";
+import { foldText, SEARCH_COUNT_ATTR, SEARCH_EMPTY_ATTR, SEARCH_GROUP_ATTR, SEARCH_GROUP_EMPTY_ATTR, SEARCH_GROUPS_ATTR, SEARCH_INDEX_ATTR, SEARCH_ROOT_ATTR } from "../dist/blocks/search-attrs.js";
+import { filterGroups, filterIndex, focusable, wireSearch } from "../dist/blocks/search-keys.js";
 import { BlockList } from "../dist/blocks/render.js";
 import { createBlockRegistry } from "../dist/blocks/registry.js";
 import { resolveBlocks } from "../dist/blocks/schema.js";
@@ -69,6 +70,8 @@ async function render() {
                                     [
                                         { type: "stickyBar", props: { content: [[{ type: "text", props: { value: "row {{item.Title}}" } }]] } },
                                         { type: "text", props: { value: "about {{item.Summary}}" } },
+                                        // Carries a stylesheet of its own, which is not text a reader reads.
+                                        { type: "reveal", props: { content: [[{ type: "text", props: { value: "tail {{item.Title}}" } }]] } },
                                     ],
                                 ],
                             },
@@ -93,9 +96,28 @@ const FILTER_MISS_ATTR = ${JSON.stringify(FILTER_MISS_ATTR)};
 const FILTER_ROW_ATTR = ${JSON.stringify(FILTER_ROW_ATTR)};
 ${foldText.toString()}
 ${wireFilterInput.toString()}
-wireFilterInput(document.querySelector("input[type=search]"));
+wireFilterInput(document.querySelector("[data-bp-filter-input] input"));
 </script>`;
+    // A search block's box on the same page, wired before or after the filter box.
+    const search = '<div data-bp-search><input type="search" id="site-search" aria-label="Site search"></div>';
+    const searchScript = `<script>
+const SEARCH_ROOT_ATTR = ${JSON.stringify(SEARCH_ROOT_ATTR)};
+const SEARCH_INDEX_ATTR = ${JSON.stringify(SEARCH_INDEX_ATTR)};
+const SEARCH_EMPTY_ATTR = ${JSON.stringify(SEARCH_EMPTY_ATTR)};
+const SEARCH_GROUPS_ATTR = ${JSON.stringify(SEARCH_GROUPS_ATTR)};
+const SEARCH_GROUP_ATTR = ${JSON.stringify(SEARCH_GROUP_ATTR)};
+const SEARCH_GROUP_EMPTY_ATTR = ${JSON.stringify(SEARCH_GROUP_EMPTY_ATTR)};
+const SEARCH_COUNT_ATTR = ${JSON.stringify(SEARCH_COUNT_ATTR)};
+${focusable.toString()}
+${filterIndex.toString()}
+${filterGroups.toString()}
+${wireSearch.toString()}
+wireSearch(document.getElementById("site-search"));
+</script>`;
+    const filterScript = script.replace("<script>", "<script>\n");
     return {
+        searchFirst: `<!doctype html><html><head>${head}</head><body>${search}${body}${searchScript}${filterScript}</body></html>`,
+        filterFirst: `<!doctype html><html><head>${head}</head><body>${search}${body}${filterScript}${searchScript}</body></html>`,
         plain: `<!doctype html><html><head>${head}</head><body>${body}</body></html>`,
         wired: `<!doctype html><html><head>${head}</head><body>${body}${script}</body></html>`,
         rules: Object.fromEntries(state.values.map((value) => [value, filterRule(state.id, value)])),

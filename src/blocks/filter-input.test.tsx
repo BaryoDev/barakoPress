@@ -132,7 +132,7 @@ describe("filterInput markup", () => {
         expect(out).toMatch(/<input type="search" aria-label="Filter"/);
         for (const title of ["Auth", "Files", "SSO"]) expect(out).toContain(`[[${title}]]`);
         // Nothing is hidden at rest: the rule only matches a row the script marked.
-        expect(out).toContain(textRule("f1-body"));
+        expect(out).toContain('<style>[data-bp-filter-miss~="f1-body"]{display:none!important}</style>');
         expect(out).not.toContain(`${FILTER_MISS_ATTR}="`);
     });
 
@@ -157,10 +157,19 @@ describe("filterInput markup", () => {
         expect(out).toContain('data-bp-filter="f1-body" data-bp-filter-values="" data-bp-filter-row="f1-body:0"');
     });
 
-    it("adds no row attribute to a source with a bar and no box", async () => {
+    it("renders a source with a bar and no box exactly as before the box existed", async () => {
         const out = await page([source([bar({ field: "Category" }), repeat([text("[[{{item.Title}}]]")])])]);
 
+        // Every marked wrapper, as the bar alone has always written it: id and values, nothing else.
+        const wrappers = [...out.matchAll(/<div data-block="text" data-bp-filter[^>]*>/g)].map((m) => m[0]);
+        expect(wrappers).toEqual([
+            '<div data-block="text" data-bp-filter="f1-body" data-bp-filter-values="f1-body:Auth" style="--bp-list:flex">',
+            '<div data-block="text" data-bp-filter="f1-body" data-bp-filter-values="f1-body:Storage" style="--bp-list:flex">',
+            '<div data-block="text" data-bp-filter="f1-body" data-bp-filter-values="f1-body:Auth" style="--bp-list:flex">',
+        ]);
         expect(out).not.toContain("data-bp-filter-row");
+        expect(out).not.toContain("data-bp-filter-miss");
+        expect(out).not.toContain("data-bp-filter-input");
         expect(out).not.toContain("data-bp-filter-input");
     });
 
