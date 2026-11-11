@@ -323,6 +323,7 @@ export { definePlugin } from "./blocks/plugins.js";
 export type { PressPlugin } from "./blocks/plugins.js";
 export { builtInBlocks, collectionItems, BLOCK_PROSE_CLASS } from "./blocks/built-in.js";
 export type { CollectionItem } from "./blocks/built-in.js";
+export { DIALOG_BLOCK } from "./blocks/dialog.js";
 export { primitiveBlocks, PROSE_CLASS, ICONS, FLOW_COLUMNS, INLINE_CLASS, TEXT_FORMATS } from "./blocks/primitives.js";
 export {
     dataBlocks,

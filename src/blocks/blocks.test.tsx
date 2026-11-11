@@ -321,6 +321,7 @@ describe("createBlockRegistry", () => {
             "rotatingText",
             "typingTerminal",
             "codeSample",
+            "dialog",
         ]);
         expect(layers.data).toEqual(["source", "repeat", "showIf", "slot", "pager", "filterBar", "filterInput", "dataTable"]);
         expect(layers.block).toEqual([

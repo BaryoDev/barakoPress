@@ -676,6 +676,8 @@ export interface Labels {
     searchGroupEmpty?: string;
     /** The live count a grouped search announces. `{count}` is how many pages matched. */
     searchCount?: string;
+    /** The close button of a `dialog` block. */
+    dialogClose?: string;
     /** The label and placeholder on a `filterInput`. */
     filterInput?: string;
     /** The live count a `filterInput` announces. `{count}` is the rows showing, `{total}` all of them. */
@@ -730,6 +732,7 @@ export const DEFAULT_LABELS: Labels = {
     searchEmpty: "Nothing matches that.",
     searchGroupEmpty: "No match here",
     searchCount: "{count} found",
+    dialogClose: "Close",
     filterInput: "Filter",
     filterCount: "{count} shown",
     filterEmpty: "Nothing matches that.",

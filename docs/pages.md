@@ -116,6 +116,47 @@ between the cells, drawn as a real table with a heading on every column and ever
 `progressBar` (how far along one thing is, as `role="progressbar"` so it is read and not only seen,
 from a `value` already worked out, or from a `count` with either a `total` or what is `remaining`).
 
+**Dialog.** A `dialog` is a button that opens a modal holding its `content`, closes on Escape, on its
+close button and on a click on the backdrop, and gives focus back to the button. Put it in a `repeat`
+and each row gets its own, with `{{item.X}}` in the button and the content bound to that row.
+
+```json
+{ "type": "repeat", "props": { "content": [[
+  { "type": "dialog", "props": {
+      "trigger": "Details for {{item.Title}}",
+      "content": [[ { "type": "text", "props": { "value": "{{item.Summary}}" } } ]]
+  } }
+]] } }
+```
+
+| Prop | What it does |
+|---|---|
+| `trigger` | The button's words. Required, and it binds |
+| `label` | The dialog's name for a screen reader. Default is the button's words |
+| `closeLabel` | The close button. Default is the site's `dialogClose` label (`Close`) |
+| `recipe`, `triggerRecipe`, `closeRecipe` | A style recipe for the panel, the button and the close control, each replacing its default look outright |
+
+It is a native `<dialog>` opened with `showModal()`, so the page behind it is inert and Escape closes it
+without script. The script adds the click on the backdrop (a press and a release both on it, so a drag
+that ends there closes nothing), Tab kept inside the dialog in both directions, and focus returned to
+the button on any close. If the button is gone or cannot take focus (a row a filter hid), focus goes
+to the nearest ancestor still drawn, never the body.
+
+The button is a link to the dialog's own id, drawn by the server, and the close control is a link back
+to it. With no script, or a script that never ran, following the link shows that row's content in the
+page (`:target`), and the close link puts it away. Nothing is hidden or revealed when the script
+arrives, so hydration shifts no layout; the script only stops the link from navigating and opens the
+modal, and gives the close link `role="button"` and the Space key. The id comes from `useId`, so many
+rows and two sources on one page never repeat one. A click with a modifier key, or a middle click,
+keeps the link's own meaning.
+
+The look comes from the theme and recipes. Colours are read as theme variables with the theme's own
+value as the fallback, so a theme variant reaches the panel and the backdrop. The panel uses the
+theme's surface, hairline and panel radius, the button and close control its spaces, and the room and
+width come from the theme's space and prose width. The backdrop is the ink at 55 percent. A recipe
+replaces the panel, the button or the close control. The fade and rise run only under
+`prefers-reduced-motion: no-preference`.
+
 A comparison's first line is the column headings and the first cell of every line after it is that
 row's heading. What goes in a cell is whatever the tenant types, ticks and dashes included: a mark
 chosen inside the engine would be one more piece of English in the markup.

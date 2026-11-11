@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- A `dialog` block opens a modal from a button in its own place, once a row when it sits in a
+  `repeat` (#254, part 2). It is a native `<dialog>` with `showModal()`, closes on Escape, a close
+  button and a backdrop click, keeps Tab inside, and gives focus back to the button. It honours
+  `prefers-reduced-motion` and takes its look, a theme variant included, from the theme and style
+  recipes. The button is a link to the dialog's id, so with no script, or a script that never ran, the
+  content is one click away and hydration shifts no layout. The close button's word is the new
+  `dialogClose` label, and a `closeLabel` prop overrides it.
+
 - A `filterInput` block filters the rows of a `source` by typed text (#254, part 1). It matches every
   word with the `search` block's `foldText`, combines with a `filterBar` in the same source (a row
   shows when both let it), keeps a polite live count and a no-match line, and takes `/` to focus and
