@@ -56,8 +56,13 @@ export function wireFilterInput(input: HTMLInputElement): (() => void) | undefin
     // and neither is a dialog's panel (#259). Its trigger is drawn on the row, so that stays.
     const visibleText = (block: HTMLElement) => {
         const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
-            acceptNode: (node) =>
-                node.parentElement?.closest(`style, script, noscript, template, [${DIALOG_PANEL_ATTR}]`) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+            acceptNode: (node) => {
+                const parent = node.parentElement;
+                if (parent?.closest("style, script, noscript, template")) return NodeFilter.FILTER_REJECT;
+                // Only a panel inside the row: a box and its rows can sit in a dialog of their own.
+                const panel = parent?.closest(`[${DIALOG_PANEL_ATTR}]`);
+                return panel && block.contains(panel) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+            },
         });
         let out = "";
         for (let node = walker.nextNode(); node; node = walker.nextNode()) out += `${node.nodeValue} `;

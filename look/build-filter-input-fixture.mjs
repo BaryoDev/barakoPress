@@ -90,6 +90,34 @@ async function render() {
     const state = JSON.parse(String(bar?.props.state ?? "null"));
     if (!state) throw new Error("the filterBar did not bind");
     const body = renderToStaticMarkup(createElement(BlockList, { blocks: bound, theme: config.theme }));
+    // A filterInput and its source inside a dialog panel: the panel is above every row (#259).
+    const inDialogRaw = [
+        {
+            type: "dialog",
+            props: {
+                trigger: "Open list",
+                content: [
+                    [
+                        {
+                            type: "source",
+                            props: {
+                                collection: "packages",
+                                mode: "list",
+                                content: [
+                                    [
+                                        { type: "filterInput", props: {} },
+                                        { type: "repeat", props: { content: [[{ type: "text", props: { value: "row {{item.Title}}" } }]] } },
+                                    ],
+                                ],
+                            },
+                        },
+                    ],
+                ],
+            },
+        },
+    ];
+    const inDialogBound = await bindBlocks(resolveBlocks(inDialogRaw, registry, { perViewer: false }), { config, registry, scopes: {} });
+    const inDialogBody = renderToStaticMarkup(createElement(BlockList, { blocks: inDialogBound, theme: config.theme }));
     const head = '<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{margin:0;font-family:sans-serif}</style>';
     const script = `<script>
 const FILTER_INPUT_ATTR = ${JSON.stringify(FILTER_INPUT_ATTR)};
@@ -124,6 +152,7 @@ wireSearch(document.getElementById("site-search"));
         filterFirst: `<!doctype html><html><head>${head}</head><body>${search}${body}${filterScript}${searchScript}</body></html>`,
         plain: `<!doctype html><html><head>${head}</head><body>${body}</body></html>`,
         wired: `<!doctype html><html><head>${head}</head><body>${body}${script}</body></html>`,
+        inDialog: `<!doctype html><html><head>${head}</head><body>${inDialogBody}${script}</body></html>`,
         rules: Object.fromEntries(state.values.map((value) => [value, filterRule(state.id, value)])),
     };
 }

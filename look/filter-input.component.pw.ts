@@ -19,6 +19,7 @@ const fixture = JSON.parse(readFileSync(join(here, "filter-input-fixture.generat
     wired: string;
     searchFirst: string;
     filterFirst: string;
+    inDialog: string;
     rules: Record<string, string>;
 };
 
@@ -258,4 +259,13 @@ test("does not match on the panel of a closed dialog in a row, but keeps its tri
     // The trigger "Get Auth" is drawn on the row, so it still matches.
     await box.fill("get auth");
     expect(await visibleRows(page)).toEqual(["row Auth"]);
+});
+
+test("filters rows normally when the box and its source sit inside an open dialog", async ({ page }) => {
+    await page.setContent(fixture.inDialog);
+    await page.evaluate(() => (document.querySelector("dialog") as HTMLDialogElement).showModal());
+    const box = page.getByRole("searchbox", { name: "Filter" });
+
+    await box.fill("cafe");
+    expect(await visibleRows(page)).toEqual(["row Café"]);
 });
