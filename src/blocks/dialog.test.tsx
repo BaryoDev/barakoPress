@@ -124,13 +124,18 @@ const repeat = (content: unknown[]) => ({ type: "repeat", props: { content: [con
 const source = (content: unknown[]) => ({ type: "source", props: { collection: "packages", mode: "list", pageSize: 50, content: [content] } });
 
 describe("dialog markup", () => {
-    it("draws a trigger put away until a script runs it, and a closed dialog holding the row's own content", async () => {
+    it("draws a visible trigger that links to the row's own dialog, a closed dialog holding that row's content", async () => {
         const out = await page([source([repeat([dialog({ trigger: "More on {{item.Title}}" })])])]);
 
         expect(out.match(/<dialog /g)).toHaveLength(3);
-        // One stylesheet for every row, hoisted by React rather than written once a dialog.
-        expect(out.match(/data-bp-dialog-panel\]\{box-sizing/g)).toHaveLength(1);
-        expect(out).toMatch(/<button type="button" hidden="" aria-haspopup="dialog" data-bp-dialog-open="[^"]*"[^>]*>More on Auth<\/button>/);
+        const ids = [...out.matchAll(/<dialog id="([^"]+)"/g)].map((m) => m[1]);
+        // One id a dialog, never repeated, and each trigger points at its own.
+        expect(new Set(ids).size).toBe(3);
+        for (const id of ids) {
+            expect(out).toContain(`<a id="${id}-open" href="#${id}" aria-haspopup="dialog" data-bp-dialog-open=""`);
+            expect(out).toContain(`href="#${id}-open" data-bp-dialog-close=""`);
+        }
+        expect(out).not.toMatch(/data-bp-dialog-open="[^"]*"[^>]*\bhidden\b/);
         expect(out).toContain("More on SSO");
         // Each row's dialog holds that row's own bound text.
         const panels = [...out.matchAll(/<dialog [^>]*>(.*?)<\/dialog>/g)].map((m) => m[1]);
@@ -139,6 +144,16 @@ describe("dialog markup", () => {
         expect(panels[1]).toContain("Uploads");
         expect(panels[2]).toContain("Single sign on");
         expect(out).not.toMatch(/<dialog [^>]*\bopen\b/);
+        // One stylesheet for every row, hoisted by React rather than written once a dialog.
+        expect(out.match(/data-bp-dialog-panel\]\{box-sizing/g)).toHaveLength(1);
+    });
+
+    it("gives two sources on one page no id in common", async () => {
+        const out = await page([source([repeat([dialog()])]), source([repeat([dialog()])])]);
+
+        const ids = [...out.matchAll(/<dialog id="([^"]+)"/g)].map((m) => m[1]);
+        expect(ids).toHaveLength(6);
+        expect(new Set(ids).size).toBe(6);
     });
 
     it("names the dialog, from the label or else the trigger", async () => {
@@ -149,28 +164,28 @@ describe("dialog markup", () => {
         expect(bare).toContain('aria-label="More on Files"');
     });
 
-    it("closes with a form method dialog, so the close button works with no script", async () => {
+    it("closes with a link back to the trigger, so the close control works with no script", async () => {
         const out = await page([source([repeat([dialog()])])]);
 
-        expect(out).toMatch(/<form [^>]*method="dialog"[^>]*><button type="submit"/);
         expect(out).toContain('data-bp-dialog-close=""');
-        expect(out).toContain(">Close</button>");
+        expect(out).toMatch(/data-bp-dialog-close="" [^>]*>Close<\/a>/);
     });
 
     it("says Close from the labels, and the block's own prop wins", async () => {
         labelsOverride = { dialogClose: "Sarado" };
         const labelled = await page([source([repeat([dialog()])])]);
-        expect(labelled).toContain(">Sarado</button>");
+        expect(labelled).toContain(">Sarado</a>");
 
         const own = await page([source([repeat([dialog({ closeLabel: "Done" })])])]);
-        expect(own).toContain(">Done</button>");
+        expect(own).toContain(">Done</a>");
     });
 
-    it("carries the stylesheet: reduced motion, the no-script fallback and the backdrop, with no colour of its own", () => {
+    it("carries the stylesheet: reduced motion, the target fallback and the backdrop, with no colour of its own", () => {
         const css = dialogCss();
 
         expect(css).toContain("@media (prefers-reduced-motion:no-preference)");
-        expect(css).toContain("@media (scripting:none)");
+        expect(css).toContain("[data-bp-dialog-panel]:target:not([open]){display:block");
+        expect(css).not.toContain("scripting");
         expect(css).toContain("::backdrop");
         // The backdrop takes its ink from the theme, through a variable the block sets.
         expect(css).toContain("var(--bp-dialog-ink)");
@@ -179,6 +194,13 @@ describe("dialog markup", () => {
         const before = css.slice(0, css.indexOf("@media (prefers-reduced-motion:no-preference)"));
         expect(before).not.toContain("animation");
         expect(before).not.toContain("transition");
+    });
+
+    it("reads its colours as theme variables, so a theme variant reaches the panel and the backdrop", async () => {
+        const out = await page([dialog({}, [text("x")])]);
+
+        expect(out).toMatch(/--bp-dialog-ink:var\(--bp-c-ink,#[0-9A-Fa-f]{6}\)/);
+        expect(out).toMatch(/background:var\(--bp-c-surface,#[0-9A-Fa-f]{6}\)/);
     });
 
     it("wears recipes for the panel, the trigger and the close button", async () => {

@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useId, type CSSProperties } from "react";
 import { recipeLook } from "../recipes.js";
 import { DialogKeys } from "./dialog-keys.js";
 import {
@@ -10,6 +10,7 @@ import {
     dialogCss,
 } from "./dialog-attrs.js";
 import { defineBlock } from "./schema.js";
+import { slotVariable } from "../theme.js";
 import { spaceOf } from "./tokens.js";
 
 /*
@@ -17,15 +18,18 @@ import { spaceOf } from "./tokens.js";
  *
  * The content is the block's `content` slot, bound in the row's own scope like any other block's, so
  * `{{item.Title}}` in it is that row's. The markup is a native `<dialog>`, which is what gives Escape,
- * the inert page behind it and the top layer for free. With no script the stylesheet shows the content
- * in the page (see dialog-attrs.ts), which is the smallest fallback that reaches it: a `<details>`
- * would need the content in the markup twice, or moved at run time under React's feet. What it costs is
- * a reader whose browser says scripting is on and whose script never ran: that reader sees the
- * trigger stay hidden. The same holds for every control the engine adds a script to.
+ * the inert page behind it and the top layer for free.
  *
- * Every look is from the theme or a style recipe. The block names no colour and no length of its own:
- * three variables on its root carry the theme's ink, a space and a width to the stylesheet, and the
- * panel, the trigger and the close button are drawn from tokens unless a recipe replaces them.
+ * The trigger is a link to the dialog's own id, drawn by the server, and the content shows in the page
+ * when that id is the URL's target (see dialog-attrs.ts). So with no script, or a script that never
+ * ran, the content is reachable from the trigger; and because the trigger is drawn in the markup and
+ * nothing is hidden or revealed when the script arrives, hydration shifts no layout. The id comes from
+ * `useId`, so a page with many rows, or two sources, never repeats one.
+ *
+ * The look is from the theme or a style recipe. A colour is read as a theme variable first, with the
+ * theme's own value as the fallback, so a theme variant (a dark one) reaches the panel and the
+ * backdrop as it does the layout's regions. Lengths are the theme's spaces; the stylesheet's own
+ * numbers are the backdrop's strength and the fade's length.
  */
 export const DIALOG_BLOCK = "dialog";
 
@@ -52,7 +56,12 @@ export const dialogBlock = defineBlock<DialogProps, "content">({
         { name: "content", kind: "slots", label: "Content", required: true, min: 1, max: 1 },
     ],
     component: ({ props, slots, theme }) => {
-        const c = theme.colors;
+        const id = useId();
+        const panelId = `bp-dialog-${id}`;
+        const openId = `${panelId}-open`;
+        // The variable a variant sets, else the theme's own colour.
+        const live = (slot: "ink" | "surface" | "hairline") => `var(${slotVariable(slot)},${theme.colors[slot]})`;
+        const c = { ink: live("ink"), surface: live("surface"), hairline: live("hairline") };
         const worn = (name: string | undefined, fallback: CSSProperties) => {
             const found = recipeLook(theme, name);
             return found ? { style: found.style, className: found.className || undefined } : { style: fallback, className: undefined };
@@ -65,7 +74,9 @@ export const dialogBlock = defineBlock<DialogProps, "content">({
             borderRadius: theme.radii.panel,
         });
         const open = worn(props.triggerRecipe, {
-            padding: "8px 15px",
+            display: "inline-block",
+            textDecoration: "none",
+            padding: `${spaceOf(theme, "xs")} ${spaceOf(theme, "sm")}`,
             borderRadius: theme.radii.pill,
             border: `1px solid ${c.hairline}`,
             background: c.surface,
@@ -75,11 +86,13 @@ export const dialogBlock = defineBlock<DialogProps, "content">({
             fontWeight: 600,
         });
         const close = worn(props.closeRecipe, {
-            padding: "6px 12px",
+            padding: `${spaceOf(theme, "xs")} ${spaceOf(theme, "sm")}`,
             borderRadius: theme.radii.control,
             border: `1px solid ${c.hairline}`,
             background: c.surface,
             color: c.ink,
+            display: "inline-block",
+            textDecoration: "none",
             font: "inherit",
             fontSize: theme.text.small,
         });
@@ -90,24 +103,23 @@ export const dialogBlock = defineBlock<DialogProps, "content">({
         } as CSSProperties;
         return (
             <div {...{ [DIALOG_ATTR]: "" }} style={root}>
-                {/* A button that does nothing without the script is not drawn until the script is there. */}
-                <button
-                    type="button"
-                    hidden
+                <a
+                    id={openId}
+                    href={`#${panelId}`}
                     aria-haspopup="dialog"
                     {...{ [DIALOG_OPEN_ATTR]: "" }}
                     style={{ cursor: "pointer", ...open.style }}
                     className={open.className}
                 >
                     {props.trigger}
-                </button>
-                <dialog {...{ [DIALOG_PANEL_ATTR]: "" }} aria-label={props.label ?? props.trigger}>
+                </a>
+                <dialog id={panelId} {...{ [DIALOG_PANEL_ATTR]: "" }} aria-label={props.label ?? props.trigger}>
                     <div {...{ [DIALOG_BODY_ATTR]: "" }} style={panel.style} className={panel.className}>
-                        <form method="dialog" style={{ display: "flex", justifyContent: "flex-end", margin: 0, marginBottom: spaceOf(theme, "sm") }}>
-                            <button type="submit" {...{ [DIALOG_CLOSE_ATTR]: "" }} style={{ cursor: "pointer", ...close.style }} className={close.className}>
+                        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: spaceOf(theme, "sm") }}>
+                            <a href={`#${openId}`} {...{ [DIALOG_CLOSE_ATTR]: "" }} style={{ cursor: "pointer", ...close.style }} className={close.className}>
                                 {props.closeLabel ?? "Close"}
-                            </button>
-                        </form>
+                            </a>
+                        </div>
                         {slots.content?.[0]}
                     </div>
                 </dialog>

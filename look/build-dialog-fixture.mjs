@@ -15,11 +15,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { defineConfig } from "../dist/config.js";
 import { bindBlocks } from "../dist/blocks/bind.js";
-import { DIALOG_ATTR, DIALOG_INLINE_ATTR, DIALOG_OPEN_ATTR, DIALOG_PANEL_ATTR } from "../dist/blocks/dialog-attrs.js";
+import { DIALOG_ATTR, DIALOG_CLOSE_ATTR, DIALOG_OPEN_ATTR, DIALOG_PANEL_ATTR } from "../dist/blocks/dialog-attrs.js";
 import { wireDialog } from "../dist/blocks/dialog-keys.js";
 import { BlockList } from "../dist/blocks/render.js";
 import { createBlockRegistry } from "../dist/blocks/registry.js";
 import { resolveBlocks } from "../dist/blocks/schema.js";
+import { themeVariablesCss, VARIANT_ATTRIBUTE } from "../dist/theme.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -42,6 +43,7 @@ async function render() {
     const config = defineConfig({
         site: { name: "Dialog test", url: "https://dialog.example" },
         cmsUrl: "http://cms.test",
+        theme: { variants: { night: { ink: "#EEF0FF", surface: "#14162B", hairline: "#3A3D5C" } } },
         collections: { packages: { type: "package", fields: { title: "Name" } } },
     });
     const registry = createBlockRegistry(config);
@@ -86,7 +88,7 @@ async function render() {
     const head = '<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{margin:0;font-family:sans-serif}</style>';
     const script = `<script>
 const DIALOG_ATTR = ${JSON.stringify(DIALOG_ATTR)};
-const DIALOG_INLINE_ATTR = ${JSON.stringify(DIALOG_INLINE_ATTR)};
+const DIALOG_CLOSE_ATTR = ${JSON.stringify(DIALOG_CLOSE_ATTR)};
 const DIALOG_OPEN_ATTR = ${JSON.stringify(DIALOG_OPEN_ATTR)};
 const DIALOG_PANEL_ATTR = ${JSON.stringify(DIALOG_PANEL_ATTR)};
 ${wireDialog.toString()}
@@ -94,7 +96,10 @@ for (const root of document.querySelectorAll("[" + DIALOG_ATTR + "]")) wireDialo
 </script>`;
     // The page's own controls either side of the dialogs, so a focus trap has something to leak to.
     const around = (inner) => `<a id="before" href="#before">before</a>${inner}<a id="after" href="#after">after</a>`;
+    // The same page under a theme variant, which a site switches with an attribute on the root.
+    const variant = `<!doctype html><html ${VARIANT_ATTRIBUTE}="night"><head>${head}<style>${themeVariablesCss(config.theme)}</style></head><body>${around(body)}${script}</body></html>`;
     return {
+        variant,
         plain: `<!doctype html><html><head>${head}</head><body>${around(body)}</body></html>`,
         wired: `<!doctype html><html><head>${head}</head><body>${around(body)}${script}</body></html>`,
     };

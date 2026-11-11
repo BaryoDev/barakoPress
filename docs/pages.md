@@ -134,22 +134,28 @@ and each row gets its own, with `{{item.X}}` in the button and the content bound
 | `trigger` | The button's words. Required, and it binds |
 | `label` | The dialog's name for a screen reader. Default is the button's words |
 | `closeLabel` | The close button. Default is the site's `dialogClose` label (`Close`) |
-| `recipe`, `triggerRecipe`, `closeRecipe` | A style recipe for the panel, the button and the close button, each replacing its default look outright |
+| `recipe`, `triggerRecipe`, `closeRecipe` | A style recipe for the panel, the button and the close control, each replacing its default look outright |
 
 It is a native `<dialog>` opened with `showModal()`, so the page behind it is inert and Escape closes it
 without script. The script adds the click on the backdrop (a press and a release both on it, so a drag
 that ends there closes nothing), Tab kept inside the dialog in both directions, and focus returned to
-the button on any close. The look comes from the theme and recipes: the panel is drawn from the theme's
-surface, hairline, panel radius and a space, the backdrop is the theme's ink at 55 percent, its room
-and width come from the theme's space and prose width, and a recipe replaces the panel, the button or
-the close button. The fade and rise run only under `prefers-reduced-motion: no-preference`.
+the button on any close. If the button is gone or cannot take focus (a row a filter hid), focus goes
+to the nearest ancestor still drawn, never the body.
 
-With no script, the content is in the page. The trigger and the close button are not drawn, and the
-stylesheet shows the closed `<dialog>` as ordinary content in the row (`@media (scripting: none)`, and
-the same for a browser with no `showModal`). That is the smallest fallback that reaches the content: a
-`<details>` would hold it in the markup twice or move it at run time. The limit is a browser that says
-scripting is on while the script never ran, which sees no trigger and no content, as with any control
-the engine adds a script to.
+The button is a link to the dialog's own id, drawn by the server, and the close control is a link back
+to it. With no script, or a script that never ran, following the link shows that row's content in the
+page (`:target`), and the close link puts it away. Nothing is hidden or revealed when the script
+arrives, so hydration shifts no layout; the script only stops the link from navigating and opens the
+modal, and gives the close link `role="button"` and the Space key. The id comes from `useId`, so many
+rows and two sources on one page never repeat one. A click with a modifier key, or a middle click,
+keeps the link's own meaning.
+
+The look comes from the theme and recipes. Colours are read as theme variables with the theme's own
+value as the fallback, so a theme variant reaches the panel and the backdrop. The panel uses the
+theme's surface, hairline and panel radius, the button and close control its spaces, and the room and
+width come from the theme's space and prose width. The backdrop is the ink at 55 percent. A recipe
+replaces the panel, the button or the close control. The fade and rise run only under
+`prefers-reduced-motion: no-preference`.
 
 A comparison's first line is the column headings and the first cell of every line after it is that
 row's heading. What goes in a cell is whatever the tenant types, ticks and dashes included: a mark

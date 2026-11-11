@@ -5,8 +5,9 @@
 - A `dialog` block opens a modal from a button in its own place, once a row when it sits in a
   `repeat` (#254, part 2). It is a native `<dialog>` with `showModal()`, closes on Escape, a close
   button and a backdrop click, keeps Tab inside, and gives focus back to the button. It honours
-  `prefers-reduced-motion` and takes its look from the theme and style recipes. With no script the
-  content shows in the page and the button is not drawn. The close button's word is the new
+  `prefers-reduced-motion` and takes its look, a theme variant included, from the theme and style
+  recipes. The button is a link to the dialog's id, so with no script, or a script that never ran, the
+  content is one click away and hydration shifts no layout. The close button's word is the new
   `dialogClose` label, and a `closeLabel` prop overrides it.
 
 ## 0.17.0 (2026-11-10)

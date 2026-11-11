@@ -17,11 +17,12 @@ const here = dirname(fileURLToPath(import.meta.url));
 const fixture = JSON.parse(readFileSync(join(here, "dialog-fixture.generated.json"), "utf8")) as {
     plain: string;
     wired: string;
+    variant: string;
 };
 
 test.describe.configure({ mode: "parallel" });
 
-const trigger = (page: Page, title: string) => page.getByRole("button", { name: `Open ${title}` });
+const trigger = (page: Page, title: string) => page.locator("a[data-bp-dialog-open]", { hasText: `Open ${title}` });
 const openPanel = (page: Page) => page.locator("dialog[open]");
 const focusedLabel = (page: Page) =>
     page.evaluate(() => {
@@ -32,16 +33,34 @@ const focusedLabel = (page: Page) =>
 test.describe("with no script", () => {
     test.use({ javaScriptEnabled: false });
 
-    test("shows the content of every row in the page, with no trigger and no close button", async ({ page }) => {
+    test("draws every trigger, shows no content until one is followed, then shows that row's content", async ({ page }) => {
         await page.setContent(fixture.plain);
 
-        await expect(page.getByText("about Sign in and tokens")).toBeVisible();
+        await expect(trigger(page, "Auth")).toBeVisible();
+        await expect(trigger(page, "Files")).toBeVisible();
+        await expect(page.getByText("about Uploads and blobs")).toBeHidden();
+
+        await trigger(page, "Files").click();
         await expect(page.getByText("about Uploads and blobs")).toBeVisible();
-        await expect(page.getByRole("link", { name: "More on Auth" })).toBeVisible();
-        await expect(page.locator("[data-bp-dialog-open]")).toHaveCount(2);
-        await expect(page.locator("[data-bp-dialog-open]").first()).toBeHidden();
-        await expect(page.locator("[data-bp-dialog-close]").first()).toBeHidden();
+        await expect(page.getByText("about Sign in and tokens")).toBeHidden();
+        await expect(page.getByRole("link", { name: "More on Files" })).toBeVisible();
+
+        // The close link goes back to the trigger and puts the content away again.
+        await page.locator("[data-bp-dialog-close]:visible").click();
+        await expect(page.getByText("about Uploads and blobs")).toBeHidden();
     });
+});
+
+test("with scripting on and the script not run, the trigger still reaches the content, and hydration shifts nothing", async ({ page }) => {
+    await page.setContent(fixture.plain);
+    const before = await trigger(page, "Auth").boundingBox();
+
+    await trigger(page, "Auth").click();
+    await expect(page.getByText("about Sign in and tokens")).toBeVisible();
+
+    // The wired page draws the triggers where the unwired one did: nothing moves when the script runs.
+    await page.setContent(fixture.wired);
+    expect(await trigger(page, "Auth").boundingBox()).toEqual(before);
 });
 
 test("with a script, shows the triggers and keeps every dialog closed and its content away", async ({ page }) => {
@@ -65,10 +84,12 @@ test("opens as a modal holding that row's own content, named for a screen reader
     await expect(panel.getByText("Sign in and tokens")).toHaveCount(0);
 });
 
-test("closes on Escape and gives focus back to the trigger", async ({ page }) => {
+test("closes on Escape and gives focus back to a trigger that never had it", async ({ page }) => {
     await page.setContent(fixture.wired);
-    await trigger(page, "Files").click();
+    // Opened from script, so the trigger was not focused by a click: the browser has nothing to restore.
+    await trigger(page, "Files").evaluate((el) => (el as HTMLElement).click());
     await expect(openPanel(page)).toHaveCount(1);
+    expect(await trigger(page, "Files").evaluate((el) => document.activeElement === el)).toBe(false);
 
     await page.keyboard.press("Escape");
 
@@ -76,11 +97,33 @@ test("closes on Escape and gives focus back to the trigger", async ({ page }) =>
     await expect(trigger(page, "Files")).toBeFocused();
 });
 
-test("closes on the close button, which gets focus first, and gives focus back", async ({ page }) => {
+test("falls back to a drawn ancestor when the trigger can no longer take focus", async ({ page }) => {
+    await page.setContent(fixture.wired);
+    await trigger(page, "Files").evaluate((el) => (el as HTMLElement).click());
+    await trigger(page, "Files").evaluate((el) => ((el as HTMLElement).style.display = "none"));
+
+    await page.keyboard.press("Escape");
+
+    await expect(openPanel(page)).toHaveCount(0);
+    const where = await page.evaluate(() => {
+        const el = document.activeElement as HTMLElement;
+        return { body: el === document.body, connected: el.isConnected, drawn: el.getClientRects().length > 0 };
+    });
+    expect(where).toEqual({ body: false, connected: true, drawn: true });
+});
+
+test("closes on the close control, which gets focus first and answers Enter and Space, and gives focus back", async ({ page }) => {
     await page.setContent(fixture.wired);
     await trigger(page, "Auth").click();
     await expect(page.locator("dialog[open] [data-bp-dialog-close]")).toBeFocused();
+    await expect(page.locator("dialog[open] [data-bp-dialog-close]")).toHaveAttribute("role", "button");
+    await page.keyboard.press("Space");
+    await expect(openPanel(page)).toHaveCount(0);
+    await expect(trigger(page, "Auth")).toBeFocused();
+    // The link did not navigate: the URL has no hash.
+    expect(await page.evaluate(() => location.hash)).toBe("");
 
+    await trigger(page, "Auth").click();
     await page.keyboard.press("Enter");
 
     await expect(openPanel(page)).toHaveCount(0);
@@ -114,6 +157,10 @@ test("a drag that starts in the panel and ends on the backdrop does not close it
 
 test("keeps Tab inside while open, wrapping in both directions, and never reaches the page behind", async ({ page }) => {
     await page.setContent(fixture.wired);
+    // A stop that is out of the Tab order is not the last one.
+    await page.evaluate(() => {
+        document.querySelector("dialog [data-bp-dialog-body]")!.insertAdjacentHTML("beforeend", '<button tabindex="-1">skip</button>');
+    });
     await trigger(page, "Auth").click();
     expect(await focusedLabel(page)).toBe("close");
 
@@ -142,6 +189,19 @@ test("fades in only when motion is allowed", async ({ page }) => {
     await trigger(page, "Auth").click();
     expect(await animation()).toBe("none");
     expect(await openPanel(page).evaluate((el) => getComputedStyle(el, "::backdrop").animationName)).toBe("none");
+});
+
+test("a theme variant reaches the panel and the backdrop", async ({ page }) => {
+    await page.setContent(fixture.variant);
+    await trigger(page, "Auth").click();
+
+    const look = await openPanel(page).evaluate((el) => ({
+        panel: getComputedStyle(el.querySelector("[data-bp-dialog-body]")!).backgroundColor,
+        backdrop: getComputedStyle(el, "::backdrop").backgroundColor,
+    }));
+    // The variant's surface #14162B, and its ink #EEF0FF at 55 percent, not the base theme's.
+    expect(look.panel).toBe("rgb(20, 22, 43)");
+    expect(look.backdrop).toMatch(/^color\(srgb 0\.93\d* 0\.94\d* 1 \/ 0\.55\)$|^rgba\(238, 240, 255, 0\.55\)$/);
 });
 
 test("draws the backdrop from the theme's ink", async ({ page }) => {
