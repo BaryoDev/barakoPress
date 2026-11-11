@@ -14,6 +14,19 @@ export const FILTER_ATTR = "data-bp-filter";
 export const FILTER_VALUES_ATTR = "data-bp-filter-values";
 /** Set on the bar to the chosen value, and absent while everything shows. */
 export const FILTER_CHOSEN_ATTR = "data-bp-filter-value";
+/**
+ * Set on every block of a row of a source that holds a `filterInput`: `<id>:<n>`, the same number on
+ * each block of one row, so a row of several blocks is matched on all its text as one.
+ */
+export const FILTER_ROW_ATTR = "data-bp-filter-row";
+/** What a `filterInput` writes onto the blocks of a row its text left out: the ids, separated by spaces. */
+export const FILTER_MISS_ATTR = "data-bp-filter-miss";
+/** Marks the box's root, holding the id of the filter it runs. */
+export const FILTER_INPUT_ATTR = "data-bp-filter-input";
+/** The live count's element, holding the label it is written from. */
+export const FILTER_COUNT_ATTR = "data-bp-filter-count";
+/** The no-match line's element, holding the label it is written from. */
+export const FILTER_EMPTY_ATTR = "data-bp-filter-empty";
 
 /**
  * A value as one whitespace-free token, so a row with several values can be matched with `~=` and a
@@ -40,14 +53,19 @@ export function markToken(id: string, value: string): string {
 export interface FilterMark {
     id: string;
     values: string[];
+    /** The row's number under this id, set only when the source holds a `filterInput`. */
+    row?: number;
 }
 
-/** The two attributes for a block the binder marked. */
+/** The attributes for a block the binder marked. */
 export function filterAttrs(marks: readonly FilterMark[]): Record<string, string> {
-    return {
+    const attrs: Record<string, string> = {
         [FILTER_ATTR]: marks.map((mark) => mark.id).join(" "),
         [FILTER_VALUES_ATTR]: marks.flatMap((mark) => mark.values.map((value) => markToken(mark.id, value))).join(" "),
     };
+    const rows = marks.filter((mark) => mark.row !== undefined).map((mark) => `${mark.id}:${mark.row}`);
+    if (rows.length > 0) attrs[FILTER_ROW_ATTR] = rows.join(" ");
+    return attrs;
 }
 
 /*
@@ -72,6 +90,16 @@ export function filterRule(id: string, value: string): string {
         `[${FILTER_ATTR}~=${cssString(id)}]:not([${FILTER_VALUES_ATTR}~=${cssString(markToken(id, value))}])` +
         `{display:none!important}`
     );
+}
+
+/**
+ * The rule that hides the blocks of box `id`'s rows that the typed words left out. It is the same
+ * kind of rule as `filterRule`, and matches only a block the script marked, so with no script and at
+ * rest it matches nothing and every row shows. The two rules each hide, so a row shows only when
+ * both the chosen value and the typed words let it.
+ */
+export function textRule(id: string): string {
+    return `[${FILTER_MISS_ATTR}~=${cssString(id)}]{display:none!important}`;
 }
 
 export interface FilterState {

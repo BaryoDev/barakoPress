@@ -676,6 +676,12 @@ export interface Labels {
     searchGroupEmpty?: string;
     /** The live count a grouped search announces. `{count}` is how many pages matched. */
     searchCount?: string;
+    /** The label and placeholder on a `filterInput`. */
+    filterInput?: string;
+    /** The live count a `filterInput` announces. `{count}` is the rows showing, `{total}` all of them. */
+    filterCount?: string;
+    /** What a `filterInput` says when nothing matched. `{query}` is what was typed. */
+    filterEmpty?: string;
     /** The link to the item before this one in a tree's reading order. */
     previous: string;
     /** The link to the item after it. */
@@ -724,6 +730,9 @@ export const DEFAULT_LABELS: Labels = {
     searchEmpty: "Nothing matches that.",
     searchGroupEmpty: "No match here",
     searchCount: "{count} found",
+    filterInput: "Filter",
+    filterCount: "{count} shown",
+    filterEmpty: "Nothing matches that.",
     previous: "Previous",
     next: "Next",
     editPage: "Edit this page",

@@ -1,4 +1,4 @@
-import type { PressConfig } from "../config.js";
+import { DEFAULT_LABELS, type PressConfig } from "../config.js";
 import { collectionOf, getItem, itemPath, listCollection, names, type Item } from "../collections.js";
 import type { Page } from "../cms.js";
 import {
@@ -16,6 +16,7 @@ import {
 import {
     DATA_TABLE_BLOCK,
     FILTER_BAR_BLOCK,
+    FILTER_INPUT_BLOCK,
     MAX_TABLE_COLUMNS,
     writeTableState,
     MAX_FILTER_VALUES,
@@ -88,6 +89,12 @@ interface Filter {
     hideEmptyGroups: boolean;
     /** Set once the bar has rendered, so a second bar in the same source draws nothing. */
     drawn: boolean;
+    /** The source holds a `filterInput`, so each row is numbered for it to match on. */
+    text: boolean;
+    /** Set once the box has rendered, so a second one in the same source draws nothing. */
+    inputDrawn: boolean;
+    /** The next row number, shared by every group of a grouped source. */
+    rows: { next: number };
     /** Inside one group of a grouped source, where the bar is not drawn again. */
     inGroup?: boolean;
 }
@@ -169,6 +176,7 @@ const CONTROLS = new Set([
     "callToAction",
     "collection",
     "filterBar",
+    "filterInput",
     "pager",
     "disclosure",
     "tabGroup",
@@ -259,6 +267,8 @@ async function bindBlock(block: ResolvedBlock, frame: Frame, ctx: BindContext): 
             return bindPager(block, frame);
         case FILTER_BAR_BLOCK:
             return bindFilterBar(block, frame);
+        case FILTER_INPUT_BLOCK:
+            return bindFilterInput(block, frame, ctx);
         case DATA_TABLE_BLOCK:
             return bindDataTable(block, frame, ctx);
     }
@@ -485,6 +495,28 @@ async function bindFilterBar(block: ResolvedBlock, frame: Frame): Promise<Resolv
     return [{ ...block, props: { ...props, state }, slots: {} }];
 }
 
+async function bindFilterInput(block: ResolvedBlock, frame: Frame, ctx: BindContext): Promise<ResolvedBlock[]> {
+    const filter = frame.filter;
+    if (!filter || !filter.text || filter.inputDrawn || filter.inGroup) return [];
+    filter.inputDrawn = true;
+    const props = await bindProps(block, frame.source, {});
+    if (!props) return [];
+    const labels = ctx.config.labels;
+    return [
+        {
+            ...block,
+            props: {
+                ...props,
+                label: props.label ?? labels.filterInput ?? DEFAULT_LABELS.filterInput,
+                countLabel: props.countLabel ?? labels.filterCount ?? DEFAULT_LABELS.filterCount,
+                emptyLabel: props.emptyLabel ?? labels.filterEmpty ?? DEFAULT_LABELS.filterEmpty,
+                state: writeFilterState({ id: filter.id, values: [] }),
+            },
+            slots: {},
+        },
+    ];
+}
+
 async function bindRepeat(block: ResolvedBlock, frame: Frame, ctx: BindContext): Promise<ResolvedBlock[]> {
     const content = block.slots.content?.[0] ?? [];
     const items = frame.rows?.items ?? [];
@@ -511,7 +543,9 @@ async function bindRepeat(block: ResolvedBlock, frame: Frame, ctx: BindContext):
         const row = await bindList(content, rowFrame, ctx);
         if (filter) {
             const values = offeredValues(ctx.config, item, filter);
-            for (const bound of row) mark(bound, filter.id, values);
+            // One number for the whole row, so the box matches a row of several blocks as one.
+            const number = filter.text ? filter.rows.next++ : undefined;
+            for (const bound of row) mark(bound, filter.id, values, number);
         }
         out.push(...row);
     }
@@ -671,15 +705,18 @@ async function filterOf(
     items: Item[],
     grouped: boolean,
 ): Promise<Filter | undefined> {
-    const bar = grouped ? content.find((block) => block.definition.type === FILTER_BAR_BLOCK) : findFilterBar(content);
-    if (!bar) return undefined;
-    const field = (await boundString(bar, frame.source, "field")).trim();
-    if (field === "") return undefined;
-    const separator = await boundString(bar, frame.source, "separator");
-    const order = (await boundString(bar, frame.source, "order")).split(",");
+    const found = (type: string) => (grouped ? content.find((block) => block.definition.type === type) : findFilterBlock(content, type));
+    const bar = found(FILTER_BAR_BLOCK);
+    const text = found(FILTER_INPUT_BLOCK) !== undefined;
+    // A bar with no field offers no buttons; a box beside it still filters.
+    const field = bar ? (await boundString(bar, frame.source, "field")).trim() : "";
+    if (field === "" && !text) return undefined;
+    // One filter and one id serve the bar and the box, so a row carries one set of attributes.
+    const separator = bar && field !== "" ? await boundString(bar, frame.source, "separator") : "";
+    const order = bar && field !== "" ? (await boundString(bar, frame.source, "order")).split(",") : [];
 
     const seen = new Set<string>();
-    for (const item of items) for (const value of rowValues(ctx.config, item, field, separator)) seen.add(value);
+    if (field !== "") for (const item of items) for (const value of rowValues(ctx.config, item, field, separator)) seen.add(value);
     const values = ordered([...seen], order).slice(0, MAX_FILTER_VALUES);
     ctx.filters++;
     return {
@@ -688,19 +725,22 @@ async function filterOf(
         separator,
         values,
         offered: new Set(values),
-        hideEmptyGroups: bar.props.hideEmptyGroups === true,
+        hideEmptyGroups: bar?.props.hideEmptyGroups === true,
         drawn: false,
+        text,
+        inputDrawn: false,
+        rows: { next: 0 },
     };
 }
 
-function findFilterBar(blocks: ResolvedBlock[]): ResolvedBlock | undefined {
+function findFilterBlock(blocks: ResolvedBlock[], want: string): ResolvedBlock | undefined {
     for (const block of blocks) {
         const type = block.definition.type;
-        if (type === FILTER_BAR_BLOCK) return block;
+        if (type === want) return block;
         if (type === SOURCE_BLOCK) continue;
         for (const lists of Object.values(block.slots)) {
             for (const list of lists) {
-                const found = findFilterBar(list);
+                const found = findFilterBlock(list, want);
                 if (found) return found;
             }
         }
@@ -728,13 +768,14 @@ function rowValues(config: PressConfig, item: Item, field: string, separator: st
 
 /** A row's values that the bar offers. One it does not offer could never be chosen. */
 function offeredValues(config: PressConfig, item: Item, filter: Filter): string[] {
+    if (filter.field === "") return [];
     return rowValues(config, item, filter.field, filter.separator).filter((value) => filter.offered.has(value));
 }
 
 /** Marks a block as belonging to bar `id`, unless it already does. */
-function mark(block: ResolvedBlock, id: string, values: string[]): void {
+function mark(block: ResolvedBlock, id: string, values: string[], row?: number): void {
     if (block.filters?.some((mark) => mark.id === id)) return;
-    block.filters = [...(block.filters ?? []), { id, values }];
+    block.filters = [...(block.filters ?? []), row === undefined ? { id, values } : { id, values, row }];
 }
 
 /** Keys in the order first seen, with the ones `order` names moved to the front in that order. */
@@ -766,7 +807,7 @@ async function bindGroups(
     // A group of a page that read part of what it matched is part of that group.
     const complete = total === undefined || total <= all.length;
     // The bar filters every group at once, so it is drawn once, ahead of them, and not per group.
-    const bars = content.filter((block) => block.definition.type === FILTER_BAR_BLOCK);
+    const bars = content.filter((block) => block.definition.type === FILTER_BAR_BLOCK || block.definition.type === FILTER_INPUT_BLOCK);
     if (filter && bars.length > 0) {
         out.push(...(await bindList(bars, { ...frame, source: frame.source.with(rowScopes(ctx, all, total)) }, ctx)));
     }
