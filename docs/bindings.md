@@ -213,3 +213,44 @@ group that has no row left. Without it a group stays with its heading and no row
 in a source counts. A grouped source honours only a bar at the top level of its content; one inside a
 band there would repeat with every group, so it draws nothing and marks no row. The
 values are those of the rows read, so a source that pages filters the page it is on.
+
+**Text filter.** A `filterInput` inside a `source` is a labelled search box that shows only the rows
+whose text holds every word typed, matched with the same `foldText` as the `search` block (lowercase,
+accents removed, so `cafe` finds `Café`). Put it beside a `filterBar` and a row shows only when both
+let it. A source holds one box, the first, and a grouped source draws it once, ahead of the groups.
+
+```json
+{ "type": "source", "props": {
+    "collection": "packages", "mode": "list", "pageSize": 50,
+    "content": [[
+      { "type": "filterBar", "props": { "field": "Category" } },
+      { "type": "filterInput", "props": { "label": "Filter packages" } },
+      { "type": "repeat", "props": { "content": [[ { "type": "text", "props": { "value": "{{item.Title}}" } } ]] } }
+    ]]
+} }
+```
+
+It extends the bar's mechanism and adds no second one. The binder marks each row's blocks with the
+same `data-bp-filter` id and, because a box is there, a row number in `data-bp-filter-row`
+(`<id>:<n>`, the same on every block of one row, so a row of several blocks matches on all its text).
+Typing sets `data-bp-filter-miss` on the blocks of the rows the words left out, and one rule the
+server wrote, `[data-bp-filter-miss~="<id>"]{display:none!important}`, hides them. The bar's rule and
+this one each hide, so the two combine by both having to pass. A row is matched on the text it shows,
+so nothing is written into the page twice.
+
+With no script every row shows and the box is not drawn: it is `hidden` in the server's markup and the
+script shows it, so there is no field that does nothing. With script, `/` focuses the box when no
+field has focus and Escape in the box clears it. Under the box are two polite live regions: the
+count, written from `countLabel`, and the no-match line from `emptyLabel`. Neither says anything while
+the list is untouched.
+
+| Prop | What it does |
+|---|---|
+| `label` | The box's accessible name and placeholder. Default is the site's `filterInput` label (`Filter`) |
+| `countLabel` | The live count. `{count}` is the rows showing, `{total}` all of them. Default is the `filterCount` label (`{count} shown`) |
+| `emptyLabel` | The line when nothing matched. `{query}` is what was typed. Default is the `filterEmpty` label (`Nothing matches that.`) |
+| `recipe`, `inputRecipe` | A style recipe for the whole box, and one for the text field, replacing the default look as a recipe does on a primitive |
+
+A group of a grouped source that is left with no visible row keeps its heading, since the text rule
+marks rows and not groups. The box is a client component, `src/blocks/filter-input.tsx`, and holds
+only an id.
