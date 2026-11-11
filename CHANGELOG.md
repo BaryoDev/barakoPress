@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.18.0 (2026-11-11)
 
 - A `dialog` block opens a modal from a button in its own place, once a row when it sits in a
   `repeat` (#254, part 2). It is a native `<dialog>` with `showModal()`, closes on Escape, a close
