@@ -8,7 +8,7 @@ import { readEnv } from "./env.js";
  *
  * Next adds the prefix itself to `<Link>`, `redirect()`, `router.push` and its own assets and
  * routes. It does not add it to a plain `<a href>`, a `<form action>`, a `Location` header written
- * by hand, an `<img src>` for a file in `public/`, or an absolute URL built from the site's address.
+ * by hand, an image source for a file in `public/`, or an absolute URL built from the site's address.
  * Those go through the helpers below. Unset, every helper returns its input unchanged.
  */
 
