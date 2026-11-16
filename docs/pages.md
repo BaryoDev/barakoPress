@@ -386,7 +386,8 @@ too.
 
 On the slug route (no `pages` mount) Press sees only `/slug`, so it gates a page by every entry
 whose last segment is that slug and takes their roles. A public page that shares a slug with a gated
-path is gated too, which is the safe side.
+path is gated too, which is the safe side. When the page also names an audience, the slug's roles
+narrow it and never replace it: a viewer needs a role in both, and with none in common nobody gets in.
 
 An empty role list, a role that is not a non-empty string, a path not starting with `/`, or two
 entries for one path throw when the config loads.

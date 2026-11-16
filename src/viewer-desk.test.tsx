@@ -49,6 +49,10 @@ const { defineConfig } = await import("./config.js");
 const { forgetCachedReads } = await import("./delivery.js");
 const { VIEWER_COOKIE } = await import("./viewer.js");
 const { createPage, createViewerPage, createPageMetadata, createHome, createHomeMetadata, createPageStaticParams } = await import("./screens/page.js");
+const { bindBlocks } = await import("./blocks/bind.js");
+const { createBlockRegistry } = await import("./blocks/registry.js");
+const { resolveBlocks } = await import("./blocks/schema.js");
+const { readTableState } = await import("./blocks/data.js");
 const { createShareImage } = await import("./routes/share-image.js");
 const { getNavigation } = await import("./cms.js");
 const { createSitemap } = await import("./routes/sitemap.js");
@@ -124,6 +128,9 @@ function cms() {
                 truncated: false,
                 items: Object.values(pages).filter((e) => !hidden.has(e.slug)).map((e) => ({ id: e.id, title: e.data.Title, slug: e.slug, path: `/${e.slug}`, children: [] })),
             });
+        }
+        if (url.pathname === "/api/public/post") {
+            return Response.json({ items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 0, hasNextPage: false });
         }
         if (url.pathname === "/api/public/page") {
             const items = Object.values(pages);
@@ -518,15 +525,30 @@ describe("a viewer-mode table that must not read", () => {
         expect(contentCalls()).toHaveLength(0);
     });
 
-    it("draws the empty state and reads nothing for a readAs that is neither public nor viewer", async () => {
-        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    it("draws no table and reads nothing for a readAs that is neither public nor viewer", async () => {
+        // The block schema checks a select against its options, so a page never reaches the binder
+        // with a typo: the block is dropped, with no rows, no public fallback and no read.
         addPage("desk", { Blocks: [deskTable({ readAs: "viewr" })] });
         jar[VIEWER_COOKIE] = ANA_TOKEN;
         const out = await html(createViewerPage(config)(args("desk")));
-        expect(out).toContain("No requests");
         expect(out).not.toContain("Public row");
+        expect(out).not.toContain("Ana lunch order");
         expect(contentCalls()).toHaveLength(0);
         expect(publicListCalls()).toHaveLength(0);
+    });
+
+    it("draws the empty state, reads nothing and says so when the binder is handed such a value", async () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        const registry = createBlockRegistry(config);
+        const [block] = resolveBlocks([deskTable()], registry, { perViewer: true });
+        const typo = { ...block, props: { ...block.props, readAs: "viewr" } };
+        const reader = vi.fn(async () => ({ items: [], total: 0, pageSize: 0, hasNextPage: false }));
+        const bound = await bindBlocks([typo], { config, registry, scopes: {}, viewerReader: async () => reader as never });
+        const state = readTableState(bound[0].props.state as string);
+        expect(state?.rows).toEqual([]);
+        expect(reader).not.toHaveBeenCalled();
+        expect(publicListCalls()).toHaveLength(0);
+        expect(contentCalls()).toHaveLength(0);
         expect(warn.mock.calls.some((c) => String(c[0]).includes("readAs"))).toBe(true);
     });
 });
