@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ReactNode } from "react";
 import { prerender } from "react-dom/static";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +16,7 @@ const BEN_TOKEN = "eyJhbGciOiJIUzI1NiJ9.ben-session-token.signaturepart";
 const CAL_TOKEN = "eyJhbGciOiJIUzI1NiJ9.cal-session-token.signaturepart";
 
 let jar: Record<string, string> = {};
+let hidden = new Set<string>();
 vi.mock("next/headers", () => ({
     headers: async () => new Headers({ host: "desk.example" }),
     cookies: async () => ({
@@ -31,6 +35,7 @@ vi.mock("next/navigation", () => ({
         throw Object.assign(new Error(`NEXT_REDIRECT ${to}`), { digest: "NEXT_REDIRECT" });
     },
 }));
+vi.mock("next/og", () => ({ ImageResponse: class { constructor() { return new Response("png"); } } }));
 vi.mock("next/server", () => ({ connection: async () => {} }));
 vi.mock("next/link", () => ({
     default: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
@@ -43,7 +48,8 @@ vi.mock("next/link", () => ({
 const { defineConfig } = await import("./config.js");
 const { forgetCachedReads } = await import("./delivery.js");
 const { VIEWER_COOKIE } = await import("./viewer.js");
-const { createPage, createViewerPage, createPageMetadata } = await import("./screens/page.js");
+const { createPage, createViewerPage, createPageMetadata, createHome, createHomeMetadata, createPageStaticParams } = await import("./screens/page.js");
+const { createShareImage } = await import("./routes/share-image.js");
 const { getNavigation } = await import("./cms.js");
 const { createSitemap } = await import("./routes/sitemap.js");
 
@@ -53,6 +59,7 @@ const config = defineConfig({
     cmsUrl: CMS,
     tenant: "t",
     viewerSessions: true,
+    pageFields: { audience: "Audience" },
     collections: { requests: { type: "catering-request", fields: { title: "Name" } } },
 });
 
@@ -115,8 +122,12 @@ function cms() {
             return Response.json({
                 contract: 2,
                 truncated: false,
-                items: Object.values(pages).map((e) => ({ id: e.id, title: e.data.Title, slug: e.slug, path: `/${e.slug}`, children: [] })),
+                items: Object.values(pages).filter((e) => !hidden.has(e.slug)).map((e) => ({ id: e.id, title: e.data.Title, slug: e.slug, path: `/${e.slug}`, children: [] })),
             });
+        }
+        if (url.pathname === "/api/public/page") {
+            const items = Object.values(pages);
+            return Response.json({ items, page: 1, pageSize: 100, totalItems: items.length, totalPages: 1, hasNextPage: false });
         }
         if (url.pathname === "/api/public/pages/resolve") {
             const entry = pages[(url.searchParams.get("path") ?? "").replace(/^\//, "")];
@@ -129,6 +140,7 @@ function cms() {
 }
 
 beforeEach(() => {
+    hidden = new Set();
     forgetCachedReads();
     jar = {};
     calls = [];
@@ -277,7 +289,7 @@ describe("a dataTable that reads as the viewer", () => {
 });
 
 describe("the site menu", () => {
-    const withPages = defineConfig({ site: { name: "Test", url: "https://test.example" }, cmsUrl: CMS, tenant: "t", pages: "" });
+    const withPages = defineConfig({ site: { name: "Test", url: "https://test.example" }, cmsUrl: CMS, tenant: "t", pages: "", pageFields: { audience: "Audience" } });
     beforeEach(() => {
         addPage("about", { Blocks: [text] });
         addPage("desk", { Audience: ["Front of house"], Blocks: [text] });
@@ -288,15 +300,10 @@ describe("the site menu", () => {
         expect(slugs).toEqual(["about"]);
     });
 
-    it("lists the page for a viewer holding one of its roles, and not for one without", async () => {
-        expect((await getNavigation(withPages, { viewerRoles: ["Front of house"] })).map((i) => i.slug)).toEqual(["about", "desk"]);
-        expect((await getNavigation(withPages, { viewerRoles: ["Guest"] })).map((i) => i.slug)).toEqual(["about"]);
-    });
-
     it("leaves out a page it cannot read rather than show its title", async () => {
         delete pages.about;
-        const nav = await getNavigation(withPages, { viewerRoles: ["Front of house"] });
-        expect(nav.map((i) => i.slug)).toEqual(["desk"]);
+        const nav = await getNavigation(withPages);
+        expect(nav.map((i) => i.slug)).toEqual([]);
         const real = globalThis.fetch;
         vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) =>
             new URL(String(input)).pathname === "/api/public/pages/resolve" ? new Response("", { status: 500 }) : real(input, init)));
@@ -323,6 +330,7 @@ describe("audiencePaths", () => {
         tenant: "t",
         viewerSessions: true,
         pages: "",
+        pageFields: { audience: "Audience" },
         audiencePaths: { "/Desk/": ["Front of house", "Owner"] },
     });
 
@@ -371,10 +379,8 @@ describe("audiencePaths", () => {
         expect(await html(createViewerPage(gated)(deskAt(["desk"])))).toContain("Desk text");
     });
 
-    it("is left out of the shared menu and the sitemap, and kept for a viewer with a role", async () => {
+    it("is left out of the shared menu and the sitemap", async () => {
         expect((await getNavigation(gated)).map((i) => i.slug)).toEqual(["about"]);
-        expect((await getNavigation(gated, { viewerRoles: ["Owner"] })).map((i) => i.slug)).toEqual(["about", "desk"]);
-        expect((await getNavigation(gated, { viewerRoles: ["Guest"] })).map((i) => i.slug)).toEqual(["about"]);
         const urls = (await createSitemap(gated)()).map((e) => e.url);
         expect(urls.some((u) => u.endsWith("/about"))).toBe(true);
         expect(urls.some((u) => u.endsWith("/desk"))).toBe(false);
@@ -389,5 +395,123 @@ describe("audiencePaths", () => {
         expect(() => make({ "/desk": "Owner" })).toThrow("at least one role");
         expect(() => make({ desk: ["Owner"] })).toThrow("must start with /");
         expect(() => make({ "/desk": ["Owner"], "/Desk/": ["Owner"] })).toThrow("repeats");
+    });
+});
+
+describe("audiencePaths on the slug route", () => {
+    const slugged = defineConfig({
+        site: { name: "Test", url: "https://test.example" },
+        cmsUrl: CMS,
+        tenant: "t",
+        viewerSessions: true,
+        audiencePaths: { "/staff/Desk": ["Front of house"] },
+    });
+    beforeEach(() => {
+        addPage("desk", { Blocks: [text] });
+        addPage("about", { Blocks: [text] });
+    });
+
+    it("is a 404 with no session, and for a viewer without the role", async () => {
+        await expect(html(createViewerPage(slugged)(args("desk")))).rejects.toThrow("NEXT_NOT_FOUND");
+        jar[VIEWER_COOKIE] = CAL_TOKEN;
+        await expect(html(createViewerPage(slugged)(args("desk")))).rejects.toThrow("NEXT_NOT_FOUND");
+        await expect(html(createPage(slugged)(args("desk")))).rejects.toThrow("NEXT_NOT_FOUND");
+    });
+
+    it("renders for a viewer with the role, and leaves other slugs public", async () => {
+        jar[VIEWER_COOKIE] = ANA_TOKEN;
+        expect(await html(createViewerPage(slugged)(args("desk")))).toContain("Desk text");
+        expect(await html(createPage(slugged)(args("about")))).toContain("Desk text");
+    });
+
+    it("leaves the slug out of the static params", async () => {
+        expect(await createPageStaticParams(slugged)()).toEqual([{ slug: "about" }]);
+    });
+});
+
+describe("a gated page on the other routes", () => {
+    const byField = defineConfig({ site: { name: "Test", url: "https://test.example" }, cmsUrl: CMS, tenant: "t", pages: "", pageFields: { audience: "Audience" } });
+    const byPath = defineConfig({ site: { name: "Test", url: "https://test.example" }, cmsUrl: CMS, tenant: "t", pages: "", audiencePaths: { "/desk": ["Owner"] } });
+    const noArgs = { params: Promise.resolve({}), searchParams: Promise.resolve({}) };
+
+    it("gives no share card, for the field and for audiencePaths", async () => {
+        const dir = mkdtempSync(join(tmpdir(), "font-"));
+        writeFileSync(join(dir, "f.ttf"), Buffer.from([1, 2, 3]));
+        process.env.PRESS_SHARE_IMAGE_FONT = join(dir, "f.ttf");
+        try {
+            addPage("desk", { Audience: ["Owner"], Blocks: [text] });
+            addPage("about", { Blocks: [text] });
+            const ask = (cfg: typeof byField, path: string) => createShareImage(cfg)(new Request(`https://t.example/share-image?path=${encodeURIComponent(path)}`));
+            expect((await ask(byField, "/desk")).status).toBe(404);
+            expect((await ask(byPath, "/desk")).status).toBe(404);
+            expect((await ask(byField, "/about")).status).toBe(200);
+        } finally {
+            delete process.env.PRESS_SHARE_IMAGE_FONT;
+        }
+    });
+
+    it("is not the home page, nor its metadata, when home.path names it", async () => {
+        addPage("desk", { Audience: ["Owner"], Blocks: [text] });
+        for (const cfg of [defineConfig({ ...byField, home: { path: "/desk" } }), defineConfig({ ...byPath, home: { path: "/desk" } })]) {
+            expect(await html(createHome(cfg)(noArgs))).not.toContain("Desk text");
+            expect(JSON.stringify(await createHomeMetadata(cfg)(noArgs))).not.toContain("Desk");
+        }
+    });
+
+    it("is left out of the static params, and out of a sitemap when the menu does not list it", async () => {
+        const open = defineConfig({ site: { name: "Test", url: "https://test.example" }, cmsUrl: CMS, tenant: "t", pageFields: { audience: "Audience" } });
+        addPage("desk", { Audience: ["Owner"], Blocks: [text] });
+        addPage("about", { Blocks: [text] });
+        expect(await createPageStaticParams(open)()).toEqual([{ slug: "about" }]);
+
+        hidden.add("desk");
+        hidden.add("about");
+        const urls = (await createSitemap(byField)()).map((e) => e.url);
+        expect(urls.some((u) => u.endsWith("/desk"))).toBe(false);
+        expect(urls.some((u) => u.endsWith("/about"))).toBe(true);
+    });
+});
+
+describe("an audience field that is present but unreadable", () => {
+    it("closes the page, and says so once", async () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        jar[VIEWER_COOKIE] = ANA_TOKEN;
+        for (const bad of [7, { name: "Owner" }, [{ name: "Owner" }], "   ", [" "]]) {
+            addPage("desk", { Audience: bad, Blocks: [text] });
+            forgetCachedReads();
+            await expect(html(createViewerPage(config)(args("desk")))).rejects.toThrow("NEXT_NOT_FOUND");
+        }
+        expect(warn.mock.calls.filter((c) => String(c[0]).includes('"desk"'))).toHaveLength(1);
+    });
+
+    it("leaves null, empty, and an empty list public", async () => {
+        for (const ok of [null, "", []]) {
+            addPage("desk", { Audience: ok, Blocks: [text] });
+            forgetCachedReads();
+            expect(await html(createPage(config)(args("desk")))).toContain("Desk text");
+        }
+    });
+});
+
+describe("a viewer-mode table that must not read", () => {
+    it("makes no authenticated read for a viewer of another tenant, even on a page with no audience", async () => {
+        const other = defineConfig({ site: { name: "Test", url: "https://test.example" }, cmsUrl: CMS, tenant: "other", viewerSessions: true, collections: { requests: { type: "catering-request", fields: { title: "Name" } } } });
+        addPage("desk", { Blocks: [deskTable()] });
+        jar[VIEWER_COOKIE] = ANA_TOKEN;
+        const out = await html(createViewerPage(other)(args("desk")));
+        expect(out).toContain("No requests");
+        expect(contentCalls()).toHaveLength(0);
+    });
+
+    it("draws the empty state and reads nothing for a readAs that is neither public nor viewer", async () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        addPage("desk", { Blocks: [deskTable({ readAs: "viewr" })] });
+        jar[VIEWER_COOKIE] = ANA_TOKEN;
+        const out = await html(createViewerPage(config)(args("desk")));
+        expect(out).toContain("No requests");
+        expect(out).not.toContain("Public row");
+        expect(contentCalls()).toHaveLength(0);
+        expect(publicListCalls()).toHaveLength(0);
+        expect(warn.mock.calls.some((c) => String(c[0]).includes("readAs"))).toBe(true);
     });
 });

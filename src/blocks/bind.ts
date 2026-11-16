@@ -686,8 +686,12 @@ async function bindDataTable(block: ResolvedBlock, frame: Frame, ctx: BindContex
         loaded = reader
             ? await read(() => listCollectionAsViewer(ctx.config, key, reader, { page, pageSize }))
             : { items: [], total: 0, pageSize: 0, hasNextPage: false };
-    } else {
+    } else if (props.readAs === undefined || props.readAs === "" || props.readAs === "public") {
         loaded = await read(() => listCollection(ctx.config, key, { page, pageSize }));
+    } else {
+        // An unknown mode is a typo for the one that gates. Draw the empty state, read nothing.
+        say(ctx, `blocks: a table over "${named(key)}" sets readAs to ${JSON.stringify(props.readAs)}, which is neither "public" nor "viewer", so it draws no rows`);
+        loaded = { items: [], total: 0, pageSize: 0, hasNextPage: false };
     }
     if (!loaded) return [];
     const items = loaded.items;

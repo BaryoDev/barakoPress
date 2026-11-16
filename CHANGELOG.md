@@ -3,8 +3,9 @@
 ## Unreleased
 
 - `audiencePaths` in the config maps page paths to role names and gates them even when delivery drops the
-  page's `Audience` field (#7). A bad entry throws when the config loads.
-- A page can name an audience (#7). Its `Audience` field (`pageFields.audience`) lists role names.
+  page's `Audience` field (#7). A bad entry throws when the config loads. On the slug route an entry
+  gates every page with the same last segment.
+- A page can name an audience (#7). Set `pageFields: { audience: "Audience" }` and the field lists role names.
   `createViewerPage` draws the page only for a signed-in viewer holding one of them. Anyone else gets
   the not-found page, not a redirect, and `createPage`, the home route and page metadata treat the page
   as missing. The site menu and sitemap leave such pages out.

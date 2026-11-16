@@ -281,25 +281,58 @@ export function pathAudience(config: PressConfig, path: string): string[] | null
     return config.audiencePaths?.[audienceKey(path)] ?? null;
 }
 
-/** Role names from a list or a comma separated string, trimmed, with blanks and repeats left out. */
-function roleNames(value: unknown): string[] {
-    const parts = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : [];
-    const names = parts.flatMap((p) => (typeof p === "string" && p.trim() !== "" ? [p.trim()] : []));
+/**
+ * Roles for a page served on the slug route, which sees only `/slug`: the roles of every
+ * `audiencePaths` entry whose last segment is the slug. It gates a public page that shares a slug
+ * with a gated path, which is the safe side.
+ */
+export function slugAudience(config: PressConfig, slug: string): string[] {
+    const map = config.audiencePaths;
+    if (!map) return [];
+    const last = slug.toLowerCase();
+    const roles = Object.entries(map).flatMap(([key, r]) => (key.split("/").pop() === last ? r : []));
+    return [...new Set(roles)];
+}
+
+/** A role no viewer can hold: the audience of a page whose field is there but unreadable. */
+export const CLOSED_ROLE = "\u0000closed";
+const WARNED_AUDIENCE = new Set<string>();
+
+/**
+ * Role names from a list or a comma separated string, trimmed, with blanks and repeats left out.
+ * Missing, empty and `[]` are public. A value that is present but not a list of names (a number, an
+ * object, a list holding one, only blanks) closes the page, with one warning per slug.
+ */
+function roleNames(value: unknown, slug: string): string[] {
+    if (value === undefined || value === null || value === "") return [];
+    if (Array.isArray(value) && value.length === 0) return [];
+    const parts = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : null;
+    const bad = parts === null || (Array.isArray(value) && parts.some((p) => typeof p !== "string"));
+    const names = bad ? [] : (parts as string[]).flatMap((p) => (p.trim() !== "" ? [p.trim()] : []));
+    if (names.length === 0) {
+        if (!WARNED_AUDIENCE.has(slug)) {
+            if (WARNED_AUDIENCE.size >= 200) WARNED_AUDIENCE.clear();
+            WARNED_AUDIENCE.add(slug);
+            console.warn(`pages: the audience of the page "${slug}" is not a list of role names, so the page is closed to everyone`);
+        }
+        return [CLOSED_ROLE];
+    }
     return [...new Set(names)];
 }
 
 export function toPage(config: PressConfig, c: PublicContent): Page {
     const d = c.data;
     const f = config.pageFields;
+    const slug = slugOf(c, f.slug);
     return {
         id: c.id,
-        slug: slugOf(c, f.slug),
+        slug,
         title: str(field(d, f.title)) || (typeof c.seo?.title === "string" ? c.seo.title.trim() : "") || config.labels.untitled,
         summary: str(field(d, f.summary)) || undefined,
         body: str(field(d, f.body)),
         blocks: field(d, f.blocks),
         hideTitle: field(d, f.hideTitle) === true,
-        audience: f.audience ? roleNames(field(d, f.audience)) : [],
+        audience: f.audience ? roleNames(field(d, f.audience), slug) : [],
         seo: c.seo ?? undefined,
         content: c,
     };
@@ -386,30 +419,22 @@ function breadcrumbs(raw: unknown): Breadcrumb[] {
  * not installed, or when its body speaks a contract this renderer does not read. A failed read throws,
  * so a caller that must not fail catches it.
  */
-export async function getNavigation(config: PressConfig, options: NavigationOptions = {}): Promise<NavItem[]> {
+export async function getNavigation(config: PressConfig): Promise<NavItem[]> {
     if (config.pages === undefined) return [];
     const tree = await navigationTree(config);
     const items = tree ? navItems(tree.items, 0, { left: NAV_MAX_ITEMS }) : [];
-    return config.pageFields.audience || config.audiencePaths ? withoutClosedPages(config, items, options.viewerRoles) : items;
-}
-
-export interface NavigationOptions {
-    /**
-     * The signed-in viewer's role names, for a menu drawn for one viewer. Unset, the menu is the
-     * shared one and lists no page that names an audience.
-     */
-    viewerRoles?: readonly string[];
+    return config.pageFields.audience || config.audiencePaths ? withoutClosedPages(config, items) : items;
 }
 
 /*
  * The menu body carries no audience, so each page is read to learn it. Those reads are the same
  * cached ones the page route makes. A page that names an audience is left out, with everything
- * under it, unless the viewer holds one of its roles; a page that cannot be read is left out too,
+ * under it; a page that cannot be read is left out too,
  * since showing its title is the leak this prevents.
  */
 const NAV_READ_BATCH = 10;
 
-async function withoutClosedPages(config: PressConfig, items: NavItem[], roles?: readonly string[]): Promise<NavItem[]> {
+async function withoutClosedPages(config: PressConfig, items: NavItem[]): Promise<NavItem[]> {
     const out: NavItem[] = [];
     for (let i = 0; i < items.length; i += NAV_READ_BATCH) {
         const batch = items.slice(i, i + NAV_READ_BATCH);
@@ -425,8 +450,8 @@ async function withoutClosedPages(config: PressConfig, items: NavItem[], roles?:
                     if (e && typeof e === "object" && "digest" in e) throw e;
                     return null;
                 }
-                if (audience?.length && !audience.some((r) => roles?.includes(r))) return null;
-                return { ...item, children: await withoutClosedPages(config, item.children, roles) };
+                if (audience?.length) return null;
+                return { ...item, children: await withoutClosedPages(config, item.children) };
             }),
         );
         for (const item of kept) if (item) out.push(item);

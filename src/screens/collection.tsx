@@ -10,7 +10,7 @@ import {
     type CollectionConfig,
     type PressConfig,
 } from "../config.js";
-import { formatDate, getPageAtPath, type Post, type Ref } from "../cms.js";
+import { formatDate, getPageAtPath, pageAudience, type Post, type Ref } from "../cms.js";
 import {
     collectionOf,
     getItem,
@@ -505,7 +505,7 @@ async function indexLead(
         console.warn(`collection: the index page at ${path} could not be read (${e instanceof Error ? e.message : String(e)})`);
         return { node: null, grouped: false };
     }
-    if (!page) return { node: null, grouped: false };
+    if (!page || pageAudience(config, page, path).length > 0) return { node: null, grouped: false };
     const resolved = await pageBlocks(config, page, registryFor(config, blocks ?? createBlockRegistry(config, [], { presets: [] })), {
         scope: "index",
         ...(searchParams ? { searchParams } : {}),

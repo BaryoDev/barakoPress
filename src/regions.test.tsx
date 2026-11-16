@@ -137,6 +137,14 @@ const TENANTS: Record<string, Tenant> = {
             "/site/footer": { id: "f", slug: "footer", data: { Title: "Footer", Blocks: FOOTER_BLOCKS } },
         },
     },
+    // A footer page that names an audience, which is not chrome for every visitor.
+    closed: {
+        host: "closed.example",
+        settings: { Name: "Closed Co", Url: "https://closed.example", FooterPath: "/site/footer", ...CHROME },
+        pages: {
+            "/site/footer": { id: "f", slug: "footer", data: { Title: "Footer", Audience: ["Owner"], Blocks: FOOTER_BLOCKS } },
+        },
+    },
     // Names a footer page nobody has written yet.
     gap: {
         host: "gap.example",
@@ -387,6 +395,19 @@ describe("a footer region", () => {
         expect(footer).not.toContain('data-press="footer"');
         expect(footer).toContain("Directions");
         expect(footer).toContain("background:#101223");
+    });
+});
+
+describe("a region page that names an audience", () => {
+    it("is not drawn: the built-in footer stays, whether the field or audiencePaths names the audience", async () => {
+        const byField = defineConfig({ sites: {}, cmsUrl: CMS, pageFields: { audience: "Audience" } });
+        const footer = footerHtml(await layoutHtml("closed.example", byField));
+        expect(footer).not.toContain("Open 8am to 5pm");
+        expect(footer).toContain("Directions");
+
+        const byPath = defineConfig({ sites: {}, cmsUrl: CMS, audiencePaths: { "/site/footer": ["Owner"] } });
+        const open = footerHtml(await layoutHtml("clinic.example", byPath));
+        expect(open).not.toContain("Open 8am to 5pm");
     });
 });
 

@@ -956,7 +956,6 @@ const BLOG_BLUEPRINT: Pick<PressConfig, "types" | "fields" | "pageFields"> = {
         body: "Body",
         blocks: "Blocks",
         hideTitle: "HideTitle",
-        audience: "Audience",
     },
 };
 

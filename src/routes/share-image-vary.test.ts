@@ -17,7 +17,7 @@ vi.mock("../site.js", async (orig) => ({
     ...(await orig<typeof import("../site.js")>()),
     siteConfigOrNull: async () => state.config,
 }));
-vi.mock("../cms.js", () => ({ getPageByPath: async () => ({ page: { title: "About" } }) }));
+vi.mock("../cms.js", () => ({ getPageByPath: async () => ({ page: { title: "About" } }), pageAudience: () => [] }));
 
 import { createShareImage } from "./share-image.js";
 

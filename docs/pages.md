@@ -343,8 +343,9 @@ anonymously by the API, so a page that has to stay private is a `Members` entry 
 
 ### Page audience
 
-A page can name who may see it. Give the page entry an `Audience` field (the name is
-`pageFields.audience`) holding role names, as a list or one comma separated string:
+A page can name who may see it. The field is opt-in, so a site whose pages already have an
+`Audience` field meaning something else is unchanged. Set `pageFields: { audience: "Audience" }`, then
+give the page entry that field holding role names, as a list or one comma separated string:
 
 ```json
 { "Title": "Catering desk", "Audience": ["Front of house", "Owner"], "Blocks": [] }
@@ -356,14 +357,17 @@ page gets, with no redirect, so the page's existence is not shown. `createPage`,
 page metadata treat such a page as missing too, so mount it under `createViewerPage`. The roles come
 from `getViewer`, on the server. The field must be one the content type marks Public, since the
 delivery API leaves out the rest and a page with no readable audience is public. Press cannot tell
-a missing field from a hidden one, so check the type. The site menu lists no page that names an
-audience: each menu page is read to find out, so a menu costs one cached page read per item.
+a missing field from a hidden one, so check the type. A field that is there but not a list of
+names (a number, an object, only blanks) closes the page to everyone and logs one warning. Missing,
+empty and `[]` stay public. The shared site menu, the sitemap, the share image, the header and footer
+regions, the holding page and a collection's index page leave out or ignore a page that names an
+audience. The menu reads each page to find out, so it costs one cached page read per item.
 
 #### Gating by path
 
 The page field works only when the pages type marks it Public, and Press cannot detect when it does
-not. A page whose field is hidden is served as a public page. The gate that always holds is
-`audiencePaths` in the Press config, a map of page path to role names:
+not. A page whose field is hidden is served as a public page. `audiencePaths` in the Press config
+does not depend on delivery. It is a map of page path to role names:
 
 ```ts
 export default defineConfig({
@@ -378,7 +382,13 @@ The menu, sitemap, static params, metadata, home route and `createPage` treat it
 an audience. Paths are the Pages module paths, below the mount. The match is exact, after trailing
 slashes, repeated slashes and `.` or `..` segments are folded and case is ignored (folding case can
 only match more than the router does). A page under a listed path is not covered unless it is listed
-too. An empty role list, a role that is not a non-empty string, a path not starting with `/`, or two
+too.
+
+On the slug route (no `pages` mount) Press sees only `/slug`, so it gates a page by every entry
+whose last segment is that slug and takes their roles. A public page that shares a slug with a gated
+path is gated too, which is the safe side.
+
+An empty role list, a role that is not a non-empty string, a path not starting with `/`, or two
 entries for one path throw when the config loads.
 
 ### Reading Members content
