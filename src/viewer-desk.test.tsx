@@ -397,12 +397,12 @@ describe("audiencePaths", () => {
         await expect(html(createViewerPage(other)(deskAt(["desk"])))).rejects.toThrow("NEXT_NOT_FOUND");
     });
 
-    it("is a 404 on the shared route and in metadata, and the roles win over the page field", async () => {
+    it("is a 404 on the shared route and in metadata, and a page field with no role in common closes it", async () => {
         jar[VIEWER_COOKIE] = ANA_TOKEN;
         await expect(html(createPage(gated)(deskAt(["desk"])))).rejects.toThrow("NEXT_NOT_FOUND");
         expect((await createPageMetadata(gated)(deskAt(["desk"]))).title).toBe("Not found");
         addPage("desk", { Audience: ["Guest"], Blocks: [text] });
-        expect(await html(createViewerPage(gated)(deskAt(["desk"])))).toContain("Desk text");
+        await expect(html(createViewerPage(gated)(deskAt(["desk"])))).rejects.toThrow("NEXT_NOT_FOUND");
     });
 
     it("is left out of the shared menu and the sitemap", async () => {
