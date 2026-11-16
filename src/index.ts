@@ -419,6 +419,6 @@ export { createFeed } from "./routes/feed.js";
 export type { FeedOptions } from "./routes/feed.js";
 export { createSitemap, SITEMAP_MAX_URLS } from "./routes/sitemap.js";
 export { createRobots } from "./routes/robots.js";
-export { basePath, normalizeBasePath, withBase } from "./base-path.js";
+export { basePath, cookieName, cookiePath, normalizeBasePath, withBase } from "./base-path.js";
 export { createShareImage } from "./routes/share-image.js";
 export { SHARE_IMAGE_ROUTE, shareImageHref } from "./share-image.js";

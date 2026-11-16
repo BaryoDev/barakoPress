@@ -1,4 +1,8 @@
+import type { ReactElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { Asset } from "./assets.js";
+import { resolveTheme } from "./theme.js";
 import { basePath, cookieName, cookiePath, normalizeBasePath, siteBaseUrl, siteWithBase, withBase, withoutBase } from "./base-path.js";
 import { defineConfig } from "./config.js";
 import { renderMarkdown } from "./markdown.js";
@@ -105,13 +109,21 @@ describe("with BASE_PATH", () => {
             },
             BASE,
         );
-        expect(site.logo).toBe("/kape-ana/logo.svg");
+        expect(site.logo).toBe("/logo.svg");
         expect(site.favicon).toBe("https://cdn.test/f.png");
         expect(site.headerLinks?.map((l) => l.href)).toEqual(["/kape-ana/docs", "https://elsewhere.test"]);
         expect(site.headerLinks?.[0].children?.[0].href).toBe("/kape-ana/docs/a");
         expect(site.headerActions?.[0].href).toBe("/kape-ana/join");
         expect(site.topBar?.links[0].href).toBe("/kape-ana/news");
         expect(site.footerColumns?.[0].links[0].href).toBe("/kape-ana/privacy");
+    });
+
+    it("keeps an as-supplied logo as supplied under the prefix", () => {
+        process.env.BASE_PATH = BASE;
+        const theme = resolveTheme({ asSupplied: [{ url: "/logo.svg" }] });
+        const out = renderToStaticMarkup(Asset({ src: "/logo.svg", alt: "L", theme }) as ReactElement);
+        expect(out).toContain("data-as-supplied");
+        expect(out).toContain('src="/kape-ana/logo.svg"');
     });
 
     it("leaves the identity as it was with no prefix", () => {

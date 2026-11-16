@@ -67,7 +67,9 @@ const links = <T extends Linked & { children?: Linked[] }>(list: T[] | undefined
 
 /**
  * The site identity with every path on this site carried under the prefix: header, menu, top bar and
- * footer links, header actions, and the logo, favicon and share image when they are local files.
+ * footer links, header actions, and the favicon and share image when they are local files. The logo
+ * and footer logo are left alone: `Asset` prefixes them when it draws, after it has matched them
+ * against the as-supplied list, which holds unprefixed paths.
  * Rendering reads this, so a plain `<a href>` lands inside the prefix. Matching a link against a
  * page (the header's duplicate check, the holding page) reads the identity before this.
  */
@@ -88,8 +90,6 @@ export function siteWithBase<
     const file = (v: string | undefined) => (v === undefined ? v : withBase(v, base));
     return {
         ...site,
-        logo: file(site.logo),
-        footerLogo: file(site.footerLogo),
         favicon: file(site.favicon),
         shareImage: file(site.shareImage),
         topBar: site.topBar ? { ...site.topBar, links: site.topBar.links.map((l) => link(l, base)) } : site.topBar,
@@ -107,6 +107,9 @@ export function siteWithBase<
  * Secure, and every cookie here keeps HttpOnly and SameSite=Lax. What is given up is the `__Host-`
  * guarantee that no Domain attribute was used, which a script on the same origin could defeat anyway.
  * With no prefix the name and the path are exactly what they were.
+ *
+ * The exported `SHARE_COOKIE`, `LINK_COOKIE` and `VIEWER_COOKIE` are the root names. A caller that
+ * reads or sets one itself passes it through `cookieName` and uses `cookiePath()`.
  */
 export function cookieName(name: string, base: string = basePath()): string {
     return base ? name.replace(/^__Host-/, "__Secure-") : name;
