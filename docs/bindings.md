@@ -186,6 +186,44 @@ so a `{slug}` in `rowLink` is filled with the row's id there.
 } }
 ```
 
+**Record panel and transition button.** A `recordPanel` shows one entry of a collection as the
+signed-in viewer, and a `transitionButton` moves that entry through its workflow. Both need
+`viewerSessions: true` and a `createViewerPage` route. A `dataTable` row link of `?record={id}` selects
+the entry.
+
+- `recordPanel` props: `collection`, `recordParam` (the URL parameter that holds the id, default
+  `record`), `fields` (a list of `{ field, label, format }` to pick and order the rows, default every
+  field the response carries), `statusLabel`, `empty` and `resultParam` (default `result`).
+- The id must have the shape of a CMS entry id, or nothing is read. The entry is read with
+  `GET /api/contents/{id}` using the viewer's own token and tenant. It is never cached, and there is
+  no fallback to a public read. A field the account may not read is not in the response, so it has
+  no row.
+- With no viewer, no id, a 403 or 404, an entry of another content type, or a shared `createPage`
+  route, the panel draws `empty` and reads nothing more.
+- `transitionButton` props: `label`, `transition`, `requireReason`, `reasonLabel`, `reasonField`
+  (default `reason`), `collection`, `recordParam`, `resultParam` and `next` (the page to come back to,
+  a path on this site). It draws only for a viewer with a valid id in the URL.
+- The button posts a form to `/api/viewer/transition` (`createViewerTransitionRoute`, see
+  [pages](pages.md)). The route refuses a request from another site, needs a viewer session, and
+  refuses a missing reason when `requireReason` is set. It calls the core with the viewer's token,
+  `PUT /api/contents/{id}/status` with `{ "transition": "...", "data": { "<reasonField>": "..." } }`,
+  so the CMS decides whether that account may make the transition. The content type needs a
+  lifecycle that declares it. The token never reaches the browser.
+- The route redirects to `next` with `?record=<id>&result=<key>`. The key is one of `done`, `reason`,
+  `forbidden`, `missing`, `conflict`, `invalid` or `unavailable`. The panel reads the entry again, shows
+  its new status and draws the message for the key. Any other value in the URL draws nothing.
+
+```json
+{ "type": "recordPanel", "props": {
+    "collection": "requests", "empty": "Pick a request",
+    "fields": [{ "field": "Name", "label": "Event" }, { "field": "Guests", "label": "Guests" }]
+} }
+{ "type": "transitionButton", "props": {
+    "collection": "requests", "label": "Decline", "transition": "Decline",
+    "requireReason": true, "next": "/desk"
+} }
+```
+
 **Filter buttons.** A `filterBar` inside a `source` draws one button per distinct value of `field`
 among the rows the source read, after an "all" button (`allLabel`, which binds, so `All {{count}}`
 works). The values come in the order first seen; `order` is a comma separated list to put first, and

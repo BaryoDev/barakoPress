@@ -407,6 +407,7 @@ export { createBindingReportRoute, createBindingReportPreflight } from "./routes
 export type { BindingReport, BindingReportOptions } from "./routes/binding-report.js";
 export { createViewerLoginRoute } from "./routes/viewer-login.js";
 export { createViewerLogoutRoute } from "./routes/viewer-logout.js";
+export { createViewerTransitionRoute } from "./routes/viewer-transition.js";
 export { signIn, signOut, getViewer, VIEWER_COOKIE } from "./viewer.js";
 export type { Viewer, ViewerCredentials, ViewerGate, SignInResult } from "./viewer.js";
 export { createRevalidateRoute } from "./routes/revalidate.js";

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- A `recordPanel` block shows one entry of a collection as the signed-in viewer (#7). The id comes from a
+  URL parameter (`recordParam`, default `record`), and the entry is read with the viewer's token on the
+  server, never cached, with no public fallback. It shows the fields the response carries and the
+  entry's status. With no viewer, a bad id, a refusal or another content type it draws its `empty` text.
+  It only reads on `createViewerPage`.
+- A `transitionButton` block posts a workflow transition for the selected entry (#7). It posts to the new
+  `createViewerTransitionRoute`, which refuses a cross-site request, needs a viewer session, and calls the
+  core's `PUT /api/contents/{id}/status` with the viewer's token. It redirects back with a result key
+  from a fixed set, and the panel reads the entry again to show its new status. `requireReason` adds a
+  reason field that the route checks before it calls the core.
+
 - `audiencePaths` in the config maps page paths to role names and gates them even when delivery drops the
   page's `Audience` field (#7). A bad entry throws when the config loads. On the slug route an entry
   gates every page with the same last segment.

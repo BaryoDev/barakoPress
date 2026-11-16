@@ -69,7 +69,7 @@ export const MAX_FILTER_VALUES = 100;
  * The collections a site offers an editor. A request-time site takes any name, because its
  * collections come from each tenant's settings and one registry serves all of them.
  */
-function collectionField(config: PressConfig, label: string) {
+export function collectionField(config: PressConfig, label: string) {
     const options = Object.keys(config.collections);
     return config.sites
         ? ({ name: "collection", kind: "text", label, required: true } as const)

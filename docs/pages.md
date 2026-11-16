@@ -302,7 +302,7 @@ such blocks out, because its output is cached and shared. `createViewerPage` ren
 
 ### Signing a viewer in
 
-Set `viewerSessions: true` in the config. It is off by default, and off, the two routes below answer
+Set `viewerSessions: true` in the config. It is off by default, and off, the routes below answer
 404 and no cookie is read.
 
 ```ts
@@ -310,6 +310,8 @@ Set `viewerSessions: true` in the config. It is off by default, and off, the two
 export const POST = createViewerLoginRoute(config);
 // app/api/viewer/logout/route.ts
 export const POST = createViewerLogoutRoute(config);
+// app/api/viewer/transition/route.ts, for the transitionButton block
+export const POST = createViewerTransitionRoute(config);
 ```
 
 Login takes a JSON body, `{ "username": "...", "password": "..." }`, and signs in with a barakoCMS

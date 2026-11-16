@@ -334,6 +334,8 @@ describe("createBlockRegistry", () => {
             "siteNavigation",
             "siteLogo",
             "viewerSignIn",
+            "recordPanel",
+            "transitionButton",
         ]);
     });
 

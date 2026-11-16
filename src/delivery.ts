@@ -798,6 +798,87 @@ export async function listAsViewer(
     return (await res.json()) as Paged<PublicContent>;
 }
 
+/** One entry as the authenticated read returns it. Only what the CMS let this viewer read is in `data`. */
+export interface ViewerEntry {
+    id: string;
+    contentType: string;
+    data: Record<string, unknown>;
+    /** Draft, Published and Archived come as 0, 1 and 2 unless the API names them. */
+    status?: unknown;
+    lifecycleState?: string | null;
+}
+
+/** Reads one entry as one viewer. The viewer's token is closed over, never passed around. */
+export type ViewerEntryReader = (id: string) => Promise<ViewerEntry>;
+
+/** An entry id as the CMS issues it. Anything else is not put in a URL. */
+export const ENTRY_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * One entry through the authenticated read, `GET /api/contents/{id}`, with the viewer's own CMS
+ * token (barakoPress #7). Same rules as `listAsViewer`: server only, never cached, the same
+ * `X-Tenant`, and no fallback to a public read. Throws on any failure, a 403 and a 404 included.
+ */
+export async function readEntryAsViewer(config: PressConfig, id: string, token: string): Promise<ViewerEntry> {
+    const path = `/api/contents/${ENTRY_ID.test(id) ? id : "invalid"}`;
+    if (!ENTRY_ID.test(id) || !carriesSecretsSafely(cmsUrlFor(config))) throw new CmsError(path, 0);
+    const res = await fetch(`${cmsUrlFor(config)}${path}`, {
+        headers: { ...(deliveryHeaders(config) as Record<string, string>), authorization: `Bearer ${token}` },
+        cache: "no-store",
+        signal: AbortSignal.timeout(config.cmsTimeoutMs),
+        redirect: "error",
+    });
+    if (!res.ok) throw new CmsError(path, res.status);
+    const body = (await res.json()) as Partial<ViewerEntry>;
+    if (typeof body.id !== "string" || typeof body.contentType !== "string" || !body.data || typeof body.data !== "object") {
+        throw new CmsError(path, 502);
+    }
+    // An answer about another entry than the one asked for is not this entry's.
+    if (body.id.toLowerCase() !== id.toLowerCase()) throw new CmsError(path, 502);
+    return { id: body.id, contentType: body.contentType, data: body.data, status: body.status, lifecycleState: body.lifecycleState };
+}
+
+export type TransitionResult = "done" | "forbidden" | "missing" | "conflict" | "invalid" | "unavailable";
+
+/**
+ * Moves an entry through its workflow as one viewer: `PUT /api/contents/{id}/status` with
+ * `{ transition, data }`, which is the CMS's own endpoint for a content type with a lifecycle. The
+ * CMS checks that this account may make that transition. The answer is one of a fixed set, never
+ * the CMS's text, since it ends up in a URL.
+ */
+export async function transitionAsViewer(
+    config: PressConfig,
+    id: string,
+    transition: string,
+    data: Record<string, unknown> | undefined,
+    token: string,
+): Promise<TransitionResult> {
+    if (!ENTRY_ID.test(id) || transition === "" || !carriesSecretsSafely(cmsUrlFor(config))) return "invalid";
+    let res: Response;
+    try {
+        res = await fetch(`${cmsUrlFor(config)}/api/contents/${id}/status`, {
+            method: "PUT",
+            headers: {
+                ...(deliveryHeaders(config) as Record<string, string>),
+                authorization: `Bearer ${token}`,
+                "content-type": "application/json",
+            },
+            body: JSON.stringify({ transition, ...(data ? { data } : {}) }),
+            cache: "no-store",
+            redirect: "error",
+            signal: AbortSignal.timeout(config.cmsTimeoutMs),
+        });
+    } catch {
+        return "unavailable";
+    }
+    if (res.ok) return "done";
+    if (res.status === 401 || res.status === 403) return "forbidden";
+    if (res.status === 404) return "missing";
+    if (res.status === 409) return "conflict";
+    if (res.status === 400 || res.status === 422) return "invalid";
+    return "unavailable";
+}
+
 /*
  * `.` and `..` name no entry. Encoding does not keep them in the path: a URL parser resolves them,
  * typed or as `%2e`, and the read lands on another endpoint. So they are refused before a URL is built.
