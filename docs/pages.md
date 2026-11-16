@@ -427,14 +427,14 @@ Mount the page under `createViewerPage`, and add the sign-in and transition rout
     { "name": "Service", "displayName": "Service", "type": "string",  "isRequired": true },
     { "name": "Guests",  "displayName": "Guests",  "type": "decimal" },
     { "name": "Budget",  "displayName": "Budget",  "type": "string" },
-    { "name": "reason",  "displayName": "Reason",  "type": "string" }
+    { "name": "Reason",  "displayName": "Reason",  "type": "string" }
   ],
   "lifecycle": {
     "states": ["Pending", "Approved", "Declined"],
     "initialState": "Pending",
     "transitions": [
       { "name": "Approve", "from": "Pending", "to": "Approved" },
-      { "name": "Decline", "from": "Pending", "to": "Declined", "requiredFields": ["reason"] }
+      { "name": "Decline", "from": "Pending", "to": "Declined", "requiredFields": ["Reason"] }
     ]
   }
 }
@@ -462,14 +462,14 @@ fields and the buttons that work are the account's own. The walkthrough is in th
       "fields": [ { "field": "Name", "label": "Event" }, { "field": "Guests", "label": "Guests" }, { "field": "Budget", "label": "Budget" } ]
   } },
   { "type": "transitionButton", "props": { "collection": "requests", "label": "Approve", "transition": "Approve", "next": "/staff/catering" } },
-  { "type": "transitionButton", "props": { "collection": "requests", "label": "Decline", "transition": "Decline", "requireReason": true, "reasonLabel": "Reason", "reasonField": "reason", "next": "/staff/catering" } },
+  { "type": "transitionButton", "props": { "collection": "requests", "label": "Decline", "transition": "Decline", "requireReason": true, "reasonLabel": "Reason", "reasonField": "Reason", "next": "/staff/catering" } },
   { "type": "howBuilt", "props": {} }
 ]
 ```
 
 The row link `?record={id}` keeps the search and filter in the URL, so the list stays as it was when a
 row is opened. The Decline button refuses an empty reason before it calls the core, and the core
-requires `reason` for that transition too. After either button the page comes back with the entry's
+requires `Reason` for that transition too. After either button the page comes back with the entry's
 new status.
 
 **4. Theme.** Set the accent to `#B4572E` in the site's theme (see [look](look.md)) so the links,

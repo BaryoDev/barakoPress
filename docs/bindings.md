@@ -234,7 +234,7 @@ the entry.
 - With no viewer, no id, a 403 or 404, an entry of another content type, or a shared `createPage`
   route, the panel draws `empty` and reads nothing more.
 - `transitionButton` props: `label`, `transition`, `requireReason`, `reasonLabel`, `reasonField`
-  (default `reason`), `collection`, `recordParam`, `resultParam` and `next` (the page to come back to,
+  (default `Reason`, the PascalCase name the core requires), `collection`, `recordParam`, `resultParam` and `next` (the page to come back to,
   a path on this site). It draws only for a viewer with a valid id in the URL.
 - The button posts a form to `/api/viewer/transition` (`createViewerTransitionRoute`, see
   [pages](pages.md)). The route refuses a request from another site, needs a viewer session, and

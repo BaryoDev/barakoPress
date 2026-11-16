@@ -993,7 +993,7 @@ async function bindTransitionButton(block: ResolvedBlock, frame: Frame, ctx: Bin
         say(ctx, "blocks: a transition button has a transition name that is empty or has characters it may not, so it draws nothing");
         return [];
     }
-    const reasonField = typeof props.reasonField === "string" && props.reasonField !== "" ? props.reasonField : "reason";
+    const reasonField = typeof props.reasonField === "string" && props.reasonField !== "" ? props.reasonField : "Reason";
     if (props.requireReason === true && !REASON_FIELD.test(reasonField)) return [];
 
     // No viewer, or output shared by every visitor: no form. The id must be one the CMS could have issued.

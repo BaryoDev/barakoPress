@@ -207,7 +207,7 @@ function transitionButton(config: PressConfig): BlockDefinition {
                     {hidden("resultParam", props.resultParam || "result")}
                     {hidden("next", sitePath(props.next))}
                     {props.requireReason === true && hidden("reasonRequired", "1")}
-                    {props.requireReason === true && hidden("reasonField", props.reasonField || "reason")}
+                    {props.requireReason === true && hidden("reasonField", props.reasonField || "Reason")}
                     {props.requireReason === true && (
                         <label>
                             {props.reasonLabel || "Reason"}

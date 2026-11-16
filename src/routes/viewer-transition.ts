@@ -95,7 +95,7 @@ export function createViewerTransitionRoute(base: PressConfig) {
         const reason = field("reason").trim();
         if (field("reasonRequired") === "1" && reason === "") return to("reason");
         if (reason.length > MAX_REASON) return to("invalid");
-        const reasonField = field("reasonField") || "reason";
+        const reasonField = field("reasonField") || "Reason";
         if (reason !== "" && !REASON_FIELD.test(reasonField)) return to("invalid");
 
         const result = await transitionAsSignedInViewer(config, id, transition, reason !== "" ? { [reasonField]: reason } : undefined);
