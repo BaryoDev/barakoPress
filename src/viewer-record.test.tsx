@@ -10,6 +10,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const ANA_TOKEN = "eyJhbGciOiJIUzI1NiJ9.ana-session-token.signaturepart";
 const BEN_TOKEN = "eyJhbGciOiJIUzI1NiJ9.ben-session-token.signaturepart";
 
+// React's `cache` only memoizes inside a server request. This stands in for one request per test.
+const memos = vi.hoisted(() => [] as Map<string, unknown>[]);
+vi.mock("react", async (original) => {
+    const real = await original<typeof import("react")>();
+    const cache = <A extends unknown[], R>(fn: (...args: A) => R) => {
+        const seen = new Map<string, unknown>();
+        memos.push(seen);
+        const ids = new Map<unknown, number>();
+        const keyOf = (args: A) => args.map((a) => (typeof a === "object" && a !== null ? `o${ids.get(a) ?? ids.set(a, ids.size).get(a)}` : `p${String(a)}`)).join("|");
+        return (...args: A): R => {
+            const key = keyOf(args);
+            if (!seen.has(key)) seen.set(key, fn(...args));
+            return seen.get(key) as R;
+        };
+    };
+    return { ...real, cache, default: { ...real, cache } };
+});
+
 let jar: Record<string, string> = {};
 vi.mock("next/headers", () => ({
     headers: async () => new Headers({ host: "desk.example" }),
@@ -56,15 +74,19 @@ const config = defineConfig({
     collections: { requests: { type: "catering-request", fields: { title: "Name" } } },
 });
 
-const ACCOUNTS: Record<string, { username: string; roles: string[] }> = {
+const DAN_TOKEN = "eyJhbGciOiJIUzI1NiJ9.dan-session-token.signaturepart";
+const ACCOUNTS: Record<string, { username: string; roles: string[]; tenant?: string }> = {
     [ANA_TOKEN]: { username: "ana", roles: ["Front of house"] },
     [BEN_TOKEN]: { username: "ben", roles: ["Owner"] },
+    // Signed in to another tenant than the one this site is pinned to.
+    [DAN_TOKEN]: { username: "dan", roles: ["Owner"], tenant: "other" },
 };
 
 // What each token may read of the same entry. The CMS applies the account's field rules.
 const FIELDS: Record<string, Record<string, unknown>> = {
     [ANA_TOKEN]: { Name: "Wedding lunch", Guests: 40 },
     [BEN_TOKEN]: { Name: "Wedding lunch", Guests: 40, Budget: "12000", Margin: "30%" },
+    [DAN_TOKEN]: { Name: "Wedding lunch", Guests: 40, Budget: "12000" },
 };
 
 interface Call {
@@ -76,6 +98,8 @@ interface Call {
 let calls: Call[] = [];
 let state = "Pending";
 let putStatus = 200;
+let typeName = "catering-request";
+let returnId = ID;
 let pages: Record<string, { id: string; slug: string; data: Record<string, unknown> }> = {};
 
 function cms() {
@@ -88,7 +112,7 @@ function cms() {
         if (url.pathname === "/api/me") {
             const who = ACCOUNTS[token];
             return who
-                ? Response.json({ userId: `u-${who.username}`, username: who.username, tenant: "t", roles: who.roles.map((name) => ({ id: name, name })), capabilities: [] })
+                ? Response.json({ userId: `u-${who.username}`, username: who.username, tenant: who.tenant ?? "t", roles: who.roles.map((name) => ({ id: name, name })), capabilities: [] })
                 : new Response("", { status: 401 });
         }
         if (url.pathname === `/api/contents/${ID}/status` && method === "PUT") {
@@ -98,7 +122,7 @@ function cms() {
         }
         if (url.pathname === `/api/contents/${ID}`) {
             if (!ACCOUNTS[token]) return new Response("", { status: 401 });
-            return Response.json({ id: ID, contentType: "catering-request", data: FIELDS[token], status: 0, lifecycleState: state });
+            return Response.json({ id: returnId, contentType: typeName, data: FIELDS[token], status: 0, lifecycleState: state });
         }
         if (url.pathname === "/api/public/pages/navigation") return Response.json({ contract: 2, truncated: false, items: [] });
         if (url.pathname === "/api/public/post") return Response.json({ items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 0, hasNextPage: false });
@@ -123,6 +147,9 @@ beforeEach(() => {
     pages = {};
     state = "Pending";
     putStatus = 200;
+    typeName = "catering-request";
+    returnId = ID;
+    for (const m of memos) m.clear();
     vi.stubGlobal("fetch", cms());
 });
 afterEach(() => {
@@ -155,7 +182,7 @@ const form = (extra: Record<string, string> = {}) => ({ record: ID, transition: 
 const route = createViewerTransitionRoute(config);
 
 describe("a record panel", () => {
-    it("shows two viewers of different roles their own fields", async () => {
+    it("sends each viewer's own token and shows what the CMS returns for it", async () => {
         addPage("desk", [panel({ fields: [{ field: "Name", label: "Event" }, { field: "Budget", label: "Budget" }] })]);
         jar[VIEWER_COOKIE] = ANA_TOKEN;
         const ana = await html(createViewerPage(config)(at("desk", { record: ID })));
@@ -191,6 +218,54 @@ describe("a record panel", () => {
         const out = await html(createPage(config)(at("desk", { record: ID })));
         expect(out).not.toContain("Wedding lunch");
         expect(entryCalls()).toHaveLength(0);
+    });
+
+    it("reads nothing for a viewer of another tenant", async () => {
+        addPage("desk", [panel()]);
+        jar[VIEWER_COOKIE] = DAN_TOKEN;
+        const out = await html(createViewerPage(config)(at("desk", { record: ID })));
+        expect(out).toContain("Pick a request");
+        expect(out).not.toContain("Wedding lunch");
+        expect(entryCalls()).toHaveLength(0);
+    });
+
+    it("draws empty for an entry of another content type", async () => {
+        addPage("desk", [panel()]);
+        jar[VIEWER_COOKIE] = ANA_TOKEN;
+        typeName = "invoice";
+        const out = await html(createViewerPage(config)(at("desk", { record: ID })));
+        expect(out).toContain("Pick a request");
+        expect(out).not.toContain("Wedding lunch");
+    });
+
+    it("draws an entry whose type name differs from the collection's only in case", async () => {
+        addPage("desk", [panel()]);
+        jar[VIEWER_COOKIE] = ANA_TOKEN;
+        typeName = "Catering-Request";
+        expect(await html(createViewerPage(config)(at("desk", { record: ID })))).toContain("Wedding lunch");
+    });
+
+    it("draws empty when the CMS answers with another entry's id", async () => {
+        addPage("desk", [panel()]);
+        jar[VIEWER_COOKIE] = ANA_TOKEN;
+        returnId = "00000000-0000-4000-8000-000000000000";
+        const out = await html(createViewerPage(config)(at("desk", { record: ID })));
+        expect(out).toContain("Pick a request");
+        expect(out).not.toContain("Wedding lunch");
+    });
+
+    it("draws no form for a reason field name it may not use", async () => {
+        addPage("desk", [{ type: "transitionButton", props: { ...approve.props, requireReason: true, reasonField: "a b" } }]);
+        jar[VIEWER_COOKIE] = ANA_TOKEN;
+        expect(await html(createViewerPage(config)(at("desk", { record: ID })))).not.toContain("transition-button");
+    });
+
+    it("asks the CMS who the viewer is once for a panel and two buttons", async () => {
+        addPage("desk", [panel(), approve, { ...approve, props: { ...approve.props, label: "Decline", transition: "Decline" } }]);
+        jar[VIEWER_COOKIE] = ANA_TOKEN;
+        const out = await html(createViewerPage(config)(at("desk", { record: ID })));
+        expect(out.match(/data-press="transition-button"/g)).toHaveLength(2);
+        expect(calls.filter((c) => c.path === "/api/me")).toHaveLength(1);
     });
 
     it("shows the entry's status", async () => {
@@ -249,6 +324,39 @@ describe("the transition route", () => {
     it("answers forbidden when there is no viewer, with no CMS call", async () => {
         const res = await route(post(form()));
         expect(res.headers.get("location")).toContain("result=forbidden");
+        expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
+    });
+
+    it("answers forbidden for a viewer of another tenant, with no PUT", async () => {
+        jar[VIEWER_COOKIE] = DAN_TOKEN;
+        const res = await route(post(form()));
+        expect(res.headers.get("location")).toContain("result=forbidden");
+        expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
+    });
+
+    it("refuses a reason field name it may not use, with no PUT", async () => {
+        jar[VIEWER_COOKIE] = ANA_TOKEN;
+        const res = await route(post(form({ reason: "Too many", reasonField: "a b" })));
+        expect(res.status).toBe(303);
+        expect(res.headers.get("location")).toContain("result=invalid");
+        expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
+    });
+
+    it("refuses a chunked body past the size cap", async () => {
+        jar[VIEWER_COOKIE] = ANA_TOKEN;
+        const big = new ReadableStream<Uint8Array>({
+            start(c) {
+                for (let i = 0; i < 4; i++) c.enqueue(new TextEncoder().encode(`x=${"a".repeat(4000)}&`));
+                c.close();
+            },
+        });
+        const req = new Request("http://desk.example/api/viewer/transition", {
+            method: "POST",
+            headers: { "content-type": "application/x-www-form-urlencoded", host: "desk.example" },
+            body: big,
+            duplex: "half",
+        } as RequestInit);
+        expect((await route(req)).status).toBe(400);
         expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
     });
 

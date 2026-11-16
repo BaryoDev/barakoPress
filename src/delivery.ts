@@ -833,6 +833,8 @@ export async function readEntryAsViewer(config: PressConfig, id: string, token: 
     if (typeof body.id !== "string" || typeof body.contentType !== "string" || !body.data || typeof body.data !== "object") {
         throw new CmsError(path, 502);
     }
+    // An answer about another entry than the one asked for is not this entry's.
+    if (body.id.toLowerCase() !== id.toLowerCase()) throw new CmsError(path, 502);
     return { id: body.id, contentType: body.contentType, data: body.data, status: body.status, lifecycleState: body.lifecycleState };
 }
 

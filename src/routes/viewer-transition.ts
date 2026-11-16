@@ -37,8 +37,28 @@ async function readForm(request: Request): Promise<URLSearchParams | null> {
     if (!isForm(request)) return null;
     const declared = Number(request.headers.get("content-length") ?? "0");
     if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return null;
-    const raw = await request.text();
-    return raw.length > MAX_BODY_BYTES ? null : new URLSearchParams(raw);
+    if (!request.body) return new URLSearchParams();
+    // Read the stream up to the cap and stop, so a chunked body is never buffered whole.
+    const reader = request.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > MAX_BODY_BYTES) {
+            await reader.cancel().catch(() => {});
+            return null;
+        }
+        chunks.push(value);
+    }
+    const all = new Uint8Array(size);
+    let at = 0;
+    for (const c of chunks) {
+        all.set(c, at);
+        at += c.byteLength;
+    }
+    return new URLSearchParams(new TextDecoder().decode(all));
 }
 
 export type TransitionKey = TransitionResult | "reason";

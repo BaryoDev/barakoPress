@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { cmsUrlFor, pinnedTenant, type PressConfig } from "./config.js";
 import {
     carriesSecretsSafely,
@@ -115,6 +116,12 @@ export async function getViewer(config: PressConfig): Promise<Viewer | null> {
     if (config.viewerSessions !== true) return null;
     const token = (await cookies()).get(VIEWER_COOKIE)?.value;
     if (!token) return null;
+    return viewerOf(config, token);
+}
+
+// One request with one cookie asks the CMS who it is once, however many blocks want to know.
+// `cache` is scoped to the request on the server, so a token never carries over to another one.
+const viewerOf = cache(async (config: PressConfig, token: string): Promise<Viewer | null> => {
     if (!carriesSecretsSafely(cmsUrlFor(config))) return null;
     try {
         const res = await fetch(`${cmsUrlFor(config)}/api/me`, {
@@ -141,7 +148,7 @@ export async function getViewer(config: PressConfig): Promise<Viewer | null> {
         if (e && typeof e === "object" && "digest" in e) throw e;
         return null;
     }
-}
+});
 
 /**
  * A reader that lists content as the signed-in viewer, or null: no session, sessions off, or a

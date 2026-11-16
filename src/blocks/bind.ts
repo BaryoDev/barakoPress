@@ -810,7 +810,8 @@ async function bindRecordPanel(block: ResolvedBlock, frame: Frame, ctx: BindCont
     if (!reader) return empty();
     const entry = await read(() => reader(id));
     // Another content type than the collection's is not this panel's entry, whatever the CMS allowed.
-    if (!entry || entry.contentType !== col.type) return empty();
+    // The CMS matches type names without regard to case, and keeps the case a module seeded.
+    if (!entry || entry.contentType.toLowerCase() !== col.type.toLowerCase()) return empty();
 
     const fields = Array.isArray(props.fields)
         ? props.fields.filter((f): f is RecordField => Boolean(f) && typeof f.field === "string" && f.field !== "")
