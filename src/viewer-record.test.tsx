@@ -260,6 +260,12 @@ describe("a record panel", () => {
         expect(await html(createViewerPage(config)(at("desk", { record: ID })))).not.toContain("transition-button");
     });
 
+    it("names the reason field Reason when the button does not say, since the core takes PascalCase names only", async () => {
+        addPage("desk", [{ type: "transitionButton", props: { ...approve.props, requireReason: true } }]);
+        jar[VIEWER_COOKIE] = ANA_TOKEN;
+        expect(await html(createViewerPage(config)(at("desk", { record: ID })))).toContain('name="reasonField" value="Reason"');
+    });
+
     it("asks the CMS who the viewer is once for a panel and two buttons", async () => {
         addPage("desk", [panel(), approve, { ...approve, props: { ...approve.props, label: "Decline", transition: "Decline" } }]);
         jar[VIEWER_COOKIE] = ANA_TOKEN;
@@ -303,7 +309,7 @@ describe("the transition route", () => {
 
     it("refuses Decline without a reason", async () => {
         jar[VIEWER_COOKIE] = ANA_TOKEN;
-        const res = await route(post(form({ transition: "Decline", reasonRequired: "1", reasonField: "reason", reason: "  " })));
+        const res = await route(post(form({ transition: "Decline", reasonRequired: "1", reasonField: "Reason", reason: "  " })));
         expect(res.status).toBe(303);
         expect(res.headers.get("location")).toContain("result=reason");
         expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
@@ -312,13 +318,20 @@ describe("the transition route", () => {
     it("sends the viewer's token, not a server key, to the core transition endpoint", async () => {
         vi.stubEnv("BARAKO_RENDERER_KEY", SERVER_KEY);
         jar[VIEWER_COOKIE] = ANA_TOKEN;
-        const res = await route(post(form({ transition: "Decline", reasonRequired: "1", reasonField: "reason", reason: "Too many guests" })));
+        const res = await route(post(form({ transition: "Decline", reasonRequired: "1", reasonField: "Reason", reason: "Too many guests" })));
         const put = calls.find((c) => c.method === "PUT");
         expect(put?.path).toBe(`/api/contents/${ID}/status`);
         expect(put?.auth).toBe(`Bearer ${ANA_TOKEN}`);
-        expect(JSON.parse(put?.body ?? "{}")).toEqual({ transition: "Decline", data: { reason: "Too many guests" } });
+        expect(JSON.parse(put?.body ?? "{}")).toEqual({ transition: "Decline", data: { Reason: "Too many guests" } });
         expect(res.headers.get("location")).toBe(`/desk?record=${ID}&result=done`);
         expect(String(res.headers.get("location"))).not.toContain(ANA_TOKEN);
+    });
+
+    it("sends the reason under Reason when the form names no field", async () => {
+        jar[VIEWER_COOKIE] = ANA_TOKEN;
+        await route(post(form({ transition: "Decline", reasonRequired: "1", reason: "Too many guests" })));
+        const put = calls.find((c) => c.method === "PUT");
+        expect(JSON.parse(put?.body ?? "{}")).toEqual({ transition: "Decline", data: { Reason: "Too many guests" } });
     });
 
     it("answers forbidden when there is no viewer, with no CMS call", async () => {

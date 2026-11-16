@@ -221,7 +221,7 @@ beforeEach(() => {
                         },
                     },
                     { type: "transitionButton", props: { collection: "requests", label: "Approve", transition: "Approve", next: "/staff/catering" } },
-                    { type: "transitionButton", props: { collection: "requests", label: "Decline", transition: "Decline", requireReason: true, reasonLabel: "Reason", reasonField: "reason", next: "/staff/catering" } },
+                    { type: "transitionButton", props: { collection: "requests", label: "Decline", transition: "Decline", requireReason: true, reasonLabel: "Reason", reasonField: "Reason", next: "/staff/catering" } },
                     { type: "text", props: { value: "Looking at {{query.q}}" } },
                     { type: "howBuilt", props: {} },
                 ],
@@ -372,18 +372,18 @@ describe("the catering desk recipe", () => {
 
     it("refuses a Decline with no reason, with no call to the core", async () => {
         jar[VIEWER_COOKIE] = BEN_TOKEN;
-        const res = await route(post({ record: WED, transition: "Decline", collection: "requests", next: "/staff/catering", reasonRequired: "1", reasonField: "reason", reason: " " }));
+        const res = await route(post({ record: WED, transition: "Decline", collection: "requests", next: "/staff/catering", reasonRequired: "1", reasonField: "Reason", reason: " " }));
         expect(res.headers.get("location")).toContain("result=reason");
         expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
     });
 
     it("calls the core with the viewer's token on a transition, and the panel shows the new status", async () => {
         jar[VIEWER_COOKIE] = BEN_TOKEN;
-        const res = await route(post({ record: WED, transition: "Decline", collection: "requests", next: "/staff/catering", reasonRequired: "1", reasonField: "reason", reason: "Too many guests" }));
+        const res = await route(post({ record: WED, transition: "Decline", collection: "requests", next: "/staff/catering", reasonRequired: "1", reasonField: "Reason", reason: "Too many guests" }));
         const put = calls.find((c) => c.method === "PUT");
         expect(put?.path).toBe(`/api/contents/${WED}/status`);
         expect(put?.auth).toBe(`Bearer ${BEN_TOKEN}`);
-        expect(JSON.parse(put?.body ?? "{}")).toEqual({ transition: "Decline", data: { reason: "Too many guests" } });
+        expect(JSON.parse(put?.body ?? "{}")).toEqual({ transition: "Decline", data: { Reason: "Too many guests" } });
         const back = new URL(String(res.headers.get("location")), "http://desk.example");
         expect(back.pathname).toBe("/staff/catering");
         forgetCachedReads();

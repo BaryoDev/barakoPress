@@ -22,7 +22,7 @@
   `createViewerTransitionRoute`, which refuses a cross-site request, needs a viewer session, and calls the
   core's `PUT /api/contents/{id}/status` with the viewer's token. It redirects back with a result key
   from a fixed set, and the panel reads the entry again to show its new status. `requireReason` adds a
-  reason field that the route checks before it calls the core.
+  reason field that the route checks before it calls the core. The reason is saved under `reasonField`, default `Reason`.
 
 - `audiencePaths` in the config maps page paths to role names and gates them even when delivery drops the
   page's `Audience` field (#7). A bad entry throws when the config loads. On the slug route an entry
