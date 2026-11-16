@@ -62,7 +62,8 @@ const { forgetCachedReads } = await import("./delivery.js");
 const { VIEWER_COOKIE } = await import("./viewer.js");
 const { createViewerPage } = await import("./screens/page.js");
 const { createViewerTransitionRoute } = await import("./routes/viewer-transition.js");
-const { bindBlocks } = await import("./blocks/bind.js");
+const { bindBlocks, queryScope } = await import("./blocks/bind.js");
+const { readTableState } = await import("./blocks/data.js");
 const { createBlockRegistry } = await import("./blocks/registry.js");
 const { resolveBlocks, defineBlock } = await import("./blocks/schema.js");
 
@@ -162,6 +163,9 @@ function cms() {
             return Response.json({ id, contentType: "catering-request", data, status: 0, lifecycleState: state });
         }
         if (url.pathname === "/api/public/pages/navigation") return Response.json({ contract: 2, truncated: false, items: [] });
+        if (url.pathname === "/api/public/catering-request") {
+            return Response.json({ items: [{ id: "pub1", slug: "one", data: { Name: "Row one" } }], page: 1, pageSize: 20, totalItems: 1, totalPages: 1, hasNextPage: false });
+        }
         if (url.pathname === "/api/public/post") return Response.json({ items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 0, hasNextPage: false });
         if (url.pathname === "/api/public/page") {
             const items = Object.values(pages);
@@ -463,5 +467,69 @@ describe("howBuilt on a viewer page with a gated block", () => {
         const out = await html(createViewerPage(open, registry())(desk()));
         expect(listing(out)).not.toContain("ownersNote");
         expect(out).not.toContain("owners only");
+    });
+});
+
+describe("the viewer table, bound directly", () => {
+    const table = (props: Record<string, unknown> = {}) => ({
+        type: "dataTable",
+        props: { collection: "requests", readAs: "viewer", empty: "No requests", columns: [{ field: "Title", label: "Event" }], ...props },
+    });
+    const reader = () =>
+        vi.fn(async (_type: string, _opts: unknown) => ({
+            items: [{ id: WED, contentType: "catering-request", data: { Name: "Ben wedding" } }],
+            page: 1,
+            pageSize: 20,
+            totalItems: 1,
+            totalPages: 1,
+            hasNextPage: false,
+        }));
+    const bind = async (blocks: unknown[], query: Record<string, string>, read = reader()) => {
+        const registry = createBlockRegistry(config);
+        const resolved = resolveBlocks(blocks as never, registry, { perViewer: true });
+        const bound = await bindBlocks(resolved, { config, registry, scopes: { query: () => queryScope(query) }, viewerReader: async () => read as never });
+        return { bound, read };
+    };
+    type Bound = { definition: { type: string }; props: Record<string, unknown>; slots: Record<string, Bound[][]> };
+    const find = (blocks: Bound[], type: string): Bound[] =>
+        blocks.flatMap((b) => [...(b.definition.type === type ? [b] : []), ...Object.values(b.slots).flatMap((lists) => lists.flatMap((l) => find(l, type)))]);
+
+    it("drops the href of a panel that holds a table, so no search form sits inside a link", async () => {
+        const { bound } = await bind([{ type: "panel", props: { href: "/elsewhere", content: [[table({ search: true })]] } }], {});
+        expect(bound[0].props.href).toBeUndefined();
+    });
+
+    it("keeps a fragment of a row link out of the query", async () => {
+        const { bound } = await bind([table({ rowLink: "?record={id}#details", search: true })], { q: "ben" });
+        const href = readTableState(find(bound as never, "dataTable")[0].props.state as string)?.rows[0].href ?? "";
+        expect(href.endsWith("#details")).toBe(true);
+        expect(href).not.toContain("%23");
+        const query = new URLSearchParams(href.slice(1, href.indexOf("#")));
+        expect(query.get("record")).toBe(WED);
+        expect(query.get("q")).toBe("ben");
+    });
+
+    it("keeps the first of two filters on one field, and sends one filter", async () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        const filters = [
+            { field: "Service", param: "a", values: ["Lunch"] },
+            { field: "Service", param: "b", values: ["Wedding"] },
+        ];
+        const { bound, read } = await bind([table({ filters })], { a: "Lunch", b: "Wedding" });
+        expect(read.mock.calls[0][1]).toMatchObject({ filter: [["Service", "eq", "Lunch"]] });
+        const state = readTableState(find(bound as never, "dataTable")[0].props.state as string);
+        expect(state?.controls?.filters).toHaveLength(1);
+        expect(warn.mock.calls.some((c) => String(c[0]).includes("second filter"))).toBe(true);
+    });
+
+    it("judges a showIf in the listing by the page's scope when howBuilt sits in a row", async () => {
+        const hidden = { type: "showIf", props: { value: "{{item.Title}}", equals: "Row one", content: [[{ type: "text", props: { value: "HIDDEN-AT-PAGE" } }]] } };
+        const rows = { type: "source", props: { collection: "requests", mode: "list", content: [[{ type: "repeat", props: { content: [[{ type: "howBuilt", props: {} }]] } }]] } };
+        const { bound } = await bind([rows, hidden], {});
+        const [built] = find(bound as never, "howBuilt");
+        expect(built).toBeDefined();
+        const shown = String(built.props.state);
+        expect(shown).toContain("source");
+        expect(shown).not.toContain("HIDDEN-AT-PAGE");
     });
 });

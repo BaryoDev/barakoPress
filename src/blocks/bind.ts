@@ -149,6 +149,8 @@ export interface BindContext {
     viewerEntryReader?: () => Promise<ViewerEntryReader | null>;
     /** The blocks as they came in, before any binding, which is what `howBuilt` lists. */
     authored: ResolvedBlock[];
+    /** The page's own scope, which `howBuilt` judges a `showIf` by wherever it is drawn, a row included. */
+    rootSource?: BindingSource;
     /** Whether the signed-in viewer passes a block's gate. Unset where output is shared. */
     canSee?: (gate: BlockGate) => Promise<boolean>;
 }
@@ -193,6 +195,7 @@ export async function bindBlocks(blocks: ResolvedBlock[], options: BindPageOptio
         { ...options.scopes, count: ctx.count },
         { locale: options.config.locale, timeZone: options.config.timeZone, currency: options.config.currency, onProblem: options.onProblem },
     );
+    ctx.rootSource = source;
     return unnestLinks(await bindList(blocks, { source }, ctx), ctx);
 }
 
@@ -215,6 +218,8 @@ const CONTROLS = new Set([
     "callToAction",
     "collection",
     "filterBar",
+    // A table draws a search form and links of its own.
+    "dataTable",
     "dialog",
     "filterInput",
     "pager",
@@ -821,10 +826,17 @@ function tableControlsOf(ctx: BindContext, props: BlockProps, key: string, query
     }
 
     const filters: { label: string; param: string; field: string; values: string[]; current: string }[] = [];
+    // The core takes one value for a field, so a second filter on it would show as active and not
+    // be sent. The first one stays.
+    const fieldsUsed = new Set<string>();
     const listed = (Array.isArray(props.filters) ? props.filters.slice(0, MAX_TABLE_FILTERS) : []) as { field?: unknown; label?: unknown; param?: unknown; values?: unknown }[];
     for (const [i, f] of listed.entries()) {
         const field = f && typeof f.field === "string" ? f.field.trim() : "";
         if (!FILTER_FIELD.test(field)) continue;
+        if (fieldsUsed.has(field)) {
+            say(ctx, `blocks: a table over "${named(key)}" has a second filter on "${field}", which the core takes once, so it draws only the first`);
+            continue;
+        }
         const asked = typeof f.param === "string" && f.param !== "" ? f.param : `f_${field}`;
         const param = PARAM_NAME.test(asked) ? asked : `f${i + 1}`;
         if (taken.has(param)) {
@@ -841,6 +853,7 @@ function tableControlsOf(ctx: BindContext, props: BlockProps, key: string, query
             ),
         ].slice(0, MAX_FILTER_OPTIONS);
         if (values.length === 0) continue;
+        fieldsUsed.add(field);
         const wanted = queryText(query, param);
         const current = values.includes(wanted) ? wanted : "";
         if (current !== "") kept.set(param, current);
@@ -875,9 +888,12 @@ function tableControlsOf(ctx: BindContext, props: BlockProps, key: string, query
 /** A query-only row link with the active search and filters added, the link's own parameters first. */
 function withKept(href: string, keep: [string, string][]): string {
     if (keep.length === 0) return href;
-    const params = new URLSearchParams(href.slice(1));
+    // The fragment is not part of the query, so it is set aside and put back after it.
+    const hash = href.indexOf("#");
+    const fragment = hash === -1 ? "" : href.slice(hash);
+    const params = new URLSearchParams(href.slice(1, hash === -1 ? undefined : hash));
     for (const [name, value] of keep) if (!params.has(name)) params.set(name, value);
-    return `?${params}`;
+    return `?${params}${fragment}`;
 }
 
 /*
@@ -1064,7 +1080,7 @@ async function describeBlocks(
 async function bindHowBuilt(block: ResolvedBlock, frame: Frame, ctx: BindContext): Promise<ResolvedBlock[]> {
     const props = await bindProps(block, frame.source, {});
     if (!props) return [];
-    const listing = await describeBlocks(ctx.authored, frame.source, ctx, { blocks: MAX_HOW_BUILT_BLOCKS }, false);
+    const listing = await describeBlocks(ctx.authored, ctx.rootSource ?? frame.source, ctx, { blocks: MAX_HOW_BUILT_BLOCKS }, false);
     const state = JSON.stringify(listing, (_, value) => (typeof value === "string" && value.length > MAX_HOW_BUILT_TEXT ? `${value.slice(0, MAX_HOW_BUILT_TEXT)}...` : value), 2);
     return [{ ...block, props: { ...props, state }, slots: {} }];
 }

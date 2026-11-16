@@ -198,6 +198,7 @@ controls and logs a warning.
 - A new search or filter starts at page one, because the search form and the filter links carry no
   page. The previous and next links keep the active search and filters. A row link that starts with
   `?` keeps them and the table's own page, so coming back from a record lands where the viewer was.
+- The core takes one value per field, so a second filter on the same field is dropped and logged.
 - `pageParam`, `record` and `result` are taken, so a search or filter parameter that uses one of
   them is dropped and logged.
 
