@@ -53,7 +53,9 @@ export function withoutBase(pathname: string, base: string = basePath()): string
  */
 export function siteBaseUrl(url: string, base: string = basePath()): string {
     if (!url || !base) return url;
-    const bare = url.replace(/\/+$/, "");
+    let end = url.length;
+    while (end > 0 && url[end - 1] === "/") end--;
+    const bare = url.slice(0, end);
     return bare.endsWith(base) ? bare : `${bare}${base}`;
 }
 
