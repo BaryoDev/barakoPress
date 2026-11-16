@@ -343,9 +343,17 @@ describe("audiencePaths", () => {
         await expect(html(createViewerPage(gated)(deskAt(["desk"])))).rejects.toThrow("NEXT_NOT_FOUND");
     });
 
-    it("renders for a viewer holding one of its roles, whatever case and trailing slash the path has", async () => {
+    it("renders for a viewer holding one of its roles", async () => {
         jar[VIEWER_COOKIE] = ANA_TOKEN;
         expect(await html(createViewerPage(gated)(deskAt(["desk"])))).toContain("Desk text");
+    });
+
+    it("gates the path whatever its case, so a CMS that matches paths loosely cannot open it", async () => {
+        // The CMS here serves the page at the upper-case path too. Only the gate can refuse it.
+        addPage("DESK", { Blocks: [text] });
+        jar[VIEWER_COOKIE] = CAL_TOKEN;
+        await expect(html(createViewerPage(gated)(deskAt(["DESK"])))).rejects.toThrow("NEXT_NOT_FOUND");
+        jar[VIEWER_COOKIE] = ANA_TOKEN;
         expect(await html(createViewerPage(gated)(deskAt(["DESK"])))).toContain("Desk text");
     });
 
