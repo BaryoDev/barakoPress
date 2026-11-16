@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { pinnedTenant, type PressConfig, type SiteLink } from "../config.js";
-import { type NavItem, flattenNavigation, getNavigation, isChromePath, isReservedPath, listPages, pageHref } from "../cms.js";
+import { type NavItem, flattenNavigation, getNavigation, isChromePath, isReservedPath, listPages, pageAudience, pageHref, pathAudience, toPage } from "../cms.js";
 import { type ResolvedPage, pageAtPath } from "../delivery.js";
 import { RESERVED_AT_ROOT } from "../config.js";
 import { servedUrl, trimTrailingSlashes } from "./served-url.js";
@@ -144,7 +144,7 @@ async function pageUrls(config: PressConfig, home: string, listed: Set<string>, 
         return first !== undefined && RESERVED_AT_ROOT.includes(first);
     };
     const keep = (p: string) => {
-        if (isChromePath(config, p) || isReservedPath(config, p) || reserved(p)) return;
+        if (isChromePath(config, p) || isReservedPath(config, p) || reserved(p) || pathAudience(config, p)) return;
         urls.add(servedUrl(home, pageHref(config, p)));
     };
     paths.forEach(keep);
@@ -166,7 +166,9 @@ async function pageUrls(config: PressConfig, home: string, listed: Set<string>, 
             if (!reserved(p)) urls.add(servedUrl(home, p));
             continue;
         }
-        if ((await lookup(trimTrailingSlashes(pagePath) || "/"))?.entry.seo?.noIndex) continue;
+        const target = await lookup(trimTrailingSlashes(pagePath) || "/");
+        if (target?.entry.seo?.noIndex) continue;
+        if (target && pageAudience(config, toPage(config, target.entry), pagePath).length > 0) continue;
         keep(pagePath);
     }
 
@@ -177,7 +179,7 @@ async function pageUrls(config: PressConfig, home: string, listed: Set<string>, 
             for (let page = 1; slugs.length + urls.size < room; page++) {
                 const res = await listPages(config, { page, pageSize: PAGE_LIST_SIZE });
                 for (const p of res.pages) {
-                    if (p.slug && !p.seo?.noIndex && !navSlugs.has(p.slug)) slugs.push(p.slug);
+                    if (p.slug && !p.seo?.noIndex && !p.audience?.length && !navSlugs.has(p.slug)) slugs.push(p.slug);
                 }
                 if (!res.hasNextPage || res.pages.length === 0) break;
             }

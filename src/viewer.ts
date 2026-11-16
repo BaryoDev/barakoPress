@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { cmsUrlFor, pinnedTenant, type PressConfig } from "./config.js";
-import { carriesSecretsSafely, deliveryHeaders } from "./delivery.js";
+import { carriesSecretsSafely, deliveryHeaders, listAsViewer, type ViewerReader } from "./delivery.js";
 import { readEnv } from "./env.js";
 
 /*
@@ -132,6 +132,19 @@ export async function getViewer(config: PressConfig): Promise<Viewer | null> {
         if (e && typeof e === "object" && "digest" in e) throw e;
         return null;
     }
+}
+
+/**
+ * A reader that lists content as the signed-in viewer, or null: no session, sessions off, or a
+ * viewer from another tenant than the one this request is pinned to. The token stays inside the
+ * returned function, which runs on the server. Nothing that draws a page is handed the token.
+ */
+export async function viewerReader(config: PressConfig): Promise<ViewerReader | null> {
+    const viewer = await getViewer(config);
+    if (!viewer || gateOutcome(viewer, {}, pinnedTenant(config)) !== "allow") return null;
+    const token = (await cookies()).get(VIEWER_COOKIE)?.value;
+    if (!token) return null;
+    return (type, opts) => listAsViewer(config, type, token, opts);
 }
 
 /** The `viewer` binding scope: only what a page may show, never the token. */

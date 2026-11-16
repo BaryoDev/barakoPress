@@ -1,5 +1,5 @@
 import { REFERENCE_FIELDS, type CollectionConfig, type FieldNames, type OptionStyle, type PressConfig } from "./config.js";
-import { bySlug, bySlugPreview, CmsError, describeType, list, search, type PublicContent, type Seo, type TypeDescription } from "./delivery.js";
+import { bySlug, bySlugPreview, CmsError, describeType, list, search, type PublicContent, type Seo, type TypeDescription, type ViewerReader } from "./delivery.js";
 import type { Ref } from "./cms.js";
 import { readFileLink, readImage, type DeliveredImage } from "./media.js";
 import { siteHref } from "./site.js";
@@ -412,6 +412,30 @@ async function listWith(
             filter: opts.filter.length > 0 ? opts.filter : undefined,
             sort: col.sort,
         }),
+        described(config, key, col),
+    ]);
+    return {
+        items: res.items.map((c) => toItem(config, key, c, description)),
+        total: res.totalItems,
+        pageSize: res.pageSize,
+        hasNextPage: res.hasNextPage,
+    };
+}
+
+/**
+ * A page of a collection as one viewer may read it, through `read`, which holds the viewer's token
+ * (see `viewerReader`). References are not expanded, and the sort is the CMS's own.
+ */
+export async function listCollectionAsViewer(
+    config: PressConfig,
+    key: string,
+    read: ViewerReader,
+    opts: { page?: number; pageSize?: number } = {},
+): Promise<CollectionPage> {
+    const col = collectionOf(config, key);
+    if (!col) return { items: [], total: 0, pageSize: 0, hasNextPage: false };
+    const [res, description] = await Promise.all([
+        read(col.type, { page: opts.page ?? 1, pageSize: opts.pageSize ?? col.pageSize ?? config.pageSizes.index }),
         described(config, key, col),
     ]);
     return {

@@ -121,6 +121,12 @@ export interface PageFieldMap {
      * this rather than losing a distinct tab title to double as the on-page one.
      */
     hideTitle?: string;
+    /**
+     * The field naming who may see the page: a list of role names, or one comma separated string.
+     * Left empty, the page is public. Set, it is drawn only by `createViewerPage` for a signed-in
+     * viewer holding one of the roles, and every other request gets the not-found page.
+     */
+    audience?: string;
 }
 
 /** Where the consumer mounted each route, so generated links match the app's real shape. */
@@ -892,6 +898,14 @@ export interface PressConfig {
      * read, so a site that does not opt in is unchanged.
      */
     viewerSessions?: boolean;
+    /**
+     * Page paths and the role names that may see them, as the Pages module serves the path (below
+     * the mount): `{ "/staff/catering": ["Front of house", "Owner"] }`. A listed path is a 404 for
+     * anyone but a signed-in viewer of the tenant holding one of its roles, whatever delivery
+     * returns for the page. It wins over the page's own `Audience` field. The match is exact, so a
+     * page under a listed path is not covered unless it is listed too.
+     */
+    audiencePaths?: Record<string, string[]>;
 }
 
 export type PressConfigInput = {
@@ -942,8 +956,41 @@ const BLOG_BLUEPRINT: Pick<PressConfig, "types" | "fields" | "pageFields"> = {
         body: "Body",
         blocks: "Blocks",
         hideTitle: "HideTitle",
+        audience: "Audience",
     },
 };
+
+/**
+ * A path as the audience map compares it: slashes collapsed and trailing ones dropped, `.` and `..`
+ * resolved, lower case. Folding case matches more than a case sensitive router would, which fails
+ * closed.
+ */
+export function audienceKey(path: string): string {
+    const out: string[] = [];
+    for (const part of path.split("/")) {
+        if (part === "" || part === ".") continue;
+        if (part === "..") out.pop();
+        else out.push(part.toLowerCase());
+    }
+    return `/${out.join("/")}`;
+}
+
+/** A bad entry is a startup error: an empty role list or a stray value must never read as a public page. */
+function checkedAudiencePaths(value: unknown): Record<string, string[]> {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("audiencePaths must be an object of page path to role names");
+    const out: Record<string, string[]> = {};
+    for (const [path, roles] of Object.entries(value)) {
+        if (!path.startsWith("/")) throw new Error(`audiencePaths: "${path}" must start with /`);
+        if (!Array.isArray(roles) || roles.length === 0) throw new Error(`audiencePaths: "${path}" needs at least one role name`);
+        for (const role of roles) {
+            if (typeof role !== "string" || role.trim() === "") throw new Error(`audiencePaths: "${path}" holds a role that is not a non-empty string`);
+        }
+        const key = audienceKey(path);
+        if (key in out) throw new Error(`audiencePaths: "${path}" repeats another entry`);
+        out[key] = (roles as string[]).map((r) => r.trim());
+    }
+    return out;
+}
 
 function trimSlash(path: string): string {
     let end = path.length;
@@ -1134,6 +1181,7 @@ export function defineConfig(
         ...(input.home ? { home: input.home } : {}),
         ...(input.structuredData === false ? { structuredData: false } : {}),
         ...(input.viewerSessions === true ? { viewerSessions: true } : {}),
+        ...(input.audiencePaths !== undefined ? { audiencePaths: checkedAudiencePaths(input.audiencePaths) } : {}),
         reservedSlugs: reservedSlugs(
             [routes.post, routes.author, routes.category, ...Object.values(collections).map((c) => c.route)],
             input.reservedSlugs,

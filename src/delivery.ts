@@ -764,6 +764,40 @@ export async function list(
     return get<Paged<PublicContent>>(config, `/api/public/${encodeURIComponent(type)}?${q}`, { type });
 }
 
+/** Reads a page of a type as one viewer. The viewer's token is closed over, never passed around. */
+export type ViewerReader = (type: string, opts: { page?: number; pageSize?: number }) => Promise<Paged<PublicContent>>;
+
+/**
+ * One page of a type through the authenticated list, `GET /api/contents?contentType=`, with the
+ * viewer's own CMS token (barakoPress #7). The CMS applies that account's read rules, so the rows
+ * are the ones this viewer may read and nothing wider.
+ *
+ * Server side only. The token goes to the CMS in an `Authorization` header and nowhere else. The
+ * read is never cached or stored, since the answer belongs to one account, and it carries the same
+ * `X-Tenant` a public read does. Throws on any failure; it never falls back to a public read.
+ */
+export async function listAsViewer(
+    config: PressConfig,
+    type: string,
+    token: string,
+    opts: { page?: number; pageSize?: number } = {},
+): Promise<Paged<PublicContent>> {
+    const q = new URLSearchParams();
+    q.set("contentType", type);
+    q.set("page", String(opts.page ?? 1));
+    q.set("pageSize", String(opts.pageSize ?? config.pageSizes.index));
+    const path = `/api/contents?${q}`;
+    if (!carriesSecretsSafely(cmsUrlFor(config))) throw new CmsError(path, 0);
+    const res = await fetch(`${cmsUrlFor(config)}${path}`, {
+        headers: { ...(deliveryHeaders(config) as Record<string, string>), authorization: `Bearer ${token}` },
+        cache: "no-store",
+        signal: AbortSignal.timeout(config.cmsTimeoutMs),
+        redirect: "error",
+    });
+    if (!res.ok) throw new CmsError(path, res.status);
+    return (await res.json()) as Paged<PublicContent>;
+}
+
 /*
  * `.` and `..` name no entry. Encoding does not keep them in the path: a URL parser resolves them,
  * typed or as `%2e`, and the read lands on another endpoint. So they are refused before a URL is built.
