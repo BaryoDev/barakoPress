@@ -1,4 +1,5 @@
 import type { PressConfig } from "../config.js";
+import { withBase } from "../base-path.js";
 import { collectionOf } from "../collections.js";
 import { ENTRY_ID, type TransitionResult } from "../delivery.js";
 import { PARAM_NAME, REASON_FIELD, MAX_REASON, TRANSITION_NAME } from "../blocks/record.js";
@@ -69,7 +70,7 @@ function back(next: string, recordParam: string, id: string, resultParam: string
     url.hash = "";
     if (ENTRY_ID.test(id)) url.searchParams.set(recordParam, id);
     url.searchParams.set(resultParam, key);
-    return new Response(null, { status: 303, headers: { ...NO_STORE, location: `${url.pathname}${url.search}` } });
+    return new Response(null, { status: 303, headers: { ...NO_STORE, location: withBase(`${url.pathname}${url.search}`) } });
 }
 
 export function createViewerTransitionRoute(base: PressConfig) {

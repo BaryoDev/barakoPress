@@ -49,7 +49,7 @@ vi.mock("next/link", () => ({
 
 const { defineConfig } = await import("./config.js");
 const { forgetCachedReads, list, pageAtPath, withViewerToken } = await import("./delivery.js");
-const { VIEWER_COOKIE, forgetMintedTokens } = await import("./viewer.js");
+const { VIEWER_COOKIE, forgetMintedTokens, signOut } = await import("./viewer.js");
 const { createViewerLoginRoute } = await import("./routes/viewer-login.js");
 const { createPage, createViewerPage } = await import("./screens/page.js");
 const { createBlockRegistry } = await import("./blocks/registry.js");
@@ -356,6 +356,26 @@ describe("the sign-in block", () => {
         expect([...out.matchAll(/name="next" value="([^"]*)"/g)].map((m) => m[1])).toEqual(["/", "/"]);
     });
 
+    it("posts the form to the login route under BASE_PATH", async () => {
+        process.env.BASE_PATH = "/kape-ana";
+        try {
+            const base = cms();
+            vi.stubGlobal(
+                "fetch",
+                vi.fn(async (input: string | URL | Request, init?: RequestInit) =>
+                    new URL(String(input)).pathname === "/api/public/page/home"
+                        ? Response.json({ id: "p1", slug: "home", data: { Title: "Home", Blocks: [{ type: "viewerSignIn", props: { next: "/members" } }] } })
+                        : base(input, init),
+                ),
+            );
+            const out = await html(viewerPage()(args));
+            expect([...out.matchAll(/action="([^"]*)"/g)].map((m) => m[1])).toEqual(["/kape-ana/api/viewer/login"]);
+            expect(out).toContain('name="next" value="/members"');
+        } finally {
+            delete process.env.BASE_PATH;
+        }
+    });
+
     it("shows the generic message for a reason that is not one of ours", async () => {
         for (const error of ["__proto__", "constructor", "toString"]) {
             const base = cms();
@@ -395,6 +415,31 @@ describe("posting the sign-in form", () => {
             headers: { "content-type": "application/x-www-form-urlencoded", host: "viewer.example", ...headers },
             body: new URLSearchParams(fields),
         });
+
+    it("under BASE_PATH signing out clears the cookie at the same name and path", async () => {
+        process.env.BASE_PATH = "/kape-ana";
+        try {
+            await signOut();
+            expect(sets).toHaveLength(1);
+            expect(sets[0].name).toBe("__Secure-press-viewer");
+            expect(sets[0].options).toMatchObject({ httpOnly: true, secure: true, sameSite: "lax", path: "/kape-ana", maxAge: 0 });
+        } finally {
+            delete process.env.BASE_PATH;
+        }
+    });
+
+    it("under BASE_PATH the redirect and the cookie stay inside the prefix", async () => {
+        process.env.BASE_PATH = "kape-ana/";
+        try {
+            const res = await createViewerLoginRoute(on)(form({ username: "ana", password: "pw", next: "/members" }));
+            expect(res.headers.get("location")).toBe("/kape-ana/members");
+            expect(sets).toHaveLength(1);
+            expect(sets[0].name).toBe("__Secure-press-viewer");
+            expect(sets[0].options).toMatchObject({ httpOnly: true, secure: true, sameSite: "lax", path: "/kape-ana" });
+        } finally {
+            delete process.env.BASE_PATH;
+        }
+    });
 
     it("sets the http-only cookie and redirects, with the token in neither", async () => {
         const res = await createViewerLoginRoute(on)(form({ username: "ana", password: "pw", next: "/members" }));

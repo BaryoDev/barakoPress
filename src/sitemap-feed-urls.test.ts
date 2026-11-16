@@ -128,6 +128,20 @@ describe("the sitemap of a site with no menu", () => {
     });
 });
 
+describe("a header link written with the BASE_PATH prefix", () => {
+    it("is listed once under the prefixed address, not twice", async () => {
+        vi.stubEnv("BASE_PATH", "/press");
+        SETTINGS.HeaderLinks.push({ label: "Prefixed", href: "/press/pricing" });
+        try {
+            const listed = await urls();
+            expect(listed).toContain(`${ORIGIN}/press/pricing`);
+            expect(listed.some((u) => u.includes("/press/press"))).toBe(false);
+        } finally {
+            SETTINGS.HeaderLinks.pop();
+        }
+    });
+});
+
 describe("a header link", () => {
     it("to a noIndex page is not listed", async () => {
         const listed = await urls();

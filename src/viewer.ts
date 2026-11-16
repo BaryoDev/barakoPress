@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { cookieName, cookiePath } from "./base-path.js";
 import { cache } from "react";
 import { cmsUrlFor, pinnedTenant, type PressConfig } from "./config.js";
 import {
@@ -94,18 +95,18 @@ export async function signIn(config: PressConfig, credentials: ViewerCredentials
     const maxAge = sessionSeconds(body.expiry);
     if (maxAge <= 0) return { ok: false, reason: "unavailable" };
 
-    (await cookies()).set(VIEWER_COOKIE, token, {
+    (await cookies()).set(cookieName(VIEWER_COOKIE), token, {
         httpOnly: true,
         secure: true,
         sameSite: "lax",
-        path: "/",
+        path: cookiePath(),
         maxAge,
     });
     return { ok: true };
 }
 
 export async function signOut(): Promise<void> {
-    (await cookies()).set(VIEWER_COOKIE, "", { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 0 });
+    (await cookies()).set(cookieName(VIEWER_COOKIE), "", { httpOnly: true, secure: true, sameSite: "lax", path: cookiePath(), maxAge: 0 });
 }
 
 /**
@@ -114,7 +115,7 @@ export async function signOut(): Promise<void> {
  */
 export async function getViewer(config: PressConfig): Promise<Viewer | null> {
     if (config.viewerSessions !== true) return null;
-    const token = (await cookies()).get(VIEWER_COOKIE)?.value;
+    const token = (await cookies()).get(cookieName(VIEWER_COOKIE))?.value;
     if (!token) return null;
     return viewerOf(config, token);
 }
@@ -158,7 +159,7 @@ const viewerOf = cache(async (config: PressConfig, token: string): Promise<Viewe
 export async function viewerReader(config: PressConfig): Promise<ViewerReader | null> {
     const viewer = await getViewer(config);
     if (!viewer || gateOutcome(viewer, {}, pinnedTenant(config)) !== "allow") return null;
-    const token = (await cookies()).get(VIEWER_COOKIE)?.value;
+    const token = (await cookies()).get(cookieName(VIEWER_COOKIE))?.value;
     if (!token) return null;
     return (type, opts) => listAsViewer(config, type, token, opts);
 }
@@ -170,7 +171,7 @@ export async function viewerReader(config: PressConfig): Promise<ViewerReader | 
 export async function viewerEntryReader(config: PressConfig): Promise<ViewerEntryReader | null> {
     const viewer = await getViewer(config);
     if (!viewer || gateOutcome(viewer, {}, pinnedTenant(config)) !== "allow") return null;
-    const token = (await cookies()).get(VIEWER_COOKIE)?.value;
+    const token = (await cookies()).get(cookieName(VIEWER_COOKIE))?.value;
     if (!token) return null;
     return (id) => readEntryAsViewer(config, id, token);
 }
@@ -187,7 +188,7 @@ export async function transitionAsSignedInViewer(
 ): Promise<TransitionResult> {
     const viewer = await getViewer(config);
     if (!viewer || gateOutcome(viewer, {}, pinnedTenant(config)) !== "allow") return "forbidden";
-    const token = (await cookies()).get(VIEWER_COOKIE)?.value;
+    const token = (await cookies()).get(cookieName(VIEWER_COOKIE))?.value;
     if (!token) return "forbidden";
     return transitionAsViewer(config, id, transition, data, token);
 }

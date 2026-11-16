@@ -82,6 +82,51 @@ site with its own layout and routes, and its tree replaces the reference one; ot
 tree is removed as above. `PRESS_TRAILING_SLASH=true` sets Next's `trailingSlash`, for a site whose
 URLs end in a slash; configure its webhook URL with the slash too (see the revalidate endpoint).
 
+## Serving under a path
+
+One site can be served under a path prefix, such as `https://playground.baryo.dev/kape-ana/`, when
+another site or the proxy owns the root of that host. Set `BASE_PATH=/kape-ana` twice: as a build
+argument, because Next reads `basePath` at build time, and as a runtime variable, because the code
+that writes links and cookies reads it when it runs. Both must match. Unset, the site is at the root
+and nothing below applies.
+
+```bash
+docker buildx build --build-arg BASE_PATH=/kape-ana -t barako-press:kape-ana .
+```
+
+```nginx
+location /kape-ana/ {
+    proxy_pass http://127.0.0.1:3100;   # no trailing slash, so the prefix is passed through
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+Do not strip the prefix in the proxy. The container serves `/kape-ana/...` itself, including its
+assets under `/kape-ana/_next/` and the API routes under `/kape-ana/api/`. The health check must ask
+for `/kape-ana/`, since `/` answers 404 (`compose.site.yml` does this from `BASE_PATH`). A webhook URL
+from barakoCMS is `https://playground.baryo.dev/kape-ana/api/revalidate`.
+
+What the prefix changes in the engine:
+
+- Plain anchors, form actions, `Location` headers, local image paths, markdown links, the feed link
+  and the sitemap, robots, feed, canonical and share image addresses carry the prefix. `<Link>` and
+  `redirect()` get it from Next.
+- The site address in the settings may or may not include the prefix. Either way it is used once.
+- A link written in the settings that already starts with the prefix (`/kape-ana/docs`) is taken as
+  already prefixed and left alone, so a page of your own whose path starts with the prefix needs
+  the prefix written twice (`/kape-ana/kape-ana/docs`) in a header, menu, footer or social link.
+- Sites on one host must not sit inside each other's prefix (`/app` and `/app/team`). The viewer
+  cookie of `/app` is sent to `/app/team` too, so signing out at one does not end the other.
+- The session cookies (viewer and share) are `__Host-` cookies at the root, which require `Path=/`.
+  Under a prefix that would send them to every other site on the host. They are renamed to
+  `__Secure-press-viewer`, `__Secure-press-share` and `__Secure-press-link` and set with
+  `Path=/kape-ana`, still `Secure`, `HttpOnly` and `SameSite=Lax`. A script on another path of the
+  same host can still set a cookie for your path, which no cookie prefix prevents, so share a host
+  only with sites you trust.
+- `robots.txt` is only read by crawlers at the root of a host. The one under the prefix is served,
+  but the host's own `/robots.txt` is the one that counts.
+
 Extra blocks go in the same way, as a `plugins` build context: see
 [Plugin packages](blocks.md#plugin-packages).
 

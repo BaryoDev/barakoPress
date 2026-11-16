@@ -28,12 +28,19 @@ RUN node scripts/plugins.mjs /plugins && rm -rf /plugins
 
 ARG PRESS_TRAILING_SLASH=
 ENV PRESS_TRAILING_SLASH=$PRESS_TRAILING_SLASH
+
+# A path prefix, such as /kape-ana, for a site served behind a proxy under that path. Next reads
+# basePath at build time, so it is a build argument. It is set again in the run stage below.
+ARG BASE_PATH=
+ENV BASE_PATH=$BASE_PATH
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 FROM node:22.23.4-alpine AS run
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
+ARG BASE_PATH=
+ENV BASE_PATH=$BASE_PATH
 RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
 
 COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./

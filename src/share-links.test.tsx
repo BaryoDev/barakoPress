@@ -181,6 +181,30 @@ describe("the sealed link cookie", () => {
     });
 });
 
+describe("redeeming a key under BASE_PATH", () => {
+    it("sets the session cookie at the prefixed name and path, and redirects inside the prefix", async () => {
+        vi.stubEnv("BASE_PATH", "/kape-ana");
+        const res = await redeem("soon.example", SITE_KEY);
+        const set = res.headers.get("set-cookie") ?? "";
+        expect(res.headers.get("location")).toBe("/kape-ana/");
+        expect(set.startsWith("__Secure-press-share=")).toBe(true);
+        expect(set).toContain("Path=/kape-ana;");
+        expect(set).toContain("HttpOnly");
+        expect(set).toContain("Secure");
+        expect(set).not.toContain("__Host-");
+
+        const entry = await redeem("baryo.dev", ENTRY_KEY);
+        expect(entry.headers.get("location")).toBe("/kape-ana/blog/draft-notes");
+        expect(entry.headers.get("set-cookie")).toMatch(/^__Secure-press-link=.*Path=\/kape-ana;/);
+    });
+
+    it("prefixes the location once more when the page path starts with the prefix", async () => {
+        vi.stubEnv("BASE_PATH", "/about");
+        const res = await redeem("baryo.dev", PAGE_KEY);
+        expect(res.headers.get("location")).toBe("/about/about");
+    });
+});
+
 describe("redeeming a key at /api/share/redeem", () => {
     it("starts a site session for a site key on a holding tenant, as before", async () => {
         const res = await redeem("soon.example", SITE_KEY);

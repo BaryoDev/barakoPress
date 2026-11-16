@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { withBase } from "../base-path.js";
 import Link from "next/link";
 import { DEFAULT_LABELS, type PressConfig, type TreeVariant } from "../config.js";
 import type { Item } from "../collections.js";
@@ -820,7 +821,7 @@ export function SearchBox({ config, action, param, query, results, index, groups
                 query and an empty box: with script the box answers in the page, and with none it is a
                 field that does nothing rather than a control that looks like it searched. */}
             {action !== undefined ? (
-                <form role="search" method="get" action={action}>
+                <form role="search" method="get" action={withBase(action)}>
                     {field}
                 </form>
             ) : (

@@ -1,4 +1,5 @@
 import { Marked, type MarkedExtension } from "marked";
+import { withBase } from "./base-path.js";
 import { LINK_REL, NEW_TAB_TARGET } from "./config.js";
 import { hasLiteral, htmlLiterals, plainLiterals } from "./literal.js";
 
@@ -115,13 +116,13 @@ function buildRenderer(headingIds: boolean, newTab: boolean) {
                 const external = /^https?:/.test(href.trim());
                 const rel = external || newTab ? ` rel="${LINK_REL}"` : "";
                 const target = newTab ? ` target="${NEW_TAB_TARGET}"` : "";
-                return `<a href="${escapeHtml(href.trim())}"${t}${target}${rel}>${label}</a>`;
+                return `<a href="${escapeHtml(withBase(href.trim()))}"${t}${target}${rel}>${label}</a>`;
             },
             image({ href, title, text }) {
                 // An image is fetched, not followed, so mailto is a link destination and not an image one.
                 if (!isLinkable(href) || /^mailto:/i.test(href.trim())) return escapeHtml(text ?? "");
                 const t = title ? ` title="${escapeHtml(title)}"` : "";
-                return `<img src="${escapeHtml(href.trim())}" alt="${escapeHtml(text ?? "")}"${t} loading="lazy">`;
+                return `<img src="${escapeHtml(withBase(href.trim()))}" alt="${escapeHtml(text ?? "")}"${t} loading="lazy">`;
             },
             heading({ tokens, depth }) {
                 const label = this.parser.parseInline(tokens);
@@ -253,7 +254,7 @@ function buildInlineRenderer() {
                 if (!isLinkable(href)) return label;
                 const t = title ? ` title="${escapeHtml(title)}"` : "";
                 const rel = /^https?:/.test(href.trim()) ? ` rel="${LINK_REL}"` : "";
-                return `<a href="${escapeHtml(href.trim())}"${t}${rel}>${label}</a>`;
+                return `<a href="${escapeHtml(withBase(href.trim()))}"${t}${rel}>${label}</a>`;
             },
             image({ text }) {
                 return escapeHtml(text ?? "");

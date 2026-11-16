@@ -1,6 +1,23 @@
 import type { NextConfig } from "next";
 
+/*
+ * BASE_PATH serves the whole site under a prefix, such as /kape-ana behind a proxy that forwards that
+ * path to this container. Next reads basePath at build time, so it is a build argument, and the same
+ * value is set at runtime for src/base-path.ts. Normalised the way src/base-path.ts does it. Empty is left out so a site with no prefix builds as before.
+ */
+// Same rules as normalizeBasePath in src/base-path.ts, duplicated because this file cannot import
+// the package's TypeScript: a segment that is dot-only, or holds a backslash, control character,
+// "?" or "#", gives no base path at all.
+function normalizeBasePath(raw: string | undefined): string {
+  const parts = (raw ?? "").trim().split("/").filter((p) => p !== "");
+  if (parts.some((p) => p === "." || p === ".." || /[\\\u0000-\u001f\u007f?#]/.test(p))) return "";
+  return parts.length ? `/${parts.join("/")}` : "";
+}
+const basePath = normalizeBasePath(process.env.BASE_PATH);
+
 const config: NextConfig = {
+  ...(basePath ? { basePath } : {}),
+
   /*
    * Standalone output, so the container carries a server and its traced dependencies rather than
    * the whole node_modules tree. Without this the Dockerfile's runtime stage has nothing to copy.

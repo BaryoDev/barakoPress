@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { cookieName, withoutBase } from "./base-path.js";
 import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
 import {
@@ -363,7 +364,7 @@ export async function showsHoldingPage(config: PressConfig, params?: SiteParams)
     // A link gate is the one page a link to an entry or a page opens, which a holding site shows too.
     if (route) return route.gate === "public";
     const jar = await cookies();
-    return !shareCookieValid(jar.get(SHARE_COOKIE)?.value, pinnedTenant(config), shareSecret());
+    return !shareCookieValid(jar.get(cookieName(SHARE_COOKIE))?.value, pinnedTenant(config), shareSecret());
 }
 
 /** As `siteConfig`, but null rather than a 404, for a layout or a handler that answers for itself. */
@@ -842,7 +843,7 @@ export function localPathOf(href: string, siteUrl: string): string | null {
     try {
         const url = new URL(href, siteUrl || "http://site.invalid");
         const base = siteUrl ? new URL(siteUrl).origin : "http://site.invalid";
-        return url.origin === base ? url.pathname : null;
+        return url.origin === base ? withoutBase(url.pathname) : null;
     } catch {
         return null;
     }

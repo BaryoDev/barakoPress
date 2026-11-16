@@ -1,4 +1,5 @@
 import type { PressConfig } from "./config.js";
+import { siteBaseUrl } from "./base-path.js";
 import { readEnv } from "./env.js";
 
 /*
@@ -24,5 +25,5 @@ export function shareImageHref(origin: string, path: string): string {
 /** The `og:image` list for a page with no image of its own: the generated one when a font is configured, else nothing. */
 export function generatedShareImages(config: PressConfig, path: string | undefined): string[] | undefined {
     if (path === undefined || !config.site.url || !readEnv().shareImageFont) return undefined;
-    return [shareImageHref(config.site.url, path)];
+    return [shareImageHref(siteBaseUrl(config.site.url), path)];
 }

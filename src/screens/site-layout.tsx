@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { siteBaseUrl, siteWithBase, withBase } from "../base-path.js";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Asset } from "../assets.js";
@@ -406,7 +407,7 @@ function phoneMenuStyles(
 function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
     const t = liveTheme(cfg.theme);
     const c = t.colors;
-    const s = cfg.site;
+    const s = siteWithBase(cfg.site);
     const band = { maxWidth: t.layout.wide, margin: "0 auto", padding: `0 ${t.layout.gutter}` } as const;
     const linkStyle = { color: "inherit", textDecoration: "none" } as const;
     const badgeStyle = { marginLeft: "6px", fontFamily: t.fonts.mono, fontSize: "11px", color: c.muted } as const;
@@ -500,7 +501,7 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
                             ),
                         )}
                         {feed && (
-                            <a href="/feed.xml" style={{ ...linkStyle, fontFamily: t.fonts.mono, fontSize: "13px", color: c.muted }}>
+                            <a href={withBase("/feed.xml")} style={{ ...linkStyle, fontFamily: t.fonts.mono, fontSize: "13px", color: c.muted }}>
                                 {cfg.labels.feed}
                             </a>
                         )}
@@ -529,7 +530,7 @@ function BuiltInHeader({ cfg, nav }: { cfg: PressConfig; nav: NavItem[] }) {
                         <PhoneMenu
                             links={s.menuLinks?.length ? s.menuLinks : (s.headerLinks ?? [])}
                             actions={actions}
-                            feed={feed ? { label: cfg.labels.feed, href: "/feed.xml" } : undefined}
+                            feed={feed ? { label: cfg.labels.feed, href: withBase("/feed.xml") } : undefined}
                             labels={{ openMenu: cfg.labels.openMenu, closeMenu: cfg.labels.closeMenu, menu: cfg.labels.menu }}
                             styles={{
                                 ...phoneMenuStyles(t, badge.style, actionStyles),
@@ -579,7 +580,7 @@ function IconSprite({ symbols }: { symbols: Readonly<Record<string, IconSymbol>>
 function BuiltInFooter({ cfg }: { cfg: PressConfig }) {
     const t = liveTheme(cfg.theme);
     const c = t.colors;
-    const s = cfg.site;
+    const s = siteWithBase(cfg.site);
     const band = { maxWidth: t.layout.wide, margin: "0 auto", padding: `0 ${t.layout.gutter}` } as const;
     const linkStyle = { color: "inherit", textDecoration: "none" } as const;
 
@@ -692,7 +693,7 @@ export function createSiteMetadata(config: PressConfig) {
         const s = cfg.site;
         let metadataBase: URL | undefined;
         try {
-            metadataBase = s.url ? new URL(s.url) : undefined;
+            metadataBase = s.url ? new URL(siteBaseUrl(s.url)) : undefined;
         } catch {
             metadataBase = undefined;
         }
@@ -709,7 +710,7 @@ export function createSiteMetadata(config: PressConfig) {
             // has nothing at /feed.xml, and pointing a reader at it is a 404 with a promise on it.
             alternates:
                 s.url && !cfg.holding && hasFeed(cfg)
-                    ? { types: { "application/rss+xml": `${s.url}/feed.xml` } }
+                    ? { types: { "application/rss+xml": `${siteBaseUrl(s.url)}/feed.xml` } }
                     : undefined,
             robots: cfg.holding ? { index: false, follow: false } : undefined,
         };

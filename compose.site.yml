@@ -37,11 +37,14 @@ services:
       # One secret for webhook keys and share sessions, at least 32 characters. Without it this
       # server refuses every delivery, which is safer than accepting unsigned ones.
       PRESS_SECRET: ${PRESS_SECRET:?set PRESS_SECRET in .env}
+      # The path prefix the site is served under, for the code that writes links, and the health check reads it too. It must equal the
+      # BASE_PATH the image was built with, since Next reads that one at build time. Empty at the root.
+      BASE_PATH: ${BASE_PATH:-}
       REVALIDATE_SECRET: ${REVALIDATE_SECRET:-${PRESS_SECRET}}
     networks:
       - edge
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000'+('/'+(process.env.BASE_PATH||'').trim().split('/').filter(Boolean).join('/')+'/').replace('//','/')).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
       timeout: 5s
       retries: 5
