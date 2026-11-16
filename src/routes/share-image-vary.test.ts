@@ -17,7 +17,7 @@ vi.mock("../site.js", async (orig) => ({
     ...(await orig<typeof import("../site.js")>()),
     siteConfigOrNull: async () => state.config,
 }));
-vi.mock("../cms.js", () => ({ getPageByPath: async () => ({ page: { title: "About" } }), pageAudience: () => [] }));
+vi.mock("../cms.js", async (orig) => ({ ...(await orig<typeof import("../cms.js")>()), getPageByPath: async () => ({ page: { title: "About" }, path: "/desk" }), pageAudience: () => [] }));
 
 import { createShareImage } from "./share-image.js";
 
@@ -35,6 +35,19 @@ async function card(sites: Record<string, string>) {
     state.config = config;
     return createShareImage(config)(new Request("https://t.example/share-image?path=%2Fabout"));
 }
+
+describe("the share image for a slug-route gate", () => {
+    it("is a 404 for a one-segment path whose slug audiencePaths gates", async () => {
+        const file = join(mkdtempSync(join(tmpdir(), "font-")), "f.ttf");
+        writeFileSync(file, Buffer.from([1, 2, 3]));
+        process.env.PRESS_SHARE_IMAGE_FONT = file;
+        const config = defineConfig({ site: { name: "T", url: "https://t.example" }, cmsUrl: "https://cms.example", audiencePaths: { "/staff/desk": ["Staff"] } });
+        state.config = config;
+        const ask = (path: string) => createShareImage(config)(new Request(`https://t.example/share-image?path=${encodeURIComponent(path)}`));
+        expect((await ask("/desk")).status).toBe(404);
+        expect((await ask("/staff/desk")).status).toBe(200);
+    });
+});
 
 describe("the share image behind a shared cache", () => {
     it("varies on the header that picks the tenant, since the URL does not name it", async () => {

@@ -709,7 +709,7 @@ async function bindDataTable(block: ResolvedBlock, frame: Frame, ctx: BindContex
             return text;
         });
         const href = linkable
-            ? template.replace(/\{(slug|id)\}/g, (_, name: string) => encodeURIComponent(name === "slug" && item.slug !== "" ? item.slug : item.id))
+            ? template.replace(/\{(slug|id)\}/g, (_, name: string) => encodeURIComponent(name === "slug" && props.readAs !== "viewer" && item.slug !== "" ? item.slug : item.id))
             : undefined;
         return href ? { cells, href } : { cells };
     });

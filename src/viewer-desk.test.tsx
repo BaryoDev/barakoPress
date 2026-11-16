@@ -319,6 +319,25 @@ describe("the site menu", () => {
     });
 });
 
+describe("a viewer table row link with a mapped slug", () => {
+    it("uses the row's id, since the authenticated list returns no slug", async () => {
+        const mapped = defineConfig({ ...config, collections: { requests: { type: "catering-request", fields: { title: "Name", slug: "Slug" } } } });
+        addPage("desk", { Blocks: [deskTable({ rowLink: "/requests/{slug}" })] });
+        const real = globalThis.fetch;
+        vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+            const url = new URL(String(input));
+            if (url.pathname === "/api/contents") {
+                return Response.json({ items: [{ id: "r1", contentType: "catering-request", data: { Name: "Lunch", Slug: "lunch" } }], page: 1, pageSize: 20, totalItems: 1, totalPages: 1, hasNextPage: false });
+            }
+            return real(input, init);
+        }));
+        jar[VIEWER_COOKIE] = ANA_TOKEN;
+        const out = await html(createViewerPage(mapped)(args("desk")));
+        expect(out).toContain('href="/requests/r1"');
+        expect(out).not.toContain("/requests/lunch");
+    });
+});
+
 describe("a viewer table row link", () => {
     it("uses the row's id when the row has no slug", async () => {
         addPage("desk", { Blocks: [deskTable({ rowLink: "/requests/{slug}" })] });
@@ -448,6 +467,66 @@ describe("audiencePaths on the slug route", () => {
         expect(await html(createViewerPage(both)(args("desk")))).toContain("Desk text");
         jar[VIEWER_COOKIE] = BEN_TOKEN;
         await expect(html(createViewerPage(both)(args("desk")))).rejects.toThrow("NEXT_NOT_FOUND");
+    });
+});
+
+describe("audiencePaths with a page audience", () => {
+    const deskAt = (path: string[]) => ({ params: Promise.resolve({ path }), searchParams: Promise.resolve({}) });
+    const byPath = defineConfig({
+        site: { name: "Test", url: "https://test.example" },
+        cmsUrl: CMS,
+        tenant: "t",
+        viewerSessions: true,
+        pages: "",
+        pageFields: { audience: "Audience" },
+        audiencePaths: { "/desk": ["Front of house"] },
+    });
+    const bySlug = defineConfig({ ...byPath, pages: undefined });
+
+    it("narrows the page's roles on the path route and never replaces them", async () => {
+        addPage("desk", { Audience: ["Owner"], Blocks: [text] });
+        // Ana holds only the path role. The page wants Owner, so she is out.
+        jar[VIEWER_COOKIE] = ANA_TOKEN;
+        await expect(html(createViewerPage(byPath)(deskAt(["desk"])))).rejects.toThrow("NEXT_NOT_FOUND");
+        addPage("desk", { Audience: ["Owner", "Front of house"], Blocks: [text] });
+        expect(await html(createViewerPage(byPath)(deskAt(["desk"])))).toContain("Desk text");
+        // Ben holds a page role but not the path role.
+        jar[VIEWER_COOKIE] = BEN_TOKEN;
+        await expect(html(createViewerPage(byPath)(deskAt(["desk"])))).rejects.toThrow("NEXT_NOT_FOUND");
+    });
+
+    it("narrows the page's roles on the slug route and never replaces them", async () => {
+        const slugged = defineConfig({ ...bySlug, audiencePaths: { "/staff/desk": ["Front of house"] } });
+        addPage("desk", { Audience: ["Owner"], Blocks: [text] });
+        jar[VIEWER_COOKIE] = ANA_TOKEN;
+        await expect(html(createViewerPage(slugged)(args("desk")))).rejects.toThrow("NEXT_NOT_FOUND");
+        addPage("desk", { Audience: ["Owner", "Front of house"], Blocks: [text] });
+        expect(await html(createViewerPage(slugged)(args("desk")))).toContain("Desk text");
+    });
+});
+
+describe("a menu item whose page read returns null", () => {
+    it("is left out with its children", async () => {
+        const withPages = defineConfig({ site: { name: "Test", url: "https://test.example" }, cmsUrl: CMS, tenant: "t", pages: "", pageFields: { audience: "Audience" } });
+        addPage("about", { Blocks: [text] });
+        const real = globalThis.fetch;
+        vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+            const url = new URL(String(input));
+            if (url.pathname === "/api/public/pages/navigation") {
+                return Response.json({
+                    contract: 2,
+                    truncated: false,
+                    items: [
+                        { id: "g", title: "Ghost", slug: "ghost", path: "/ghost", children: [{ id: "k", title: "Kid", slug: "kid", path: "/ghost/kid", children: [] }] },
+                        { id: "p-about", title: "About", slug: "about", path: "/about", children: [] },
+                    ],
+                });
+            }
+            if (url.pathname === "/api/public/pages/resolve" && url.searchParams.get("path")?.startsWith("/ghost")) return new Response("", { status: 404 });
+            return real(input, init);
+        }));
+        forgetCachedReads();
+        expect((await getNavigation(withPages)).map((i) => i.slug)).toEqual(["about"]);
     });
 });
 

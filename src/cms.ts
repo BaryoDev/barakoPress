@@ -261,8 +261,20 @@ export interface Page {
 }
 
 /**
- * Who may see a page: the roles `audiencePaths` lists for any of `paths`, else the page's own
- * `Audience`. Empty means everyone. `paths` are every path the page was reached or resolved at, and
+ * Two role lists as one gate. An empty list says nothing, so the other stands. Otherwise a viewer
+ * needs a role in both, and with none in common the result is the closed role: nobody gets in.
+ */
+export function narrowAudience(a: string[], b: string[]): string[] {
+    if (a.length === 0) return b;
+    if (b.length === 0) return a;
+    const both = a.filter((r) => b.includes(r));
+    return both.length > 0 ? both : [CLOSED_ROLE];
+}
+
+/**
+ * Who may see a page: the page's own `Audience`, narrowed by the roles `audiencePaths` lists for the
+ * first of `paths` that matches. A path entry never replaces the page's roles, so a viewer needs a
+ * role in both. Empty means everyone. `paths` are every path the page was reached or resolved at, and
  * each is compared exactly after `audienceKey` folds slashes, dot segments and case.
  */
 export function pageAudience(config: PressConfig, page: Page, ...paths: string[]): string[] {
@@ -270,7 +282,7 @@ export function pageAudience(config: PressConfig, page: Page, ...paths: string[]
     if (map) {
         for (const path of paths) {
             const roles = map[audienceKey(path)];
-            if (roles) return roles;
+            if (roles) return narrowAudience(roles, page.audience ?? []);
         }
     }
     return page.audience ?? [];
@@ -440,11 +452,14 @@ async function withoutClosedPages(config: PressConfig, items: NavItem[]): Promis
         const batch = items.slice(i, i + NAV_READ_BATCH);
         const kept = await Promise.all(
             batch.map(async (item) => {
-                let audience: string[] | undefined | null = pathAudience(config, item.path);
+                let audience: string[] | null = pathAudience(config, item.path);
                 try {
                     if (!audience) {
                         const page = await getPageAtPath(config, item.path);
-                        audience = page ? pageAudience(config, page, item.path) : undefined;
+                        // The menu comes from the Pages module tree, so a null read means delivery
+                        // will not return this page. It is left out, with its children.
+                        if (!page) return null;
+                        audience = pageAudience(config, page, item.path);
                     }
                 } catch (e) {
                     if (e && typeof e === "object" && "digest" in e) throw e;
