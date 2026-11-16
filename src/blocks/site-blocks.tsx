@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { siteWithBase, withBase } from "../base-path.js";
 import type { CSSProperties } from "react";
 import { Asset } from "../assets.js";
 import type { PressConfig } from "../config.js";
@@ -49,7 +50,7 @@ function siteNavigation(config: PressConfig, holding: boolean): BlockDefinition 
         component: ({ props, theme }) => {
             // The holding page names nothing of the site behind it, so it draws no header links either.
             if (holding) return null;
-            const links = config.site.headerLinks ?? [];
+            const links = siteWithBase(config.site).headerLinks ?? [];
             if (links.length === 0) return null;
             const set = config.site.headerRecipes ?? {};
             const plain = { color: "inherit", textDecoration: "none" } as const;
@@ -122,7 +123,7 @@ function siteLogo(config: PressConfig): BlockDefinition {
             { name: "recipe", kind: "text", label: "Style recipe" },
         ],
         component: ({ props, theme }) => {
-            const s = config.site;
+            const s = siteWithBase(config.site);
             const show = props.show ?? (s.logo ? "logo" : "name");
             const image = show !== "name" ? s.logo : undefined;
             const name = show !== "logo" || !image;
@@ -194,7 +195,7 @@ function viewerSignIn(config: PressConfig): BlockDefinition {
             return (
                 <form
                     method="post"
-                    action="/api/viewer/login"
+                    action={withBase("/api/viewer/login")}
                     data-press="viewer-sign-in"
                     style={{ display: "grid", gap: spaceOf(theme, "md"), maxWidth: "24rem" }}
                 >

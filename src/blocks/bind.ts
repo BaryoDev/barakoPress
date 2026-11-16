@@ -1,4 +1,5 @@
 import { DEFAULT_LABELS, type PressConfig } from "../config.js";
+import { siteBaseUrl } from "../base-path.js";
 import { collectionOf, getItem, itemPath, listCollection, listCollectionAsViewer, names, type Item } from "../collections.js";
 import { CmsError, ENTRY_ID, MAX_VIEWER_FILTER_VALUE, type ViewerEntry, type ViewerEntryReader, type ViewerReader } from "../delivery.js";
 import { sitePath } from "../site-path.js";
@@ -1503,7 +1504,7 @@ export function siteScope(config: PressConfig, globals: Record<string, unknown>)
         ...globals,
         Name: s.name,
         Tagline: s.tagline,
-        Url: s.url,
+        Url: siteBaseUrl(s.url),
         Logo: s.logo,
         Copyright: s.copyright,
     };

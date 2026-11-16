@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { withBase } from "../base-path.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
 import { collectionField } from "./data.js";
 import { BINDING_FORMATS } from "./bindings.js";
@@ -196,7 +197,7 @@ function transitionButton(config: PressConfig): BlockDefinition {
             return (
                 <form
                     method="post"
-                    action={TRANSITION_ACTION}
+                    action={withBase(TRANSITION_ACTION)}
                     data-press="transition-button"
                     style={{ display: "grid", gap: spaceOf(theme, "sm"), maxWidth: "24rem" }}
                 >

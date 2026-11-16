@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { cookieName } from "./base-path.js";
 import type { PressConfig } from "./config.js";
 import {
     isPressPath,
@@ -32,7 +33,7 @@ import { LINK_COOKIE, openLinkCookie, samePath, SHARE_COOKIE, shareCookieValid, 
  */
 
 function gateFor(request: NextRequest, tenant: string): Gate {
-    const cookie = request.cookies.get(SHARE_COOKIE)?.value;
+    const cookie = request.cookies.get(cookieName(SHARE_COOKIE))?.value;
     return shareCookieValid(cookie, tenant, shareSecret()) ? "shared" : "public";
 }
 
@@ -51,7 +52,7 @@ function decodedPath(pathname: string): string {
  * would otherwise see it.
  */
 function opensLink(request: NextRequest, tenant: string, pathname: string): boolean {
-    const link = openLinkCookie(request.cookies.get(LINK_COOKIE)?.value, tenant, shareSecret());
+    const link = openLinkCookie(request.cookies.get(cookieName(LINK_COOKIE))?.value, tenant, shareSecret());
     return link !== null && samePath(link.path, decodedPath(pathname));
 }
 

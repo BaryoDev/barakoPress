@@ -1,4 +1,5 @@
 import type { Labels, PressConfig } from "../config.js";
+import { cookieName, cookiePath, withBase } from "../base-path.js";
 import { readEnv } from "../env.js";
 import { isLinkPath, openShareLink, redeemShareLink, type PublicContent, type ShareRedeemCaller } from "../delivery.js";
 import { collectionOf, itemRoutePath, productOf } from "../collections.js";
@@ -50,7 +51,8 @@ export interface SharePageOptions {
 }
 
 function redirect(location: string, cookie?: string): Response {
-    const headers = new Headers({ ...NO_STORE, location });
+    // A hand-written Location is not given the prefix by Next, so it is added here.
+    const headers = new Headers({ ...NO_STORE, location: withBase(location) });
     if (cookie) headers.append("set-cookie", cookie);
     return new Response(null, { status: 303, headers });
 }
@@ -113,7 +115,7 @@ function sessionEnd(expiresAt: number, now: number): { expires: number; maxAge: 
 }
 
 const cookie = (name: string, value: string, maxAge: number) =>
-    `${name}=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Lax`;
+    `${cookieName(name)}=${value}; Path=${cookiePath()}; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Lax`;
 
 /*
  * Where an entry link opens: the item page of the collection that renders the entry's type. An entry
@@ -199,6 +201,7 @@ function escape(value: string): string {
 
 function html(redeemPath: string, labels: Labels, locale: string): string {
     const action = JSON.stringify(redeemPath).replace(/</g, "\\u003c");
+    const home = JSON.stringify(withBase("/")).replace(/</g, "\\u003c");
     return `<!doctype html>
 <html lang="${escape(locale)}">
 <head>
@@ -217,7 +220,7 @@ function html(redeemPath: string, labels: Labels, locale: string): string {
   var key = location.hash.slice(1);
   history.replaceState(null, "", location.pathname);
   try { key = decodeURIComponent(key); } catch (e) { key = ""; }
-  if (!key) { location.replace("/#${SHARE_INVALID_FRAGMENT}"); return; }
+  if (!key) { location.replace(${home}+"#${SHARE_INVALID_FRAGMENT}"); return; }
   document.getElementById("opening").hidden = false;
   var form = document.getElementById("redeem");
   form.action = ${action};
@@ -244,7 +247,7 @@ function html(redeemPath: string, labels: Labels, locale: string): string {
  * that opens in English beats one that answers 500.
  */
 export function createSharePage(base: PressConfig, options: SharePageOptions = {}) {
-    const redeemPath = options.redeemPath ?? "/api/share/redeem";
+    const redeemPath = withBase(options.redeemPath ?? "/api/share/redeem");
     return async function GET(request: Request): Promise<Response> {
         let config: PressConfig | null = base;
         try {

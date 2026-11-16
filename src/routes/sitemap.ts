@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { siteBaseUrl } from "../base-path.js";
 import { pinnedTenant, type PressConfig, type SiteLink } from "../config.js";
 import { type NavItem, flattenNavigation, getNavigation, isChromePath, isReservedPath, listPages, pageAudience, pageHref, pathAudience, toPage } from "../cms.js";
 import { type ResolvedPage, pageAtPath } from "../delivery.js";
@@ -44,7 +45,7 @@ export function createSitemap(base: PressConfig) {
         if (!config || config.holding) notFound();
 
         const items: MetadataRoute.Sitemap = [];
-        const home = config.site.url;
+        const home = siteBaseUrl(config.site.url);
         // Home is listed first on its own, so an entry or a page that names "/" is not listed again.
         const listedUrls = new Set<string>([home]);
         // The home page takes the first slot, so the rest of the file is one URL shorter than the cap.

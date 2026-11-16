@@ -1,4 +1,5 @@
 import type { PressConfig } from "../config.js";
+import { withBase } from "../base-path.js";
 import { resolveSite } from "../site.js";
 import { signIn } from "../viewer.js";
 import { sitePath } from "../site-path.js";
@@ -44,7 +45,7 @@ async function readCredentials(request: Request): Promise<{ username: string; pa
     }
 }
 
-const see = (path: string) => new Response(null, { status: 303, headers: { ...NO_STORE, location: path } });
+const see = (path: string) => new Response(null, { status: 303, headers: { ...NO_STORE, location: withBase(path) } });
 
 export function createViewerLoginRoute(base: PressConfig) {
     return async function POST(request: Request): Promise<Response> {

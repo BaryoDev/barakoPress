@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { withBase, withoutBase } from "./base-path.js";
 import { renderMarkdown, type RenderMarkdownOptions } from "./markdown.js";
 import { isImageSrc } from "./media.js";
 import { spaceOf, SPACES } from "./blocks/tokens.js";
@@ -168,7 +169,7 @@ export function Asset({ src, alt, theme, style, loading, supplied, width, height
     const size = { width, height };
     const asset = suppliedAssetOn(theme, src, supplied);
     if (!asset) {
-        return <img src={src} alt={alt ?? ""} {...size} loading={loading} style={style} />;
+        return <img src={withBase(src)} alt={alt ?? ""} {...size} loading={loading} style={style} />;
     }
 
     return (
@@ -189,7 +190,7 @@ export function Asset({ src, alt, theme, style, loading, supplied, width, height
             }}
         >
             <img
-                src={src}
+                src={withBase(src)}
                 alt={alt ?? ""}
                 {...size}
                 loading={loading}
@@ -230,7 +231,7 @@ export function renderProse(source: string, theme: PressTheme, options?: RenderM
     if (theme.asSupplied.length === 0 || !html.includes("<img")) return html;
 
     return html.replace(/<img src="([^"]*)"/g, (tag, src: string) => {
-        const asset = suppliedAssetFor(theme, unescapeHtml(src));
+        const asset = suppliedAssetFor(theme, withoutBase(unescapeHtml(src)));
         if (!asset) return tag;
         const style = declarations({
             ...NO_TREATMENT,

@@ -1,4 +1,5 @@
 import { POST_COLLECTION, type PressConfig } from "../config.js";
+import { siteBaseUrl } from "../base-path.js";
 import { collectionOf, itemPath, listCollection, type Item } from "../collections.js";
 import { siteConfigOrNull, tenantVary } from "../site.js";
 import { servedUrl } from "./served-url.js";
@@ -57,7 +58,7 @@ export function createFeed(base: PressConfig, collection: string = POST_COLLECTI
             // An entry with no slug has no page to link to (barakoCMS #1100).
             .filter((item) => item.slug)
             .map((item) => {
-                const url = servedUrl(config.site.url, itemPath(config, collection, item) ?? `${col.route}/${item.slug}`);
+                const url = servedUrl(siteBaseUrl(config.site.url), itemPath(config, collection, item) ?? `${col.route}/${item.slug}`);
                 const date = item.date ? new Date(item.date) : null;
                 const pubDate =
                     date && !Number.isNaN(date.getTime())
@@ -87,9 +88,9 @@ export function createFeed(base: PressConfig, collection: string = POST_COLLECTI
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>${xml(config.site.name)}</title>
-    <link>${xml(config.site.url)}</link>
+    <link>${xml(siteBaseUrl(config.site.url))}</link>
     <description>${xml(config.site.tagline ?? config.site.name)}</description>
-    <atom:link href="${xml(`${config.site.url}${options.path ?? "/feed.xml"}`)}" rel="self" type="application/rss+xml"/>
+    <atom:link href="${xml(`${siteBaseUrl(config.site.url)}${options.path ?? "/feed.xml"}`)}" rel="self" type="application/rss+xml"/>
 ${entries}
   </channel>
 </rss>

@@ -1,6 +1,17 @@
 import type { NextConfig } from "next";
 
+/*
+ * BASE_PATH serves the whole site under a prefix, such as /kape-ana behind a proxy that forwards that
+ * path to this container. Next reads basePath at build time, so it is a build argument, and the same
+ * value is set at runtime for src/base-path.ts. Normalised the way src/base-path.ts does it: a leading
+ * slash, no trailing slash, empty for nothing. Empty is left out so a site with no prefix builds as before.
+ */
+const segments = (process.env.BASE_PATH ?? "").split("/").map((p) => p.trim()).filter(Boolean);
+const basePath = segments.length ? `/${segments.join("/")}` : "";
+
 const config: NextConfig = {
+  ...(basePath ? { basePath } : {}),
+
   /*
    * Standalone output, so the container carries a server and its traced dependencies rather than
    * the whole node_modules tree. Without this the Dockerfile's runtime stage has nothing to copy.

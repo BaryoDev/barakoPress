@@ -1,4 +1,5 @@
 import { cookies, headers } from "next/headers";
+import { cookieName } from "../base-path.js";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import type { PressConfig } from "../config.js";
@@ -71,7 +72,7 @@ export function createSharedLinkPage(base: PressConfig, registry?: BlockRegistry
         if (!config) notFound();
         const path = pathOf((await params).path);
 
-        const link = openLinkCookie((await cookies()).get(LINK_COOKIE)?.value, route.tenant, shareSecret());
+        const link = openLinkCookie((await cookies()).get(cookieName(LINK_COOKIE))?.value, route.tenant, shareSecret());
         if (!link || !samePath(link.path, path)) notFound();
 
         const named = config.sites?.visitorIpHeader;

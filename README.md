@@ -250,14 +250,15 @@ per request, so when a value was read depended on which value it was.
 | `REVALIDATE_SECRET` | The webhook key before `PRESS_SECRET`, read only while that is unset |
 | `PRESS_PREVIEW_SECRET` | The share key before `PRESS_SECRET`, read only while that is unset |
 | `PRESS_FONT_ORIGINS` | The origins a font stylesheet may be linked from. Unset, Google Fonts only. See [One build, many sites](https://github.com/BaryoDev/barakoPress/blob/master/docs/sites.md#one-build-many-sites) |
+| `BASE_PATH` | A path prefix to serve the whole site under, such as `/kape-ana`. Empty by default, which is the root. Written with or without the leading or trailing slash, it is read as a leading slash and no trailing one. Next reads it at build time, so it is also a build argument. See [Serving under a path](https://github.com/BaryoDev/barakoPress/blob/master/docs/deploying.md#serving-under-a-path) |
 | `PRESS_SCRIPT_ORIGINS` | The origins a site's Umami script (`AnalyticsScript`) may be loaded from. Unset, none, so no script is rendered. Read when a page renders, so a cached page keeps its tag until it renders again. See [One build, many sites](https://github.com/BaryoDev/barakoPress/blob/master/docs/sites.md#one-build-many-sites) |
 
 Values are used exactly as the environment has them, untrimmed. A secret with a trailing space is a
 different HMAC key, so trimming one here would stop a webhook that verifies today.
 
-The reference app's `Dockerfile` also takes two build arguments, read when the image is built and
+The reference app's `Dockerfile` also takes three build arguments, read when the image is built and
 not by the package: `PRESS_DEPLOY` names a directory under `deploy/` to lay over the reference app,
-and `PRESS_TRAILING_SLASH=true` sets Next's `trailingSlash` in `next.config.ts`. See
+`PRESS_TRAILING_SLASH=true` sets Next's `trailingSlash` in `next.config.ts`, and `BASE_PATH` sets Next's `basePath` (it is also read at runtime, so set it in both places). See
 [The reference deployment](https://github.com/BaryoDev/barakoPress/blob/master/docs/deploying.md#the-reference-deployment-in-this-repository).
 
 **A site is build time or request time.** Without `sites`, identity is build time: the index, the

@@ -53,6 +53,8 @@ export interface PressEnv {
     shareImageFont?: string;
     /** `PRESS_TRAILING_SLASH`. `true` when the build serves every path with a trailing slash. */
     trailingSlash?: string;
+    /** `BASE_PATH`. The path prefix this site is served under, such as `/kape-ana`. Unset, the site is at the root. */
+    basePath?: string;
 }
 
 /** The variable each value comes from. A log line names this, never the value. */
@@ -70,6 +72,7 @@ export const ENV_NAMES = {
     scriptOrigins: "PRESS_SCRIPT_ORIGINS",
     shareImageFont: "PRESS_SHARE_IMAGE_FONT",
     trailingSlash: "PRESS_TRAILING_SLASH",
+    basePath: "BASE_PATH",
 } as const satisfies Record<keyof PressEnv, string>;
 
 /** Reads every value, now. Call it where the value is used, never at module scope. */

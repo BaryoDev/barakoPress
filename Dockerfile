@@ -65,6 +65,11 @@ RUN node scripts/plugins.mjs /plugins && rm -rf /plugins
 ARG PRESS_TRAILING_SLASH=
 ENV PRESS_TRAILING_SLASH=$PRESS_TRAILING_SLASH
 
+# A path prefix, such as /kape-ana, for a site served behind a proxy under that path. Next reads
+# basePath at build time, so it is a build argument. It is set again in the run stage below.
+ARG BASE_PATH=
+ENV BASE_PATH=$BASE_PATH
+
 # The build renders nothing from the CMS: every page is dynamic or revalidated at runtime, so no
 # CMS_URL is needed here and the image is not tied to one instance.
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -73,6 +78,8 @@ RUN npm run build
 FROM node:22.23.4-alpine AS run
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
+ARG BASE_PATH=
+ENV BASE_PATH=$BASE_PATH
 
 # Runs as a non-root user. The image needs no write access to its own files at runtime; the cache
 # Next writes lives under .next/cache, which is created and owned below.
