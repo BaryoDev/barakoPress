@@ -309,6 +309,21 @@ export function slugAudience(config: PressConfig, slug: string): string[] {
 /** A role no viewer can hold: the audience of a page whose field is there but unreadable. */
 export const CLOSED_ROLE = "\u0000closed";
 const WARNED_AUDIENCE = new Set<string>();
+const WARNED_UNREAD = new Set<string>();
+
+/** Warn once per slug about an Audience value on a site that is not set to read one. Warning only. */
+function warnUnreadAudience(d: Record<string, unknown> | null | undefined, slug: string): void {
+    if (!d || WARNED_UNREAD.has(slug)) return;
+    for (const key of Object.keys(d)) {
+        if (key.toLowerCase() !== "audience") continue;
+        const v = d[key];
+        if (v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0)) continue;
+        if (WARNED_UNREAD.size >= 200) WARNED_UNREAD.clear();
+        WARNED_UNREAD.add(slug);
+        console.warn(`pages: "${slug}" has an Audience value, but pageFields.audience is not set, so the page is public. Gate it with audiencePaths, or set pageFields: { audience: "Audience" }.`);
+        return;
+    }
+}
 
 /**
  * Role names from a list or a comma separated string, trimmed, with blanks and repeats left out.
@@ -336,6 +351,7 @@ export function toPage(config: PressConfig, c: PublicContent): Page {
     const d = c.data;
     const f = config.pageFields;
     const slug = slugOf(c, f.slug);
+    if (!f.audience) warnUnreadAudience(d as Record<string, unknown> | undefined, slug);
     return {
         id: c.id,
         slug,

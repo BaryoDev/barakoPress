@@ -505,6 +505,29 @@ describe("audiencePaths with a page audience", () => {
     });
 });
 
+describe("a page with an Audience value on a site not set to read it", () => {
+    const unset = defineConfig({ site: { name: "Test", url: "https://test.example" }, cmsUrl: CMS, tenant: "t", viewerSessions: true });
+    const warnings = (spy: { mock: { calls: unknown[][] } }) => spy.mock.calls.filter((c) => String(c[0]).includes("has an Audience value"));
+
+    it("renders and warns once, and a site that reads the field does not warn", async () => {
+        const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+        try {
+            addPage("unread-staff", { audience: ["Staff"], Blocks: [text] });
+            expect(await html(createPage(unset)(args("unread-staff")))).toContain("Desk text");
+            forgetCachedReads();
+            expect(await html(createPage(unset)(args("unread-staff")))).toContain("Desk text");
+            expect(warnings(spy)).toHaveLength(1);
+            expect(String(warnings(spy)[0][0])).toContain('"unread-staff"');
+
+            addPage("read-staff", { Audience: ["Staff"], Blocks: [text] });
+            await html(createViewerPage(config)(args("read-staff"))).catch(() => {});
+            expect(warnings(spy)).toHaveLength(1);
+        } finally {
+            spy.mockRestore();
+        }
+    });
+});
+
 describe("a menu item whose page read returns null", () => {
     it("is left out with its children", async () => {
         const withPages = defineConfig({ site: { name: "Test", url: "https://test.example" }, cmsUrl: CMS, tenant: "t", pages: "", pageFields: { audience: "Audience" } });

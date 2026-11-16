@@ -344,7 +344,10 @@ anonymously by the API, so a page that has to stay private is a `Members` entry 
 ### Page audience
 
 A page can name who may see it. The field is opt-in, so a site whose pages already have an
-`Audience` field meaning something else is unchanged. Set `pageFields: { audience: "Audience" }`, then
+`Audience` field meaning something else is unchanged. A site that is not set to read the field warns
+once per slug when a page carries an `Audience` value, since that page is public. It cannot warn when
+the field is not Public, because delivery leaves it out, which is why a staff page belongs in
+`audiencePaths`. Set `pageFields: { audience: "Audience" }`, then
 give the page entry that field holding role names, as a list or one comma separated string:
 
 ```json
