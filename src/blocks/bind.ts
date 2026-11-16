@@ -1,6 +1,6 @@
 import { DEFAULT_LABELS, type PressConfig } from "../config.js";
 import { collectionOf, getItem, itemPath, listCollection, listCollectionAsViewer, names, type Item } from "../collections.js";
-import { ENTRY_ID, type ViewerEntry, type ViewerEntryReader, type ViewerReader } from "../delivery.js";
+import { ENTRY_ID, MAX_VIEWER_FILTER_VALUE, type ViewerEntry, type ViewerEntryReader, type ViewerReader } from "../delivery.js";
 import { sitePath } from "../site-path.js";
 import {
     PARAM_NAME,
@@ -14,8 +14,10 @@ import {
     type RecordPanelState,
 } from "./record.js";
 import type { Page } from "../cms.js";
+import type { BlockGate } from "./schema.js";
 import {
     BindingSource,
+    readBindings,
     bindText,
     bindValue,
     BINDING_FORMATS,
@@ -31,7 +33,11 @@ import {
     FILTER_BAR_BLOCK,
     FILTER_INPUT_BLOCK,
     MAX_TABLE_COLUMNS,
+    MAX_TABLE_FILTERS,
+    MAX_FILTER_OPTIONS,
+    MAX_TABLE_SEARCH,
     writeTableState,
+    type TableControls,
     MAX_FILTER_VALUES,
     MAX_SOURCES,
     MAX_ALL_REQUESTS,
@@ -46,6 +52,7 @@ import {
     writePagerState,
 } from "./data.js";
 import { DIALOG_BLOCK } from "./dialog.js";
+import { HOW_BUILT_BLOCK, MAX_HOW_BUILT_BLOCKS, MAX_HOW_BUILT_TEXT } from "./how-built.js";
 import { writeFilterState } from "./filter.js";
 import { holdsLink, isSafeHref } from "../markdown.js";
 import { plainLiterals } from "../literal.js";
@@ -140,6 +147,10 @@ export interface BindContext {
     viewerReader?: () => Promise<ViewerReader | null>;
     /** Reads one entry as the signed-in viewer, or resolves null when there is none. Unset where output is shared. */
     viewerEntryReader?: () => Promise<ViewerEntryReader | null>;
+    /** The blocks as they came in, before any binding, which is what `howBuilt` lists. */
+    authored: ResolvedBlock[];
+    /** Whether the signed-in viewer passes a block's gate. Unset where output is shared. */
+    canSee?: (gate: BlockGate) => Promise<boolean>;
 }
 
 export interface BindPageOptions {
@@ -158,6 +169,8 @@ export interface BindPageOptions {
     viewerReader?: () => Promise<ViewerReader | null>;
     /** Set only where output is never cached. A record panel draws nothing but its empty text without it. */
     viewerEntryReader?: () => Promise<ViewerEntryReader | null>;
+    /** Set only where output is never cached. Without it a gated block is left out of a `howBuilt` listing. */
+    canSee?: (gate: BlockGate) => Promise<boolean>;
 }
 
 export async function bindBlocks(blocks: ResolvedBlock[], options: BindPageOptions): Promise<ResolvedBlock[]> {
@@ -172,6 +185,8 @@ export async function bindBlocks(blocks: ResolvedBlock[], options: BindPageOptio
         said: new Set(),
         viewerReader: options.viewerReader,
         viewerEntryReader: options.viewerEntryReader,
+        authored: blocks,
+        canSee: options.canSee,
     };
     if (options.scopes.count) ctx.count = options.scopes.count;
     const source = new BindingSource(
@@ -302,6 +317,8 @@ async function bindBlock(block: ResolvedBlock, frame: Frame, ctx: BindContext): 
             return bindRecordPanel(block, frame, ctx);
         case TRANSITION_BUTTON_BLOCK:
             return bindTransitionButton(block, frame, ctx);
+        case HOW_BUILT_BLOCK:
+            return bindHowBuilt(block, frame, ctx);
     }
 
     const bound = await bindProps(block, frame.source, { preset: Boolean(block.definition.preset) });
@@ -700,14 +717,26 @@ async function bindDataTable(block: ResolvedBlock, frame: Frame, ctx: BindContex
     const page = pageNumber(await frame.source.read("query"), param);
     const pageSize = typeof props.pageSize === "number" ? Math.min(props.pageSize, MAX_SOURCE_ROWS) : 20;
     let loaded;
+    let tableQuery: TableQuery | undefined;
     if (props.readAs === "viewer") {
         // The viewer's own read. No session, or output shared by every visitor, means no rows and no
         // CMS call. It never falls back to the public read.
         const reader = await ctx.viewerReader?.();
-        loaded = reader
-            ? await read(() => listCollectionAsViewer(ctx.config, key, reader, { page, pageSize }))
-            : { items: [], total: 0, pageSize: 0, hasNextPage: false };
+        // The search and filters come from the URL and go to the core as query parameters. They are
+        // asked for only when there is a viewer to ask as.
+        if (reader) {
+            tableQuery = tableControlsOf(ctx, props, key, await frame.source.read("query"), param);
+            const { search, filter } = tableQuery;
+            loaded = await read(() => listCollectionAsViewer(ctx.config, key, reader, { page, pageSize, search, filter }));
+        } else {
+            loaded = { items: [], total: 0, pageSize: 0, hasNextPage: false };
+        }
     } else if (props.readAs === undefined || props.readAs === "" || props.readAs === "public") {
+        // The delivery API has no search or field filter this block can use, so a public table
+        // draws no controls.
+        if (props.search === true || (Array.isArray(props.filters) && props.filters.length > 0)) {
+            say(ctx, `blocks: a table over "${named(key)}" asks for a search or filters, which only a table with readAs "viewer" has, so it draws none`);
+        }
         loaded = await read(() => listCollection(ctx.config, key, { page, pageSize }));
     } else {
         // An unknown mode is a typo for the one that gates. Draw the empty state, read nothing.
@@ -718,7 +747,9 @@ async function bindDataTable(block: ResolvedBlock, frame: Frame, ctx: BindContex
     const items = loaded.items;
 
     const template = typeof props.rowLink === "string" ? props.rowLink.trim() : "";
-    const linkable = template.startsWith("/") && isSafeHref(template.replace(/\{(slug|id)\}/g, "x"));
+    // A path on this site, or a query alone such as `?record={id}`, which keeps the page.
+    const queryLink = template.startsWith("?") && isSafeHref(`/x${template.replace(/\{(slug|id)\}/g, "x")}`);
+    const linkable = queryLink || (template.startsWith("/") && isSafeHref(template.replace(/\{(slug|id)\}/g, "x")));
     const rows = items.map((item) => {
         const scope = itemScope(ctx.config, item);
         const cells = columns.map((column) => {
@@ -732,15 +763,111 @@ async function bindDataTable(block: ResolvedBlock, frame: Frame, ctx: BindContex
         const href = linkable
             ? template.replace(/\{(slug|id)\}/g, (_, name: string) => encodeURIComponent(name === "slug" && props.readAs !== "viewer" && item.slug !== "" ? item.slug : item.id))
             : undefined;
-        return href ? { cells, href } : { cells };
+        return href ? { cells, href: queryLink && tableQuery ? withKept(href, tableQuery.controls.keep) : href } : { cells };
     });
 
     const state = writeTableState({
         heads: columns.map((c) => (typeof c.label === "string" && c.label.trim() !== "" ? c.label : c.field)),
         rows,
         pager: { param, page, hasNext: loaded.hasNextPage ?? false },
+        ...(tableQuery && (tableQuery.controls.search || tableQuery.controls.filters.length > 0) ? { controls: tableQuery.controls } : {}),
     });
     return [{ ...block, props: { ...props, state }, slots: {} }];
+}
+
+/*
+ * A viewer table's search and filters. What the core's authenticated list takes is `search` and
+ * `filter[field][op]=value`, so those are all this sends. A filter value must be one the author
+ * listed, so the URL cannot make the table ask for anything else. The search is cut to a bounded
+ * length and stripped of control characters. Every address is built here with URLSearchParams, so
+ * nothing from the URL is written into a link unencoded. No `page` goes in any of them, so a new
+ * search or filter starts on page one.
+ */
+interface TableQuery {
+    search: string;
+    filter: [string, string, string][];
+    controls: TableControls;
+}
+
+const FILTER_FIELD = /^[^\s\[\]\x00-\x1f\x7f]{1,64}$/;
+
+function tableControlsOf(ctx: BindContext, props: BlockProps, key: string, query: Record<string, unknown> | null, pageParam: string): TableQuery {
+    const taken = new Set([pageParam, "record", "result"]);
+    const kept = new Map<string, string>();
+    const controls: TableControls = { filters: [], keep: [] };
+    let search = "";
+
+    if (props.search === true) {
+        const param = paramName(props.searchParam, "q");
+        if (taken.has(param)) {
+            say(ctx, `blocks: a table over "${named(key)}" uses "${param}" for its search, which is its page or record parameter, so it draws no search`);
+        } else {
+            taken.add(param);
+            search = queryText(query, param).replace(/[\x00-\x1f\x7f]+/g, " ").trim().slice(0, MAX_TABLE_SEARCH);
+            if (search !== "") kept.set(param, search);
+            const label = typeof props.searchLabel === "string" && props.searchLabel.trim() !== "" ? props.searchLabel : "Search";
+            controls.search = { param, value: search, label, hidden: [] };
+        }
+    }
+
+    const filters: { label: string; param: string; field: string; values: string[]; current: string }[] = [];
+    const listed = (Array.isArray(props.filters) ? props.filters.slice(0, MAX_TABLE_FILTERS) : []) as { field?: unknown; label?: unknown; param?: unknown; values?: unknown }[];
+    for (const [i, f] of listed.entries()) {
+        const field = f && typeof f.field === "string" ? f.field.trim() : "";
+        if (!FILTER_FIELD.test(field)) continue;
+        const asked = typeof f.param === "string" && f.param !== "" ? f.param : `f_${field}`;
+        const param = PARAM_NAME.test(asked) ? asked : `f${i + 1}`;
+        if (taken.has(param)) {
+            say(ctx, `blocks: a table over "${key}" has a filter whose parameter "${param}" is already used, so it draws no such filter`);
+            continue;
+        }
+        taken.add(param);
+        const values = [
+            ...new Set(
+                (Array.isArray(f.values) ? (f.values as unknown[]) : [])
+                    .filter((v): v is string => typeof v === "string")
+                    .map((v) => v.trim())
+                    .filter((v) => v !== "" && v.length <= MAX_VIEWER_FILTER_VALUE),
+            ),
+        ].slice(0, MAX_FILTER_OPTIONS);
+        if (values.length === 0) continue;
+        const wanted = queryText(query, param);
+        const current = values.includes(wanted) ? wanted : "";
+        if (current !== "") kept.set(param, current);
+        filters.push({ label: typeof f.label === "string" && f.label.trim() !== "" ? f.label : field, param, field, values, current });
+    }
+
+    const hrefWith = (param: string, value: string) => {
+        const pairs = new Map(kept);
+        if (value === "") pairs.delete(param);
+        else pairs.set(param, value);
+        const text = new URLSearchParams([...pairs]).toString();
+        return text === "" ? "?" : `?${text}`;
+    };
+    for (const f of filters) {
+        controls.filters.push({
+            label: f.label,
+            current: f.current,
+            allHref: hrefWith(f.param, ""),
+            options: f.values.map((value) => ({ value, href: hrefWith(f.param, value) })),
+        });
+    }
+    controls.keep = [...kept];
+    // The search form carries the filters, and not its own value or the page.
+    if (controls.search) controls.search.hidden = [...kept].filter(([name]) => name !== controls.search!.param);
+    return {
+        search,
+        filter: filters.filter((f) => f.current !== "").map((f): [string, string, string] => [f.field, "eq", f.current]),
+        controls,
+    };
+}
+
+/** A query-only row link with the active search and filters added, the link's own parameters first. */
+function withKept(href: string, keep: [string, string][]): string {
+    if (keep.length === 0) return href;
+    const params = new URLSearchParams(href.slice(1));
+    for (const [name, value] of keep) if (!params.has(name)) params.set(name, value);
+    return `?${params}`;
 }
 
 /*
@@ -860,6 +987,68 @@ async function bindTransitionButton(block: ResolvedBlock, frame: Frame, ctx: Bin
         state: JSON.stringify({ record: id }),
     };
     return [{ ...block, props: bound, slots: {} }];
+}
+
+/*
+ * A `howBuilt` block: the page's blocks as authored, as JSON (#7).
+ *
+ * It lists `ctx.authored`, the list as it came in, so no value a binding resolved to is in it: a
+ * `{{viewer.Username}}` is the text an editor wrote, and the `state` a binder writes into a table or
+ * a panel is left out. A block this viewer would not see is left out too: one whose gate refuses
+ * them (with no `canSee` every gated block is), and a `showIf` that is not met. A `showIf` inside a
+ * row that reads the row cannot be judged without it, so it is left out as well. The block's own
+ * limits are the block count and the string length.
+ */
+const WHOLE_PAGE_SCOPES = new Set(["site", "page", "query", "viewer"]);
+
+async function showIfMet(block: ResolvedBlock, source: BindingSource, inRow: boolean): Promise<boolean> {
+    if (inRow) {
+        for (const name of ["value", "equals"]) {
+            const text = block.props[name];
+            if (typeof text === "string" && readBindings(text).some((b) => !WHOLE_PAGE_SCOPES.has(b.scope))) return false;
+        }
+    }
+    const value = (await boundString(block, source, "value")).trim();
+    const equals = (await boundString(block, source, "equals")).trim();
+    const met = equals === "" ? value !== "" : value === equals;
+    return block.props.unless === true ? !met : met;
+}
+
+async function describeBlocks(
+    list: ResolvedBlock[],
+    source: BindingSource,
+    ctx: BindContext,
+    left: { blocks: number },
+    inRow: boolean,
+): Promise<unknown[]> {
+    const out: unknown[] = [];
+    for (const block of list) {
+        if (left.blocks <= 0) break;
+        const definition = block.definition;
+        if (definition.gate && !(await ctx.canSee?.(definition.gate))) continue;
+        if (definition.type === SHOW_IF_BLOCK && !(await showIfMet(block, source, inRow))) continue;
+        left.blocks--;
+        const props: Record<string, unknown> = {};
+        const hasState = (definition.fields as { name: string }[]).some((f) => f.name === "state");
+        for (const [name, value] of Object.entries(block.props)) {
+            if (name === "state" && hasState) continue;
+            props[name] = value;
+        }
+        const rows = inRow || definition.type === SOURCE_BLOCK || definition.type === REPEAT_BLOCK;
+        for (const [name, lists] of Object.entries(block.slots)) {
+            props[name] = await Promise.all(lists.map((inner) => describeBlocks(inner, source, ctx, left, rows)));
+        }
+        out.push({ type: definition.type, props });
+    }
+    return out;
+}
+
+async function bindHowBuilt(block: ResolvedBlock, frame: Frame, ctx: BindContext): Promise<ResolvedBlock[]> {
+    const props = await bindProps(block, frame.source, {});
+    if (!props) return [];
+    const listing = await describeBlocks(ctx.authored, frame.source, ctx, { blocks: MAX_HOW_BUILT_BLOCKS }, false);
+    const state = JSON.stringify(listing, (_, value) => (typeof value === "string" && value.length > MAX_HOW_BUILT_TEXT ? `${value.slice(0, MAX_HOW_BUILT_TEXT)}...` : value), 2);
+    return [{ ...block, props: { ...props, state }, slots: {} }];
 }
 
 /*

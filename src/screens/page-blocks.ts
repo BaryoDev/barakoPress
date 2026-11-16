@@ -1,10 +1,10 @@
-import type { PressConfig } from "../config.js";
+import { pinnedTenant, type PressConfig } from "../config.js";
 import type { Page } from "../cms.js";
 import { resolveBlocks, type BlockRegistry, type ResolvedBlock } from "../blocks/schema.js";
 import { bindBlocks, pageScope, queryScope, siteScope } from "../blocks/bind.js";
 import { readBindings } from "../blocks/bindings.js";
 import { getGlobals } from "../site.js";
-import { getViewer, viewerEntryReader, viewerReader, viewerScope } from "../viewer.js";
+import { gateOutcome, getViewer, viewerEntryReader, viewerReader, viewerScope } from "../viewer.js";
 import { withGates, withoutGated } from "../blocks/gated.js";
 
 /*
@@ -42,7 +42,13 @@ export async function pageBlocks(
         },
         // A table that reads as the viewer. Only where the output is never cached.
         ...(options.perViewer && config.viewerSessions === true
-            ? { viewerReader: () => viewerReader(config), viewerEntryReader: () => viewerEntryReader(config) }
+            ? {
+                  viewerReader: () => viewerReader(config),
+                  viewerEntryReader: () => viewerEntryReader(config),
+                  // The same check a gated block makes when it draws, for a listing of the blocks.
+                  canSee: async (gate: { roles?: readonly string[] }) =>
+                      gateOutcome(await getViewer(config), { roles: gate.roles }, pinnedTenant(config)) === "allow",
+              }
             : {}),
         // Reported, never thrown, and never shown to a visitor: a renamed field is something the
         // person editing the page has to see, and nothing a reader can act on. Where they see it is

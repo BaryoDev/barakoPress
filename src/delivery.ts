@@ -765,7 +765,24 @@ export async function list(
 }
 
 /** Reads a page of a type as one viewer. The viewer's token is closed over, never passed around. */
-export type ViewerReader = (type: string, opts: { page?: number; pageSize?: number }) => Promise<Paged<PublicContent>>;
+export type ViewerReader = (type: string, opts: ViewerListOptions) => Promise<Paged<PublicContent>>;
+
+/**
+ * What the authenticated list takes besides paging. `search` is the core's `search` parameter (a
+ * case-insensitive match over the values of an entry) and `filter` its `filter[field][op]=value`
+ * syntax, which needs the content type. The core takes at most five filters and refuses a value
+ * over 256 characters, so both are bounded here too.
+ */
+export interface ViewerListOptions {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    filter?: [string, string, string][];
+}
+
+export const MAX_VIEWER_SEARCH = 200;
+export const MAX_VIEWER_FILTERS = 5;
+export const MAX_VIEWER_FILTER_VALUE = 256;
 
 /**
  * One page of a type through the authenticated list, `GET /api/contents?contentType=`, with the
@@ -780,12 +797,17 @@ export async function listAsViewer(
     config: PressConfig,
     type: string,
     token: string,
-    opts: { page?: number; pageSize?: number } = {},
+    opts: ViewerListOptions = {},
 ): Promise<Paged<PublicContent>> {
     const q = new URLSearchParams();
     q.set("contentType", type);
     q.set("page", String(opts.page ?? 1));
     q.set("pageSize", String(opts.pageSize ?? config.pageSizes.index));
+    const search = (opts.search ?? "").trim().slice(0, MAX_VIEWER_SEARCH);
+    if (search !== "") q.set("search", search);
+    for (const [field, op, value] of (opts.filter ?? []).slice(0, MAX_VIEWER_FILTERS)) {
+        if (value.length <= MAX_VIEWER_FILTER_VALUE) q.set(`filter[${field}][${op}]`, value);
+    }
     const path = `/api/contents?${q}`;
     if (!carriesSecretsSafely(cmsUrlFor(config))) throw new CmsError(path, 0);
     const res = await fetch(`${cmsUrlFor(config)}${path}`, {

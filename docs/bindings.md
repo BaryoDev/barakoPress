@@ -159,9 +159,8 @@ per row and the first cell becomes the link. A path that is not on this site is 
 said when there are no rows. It is one of the page's eight reads, and a collection the site lacks
 draws nothing and says so in the log.
 
-It reads the delivery API, so it shows what the content type marks Public. Sorting, search, filters
-and saved-query sources are not part of this block yet (they need a paged query endpoint in
-barakoCMS).
+It reads the delivery API, so it shows what the content type marks Public. Sorting and saved-query
+sources are not part of this block yet. Search and filters are for `readAs: "viewer"` only (below).
 
 Set `readAs: "viewer"` and it reads the CMS's authenticated list, `GET /api/contents?contentType=...`,
 with the signed-in viewer's own token, so the rows are the ones that account may read. The token is
@@ -175,6 +174,36 @@ so a `{slug}` in `rowLink` is filled with the row's id there.
 ```json
 { "type": "dataTable", "props": {
     "collection": "catering-request", "readAs": "viewer", "empty": "No requests",
+    "columns": [ { "field": "Title", "label": "Request" } ]
+} }
+```
+
+*Search and filters.* A viewer table can pass a search and a few filters to the core's list, which
+takes `search` and `filter[field][op]=value` (see `Features/Content/List/Endpoint.cs` in barakoCMS).
+The public delivery API has no such parameters, so a public table that sets any of these draws no
+controls and logs a warning.
+
+- `search: true` draws a search box. It is a plain GET form, so a search is a URL and works with no
+  script. The value is read from the URL parameter `searchParam` (default `q`), stripped of control
+  characters, cut to 200 characters and sent to the core as `search`. The core matches it, without
+  regard to case, against the values of an entry. `searchLabel` names the box (default "Search").
+- `filters` is a list of up to five groups `{ field, label, param, values }`. `field` is the core's
+  field name, `values` is the list of choices (up to thirty, each at most 256 characters) and `param`
+  is the URL parameter (default `f_<field>`). The block draws an "All" link and one link per value.
+  A value in the URL that is not one of the listed values is ignored. A chosen value goes to the core
+  as `filter[<field>][eq]=<value>`. The core refuses a field that is not readable for the content
+  type, so a filter on a field the viewer may not read draws the empty state.
+- A new search or filter starts at page one. The previous and next links, and a row link that starts
+  with `?`, keep the active search and filters.
+- `pageParam`, `record` and `result` are taken, so a search or filter parameter that uses one of
+  them is dropped and logged.
+
+```json
+{ "type": "dataTable", "props": {
+    "collection": "requests", "readAs": "viewer", "empty": "No requests",
+    "search": true, "searchLabel": "Search requests",
+    "filters": [ { "field": "Service", "label": "Service", "param": "service", "values": ["Wedding", "Lunch", "Tasting"] } ],
+    "rowLink": "?record={id}",
     "columns": [ { "field": "Title", "label": "Request" } ]
 } }
 ```
@@ -222,6 +251,24 @@ the entry.
     "collection": "requests", "label": "Decline", "transition": "Decline",
     "requireReason": true, "next": "/desk"
 } }
+```
+
+**How is this built?** A `howBuilt` block draws a closed `<details>` that holds the page's own block
+configuration as JSON, so a person using the page can see how it is made. `summary` sets the heading
+(default "How is this built?"). It is a viewer block: it draws on `createViewerPage` and never on a
+shared page. The listing is made from the blocks as they were written, before any binding, so a
+`{{viewer.Username}}` shows as the text an editor typed and no value from the session, the URL or the
+CMS is in it. It leaves out:
+
+- the `state` a table, panel or pager has written into it by binding, which holds resolved data;
+- any block whose `gate` this viewer does not pass, and a `showIf` that is not met for them;
+- anything past 200 blocks, and any string past 1000 characters, which is cut.
+
+A token is never a block prop, so it is never in the listing. Do not put a secret in a block prop
+and expect this block to hide it.
+
+```json
+{ "type": "howBuilt", "props": { "summary": "How is this built?" } }
 ```
 
 **Filter buttons.** A `filterBar` inside a `source` draws one button per distinct value of `field`
