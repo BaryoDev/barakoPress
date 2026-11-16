@@ -1,6 +1,15 @@
 import { cookies } from "next/headers";
 import { cmsUrlFor, pinnedTenant, type PressConfig } from "./config.js";
-import { carriesSecretsSafely, deliveryHeaders, listAsViewer, type ViewerReader } from "./delivery.js";
+import {
+    carriesSecretsSafely,
+    deliveryHeaders,
+    listAsViewer,
+    readEntryAsViewer,
+    transitionAsViewer,
+    type TransitionResult,
+    type ViewerEntryReader,
+    type ViewerReader,
+} from "./delivery.js";
 import { readEnv } from "./env.js";
 
 /*
@@ -145,6 +154,35 @@ export async function viewerReader(config: PressConfig): Promise<ViewerReader | 
     const token = (await cookies()).get(VIEWER_COOKIE)?.value;
     if (!token) return null;
     return (type, opts) => listAsViewer(config, type, token, opts);
+}
+
+/**
+ * A reader of one entry as the signed-in viewer, or null: the same conditions as `viewerReader`.
+ * The token stays inside the returned function.
+ */
+export async function viewerEntryReader(config: PressConfig): Promise<ViewerEntryReader | null> {
+    const viewer = await getViewer(config);
+    if (!viewer || gateOutcome(viewer, {}, pinnedTenant(config)) !== "allow") return null;
+    const token = (await cookies()).get(VIEWER_COOKIE)?.value;
+    if (!token) return null;
+    return (id) => readEntryAsViewer(config, id, token);
+}
+
+/**
+ * Makes a workflow transition as the signed-in viewer. `"forbidden"` when there is no viewer, or
+ * one of another tenant, so a request that has no right to ask is answered the same as a refusal.
+ */
+export async function transitionAsSignedInViewer(
+    config: PressConfig,
+    id: string,
+    transition: string,
+    data?: Record<string, unknown>,
+): Promise<TransitionResult> {
+    const viewer = await getViewer(config);
+    if (!viewer || gateOutcome(viewer, {}, pinnedTenant(config)) !== "allow") return "forbidden";
+    const token = (await cookies()).get(VIEWER_COOKIE)?.value;
+    if (!token) return "forbidden";
+    return transitionAsViewer(config, id, transition, data, token);
 }
 
 /** The `viewer` binding scope: only what a page may show, never the token. */

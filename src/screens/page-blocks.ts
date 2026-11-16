@@ -4,7 +4,7 @@ import { resolveBlocks, type BlockRegistry, type ResolvedBlock } from "../blocks
 import { bindBlocks, pageScope, queryScope, siteScope } from "../blocks/bind.js";
 import { readBindings } from "../blocks/bindings.js";
 import { getGlobals } from "../site.js";
-import { getViewer, viewerReader, viewerScope } from "../viewer.js";
+import { getViewer, viewerEntryReader, viewerReader, viewerScope } from "../viewer.js";
 import { withGates, withoutGated } from "../blocks/gated.js";
 
 /*
@@ -41,7 +41,9 @@ export async function pageBlocks(
             ...(options.searchParams ? { query: async () => queryScope(await options.searchParams!) } : {}),
         },
         // A table that reads as the viewer. Only where the output is never cached.
-        ...(options.perViewer && config.viewerSessions === true ? { viewerReader: () => viewerReader(config) } : {}),
+        ...(options.perViewer && config.viewerSessions === true
+            ? { viewerReader: () => viewerReader(config), viewerEntryReader: () => viewerEntryReader(config) }
+            : {}),
         // Reported, never thrown, and never shown to a visitor: a renamed field is something the
         // person editing the page has to see, and nothing a reader can act on. Where they see it is
         // barakoBrew, over `createBindingReportRoute`; this line is for whoever has the log.

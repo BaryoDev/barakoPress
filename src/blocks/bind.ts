@@ -1,6 +1,18 @@
 import { DEFAULT_LABELS, type PressConfig } from "../config.js";
 import { collectionOf, getItem, itemPath, listCollection, listCollectionAsViewer, names, type Item } from "../collections.js";
-import type { ViewerReader } from "../delivery.js";
+import { ENTRY_ID, type ViewerEntry, type ViewerEntryReader, type ViewerReader } from "../delivery.js";
+import { sitePath } from "../site-path.js";
+import {
+    PARAM_NAME,
+    RECORD_PANEL_BLOCK,
+    RESULT_MESSAGES,
+    TRANSITION_BUTTON_BLOCK,
+    TRANSITION_NAME,
+    REASON_FIELD,
+    MAX_RECORD_FIELDS,
+    writeRecordState,
+    type RecordPanelState,
+} from "./record.js";
 import type { Page } from "../cms.js";
 import {
     BindingSource,
@@ -126,6 +138,8 @@ export interface BindContext {
     said: Set<string>;
     /** Reads as the signed-in viewer, or resolves null when there is none. Unset where output is shared. */
     viewerReader?: () => Promise<ViewerReader | null>;
+    /** Reads one entry as the signed-in viewer, or resolves null when there is none. Unset where output is shared. */
+    viewerEntryReader?: () => Promise<ViewerEntryReader | null>;
 }
 
 export interface BindPageOptions {
@@ -142,6 +156,8 @@ export interface BindPageOptions {
     scope?: string;
     /** Set only where output is never cached. A table reading as the viewer draws no rows without it. */
     viewerReader?: () => Promise<ViewerReader | null>;
+    /** Set only where output is never cached. A record panel draws nothing but its empty text without it. */
+    viewerEntryReader?: () => Promise<ViewerEntryReader | null>;
 }
 
 export async function bindBlocks(blocks: ResolvedBlock[], options: BindPageOptions): Promise<ResolvedBlock[]> {
@@ -155,6 +171,7 @@ export async function bindBlocks(blocks: ResolvedBlock[], options: BindPageOptio
         scope: (options.scope ?? "body").replace(/[^A-Za-z0-9_-]/g, "") || "body",
         said: new Set(),
         viewerReader: options.viewerReader,
+        viewerEntryReader: options.viewerEntryReader,
     };
     if (options.scopes.count) ctx.count = options.scopes.count;
     const source = new BindingSource(
@@ -281,6 +298,10 @@ async function bindBlock(block: ResolvedBlock, frame: Frame, ctx: BindContext): 
             return bindDataTable(block, frame, ctx);
         case DIALOG_BLOCK:
             return bindDialog(block, frame, ctx);
+        case RECORD_PANEL_BLOCK:
+            return bindRecordPanel(block, frame, ctx);
+        case TRANSITION_BUTTON_BLOCK:
+            return bindTransitionButton(block, frame, ctx);
     }
 
     const bound = await bindProps(block, frame.source, { preset: Boolean(block.definition.preset) });
@@ -720,6 +741,124 @@ async function bindDataTable(block: ResolvedBlock, frame: Frame, ctx: BindContex
         pager: { param, page, hasNext: loaded.hasNextPage ?? false },
     });
     return [{ ...block, props: { ...props, state }, slots: {} }];
+}
+
+/*
+ * A `recordPanel` and a `transitionButton` (#7, the operator desk).
+ *
+ * The entry id comes from a URL parameter and is checked against the CMS's id shape before it is
+ * put in a URL. The entry is read as the signed-in viewer, with their token, by a reader that holds
+ * the token itself. With no viewer, no id, a refusal, or an entry of another type, the panel says
+ * its `empty` text and nothing about why. It never falls back to a public read.
+ */
+function paramName(value: unknown, fallback: string): string {
+    return typeof value === "string" && PARAM_NAME.test(value) ? value : fallback;
+}
+
+function queryText(query: Record<string, unknown> | null, param: string): string {
+    const raw = query && Object.hasOwn(query, param) ? query[param] : undefined;
+    return typeof raw === "string" ? raw : "";
+}
+
+const STATUS_NAMES = ["Draft", "Published", "Archived", "Scheduled"];
+
+function statusText(entry: ViewerEntry): string | undefined {
+    if (typeof entry.lifecycleState === "string" && entry.lifecycleState !== "") return entry.lifecycleState.slice(0, 80);
+    const status = entry.status;
+    if (typeof status === "number") return STATUS_NAMES[status];
+    return typeof status === "string" && status !== "" ? status.slice(0, 80) : undefined;
+}
+
+type RecordField = { field: string; label?: string; format?: string };
+
+function recordRows(entry: ViewerEntry, fields: RecordField[] | null, source: BindingSource): RecordPanelState["rows"] {
+    const picked: RecordField[] = fields ?? Object.keys(entry.data).slice(0, MAX_RECORD_FIELDS).map((field) => ({ field }));
+    const rows: RecordPanelState["rows"] = [];
+    for (const f of picked.slice(0, MAX_RECORD_FIELDS)) {
+        const format = BINDING_FORMATS.find((b) => b === f.format) ?? "text";
+        const value = Object.hasOwn(entry.data, f.field) ? entry.data[f.field] : undefined;
+        const text = Array.isArray(value)
+            ? value.map((one) => formatValue(one, format, source.options) ?? "").filter((t) => t !== "").join(", ")
+            : (formatValue(value, format, source.options) ?? "");
+        // A field the viewer may not read is not in the response, so it has no row at all.
+        if (text === "") continue;
+        rows.push({ label: typeof f.label === "string" && f.label.trim() !== "" ? f.label : f.field, text });
+    }
+    return rows;
+}
+
+async function bindRecordPanel(block: ResolvedBlock, frame: Frame, ctx: BindContext): Promise<ResolvedBlock[]> {
+    const props = await bindProps(block, frame.source, {});
+    if (!props) return [];
+    const key = typeof props.collection === "string" ? props.collection : "";
+    const empty = (): ResolvedBlock[] => [{ ...block, props: { ...props, state: writeRecordState({ found: false, rows: [] }) }, slots: {} }];
+    if (ctx.budget.reads <= 0) {
+        sayReadsOver(ctx, `a record panel over "${named(key)}"`);
+        return [];
+    }
+    ctx.budget.reads--;
+    const col = collectionOf(ctx.config, key);
+    if (!col) {
+        say(ctx, `blocks: a record panel names the collection "${named(key)}" and this site has no such collection, so it draws nothing`);
+        return [];
+    }
+
+    const query = await frame.source.read("query");
+    const id = queryText(query, paramName(props.recordParam, "record"));
+    if (!ENTRY_ID.test(id)) return empty();
+    const reader = await ctx.viewerEntryReader?.();
+    if (!reader) return empty();
+    const entry = await read(() => reader(id));
+    // Another content type than the collection's is not this panel's entry, whatever the CMS allowed.
+    if (!entry || entry.contentType !== col.type) return empty();
+
+    const fields = Array.isArray(props.fields)
+        ? props.fields.filter((f): f is RecordField => Boolean(f) && typeof f.field === "string" && f.field !== "")
+        : null;
+    const message = RESULT_MESSAGES.get(queryText(query, paramName(props.resultParam, "result")));
+    const status = statusText(entry);
+    const state: RecordPanelState = {
+        found: true,
+        rows: recordRows(entry, fields && fields.length > 0 ? fields : null, frame.source),
+        ...(status !== undefined ? { status } : {}),
+        ...(message ? { message } : {}),
+    };
+    return [{ ...block, props: { ...props, state: writeRecordState(state) }, slots: {} }];
+}
+
+async function bindTransitionButton(block: ResolvedBlock, frame: Frame, ctx: BindContext): Promise<ResolvedBlock[]> {
+    const props = await bindProps(block, frame.source, {});
+    if (!props) return [];
+    const key = typeof props.collection === "string" ? props.collection : "";
+    if (!collectionOf(ctx.config, key)) {
+        say(ctx, `blocks: a transition button names the collection "${named(key)}" and this site has no such collection, so it draws nothing`);
+        return [];
+    }
+    const transition = typeof props.transition === "string" ? props.transition.trim() : "";
+    if (!TRANSITION_NAME.test(transition)) {
+        say(ctx, "blocks: a transition button has a transition name that is empty or has characters it may not, so it draws nothing");
+        return [];
+    }
+    const reasonField = typeof props.reasonField === "string" && props.reasonField !== "" ? props.reasonField : "reason";
+    if (props.requireReason === true && !REASON_FIELD.test(reasonField)) return [];
+
+    // No viewer, or output shared by every visitor: no form. The id must be one the CMS could have issued.
+    const recordParam = paramName(props.recordParam, "record");
+    const id = queryText(await frame.source.read("query"), recordParam);
+    if (!ENTRY_ID.test(id) || !(await ctx.viewerEntryReader?.())) return [];
+
+    // The page to come back to, as a path alone. The route adds the id and the result itself.
+    const next = new URL(sitePath(props.next), "http://site.invalid").pathname;
+    const bound = {
+        ...props,
+        transition,
+        reasonField,
+        recordParam,
+        resultParam: paramName(props.resultParam, "result"),
+        next,
+        state: JSON.stringify({ record: id }),
+    };
+    return [{ ...block, props: bound, slots: {} }];
 }
 
 /*
