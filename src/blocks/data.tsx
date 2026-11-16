@@ -178,8 +178,17 @@ const pager = defineBlock<PagerProps & { state?: string }>({
     },
 });
 
-function pagerLinks(state: PagerState, theme: PressTheme, previousLabel?: string, nextLabel?: string, align?: string) {
-    const href = (page: number) => `?${encodeURIComponent(state.param)}=${page}`;
+function pagerLinks(
+    state: PagerState,
+    theme: PressTheme,
+    previousLabel?: string,
+    nextLabel?: string,
+    align?: string,
+    keep: [string, string][] = [],
+) {
+    // A table with a search or a filter keeps them on the next and previous page.
+    const href = (page: number) =>
+        keep.length === 0 ? `?${encodeURIComponent(state.param)}=${page}` : `?${new URLSearchParams([...keep, [state.param, String(page)]])}`;
     const tone = toneOf(theme, undefined);
     const style = { color: tone.accent, fontWeight: 600, textDecoration: "none" } as const;
     return (
@@ -394,14 +403,35 @@ type DataTableProps = {
     previousLabel?: string;
     nextLabel?: string;
     readAs?: string;
+    search?: boolean;
+    searchParam?: string;
+    searchLabel?: string;
+    filters?: { field: string; label?: string; param?: string; values?: string[] }[];
     state?: string;
 };
+
+/**
+ * The search box and filter links a table with `readAs: "viewer"` draws. The binder works out every
+ * address, so the component only draws them. `keep` is the active search and filters, which the
+ * pager and the row links carry along.
+ */
+export interface TableControls {
+    search?: { param: string; value: string; label: string; hidden: [string, string][] };
+    filters: { label: string; current: string; allHref: string; options: { value: string; href: string }[] }[];
+    keep: [string, string][];
+}
 
 export interface DataTableState {
     heads: string[];
     rows: { cells: string[]; href?: string }[];
     pager: PagerState;
+    controls?: TableControls;
 }
+
+export const MAX_TABLE_FILTERS = 5;
+export const MAX_FILTER_OPTIONS = 30;
+/** The longest search the box takes. The core's list takes more, and a longer one is cut. */
+export const MAX_TABLE_SEARCH = 200;
 
 export function writeTableState(state: DataTableState): string {
     return JSON.stringify(state);
@@ -450,6 +480,33 @@ function dataTable(config: PressConfig): BlockDefinition {
             { name: "previousLabel", kind: "text", label: "Previous label" },
             { name: "nextLabel", kind: "text", label: "Next label" },
             { name: "readAs", kind: "select", label: "Read as", options: ["public", "viewer"], bindable: false },
+            { name: "search", kind: "boolean", label: "Draw a search box (read as viewer only)", bindable: false },
+            { name: "searchParam", kind: "text", label: "URL parameter holding the search", bindable: false },
+            { name: "searchLabel", kind: "text", label: "Label for the search box" },
+            {
+                name: "filters",
+                kind: "list",
+                label: "Filters (read as viewer only)",
+                max: MAX_TABLE_FILTERS,
+                item: {
+                    kind: "group",
+                    label: "Filter",
+                    fields: [
+                        { name: "field", kind: "text", label: "Field", required: true, bindable: false },
+                        { name: "label", kind: "text", label: "Label" },
+                        { name: "param", kind: "text", label: "URL parameter holding the value", bindable: false },
+                        {
+                            name: "values",
+                            kind: "list",
+                            label: "Values offered",
+                            required: true,
+                            min: 1,
+                            max: MAX_FILTER_OPTIONS,
+                            item: { kind: "text", label: "Value", bindable: false },
+                        },
+                    ],
+                },
+            },
             // Written by the binder, never by an editor.
             { name: "state", kind: "text", label: "Table state", bindable: false },
         ],
@@ -464,8 +521,55 @@ function dataTable(config: PressConfig): BlockDefinition {
                 fontSize: theme.text.small,
             };
             const link = { color: c.ink, fontWeight: 600 } as const;
+            const controls = state.controls;
+            const tone = toneOf(theme, undefined);
+            const control: CSSProperties = {
+                padding: spaceOf(theme, "sm"),
+                font: "inherit",
+                color: c.ink,
+                background: c.surface,
+                border: `1px solid ${c.hairline}`,
+                borderRadius: theme.radii.control,
+            };
             return (
                 <div style={{ display: "grid", gap: spaceOf(theme, "md"), overflowX: "auto" }}>
+                    {controls?.search && (
+                        <form method="get" role="search" data-press="table-search" style={{ display: "flex", gap: spaceOf(theme, "sm"), flexWrap: "wrap" }}>
+                            {controls.search.hidden.map(([name, value], i) => (
+                                <input key={i} type="hidden" name={name} value={value} />
+                            ))}
+                            <input
+                                type="search"
+                                name={controls.search.param}
+                                defaultValue={controls.search.value}
+                                maxLength={MAX_TABLE_SEARCH}
+                                aria-label={controls.search.label}
+                                placeholder={controls.search.label}
+                                style={control}
+                            />
+                            <button type="submit" style={{ ...control, cursor: "pointer" }}>
+                                {controls.search.label}
+                            </button>
+                        </form>
+                    )}
+                    {controls?.filters.map((filter, f) => (
+                        <nav key={f} aria-label={filter.label} data-press="table-filter" style={{ display: "flex", gap: spaceOf(theme, "md"), flexWrap: "wrap", fontSize: theme.text.small }}>
+                            <span style={{ color: c.secondaryInk }}>{filter.label}</span>
+                            <Link href={filter.allHref} aria-current={filter.current === "" ? "true" : undefined} style={{ color: tone.accent, fontWeight: filter.current === "" ? 700 : 500 }}>
+                                All
+                            </Link>
+                            {filter.options.map((option) => (
+                                <Link
+                                    key={option.value}
+                                    href={option.href}
+                                    aria-current={filter.current === option.value ? "true" : undefined}
+                                    style={{ color: tone.accent, fontWeight: filter.current === option.value ? 700 : 500 }}
+                                >
+                                    {option.value}
+                                </Link>
+                            ))}
+                        </nav>
+                    ))}
                     <table style={{ borderCollapse: "collapse", width: "100%" }}>
                         {props.caption ? <caption style={{ ...cell, fontWeight: 700 }}>{props.caption}</caption> : null}
                         <thead>
@@ -496,7 +600,7 @@ function dataTable(config: PressConfig): BlockDefinition {
                         </tbody>
                     </table>
                     {state.rows.length === 0 && props.empty ? <p style={{ fontSize: theme.text.small }}>{props.empty}</p> : null}
-                    {pagerLinks(state.pager, theme, props.previousLabel, props.nextLabel)}
+                    {pagerLinks(state.pager, theme, props.previousLabel, props.nextLabel, undefined, controls?.keep)}
                 </div>
             );
         },

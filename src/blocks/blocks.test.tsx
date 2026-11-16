@@ -336,6 +336,7 @@ describe("createBlockRegistry", () => {
             "viewerSignIn",
             "recordPanel",
             "transitionButton",
+            "howBuilt",
         ]);
     });
 

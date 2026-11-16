@@ -398,6 +398,83 @@ The same holds on every route: a path entry narrows the page's own `Audience` an
 An empty role list, a role that is not a non-empty string, a path not starting with `/`, or two
 entries for one path throw when the config loads.
 
+### Recipe: an operator desk at /staff/catering
+
+A staff page where each person sees the requests their role may read, opens one, and approves or
+declines it. It is built from blocks. The CMS decides who sees what, and who may approve.
+
+**1. Gate the path.** Sessions on, and the roles that may open the page:
+
+```ts
+export default defineConfig({
+    viewerSessions: true,
+    collections: { requests: { type: "catering-request", fields: { title: "Name" } } },
+    audiencePaths: { "/staff/catering": ["Front of house", "Owner"] },
+});
+```
+
+Mount the page under `createViewerPage`, and add the sign-in and transition routes
+(`createViewerTransitionRoute`, below). A viewer with no session or none of the roles gets a 404.
+
+**2. Declare the collection and its lifecycle in the core.** `POST /api/content-types`:
+
+```json
+{
+  "name": "catering-request",
+  "displayName": "Catering request",
+  "fields": [
+    { "name": "Name",    "displayName": "Event",   "type": "string",  "isRequired": true },
+    { "name": "Service", "displayName": "Service", "type": "string",  "isRequired": true },
+    { "name": "Guests",  "displayName": "Guests",  "type": "decimal" },
+    { "name": "Budget",  "displayName": "Budget",  "type": "string" },
+    { "name": "reason",  "displayName": "Reason",  "type": "string" }
+  ],
+  "lifecycle": {
+    "states": ["Pending", "Approved", "Declined"],
+    "initialState": "Pending",
+    "transitions": [
+      { "name": "Approve", "from": "Pending", "to": "Approved" },
+      { "name": "Decline", "from": "Pending", "to": "Declined", "requiredFields": ["reason"] }
+    ]
+  }
+}
+```
+
+Give each role its rights on `catering-request`: `read` for both, and `"transitions": { "Approve":
+{ "enabled": true }, "Decline": { "enabled": true } }` for whoever may decide. Put a field rule on
+`Budget` so Front of house does not read it. Press sends the viewer's own token, so the rows, the
+fields and the buttons that work are the account's own. The walkthrough is in the core's
+`docs/approval-by-configuration.md`.
+
+**3. Build the page.** Its blocks, in order:
+
+```json
+[
+  { "type": "dataTable", "props": {
+      "collection": "requests", "readAs": "viewer", "pageSize": 20, "empty": "No requests",
+      "search": true, "searchLabel": "Search requests",
+      "filters": [ { "field": "Service", "label": "Service", "param": "service", "values": ["Wedding", "Lunch", "Tasting"] } ],
+      "rowLink": "?record={id}",
+      "columns": [ { "field": "Title", "label": "Event" }, { "field": "Guests", "label": "Guests" } ]
+  } },
+  { "type": "recordPanel", "props": {
+      "collection": "requests", "empty": "Pick a request",
+      "fields": [ { "field": "Name", "label": "Event" }, { "field": "Guests", "label": "Guests" }, { "field": "Budget", "label": "Budget" } ]
+  } },
+  { "type": "transitionButton", "props": { "collection": "requests", "label": "Approve", "transition": "Approve", "next": "/staff/catering" } },
+  { "type": "transitionButton", "props": { "collection": "requests", "label": "Decline", "transition": "Decline", "requireReason": true, "reasonLabel": "Reason", "reasonField": "reason", "next": "/staff/catering" } },
+  { "type": "howBuilt", "props": {} }
+]
+```
+
+The row link `?record={id}` keeps the search and filter in the URL, so the list stays as it was when a
+row is opened. The Decline button refuses an empty reason before it calls the core, and the core
+requires `reason` for that transition too. After either button the page comes back with the entry's
+new status.
+
+**4. Theme.** Set the accent to `#B4572E` in the site's theme (see [look](look.md)) so the links,
+the active filter and the buttons use it. No block needs its own colour.
+
 ### Reading Members content
 
 Set `CMS_VIEWER_MINT_TOKEN` to a barakoCMS bearer token whose account holds `manage_public_delivery`.

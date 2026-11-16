@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- A `dataTable` that reads as the viewer takes `search`, `searchParam`, `searchLabel` and `filters` (#7). The
+  search is a GET form and a filter is a link, so each is a URL. They go to the core's authenticated
+  list as `search` and `filter[field][eq]`, cut to the core's limits (200 characters of search, five
+  filters, 256 characters a value), and a change of either starts again at page one. A filter value
+  that the page does not list is ignored. A public table that asks for them draws none and logs a
+  warning. A row link of `?record={id}` now works, and keeps the search and filters.
+- A `howBuilt` block shows the page's own block configuration as JSON in a closed `<details>` (#7). It lists
+  the blocks as written, so it holds no session, URL or CMS value, no `state` a binder wrote, and no
+  block a gate or `showIf` hides from that viewer. It draws only on `createViewerPage`.
+- The operator desk recipe for `/staff/catering` is in [pages](docs/pages.md), with the lifecycle the core
+  accepts (#7).
 - A `recordPanel` block shows one entry of a collection as the signed-in viewer (#7). The id comes from a
   URL parameter (`recordParam`, default `record`), and the entry is read with the viewer's token on the
   server, never cached, with no public fallback. It shows the fields the response carries and the
