@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { siteBaseUrl } from "../base-path.js";
+import { siteBaseUrl, withoutBase } from "../base-path.js";
 import { pinnedTenant, type PressConfig, type SiteLink } from "../config.js";
 import { type NavItem, flattenNavigation, getNavigation, isChromePath, isReservedPath, listPages, pageAudience, pageHref, pathAudience, toPage } from "../cms.js";
 import { type ResolvedPage, pageAtPath } from "../delivery.js";
@@ -161,7 +161,7 @@ async function pageUrls(config: PressConfig, home: string, listed: Set<string>, 
     };
     // A header link is a site path. Under the mount it is a page path; elsewhere it is some other route.
     // A target that resolves to a noIndex page is left out; one that resolves to no page stays.
-    for (const p of linkPaths(config.site.headerLinks)) {
+    for (const p of linkPaths(config.site.headerLinks).map((raw) => withoutBase(raw))) {
         const pagePath = mount && p.startsWith(`${mount}/`) ? p.slice(mount.length) : mount && p === mount ? "/" : !mount ? p : undefined;
         if (pagePath === undefined) {
             if (!reserved(p)) urls.add(servedUrl(home, p));

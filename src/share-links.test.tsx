@@ -197,6 +197,12 @@ describe("redeeming a key under BASE_PATH", () => {
         expect(entry.headers.get("location")).toBe("/kape-ana/blog/draft-notes");
         expect(entry.headers.get("set-cookie")).toMatch(/^__Secure-press-link=.*Path=\/kape-ana;/);
     });
+
+    it("prefixes the location once more when the page path starts with the prefix", async () => {
+        vi.stubEnv("BASE_PATH", "/about");
+        const res = await redeem("baryo.dev", PAGE_KEY);
+        expect(res.headers.get("location")).toBe("/about/about");
+    });
 });
 
 describe("redeeming a key at /api/share/redeem", () => {

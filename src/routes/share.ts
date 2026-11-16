@@ -1,5 +1,5 @@
 import type { Labels, PressConfig } from "../config.js";
-import { cookieName, cookiePath, withBase } from "../base-path.js";
+import { basePath, cookieName, cookiePath, withBase } from "../base-path.js";
 import { readEnv } from "../env.js";
 import { isLinkPath, openShareLink, redeemShareLink, type PublicContent, type ShareRedeemCaller } from "../delivery.js";
 import { collectionOf, itemRoutePath, productOf } from "../collections.js";
@@ -51,8 +51,10 @@ export interface SharePageOptions {
 }
 
 function redirect(location: string, cookie?: string): Response {
-    // A hand-written Location is not given the prefix by Next, so it is added here.
-    const headers = new Headers({ ...NO_STORE, location: withBase(location) });
+    // A hand-written Location is not given the prefix by Next, so it is added here. Every location is
+    // site-relative, so it is prefixed without the withBase guard: a page whose path starts with the
+    // prefix (a collection at /press under /press) still needs it once more.
+    const headers = new Headers({ ...NO_STORE, location: `${basePath()}${location}` });
     if (cookie) headers.append("set-cookie", cookie);
     return new Response(null, { status: 303, headers });
 }

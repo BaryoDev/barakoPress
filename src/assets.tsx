@@ -231,7 +231,9 @@ export function renderProse(source: string, theme: PressTheme, options?: RenderM
     if (theme.asSupplied.length === 0 || !html.includes("<img")) return html;
 
     return html.replace(/<img src="([^"]*)"/g, (tag, src: string) => {
-        const asset = suppliedAssetFor(theme, withoutBase(unescapeHtml(src)));
+        const plain = unescapeHtml(src);
+        // An exact match first, since a registration may itself name the prefixed path; then the path without the prefix.
+        const asset = suppliedAssetFor(theme, plain) ?? suppliedAssetFor(theme, withoutBase(plain));
         if (!asset) return tag;
         const style = declarations({
             ...NO_TREATMENT,

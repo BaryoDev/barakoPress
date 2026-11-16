@@ -113,6 +113,11 @@ What the prefix changes in the engine:
   and the sitemap, robots, feed, canonical and share image addresses carry the prefix. `<Link>` and
   `redirect()` get it from Next.
 - The site address in the settings may or may not include the prefix. Either way it is used once.
+- A link written in the settings that already starts with the prefix (`/kape-ana/docs`) is taken as
+  already prefixed and left alone, so a page of your own whose path starts with the prefix needs
+  the prefix written twice (`/kape-ana/kape-ana/docs`) in a header, menu, footer or social link.
+- Sites on one host must not sit inside each other's prefix (`/app` and `/app/team`). The viewer
+  cookie of `/app` is sent to `/app/team` too, so signing out at one does not end the other.
 - The session cookies (viewer and share) are `__Host-` cookies at the root, which require `Path=/`.
   Under a prefix that would send them to every other site on the host. They are renamed to
   `__Secure-press-viewer`, `__Secure-press-share` and `__Secure-press-link` and set with

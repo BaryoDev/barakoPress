@@ -69,7 +69,7 @@ const links = <T extends Linked & { children?: Linked[] }>(list: T[] | undefined
 
 /**
  * The site identity with every path on this site carried under the prefix: header, menu, top bar and
- * footer links, header actions, and the favicon and share image when they are local files. The logo
+ * footer links, header actions, local social links, and the favicon and share image when they are local files. The logo
  * and footer logo are left alone: `Asset` prefixes them when it draws, after it has matched them
  * against the as-supplied list, which holds unprefixed paths.
  * Rendering reads this, so a plain `<a href>` lands inside the prefix. Matching a link against a
@@ -86,6 +86,7 @@ export function siteWithBase<
         menuLinks?: (Linked & { children?: Linked[] })[];
         headerActions?: Linked[];
         footerColumns?: { links: Linked[] }[];
+        socialLinks?: Linked[];
     },
 >(site: S, base: string = basePath()): S {
     if (!base) return site;
@@ -98,6 +99,7 @@ export function siteWithBase<
         headerLinks: links(site.headerLinks, base),
         menuLinks: links(site.menuLinks, base),
         headerActions: site.headerActions?.map((a) => link(a, base)),
+        socialLinks: site.socialLinks?.map((l) => link(l, base)),
         footerColumns: site.footerColumns?.map((c) => ({ ...c, links: c.links.map((l) => link(l, base)) })),
     };
 }

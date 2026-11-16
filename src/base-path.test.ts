@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Asset } from "./assets.js";
+import { Asset, renderProse } from "./assets.js";
 import { resolveTheme } from "./theme.js";
 import { basePath, cookieName, cookiePath, normalizeBasePath, siteBaseUrl, siteWithBase, withBase, withoutBase } from "./base-path.js";
 import { defineConfig } from "./config.js";
@@ -106,6 +106,7 @@ describe("with BASE_PATH", () => {
                 headerActions: [{ href: "/join" }],
                 topBar: { links: [{ href: "/news" }] },
                 footerColumns: [{ links: [{ href: "/privacy" }] }],
+                socialLinks: [{ href: "/about" }, { href: "https://facebook.com/x" }],
             },
             BASE,
         );
@@ -116,6 +117,7 @@ describe("with BASE_PATH", () => {
         expect(site.headerActions?.[0].href).toBe("/kape-ana/join");
         expect(site.topBar?.links[0].href).toBe("/kape-ana/news");
         expect(site.footerColumns?.[0].links[0].href).toBe("/kape-ana/privacy");
+        expect(site.socialLinks?.map((l) => l.href)).toEqual(["/kape-ana/about", "https://facebook.com/x"]);
     });
 
     it("keeps an as-supplied logo as supplied under the prefix", () => {
@@ -167,6 +169,17 @@ describe("the places that build a URL by hand", () => {
         expect(html).toContain('href="/kape-ana/about"');
         expect(html).toContain('src="/kape-ana/pic.png"');
         expect(html).toContain('href="https://elsewhere.test/a"');
+    });
+
+    it("a prose image registered under its prefixed path keeps its protection", () => {
+        process.env.BASE_PATH = BASE;
+        const theme = resolveTheme({ asSupplied: [{ url: "/kape-ana/logo.svg" }, { url: "/mark.svg" }] });
+        const exact = renderProse("![x](/kape-ana/logo.svg)", theme);
+        const plain = renderProse("![x](/mark.svg)", theme);
+        const other = renderProse("![x](/other.svg)", theme);
+        expect(exact).toContain("style=");
+        expect(plain).toContain("style=");
+        expect(other).not.toContain("style=");
     });
 
     it("markdown is unchanged with no prefix", () => {
