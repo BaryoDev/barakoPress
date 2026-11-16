@@ -192,9 +192,12 @@ controls and logs a warning.
   is the URL parameter (default `f_<field>`). The block draws an "All" link and one link per value.
   A value in the URL that is not one of the listed values is ignored. A chosen value goes to the core
   as `filter[<field>][eq]=<value>`. The core refuses a field that is not readable for the content
-  type, so a filter on a field the viewer may not read draws the empty state.
-- A new search or filter starts at page one. The previous and next links, and a row link that starts
-  with `?`, keep the active search and filters.
+  type, so a filter on a field the viewer may not read is a failed read. Any read the core refuses
+  (a 400 for a filter, a 403 or 404) draws the search and filter controls and the `empty` text, so
+  the viewer can change the search, and logs the status once.
+- A new search or filter starts at page one, because the search form and the filter links carry no
+  page. The previous and next links keep the active search and filters. A row link that starts with
+  `?` keeps them and the table's own page, so coming back from a record lands where the viewer was.
 - `pageParam`, `record` and `result` are taken, so a search or filter parameter that uses one of
   them is dropped and logged.
 
@@ -263,6 +266,9 @@ CMS is in it. It leaves out:
 - the `state` a table, panel or pager has written into it by binding, which holds resolved data;
 - any block whose `gate` this viewer does not pass, and a `showIf` that is not met for them;
 - anything past 200 blocks, and any string past 1000 characters, which is cut.
+
+Field names and values in block props show to anyone admitted to the page, so a block meant for one
+role should use `gate`, which leaves it out for everyone else.
 
 A token is never a block prop, so it is never in the listing. Do not put a secret in a block prop
 and expect this block to hide it.

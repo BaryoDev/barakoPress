@@ -1,6 +1,6 @@
 import { DEFAULT_LABELS, type PressConfig } from "../config.js";
 import { collectionOf, getItem, itemPath, listCollection, listCollectionAsViewer, names, type Item } from "../collections.js";
-import { ENTRY_ID, MAX_VIEWER_FILTER_VALUE, type ViewerEntry, type ViewerEntryReader, type ViewerReader } from "../delivery.js";
+import { CmsError, ENTRY_ID, MAX_VIEWER_FILTER_VALUE, type ViewerEntry, type ViewerEntryReader, type ViewerReader } from "../delivery.js";
 import { sitePath } from "../site-path.js";
 import {
     PARAM_NAME,
@@ -727,7 +727,14 @@ async function bindDataTable(block: ResolvedBlock, frame: Frame, ctx: BindContex
         if (reader) {
             tableQuery = tableControlsOf(ctx, props, key, await frame.source.read("query"), param);
             const { search, filter } = tableQuery;
-            loaded = await read(() => listCollectionAsViewer(ctx.config, key, reader, { page, pageSize, search, filter }));
+            // A refusal (the core answers 400 for a filter it will not run, 403 or 404 for a type
+            // the account may not read) draws the controls and the empty text, not nothing, so the
+            // viewer can change the search. The status is logged.
+            loaded = await read(() => listCollectionAsViewer(ctx.config, key, reader, { page, pageSize, search, filter }), (e) => {
+                const status = e instanceof CmsError ? e.status : "no response";
+                say(ctx, `blocks: the viewer read for a table over "${named(key)}" failed (${status}), so it draws no rows`);
+            });
+            loaded ??= { items: [], total: 0, pageSize: 0, hasNextPage: false };
         } else {
             loaded = { items: [], total: 0, pageSize: 0, hasNextPage: false };
         }
@@ -763,7 +770,10 @@ async function bindDataTable(block: ResolvedBlock, frame: Frame, ctx: BindContex
         const href = linkable
             ? template.replace(/\{(slug|id)\}/g, (_, name: string) => encodeURIComponent(name === "slug" && props.readAs !== "viewer" && item.slug !== "" ? item.slug : item.id))
             : undefined;
-        return href ? { cells, href: queryLink && tableQuery ? withKept(href, tableQuery.controls.keep) : href } : { cells };
+        // A row link keeps the table's own page too, so coming back from a record lands where the
+        // viewer was. The search, filter and All links never carry a page.
+        const rowKeep: [string, string][] = tableQuery ? [...tableQuery.controls.keep, ...(page > 1 ? [[param, String(page)] as [string, string]] : [])] : [];
+        return href ? { cells, href: queryLink && tableQuery ? withKept(href, rowKeep) : href } : { cells };
     });
 
     const state = writeTableState({
@@ -1024,10 +1034,18 @@ async function describeBlocks(
     const out: unknown[] = [];
     for (const block of list) {
         if (left.blocks <= 0) break;
-        const definition = block.definition;
-        if (definition.gate && !(await ctx.canSee?.(definition.gate))) continue;
-        if (definition.type === SHOW_IF_BLOCK && !(await showIfMet(block, source, inRow))) continue;
+        // Take the place before any await, so lists read side by side cannot both pass the check
+        // on the last one. A block left out gives it back.
         left.blocks--;
+        const definition = block.definition;
+        if (definition.gate && !(await ctx.canSee?.(definition.gate))) {
+            left.blocks++;
+            continue;
+        }
+        if (definition.type === SHOW_IF_BLOCK && !(await showIfMet(block, source, inRow))) {
+            left.blocks++;
+            continue;
+        }
         const props: Record<string, unknown> = {};
         const hasState = (definition.fields as { name: string }[]).some((f) => f.name === "state");
         for (const [name, value] of Object.entries(block.props)) {
@@ -1340,11 +1358,12 @@ function collectionCount(ctx: BindContext, path: string): Promise<number | undef
 }
 
 /** A page's read must not take the page down, which is the rule the feed and the sitemap follow. */
-async function read<T>(load: () => Promise<T>): Promise<T | null> {
+async function read<T>(load: () => Promise<T>, onFail?: (e: unknown) => void): Promise<T | null> {
     try {
         return await load();
     } catch (e) {
         if (e && typeof e === "object" && "digest" in e) throw e;
+        onFail?.(e);
         return null;
     }
 }

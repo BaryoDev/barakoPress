@@ -82,10 +82,13 @@ const config = defineConfig({
 });
 
 const CAL_TOKEN = "eyJhbGciOiJIUzI1NiJ9.cal-session-token.signaturepart";
-const ACCOUNTS: Record<string, { username: string; roles: string[] }> = {
+const DAN_TOKEN = "eyJhbGciOiJIUzI1NiJ9.dan-session-token.signaturepart";
+const ACCOUNTS: Record<string, { username: string; roles: string[]; tenant?: string }> = {
     [ANA_TOKEN]: { username: "ana", roles: ["Front of house"] },
     [BEN_TOKEN]: { username: "ben", roles: ["Owner"] },
     [CAL_TOKEN]: { username: "cal", roles: ["Guest"] },
+    // An Owner, but of another tenant than the one this site is pinned to.
+    [DAN_TOKEN]: { username: "dan", roles: ["Owner"], tenant: "other" },
 };
 
 interface Row {
@@ -103,6 +106,7 @@ const ROWS: Record<string, Row[]> = {
         { id: GALA, Name: "Ben gala", Service: "Lunch", Guests: 200, Budget: "30000" },
     ],
     [CAL_TOKEN]: [],
+    [DAN_TOKEN]: [],
 };
 
 interface Call {
@@ -113,6 +117,8 @@ interface Call {
 }
 let calls: Call[] = [];
 let state = "Pending";
+let hasNext = false;
+let listStatus = 200;
 let pages: Record<string, { id: string; slug: string; data: Record<string, unknown> }> = {};
 
 function cms() {
@@ -125,11 +131,12 @@ function cms() {
         if (url.pathname === "/api/me") {
             const who = ACCOUNTS[token];
             return who
-                ? Response.json({ userId: `u-${who.username}`, username: who.username, tenant: "t", roles: who.roles.map((name) => ({ id: name, name })), capabilities: [] })
+                ? Response.json({ userId: `u-${who.username}`, username: who.username, tenant: who.tenant ?? "t", roles: who.roles.map((name) => ({ id: name, name })), capabilities: [] })
                 : new Response("", { status: 401 });
         }
         if (url.pathname === "/api/contents") {
             if (!ACCOUNTS[token] || url.searchParams.get("contentType") !== "catering-request") return new Response("", { status: 401 });
+            if (listStatus !== 200 && url.searchParams.has("filter[Service][eq]")) return new Response("", { status: listStatus });
             const search = (url.searchParams.get("search") ?? "").toLowerCase();
             const service = url.searchParams.get("filter[Service][eq]");
             const rows = ROWS[token].filter((r) => r.Name.toLowerCase().includes(search) && (service === null || r.Service === service));
@@ -139,7 +146,7 @@ function cms() {
                 pageSize: 20,
                 totalItems: rows.length,
                 totalPages: rows.length ? 1 : 0,
-                hasNextPage: false,
+                hasNextPage: hasNext,
             });
         }
         const one = url.pathname.match(/^\/api\/contents\/([^/]+)(\/status)?$/);
@@ -173,6 +180,8 @@ beforeEach(() => {
     jar = {};
     calls = [];
     state = "Pending";
+    hasNext = false;
+    listStatus = 200;
     for (const m of memos) m.clear();
     vi.stubGlobal("fetch", cms());
     // The page of the recipe in docs/pages.md, as the CMS would serve it.
@@ -189,6 +198,7 @@ beforeEach(() => {
                         props: {
                             collection: "requests",
                             readAs: "viewer",
+                            state: "SECRET-STATE",
                             pageSize: 20,
                             empty: "No requests",
                             search: true,
@@ -225,6 +235,19 @@ const desk = (query: Record<string, string> = {}) => ({ params: Promise.resolve(
 const listCalls = () => calls.filter((c) => c.path.startsWith("/api/contents?"));
 /** The text inside the howBuilt disclosure, which is the only place its listing is drawn. */
 const listing = (out: string) => out.match(/data-press="how-built"[\s\S]*?<\/details>/)?.[0] ?? "";
+
+/** The query of the anchor whose href holds `needle`, with &amp; read back as &. */
+const anchorWith = (out: string, needle: string) => {
+    const href = [...out.matchAll(/<a [^>]*href="([^"]*)"/g)].map((m) => m[1].replace(/&amp;/g, "&")).find((h) => h.includes(needle));
+    expect(href).toBeDefined();
+    return new URLSearchParams(String(href).replace(/^\?/, ""));
+};
+const hrefOf = (out: string, rel: string) => {
+    const tag = out.match(new RegExp(`<a [^>]*rel="${rel}"[^>]*>`))?.[0] ?? "";
+    const href = tag.match(/href="([^"]*)"/)?.[1] ?? "";
+    expect(href).not.toBe("");
+    return new URLSearchParams(href.replace(/&amp;/g, "&").replace(/^\?/, ""));
+};
 
 const post = (fields: Record<string, string>) =>
     new Request("http://desk.example/api/viewer/transition", {
@@ -292,8 +315,55 @@ describe("the catering desk recipe", () => {
     it("keeps the search on a row link", async () => {
         jar[VIEWER_COOKIE] = BEN_TOKEN;
         const out = await html(createViewerPage(config)(desk({ q: "ben" })));
-        expect(out).toContain(`record=${WED}`);
-        expect(out).toMatch(/href="\?[^"]*q=ben[^"]*"/);
+        const href = anchorWith(out, `record=${WED}`);
+        expect(href.get("q")).toBe("ben");
+        expect(href.get("record")).toBe(WED);
+        expect(href.has("page")).toBe(false);
+    });
+
+    it("keeps the table's page on a row link, and puts no page on the search, filter and All links", async () => {
+        jar[VIEWER_COOKIE] = BEN_TOKEN;
+        const out = await html(createViewerPage(config)(desk({ q: "ben", service: "Lunch", page: "3" })));
+        const row = anchorWith(out, `record=${GALA}`);
+        expect(row.get("page")).toBe("3");
+        expect(row.get("q")).toBe("ben");
+        expect(row.get("service")).toBe("Lunch");
+        const filters = out.match(/data-press="table-filter"[\s\S]*?<\/nav>/)?.[0] ?? "";
+        expect(filters).toContain("href=");
+        expect(filters).not.toContain("page=");
+        const form = out.match(/data-press="table-search"[\s\S]*?<\/form>/)?.[0] ?? "";
+        expect(form).not.toContain("page");
+    });
+
+    it("keeps the search and filter on the previous and next links", async () => {
+        hasNext = true;
+        jar[VIEWER_COOKIE] = BEN_TOKEN;
+        const out = await html(createViewerPage(config)(desk({ q: "ben", service: "Lunch", page: "2" })));
+        const prev = hrefOf(out, "prev");
+        const next = hrefOf(out, "next");
+        for (const [link, page] of [[prev, "1"], [next, "3"]] as const) {
+            expect(link.get("q")).toBe("ben");
+            expect(link.get("service")).toBe("Lunch");
+            expect(link.get("page")).toBe(page);
+        }
+    });
+
+    it("draws the controls and the empty text when the core refuses a filtered read, and logs the status", async () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        listStatus = 400;
+        jar[VIEWER_COOKIE] = BEN_TOKEN;
+        const out = await html(createViewerPage(config)(desk({ service: "Lunch" })));
+        expect(out).toContain("No requests");
+        expect(out).toContain('data-press="table-search"');
+        expect(out).toContain('data-press="table-filter"');
+        expect(warn.mock.calls.some((c) => String(c[0]).includes("(400)"))).toBe(true);
+    });
+
+    it("leaves a state prop an editor wrote out of the howBuilt listing", async () => {
+        jar[VIEWER_COOKIE] = BEN_TOKEN;
+        const shown = listing(await html(createViewerPage(config)(desk())));
+        expect(shown).toContain("dataTable");
+        expect(shown).not.toContain("SECRET-STATE");
     });
 
     it("refuses a Decline with no reason, with no call to the core", async () => {
@@ -367,5 +437,31 @@ describe("howBuilt and gates", () => {
 
     it("leaves a gated block out when nothing can say who is looking", async () => {
         expect(await list()).not.toContain("ownersNote");
+    });
+});
+
+describe("howBuilt on a viewer page with a gated block", () => {
+    const owners = defineBlock({ type: "ownersNote", label: "Owners", fields: [], gate: { roles: ["Owner"] }, component: () => <p>owners only</p> });
+    // No audiencePaths here, so a viewer of another tenant reaches the page and only the block's gate is tested.
+    const open = defineConfig({ site: { name: "Test", url: "https://test.example" }, cmsUrl: CMS, tenant: "t", viewerSessions: true, pages: "" });
+    const registry = () => createBlockRegistry(open, [owners]);
+
+    beforeEach(() => {
+        (pages["staff/catering"].data.Blocks as unknown[]).push({ type: "ownersNote", props: {} });
+    });
+
+    it("lists the block for an Owner, and for no one else", async () => {
+        jar[VIEWER_COOKIE] = BEN_TOKEN;
+        expect(listing(await html(createViewerPage(open, registry())(desk())))).toContain("ownersNote");
+        jar[VIEWER_COOKIE] = ANA_TOKEN;
+        forgetCachedReads();
+        expect(listing(await html(createViewerPage(open, registry())(desk())))).not.toContain("ownersNote");
+    });
+
+    it("does not list it for an Owner of another tenant", async () => {
+        jar[VIEWER_COOKIE] = DAN_TOKEN;
+        const out = await html(createViewerPage(open, registry())(desk()));
+        expect(listing(out)).not.toContain("ownersNote");
+        expect(out).not.toContain("owners only");
     });
 });
