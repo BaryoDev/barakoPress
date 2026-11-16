@@ -9,6 +9,9 @@ import {
     getPageByPath,
     getPageAtPath,
     getRedirect,
+    pageAudience,
+    narrowAudience,
+    slugAudience,
     isDataPath,
     isReservedPath,
     listPages,
@@ -178,6 +181,10 @@ function pathOf(segments: string[] | undefined): string {
 interface Found {
     page: Page;
     breadcrumbs: Breadcrumb[];
+    /** Every path the page was asked for or resolved at, for the audience check. */
+    paths: string[];
+    /** On the slug route, the roles of every audiencePaths entry ending in the slug. */
+    slugRoles?: string[];
 }
 
 /*
@@ -200,13 +207,20 @@ async function collectionMetadata(config: PressConfig, hit: { key: string; slug?
     return item ? itemMetadata(item) : { title: "Not found" };
 }
 
+/** A page that names roles is not shared output: only a viewer holding one of them may see it. */
+function audienceOf(config: PressConfig, page: Page, paths: string[], slugRoles: string[] = []): string[] {
+    // A slug match is a guess at the page's path, so it narrows the page's own roles and never
+    // replaces them. A viewer needs a role in both; none in common closes the page.
+    return narrowAudience(slugRoles, pageAudience(config, page, ...paths));
+}
+
 async function findPage(config: PressConfig, p: PageRouteParams): Promise<Found | null> {
     if (bySlugRoute(p)) {
         // A slug route mounted at the root serves the page at `/slug`. Deeper data paths cannot be
         // matched from a slug without reading every one of them, so only that one is checked.
         if (isDataPath(config, `/${p.slug}`)) return null;
         const page = await getPage(config, p.slug as string);
-        return page ? { page, breadcrumbs: [] } : null;
+        return page ? { page, breadcrumbs: [], paths: [`/${p.slug}`, `/${page.slug}`], slugRoles: slugAudience(config, p.slug as string) } : null;
     }
     if (config.pages === undefined) return null;
     const path = pathOf(p.path);
@@ -215,7 +229,7 @@ async function findPage(config: PressConfig, p: PageRouteParams): Promise<Found 
     if (isReservedPath(config, path)) return null;
     if (isDataPath(config, path)) return null;
     const found = await getPageByPath(config, path);
-    return found ? { page: found.page, breadcrumbs: found.breadcrumbs } : null;
+    return found ? { page: found.page, breadcrumbs: found.breadcrumbs, paths: [path, found.path] } : null;
 }
 
 /*
@@ -285,6 +299,8 @@ export function createPage(base: PressConfig, registry?: BlockRegistry, options:
         }
         const found = await findPage(config, p);
         if (!found) return missing(config, p);
+        // A page with an audience is for `createViewerPage`. This output is shared, so it is a 404.
+        if (audienceOf(config, found.page, found.paths, found.slugRoles).length > 0) notFound();
         blocks ??= createBlockRegistry(base);
         return PageView({
             config,
@@ -330,6 +346,12 @@ export function createViewerPage(base: PressConfig, registry?: BlockRegistry, op
             }
             const found = await findPage(config, p);
             if (!found) return missing(config, p);
+            const audience = audienceOf(config, found.page, found.paths, found.slugRoles);
+            if (audience.length > 0) {
+                // Not signed in, or without one of the roles: the same 404 a missing page gets.
+                const viewer = await getViewer(config);
+                if (gateOutcome(viewer, { roles: audience }, pinnedTenant(config)) !== "allow") notFound();
+            }
             blocks ??= createBlockRegistry(base);
             return PageView({
                 config,
@@ -379,7 +401,8 @@ export function createHome(base: PressConfig, registry?: BlockRegistry, options:
     return async function Home({ params, searchParams }: PageParams) {
         const config = await siteConfig(base, params);
         const path = config.home?.path;
-        const page = path ? await homePage(config, path) : null;
+        const named = path ? await homePage(config, path) : null;
+        const page = named && path && audienceOf(config, named, [path]).length === 0 ? named : null;
         if (page) {
             const query = options.query ?? (await routeFromParams(params)) === null;
             blocks ??= createBlockRegistry(base);
@@ -401,7 +424,8 @@ export function createHomeMetadata(base: PressConfig) {
     return async function generateMetadata({ params }: PageParams): Promise<Metadata> {
         const config = await siteConfig(base, params);
         const path = config.home?.path;
-        const page = path ? await homePage(config, path) : null;
+        const named = path ? await homePage(config, path) : null;
+        const page = named && path && audienceOf(config, named, [path]).length === 0 ? named : null;
         if (!page) {
             const col = collectionOf(config, homeCollection(config));
             const label = col ? (indexCopy(col).heading ?? col.label) : undefined;
@@ -433,7 +457,7 @@ export function createPageMetadata(base: PressConfig) {
         const hit = collectionHit(config, p);
         if (hit) return collectionMetadata(config, hit);
         const found = await findPage(config, p);
-        if (!found) return { title: "Not found" };
+        if (!found || audienceOf(config, found.page, found.paths, found.slugRoles).length > 0) return { title: "Not found" };
 
         const page = found.page;
         const seo = page.seo;
@@ -486,7 +510,7 @@ export function createPageStaticParams(config: PressConfig) {
             } catch {
                 break;
             }
-            for (const p of batch.pages) if (p.slug) slugs.push({ slug: p.slug });
+            for (const p of batch.pages) if (p.slug && audienceOf(config, p, [`/${p.slug}`], slugAudience(config, p.slug)).length === 0) slugs.push({ slug: p.slug });
             if (!batch.hasNextPage || batch.pages.length === 0) break;
         }
         return slugs;

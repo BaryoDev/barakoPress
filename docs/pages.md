@@ -341,6 +341,61 @@ the route; it does not hide the data. An entry the CMS serves anonymously is sti
 anonymously by the API, so a page that has to stay private is a `Members` entry in barakoCMS 5.1.0
 (see its delivery API), read with a viewer token as described next.
 
+### Page audience
+
+A page can name who may see it. The field is opt-in, so a site whose pages already have an
+`Audience` field meaning something else is unchanged. A site that is not set to read the field warns
+once per slug when a page carries an `Audience` value, since that page is public. It cannot warn when
+the field is not Public, because delivery leaves it out, which is why a staff page belongs in
+`audiencePaths`. Set `pageFields: { audience: "Audience" }`, then
+give the page entry that field holding role names, as a list or one comma separated string:
+
+```json
+{ "Title": "Catering desk", "Audience": ["Front of house", "Owner"], "Blocks": [] }
+```
+
+`createViewerPage` draws it only for a signed-in viewer of this tenant holding one of the roles. A
+visitor with no session, and a viewer with none of the roles, get the same not-found page a missing
+page gets, with no redirect, so the page's existence is not shown. `createPage`, the home route and
+page metadata treat such a page as missing too, so mount it under `createViewerPage`. The roles come
+from `getViewer`, on the server. The field must be one the content type marks Public, since the
+delivery API leaves out the rest and a page with no readable audience is public. Press cannot tell
+a missing field from a hidden one, so check the type. A field that is there but not a list of
+names (a number, an object, only blanks) closes the page to everyone and logs one warning. Missing,
+empty and `[]` stay public. The shared site menu, the sitemap, the share image, the header and footer
+regions, the holding page and a collection's index page leave out or ignore a page that names an
+audience. The menu reads each page to find out, so it costs one cached page read per item.
+
+#### Gating by path
+
+The page field works only when the pages type marks it Public, and Press cannot detect when it does
+not. A page whose field is hidden is served as a public page. `audiencePaths` in the Press config
+does not depend on delivery. It is a map of page path to role names:
+
+```ts
+export default defineConfig({
+    viewerSessions: true,
+    audiencePaths: { "/staff/catering": ["Front of house", "Owner"] },
+});
+```
+
+For a listed path the config roles are the audience and they win over the page field. A page with
+no session, no matching role, or a viewer of another tenant is a 404, whatever delivery returns.
+The menu, sitemap, static params, metadata, home route and `createPage` treat it like any page with
+an audience. Paths are the Pages module paths, below the mount. The match is exact, after trailing
+slashes, repeated slashes and `.` or `..` segments are folded and case is ignored (folding case can
+only match more than the router does). A page under a listed path is not covered unless it is listed
+too.
+
+On the slug route (no `pages` mount) Press sees only `/slug`, so it gates a page by every entry
+whose last segment is that slug and takes their roles. A public page that shares a slug with a gated
+path is gated too, which is the safe side. When the page also names an audience, the slug's roles
+narrow it and never replace it: a viewer needs a role in both, and with none in common nobody gets in.
+The same holds on every route: a path entry narrows the page's own `Audience` and never replaces it.
+
+An empty role list, a role that is not a non-empty string, a path not starting with `/`, or two
+entries for one path throw when the config loads.
+
 ### Reading Members content
 
 Set `CMS_VIEWER_MINT_TOKEN` to a barakoCMS bearer token whose account holds `manage_public_delivery`.

@@ -1,5 +1,6 @@
 import { DEFAULT_LABELS, type PressConfig } from "../config.js";
-import { collectionOf, getItem, itemPath, listCollection, names, type Item } from "../collections.js";
+import { collectionOf, getItem, itemPath, listCollection, listCollectionAsViewer, names, type Item } from "../collections.js";
+import type { ViewerReader } from "../delivery.js";
 import type { Page } from "../cms.js";
 import {
     BindingSource,
@@ -123,6 +124,8 @@ export interface BindContext {
     scope: string;
     /** Warnings this bind has made, so each bind says a message once and two overlapping binds never silence or clear one another. */
     said: Set<string>;
+    /** Reads as the signed-in viewer, or resolves null when there is none. Unset where output is shared. */
+    viewerReader?: () => Promise<ViewerReader | null>;
 }
 
 export interface BindPageOptions {
@@ -137,6 +140,8 @@ export interface BindPageOptions {
      * from filtering both. It keeps the id the same on every render of a page, so the HTML is too.
      */
     scope?: string;
+    /** Set only where output is never cached. A table reading as the viewer draws no rows without it. */
+    viewerReader?: () => Promise<ViewerReader | null>;
 }
 
 export async function bindBlocks(blocks: ResolvedBlock[], options: BindPageOptions): Promise<ResolvedBlock[]> {
@@ -149,6 +154,7 @@ export async function bindBlocks(blocks: ResolvedBlock[], options: BindPageOptio
         filters: 0,
         scope: (options.scope ?? "body").replace(/[^A-Za-z0-9_-]/g, "") || "body",
         said: new Set(),
+        viewerReader: options.viewerReader,
     };
     if (options.scopes.count) ctx.count = options.scopes.count;
     const source = new BindingSource(
@@ -672,7 +678,21 @@ async function bindDataTable(block: ResolvedBlock, frame: Frame, ctx: BindContex
     const param = typeof props.pageParam === "string" && props.pageParam !== "" ? props.pageParam : "page";
     const page = pageNumber(await frame.source.read("query"), param);
     const pageSize = typeof props.pageSize === "number" ? Math.min(props.pageSize, MAX_SOURCE_ROWS) : 20;
-    const loaded = await read(() => listCollection(ctx.config, key, { page, pageSize }));
+    let loaded;
+    if (props.readAs === "viewer") {
+        // The viewer's own read. No session, or output shared by every visitor, means no rows and no
+        // CMS call. It never falls back to the public read.
+        const reader = await ctx.viewerReader?.();
+        loaded = reader
+            ? await read(() => listCollectionAsViewer(ctx.config, key, reader, { page, pageSize }))
+            : { items: [], total: 0, pageSize: 0, hasNextPage: false };
+    } else if (props.readAs === undefined || props.readAs === "" || props.readAs === "public") {
+        loaded = await read(() => listCollection(ctx.config, key, { page, pageSize }));
+    } else {
+        // An unknown mode is a typo for the one that gates. Draw the empty state, read nothing.
+        say(ctx, `blocks: a table over "${named(key)}" sets readAs to ${JSON.stringify(props.readAs)}, which is neither "public" nor "viewer", so it draws no rows`);
+        loaded = { items: [], total: 0, pageSize: 0, hasNextPage: false };
+    }
     if (!loaded) return [];
     const items = loaded.items;
 
@@ -689,7 +709,7 @@ async function bindDataTable(block: ResolvedBlock, frame: Frame, ctx: BindContex
             return text;
         });
         const href = linkable
-            ? template.replace(/\{(slug|id)\}/g, (_, name: string) => encodeURIComponent(name === "slug" ? item.slug : item.id))
+            ? template.replace(/\{(slug|id)\}/g, (_, name: string) => encodeURIComponent(name === "slug" && props.readAs !== "viewer" && item.slug !== "" ? item.slug : item.id))
             : undefined;
         return href ? { cells, href } : { cells };
     });

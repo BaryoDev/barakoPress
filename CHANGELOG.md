@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- `audiencePaths` in the config maps page paths to role names and gates them even when delivery drops the
+  page's `Audience` field (#7). A bad entry throws when the config loads. On the slug route an entry
+  gates every page with the same last segment.
+- A page can name an audience (#7). Set `pageFields: { audience: "Audience" }` and the field lists role names.
+  `createViewerPage` draws the page only for a signed-in viewer holding one of them. Anyone else gets
+  the not-found page, not a redirect, and `createPage`, the home route and page metadata treat the page
+  as missing. The site menu and sitemap leave such pages out.
+- A `dataTable` with `readAs: "viewer"` reads the CMS's authenticated list with the signed-in viewer's
+  own token, on the server, so it shows only the rows that account may read. It carries the tenant,
+  is never cached, and never falls back to the public read. With no viewer, or on `createPage`, it
+  draws its empty text and makes no read. The default, `readAs: "public"`, is unchanged.
+
 ## 0.18.1 (2026-11-11)
 
 - A `filterInput` no longer matches the text inside a `dialog` block's panel in a row (#259). The panel

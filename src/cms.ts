@@ -1,5 +1,5 @@
 import type { PressConfig } from "./config.js";
-import { AUTHOR_COLLECTION, CATEGORY_COLLECTION, POST_COLLECTION, RESERVED_AT_ROOT, validTimeZone } from "./config.js";
+import { AUTHOR_COLLECTION, audienceKey, CATEGORY_COLLECTION, POST_COLLECTION, RESERVED_AT_ROOT, validTimeZone } from "./config.js";
 import { bySlug, list, navigationTree, pageAtPath, redirectAt, type PublicContent, type Seo } from "./delivery.js";
 import { collectionOf, getItem, getItemPreview, listCollection, slugOf, toItem, type Item } from "./collections.js";
 import { samePath, siteHref } from "./site.js";
@@ -253,22 +253,114 @@ export interface Page {
      * and a site building one by hand (rather than through `toPage`) keeps compiling without it.
      */
     hideTitle?: boolean;
+    /** Role names that may see the page. Empty or absent means everyone. */
+    audience?: string[];
     seo?: Seo;
     /** The entry as the API returned it, so a binding can read a field by the name the tenant gave it. */
     content?: PublicContent;
 }
 
+/**
+ * Two role lists as one gate. An empty list says nothing, so the other stands. Otherwise a viewer
+ * needs a role in both, and with none in common the result is the closed role: nobody gets in.
+ */
+export function narrowAudience(a: string[], b: string[]): string[] {
+    if (a.length === 0) return b;
+    if (b.length === 0) return a;
+    const both = a.filter((r) => b.includes(r));
+    return both.length > 0 ? both : [CLOSED_ROLE];
+}
+
+/**
+ * Who may see a page: the page's own `Audience`, narrowed by the roles `audiencePaths` lists for the
+ * first of `paths` that matches. A path entry never replaces the page's roles, so a viewer needs a
+ * role in both. Empty means everyone. `paths` are every path the page was reached or resolved at, and
+ * each is compared exactly after `audienceKey` folds slashes, dot segments and case.
+ */
+export function pageAudience(config: PressConfig, page: Page, ...paths: string[]): string[] {
+    const map = config.audiencePaths;
+    if (map) {
+        for (const path of paths) {
+            const roles = map[audienceKey(path)];
+            if (roles) return narrowAudience(roles, page.audience ?? []);
+        }
+    }
+    return page.audience ?? [];
+}
+
+/** The same check for a path alone, before the page is read. Null when the path is not listed. */
+export function pathAudience(config: PressConfig, path: string): string[] | null {
+    return config.audiencePaths?.[audienceKey(path)] ?? null;
+}
+
+/**
+ * Roles for a page served on the slug route, which sees only `/slug`: the roles of every
+ * `audiencePaths` entry whose last segment is the slug. It gates a public page that shares a slug
+ * with a gated path, which is the safe side.
+ */
+export function slugAudience(config: PressConfig, slug: string): string[] {
+    const map = config.audiencePaths;
+    if (!map) return [];
+    const last = slug.toLowerCase();
+    const roles = Object.entries(map).flatMap(([key, r]) => (key.split("/").pop() === last ? r : []));
+    return [...new Set(roles)];
+}
+
+/** A role no viewer can hold: the audience of a page whose field is there but unreadable. */
+export const CLOSED_ROLE = "\u0000closed";
+const WARNED_AUDIENCE = new Set<string>();
+const WARNED_UNREAD = new Set<string>();
+
+/** Warn once per slug about an Audience value on a site that is not set to read one. Warning only. */
+function warnUnreadAudience(d: Record<string, unknown> | null | undefined, slug: string): void {
+    if (!d || WARNED_UNREAD.has(slug)) return;
+    for (const key of Object.keys(d)) {
+        if (key.toLowerCase() !== "audience") continue;
+        const v = d[key];
+        if (v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0)) continue;
+        if (WARNED_UNREAD.size >= 200) WARNED_UNREAD.clear();
+        WARNED_UNREAD.add(slug);
+        console.warn(`pages: "${slug}" has an Audience value, but pageFields.audience is not set, so the page is public. Gate it with audiencePaths, or set pageFields: { audience: "Audience" }.`);
+        return;
+    }
+}
+
+/**
+ * Role names from a list or a comma separated string, trimmed, with blanks and repeats left out.
+ * Missing, empty and `[]` are public. A value that is present but not a list of names (a number, an
+ * object, a list holding one, only blanks) closes the page, with one warning per slug.
+ */
+function roleNames(value: unknown, slug: string): string[] {
+    if (value === undefined || value === null || value === "") return [];
+    if (Array.isArray(value) && value.length === 0) return [];
+    const parts = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : null;
+    const bad = parts === null || (Array.isArray(value) && parts.some((p) => typeof p !== "string"));
+    const names = bad ? [] : (parts as string[]).flatMap((p) => (p.trim() !== "" ? [p.trim()] : []));
+    if (names.length === 0) {
+        if (!WARNED_AUDIENCE.has(slug)) {
+            if (WARNED_AUDIENCE.size >= 200) WARNED_AUDIENCE.clear();
+            WARNED_AUDIENCE.add(slug);
+            console.warn(`pages: the audience of the page "${slug}" is not a list of role names, so the page is closed to everyone`);
+        }
+        return [CLOSED_ROLE];
+    }
+    return [...new Set(names)];
+}
+
 export function toPage(config: PressConfig, c: PublicContent): Page {
     const d = c.data;
     const f = config.pageFields;
+    const slug = slugOf(c, f.slug);
+    if (!f.audience) warnUnreadAudience(d as Record<string, unknown> | undefined, slug);
     return {
         id: c.id,
-        slug: slugOf(c, f.slug),
+        slug,
         title: str(field(d, f.title)) || (typeof c.seo?.title === "string" ? c.seo.title.trim() : "") || config.labels.untitled,
         summary: str(field(d, f.summary)) || undefined,
         body: str(field(d, f.body)),
         blocks: field(d, f.blocks),
         hideTitle: field(d, f.hideTitle) === true,
+        audience: f.audience ? roleNames(field(d, f.audience), slug) : [],
         seo: c.seo ?? undefined,
         content: c,
     };
@@ -358,7 +450,44 @@ function breadcrumbs(raw: unknown): Breadcrumb[] {
 export async function getNavigation(config: PressConfig): Promise<NavItem[]> {
     if (config.pages === undefined) return [];
     const tree = await navigationTree(config);
-    return tree ? navItems(tree.items, 0, { left: NAV_MAX_ITEMS }) : [];
+    const items = tree ? navItems(tree.items, 0, { left: NAV_MAX_ITEMS }) : [];
+    return config.pageFields.audience || config.audiencePaths ? withoutClosedPages(config, items) : items;
+}
+
+/*
+ * The menu body carries no audience, so each page is read to learn it. Those reads are the same
+ * cached ones the page route makes. A page that names an audience is left out, with everything
+ * under it; a page that cannot be read is left out too,
+ * since showing its title is the leak this prevents.
+ */
+const NAV_READ_BATCH = 10;
+
+async function withoutClosedPages(config: PressConfig, items: NavItem[]): Promise<NavItem[]> {
+    const out: NavItem[] = [];
+    for (let i = 0; i < items.length; i += NAV_READ_BATCH) {
+        const batch = items.slice(i, i + NAV_READ_BATCH);
+        const kept = await Promise.all(
+            batch.map(async (item) => {
+                let audience: string[] | null = pathAudience(config, item.path);
+                try {
+                    if (!audience) {
+                        const page = await getPageAtPath(config, item.path);
+                        // The menu comes from the Pages module tree, so a null read means delivery
+                        // will not return this page. It is left out, with its children.
+                        if (!page) return null;
+                        audience = pageAudience(config, page, item.path);
+                    }
+                } catch (e) {
+                    if (e && typeof e === "object" && "digest" in e) throw e;
+                    return null;
+                }
+                if (audience?.length) return null;
+                return { ...item, children: await withoutClosedPages(config, item.children) };
+            }),
+        );
+        for (const item of kept) if (item) out.push(item);
+    }
+    return out;
 }
 
 /** Every path in a menu, parents before their children. */

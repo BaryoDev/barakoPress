@@ -159,9 +159,25 @@ per row and the first cell becomes the link. A path that is not on this site is 
 said when there are no rows. It is one of the page's eight reads, and a collection the site lacks
 draws nothing and says so in the log.
 
-It reads the delivery API, so it shows what the content type marks Public. Sorting, search, filters,
-saved-query sources and viewer-gated tables are not part of this block yet (they need viewer sessions,
-#7, and a paged query endpoint in barakoCMS).
+It reads the delivery API, so it shows what the content type marks Public. Sorting, search, filters
+and saved-query sources are not part of this block yet (they need a paged query endpoint in
+barakoCMS).
+
+Set `readAs: "viewer"` and it reads the CMS's authenticated list, `GET /api/contents?contentType=...`,
+with the signed-in viewer's own token, so the rows are the ones that account may read. The token is
+read on the server from the `__Host-press-viewer` cookie and goes to the CMS in an `Authorization`
+header. It is not in the HTML, a prop or a response. The read carries the same `X-Tenant` as a
+public one, is never cached, and never falls back to the public read. It needs `viewerSessions` and a
+`createViewerPage` route. On `createPage`, or with no signed-in viewer, the table draws its `empty`
+text and makes no read. References are not expanded and the order is the CMS's own. The authenticated list returns no slug,
+so a `{slug}` in `rowLink` is filled with the row's id there.
+
+```json
+{ "type": "dataTable", "props": {
+    "collection": "catering-request", "readAs": "viewer", "empty": "No requests",
+    "columns": [ { "field": "Title", "label": "Request" } ]
+} }
+```
 
 ```json
 { "type": "dataTable", "props": {

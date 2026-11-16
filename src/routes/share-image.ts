@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import type { PressConfig } from "../config.js";
-import { getPageByPath } from "../cms.js";
+import { getPageByPath, narrowAudience, pageAudience, slugAudience } from "../cms.js";
 import { readEnv } from "../env.js";
 import { siteConfigOrNull, tenantVary } from "../site.js";
 
@@ -55,6 +55,13 @@ export function createShareImage(base: PressConfig) {
         if (!isSharePath(path)) return new Response("Not found", { status: 404 });
         const found = await getPageByPath(config, path).catch(() => null);
         if (!found) return new Response("Not found", { status: 404 });
+        // A gated page's title is not shared output: the same answer as a missing page.
+        // A single segment is what the slug route serves, and that route gates by slug, so the card
+        // follows it.
+        const segments = path.split("/").filter(Boolean);
+        const gate = pageAudience(config, found.page, path, found.path);
+        const roles = segments.length === 1 ? narrowAudience(slugAudience(config, segments[0]), gate) : gate;
+        if (roles.length > 0) return new Response("Not found", { status: 404 });
 
         let font: ArrayBuffer;
         try {

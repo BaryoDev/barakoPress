@@ -25,7 +25,7 @@ import { liveTheme, themeVariablesCss, type PressTheme } from "../theme.js";
 import { VariantScript } from "./theme-variants.js";
 import { lookOr, recipeLook } from "../recipes.js";
 import type { BlockRegistry } from "../blocks/schema.js";
-import { getNavigation, getPageAtPath, isChromePath, type NavItem, type Page } from "../cms.js";
+import { getNavigation, getPageAtPath, pageAudience, isChromePath, type NavItem, type Page } from "../cms.js";
 import { withoutHeaderDuplicates } from "./header-links.js";
 import { Navigation } from "./navigation.js";
 import { HeaderLink, PhoneMenu, type HeaderLinkStyles, type PhoneMenuStyles } from "./header-menu.js";
@@ -126,7 +126,9 @@ async function holdingPage(cfg: PressConfig, registry?: BlockRegistry): Promise<
     const path = cfg.holding?.path;
     if (!path || !registry) return null;
     try {
-        return await getPageAtPath(cfg, path);
+        const page = await getPageAtPath(cfg, path);
+        // Chrome is drawn for every visitor, so a page that names an audience is not chrome.
+        return page && pageAudience(cfg, page, path).length === 0 ? page : null;
     } catch (e) {
         if (e && typeof e === "object" && "digest" in e) throw e;
         return null;
@@ -175,7 +177,8 @@ function withoutChrome(cfg: PressConfig, items: NavItem[]): NavItem[] {
 async function regionPage(cfg: PressConfig, region: Region | undefined): Promise<Page | null> {
     if (!region) return null;
     try {
-        return await getPageAtPath(cfg, region.path);
+        const page = await getPageAtPath(cfg, region.path);
+        return page && pageAudience(cfg, page, region.path).length === 0 ? page : null;
     } catch (e) {
         if (e && typeof e === "object" && "digest" in e) throw e;
         const why = e instanceof Error ? e.message : String(e);

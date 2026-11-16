@@ -376,6 +376,10 @@ const filterInput = defineBlock<FilterInputProps>({
  * the server and writes it into `state`; the block draws a table and prev and next links, so paging
  * is a different URL and nothing in the browser calls the API. It reads what the delivery API
  * serves, so it shows only the fields the content type marks Public.
+ *
+ * With `readAs: "viewer"` it reads through the authenticated list with the signed-in viewer's own
+ * token instead, so the rows are the ones that account may read. That needs `viewerSessions` and
+ * `createViewerPage`. Anywhere else, or with no viewer, it draws the empty state and makes no read.
  */
 export const MAX_TABLE_COLUMNS = 12;
 
@@ -389,6 +393,7 @@ type DataTableProps = {
     caption?: string;
     previousLabel?: string;
     nextLabel?: string;
+    readAs?: string;
     state?: string;
 };
 
@@ -444,6 +449,7 @@ function dataTable(config: PressConfig): BlockDefinition {
             { name: "caption", kind: "text", label: "Caption, for a screen reader" },
             { name: "previousLabel", kind: "text", label: "Previous label" },
             { name: "nextLabel", kind: "text", label: "Next label" },
+            { name: "readAs", kind: "select", label: "Read as", options: ["public", "viewer"], bindable: false },
             // Written by the binder, never by an editor.
             { name: "state", kind: "text", label: "Table state", bindable: false },
         ],
