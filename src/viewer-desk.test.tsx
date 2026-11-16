@@ -427,6 +427,21 @@ describe("audiencePaths on the slug route", () => {
     it("leaves the slug out of the static params", async () => {
         expect(await createPageStaticParams(slugged)()).toEqual([{ slug: "about" }]);
     });
+
+    it("narrows the page's own roles and never replaces them", async () => {
+        const both = defineConfig({ ...slugged, pageFields: { audience: "Audience" } });
+        addPage("desk", { Audience: ["Owner"], Blocks: [text] });
+        // The slug grants Front of house, the page grants Owner: no role in common, so nobody.
+        jar[VIEWER_COOKIE] = ANA_TOKEN;
+        await expect(html(createViewerPage(both)(args("desk")))).rejects.toThrow("NEXT_NOT_FOUND");
+        jar[VIEWER_COOKIE] = BEN_TOKEN;
+        await expect(html(createViewerPage(both)(args("desk")))).rejects.toThrow("NEXT_NOT_FOUND");
+        addPage("desk", { Audience: ["Owner", "Front of house"], Blocks: [text] });
+        jar[VIEWER_COOKIE] = ANA_TOKEN;
+        expect(await html(createViewerPage(both)(args("desk")))).toContain("Desk text");
+        jar[VIEWER_COOKIE] = BEN_TOKEN;
+        await expect(html(createViewerPage(both)(args("desk")))).rejects.toThrow("NEXT_NOT_FOUND");
+    });
 });
 
 describe("a gated page on the other routes", () => {

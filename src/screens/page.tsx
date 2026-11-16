@@ -10,6 +10,7 @@ import {
     getPageAtPath,
     getRedirect,
     pageAudience,
+    CLOSED_ROLE,
     pathAudience,
     slugAudience,
     isDataPath,
@@ -213,7 +214,13 @@ function audienceOf(config: PressConfig, page: Page, paths: string[], slugRoles:
         const mapped = pathAudience(config, path);
         if (mapped) return mapped;
     }
-    return slugRoles.length > 0 ? slugRoles : pageAudience(config, page, ...paths);
+    const own = pageAudience(config, page, ...paths);
+    if (slugRoles.length === 0) return own;
+    if (own.length === 0) return slugRoles;
+    // A slug match is a guess at the page's path, so it narrows the page's own roles and never
+    // replaces them. A viewer needs a role in both; none in common closes the page.
+    const both = slugRoles.filter((r) => own.includes(r));
+    return both.length > 0 ? both : [CLOSED_ROLE];
 }
 
 async function findPage(config: PressConfig, p: PageRouteParams): Promise<Found | null> {
