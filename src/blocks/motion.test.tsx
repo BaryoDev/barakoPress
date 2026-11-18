@@ -431,7 +431,21 @@ describe("the disclosure's open and close motion (#235)", () => {
         const body = registry.get("faqItem")?.preset ?? [];
 
         expect(walk(body as never)).toBe(2);
-        // A nine item ledger is then the faq, its nine items and two blocks under each.
-        expect(1 + 9 + 9 * walk(body as never)).toBe(28);
+    });
+
+    it("keeps each disclosure usable by keyboard and screen reader (markup check; the repo runs no axe)", async () => {
+        const html = await ledger([{ question: "A", open: true }, { question: "B" }, { question: "C" }]);
+        const all = html.match(/<details[\s\S]*?<\/details>/g) ?? [];
+
+        expect(all).toHaveLength(3);
+        for (const d of all) {
+            // The summary is the first child, so it is the one focusable toggle and names the details.
+            expect(d).toMatch(/^<details[^>]*>\s*<summary[^>]*>[^<\s]/);
+            expect(d.match(/<summary/g)).toHaveLength(1);
+            // Nothing takes the toggle or the answer out of the tab order or the accessibility tree.
+            expect(d).not.toMatch(/tabindex="-1"|aria-hidden|<(details|summary)[^>]*role=/);
+            // The answer stays in the markup when closed, so find-in-page can reach it.
+            expect(d).toMatch(/<div data-bp-panel="">[\s\S]*About /);
+        }
     });
 });
