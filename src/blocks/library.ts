@@ -688,13 +688,31 @@ const faq: BlockPreset = {
     ],
 };
 
+/*
+ * `open` and `group` are what make a ledger: one item open at first, the others closed when another
+ * opens. A preset cannot hand a boolean down, so `open` picks between two disclosures through
+ * `showIf`, the way `hero` picks between its buttons. Only one of the two is ever rendered.
+ */
 const faqItem: BlockPreset = {
     type: "faqItem",
     label: "Question",
-    fields: [text("question", "Question", true), text("answer", "Answer", true), tone],
+    fields: [
+        text("question", "Question", true),
+        text("answer", "Answer", true),
+        { name: "open", kind: "boolean", label: "Open to begin with" },
+        text("group", "Only one open in this group"),
+        tone,
+    ],
     blocks: [
-        holding("disclosure", { label: p("question"), tone: p("tone") }, [
-            b("richText", { markdown: p("answer"), width: "full" }),
+        showIf({ value: p("open") }, [
+            holding("disclosure", { label: p("question"), tone: p("tone"), group: p("group"), open: true }, [
+                b("richText", { markdown: p("answer"), width: "full" }),
+            ]),
+        ]),
+        showIf({ value: p("open"), unless: true }, [
+            holding("disclosure", { label: p("question"), tone: p("tone"), group: p("group") }, [
+                b("richText", { markdown: p("answer"), width: "full" }),
+            ]),
         ]),
     ],
 };

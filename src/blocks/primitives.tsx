@@ -18,6 +18,7 @@ import {
     linesOf,
     motionClass,
     revealCss,
+    disclosureCss,
     rotatingCss,
     typingCss,
 } from "./motion.js";
@@ -1241,6 +1242,7 @@ const disclosure = defineBlock<DisclosureProps, "content">({
             <details
                 name={props.group}
                 open={props.open === true}
+                data-bp-disclosure=""
                 {...look(theme, props.recipe, { borderTop: `1px solid ${tone.hairline}`, padding: `${theme.space.sm} 0` })}
             >
                 <summary
@@ -1254,7 +1256,11 @@ const disclosure = defineBlock<DisclosureProps, "content">({
                 >
                     {props.label}
                 </summary>
-                <div style={{ paddingTop: theme.space.sm }}>{slots.content?.[0]}</div>
+                {/* The wrapper is what collapses; the padding sits one level in so it collapses too. */}
+                <div data-bp-panel="">
+                    <div style={{ paddingTop: theme.space.sm }}>{slots.content?.[0]}</div>
+                </div>
+                <style dangerouslySetInnerHTML={{ __html: disclosureCss() }} />
             </details>
         );
     },

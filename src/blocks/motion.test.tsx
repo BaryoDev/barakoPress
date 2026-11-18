@@ -306,3 +306,84 @@ describe("the blocks an editor is offered", () => {
         expect(bare).not.toContain("user-select:all\">Copy");
     });
 });
+
+/*
+ * The accordion of #235. `<details name>` closes the others with nothing loaded, so what is tested
+ * here is the markup that mechanism needs and the CSS that animates it. The timing itself is a
+ * browser's to draw and is checked by hand, see the issue.
+ */
+describe("the disclosure's open and close motion (#235)", () => {
+    const ledger = (items: { question: string; open?: boolean }[], group = "ledger") =>
+        page([
+            {
+                type: "faq",
+                props: {
+                    items: [
+                        items.map((i) => ({
+                            type: "faqItem",
+                            props: { question: i.question, answer: `About ${i.question}`, group, ...(i.open ? { open: true } : {}) },
+                        })),
+                    ],
+                },
+            },
+        ]);
+
+    it("animates grid-template-rows from 0fr to 1fr over .4s on the issue's easing", async () => {
+        const css = styles(await page([{ type: "disclosure", props: { label: "One", content: [[]] } }]));
+
+        expect(css).toContain("grid-template-rows:0fr");
+        expect(css).toContain("grid-template-rows:1fr");
+        expect(css).toContain("transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1)");
+        // Without this the content is cut off at once on close and the row has nothing to shrink.
+        expect(css).toContain("content-visibility .4s allow-discrete");
+    });
+
+    it("leaves a reduced-motion visitor with no motion rule at all", async () => {
+        const css = styles(await page([{ type: "disclosure", props: { label: "One", content: [[]] } }]));
+        const left = unguarded(css);
+
+        expect(left).not.toContain("transition");
+        expect(left).not.toContain("grid-template-rows");
+        expect(left).not.toContain("details-content");
+    });
+
+    it("wraps the panel so the row can collapse, and keeps a real details element", async () => {
+        const html = await page([{ type: "disclosure", props: { label: "One", content: [[]] } }]);
+
+        expect(html).toMatch(/<details[^>]*data-bp-disclosure/);
+        expect(html).toMatch(/<\/summary><div data-bp-panel="">/);
+    });
+
+    it("puts one group name on every details of a faq, so opening one closes the others", async () => {
+        const html = await ledger([{ question: "A" }, { question: "B" }, { question: "C" }]);
+
+        expect(html.match(/<details[^>]*name="ledger"/g)).toHaveLength(3);
+    });
+
+    it("opens the item that asks to be open and only that one", async () => {
+        const html = await ledger([{ question: "A", open: true }, { question: "B" }, { question: "C" }]);
+
+        expect(html.match(/<details/g)).toHaveLength(3);
+        expect(html.match(/<details[^>]*open=""/g)).toHaveLength(1);
+        expect(html).toMatch(/<details[^>]*open=""[^>]*>\s*<summary[^>]*>A</);
+    });
+
+    it("builds a nine item ledger from faq items with the first open", async () => {
+        const items = Array.from({ length: 9 }, (_, i) => ({ question: `Q${i + 1}`, open: i === 0 }));
+        const html = await ledger(items);
+
+        expect(html.match(/<details[^>]*name="ledger"/g)).toHaveLength(9);
+        expect(html.match(/<details[^>]*open=""/g)).toHaveLength(1);
+        // Closed answers are still in the markup, which is what find-in-page and a keyboard reach.
+        expect(html).toContain("About Q9");
+    });
+
+    it("leaves faq items independent when no group is given", async () => {
+        const html = await page([
+            { type: "faq", props: { items: [[{ type: "faqItem", props: { question: "A", answer: "a" } }]] } },
+        ]);
+
+        expect(html).toContain("<details");
+        expect(html).not.toContain("name=");
+    });
+});
