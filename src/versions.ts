@@ -56,7 +56,7 @@ function endpoint(ref: VersionRef): { url: string; pick: (json: unknown) => stri
             };
         case "npm":
             return {
-                url: `https://registry.npmjs.org/-/package/${ref.id.replace("/", "%2F")}/dist-tags`,
+                url: `https://registry.npmjs.org/-/package/${ref.id.replaceAll("/", "%2F")}/dist-tags`,
                 pick: (json) => text((json as { latest?: unknown })?.latest),
             };
         case "nuget":
