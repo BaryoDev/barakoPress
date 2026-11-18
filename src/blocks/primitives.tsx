@@ -1214,7 +1214,7 @@ const list = defineBlock<{ style?: string; gap?: string; recipe?: string }, "ite
     },
 });
 
-type DisclosureProps = { label: string; open?: boolean; group?: string; tone?: string; recipe?: string };
+type DisclosureProps = { label: string; open?: boolean; start?: string; group?: string; tone?: string; recipe?: string };
 
 /*
  * A labelled section that opens: the accordion shape, right for a `faq` where a reader may want two
@@ -1231,6 +1231,8 @@ const disclosure = defineBlock<DisclosureProps, "content">({
     fields: [
         { name: "label", kind: "text", label: "Label", required: true },
         { name: "open", kind: "boolean", label: "Open to begin with" },
+        // A boolean cannot be bound, so a preset that wants to hand the choice down says "open" here.
+        { name: "start", kind: "select", label: "Start", options: ["open", "closed"] },
         { name: "group", kind: "text", label: "Only one open in this group" },
         { name: "tone", label: "Tone", ...toneSelect },
         recipeField,
@@ -1239,29 +1241,31 @@ const disclosure = defineBlock<DisclosureProps, "content">({
     component: ({ props, slots, theme }) => {
         const tone = toneOf(theme, props.tone);
         return (
-            <details
-                name={props.group}
-                open={props.open === true}
-                data-bp-disclosure=""
-                {...look(theme, props.recipe, { borderTop: `1px solid ${tone.hairline}`, padding: `${theme.space.sm} 0` })}
-            >
-                <summary
-                    style={{
-                        cursor: "pointer",
-                        fontFamily: theme.fonts.heading,
-                        fontWeight: 600,
-                        fontSize: theme.text.subheading,
-                        color: tone.ink,
-                    }}
-                >
-                    {props.label}
-                </summary>
-                {/* The wrapper is what collapses; the padding sits one level in so it collapses too. */}
-                <div data-bp-panel="">
-                    <div style={{ paddingTop: theme.space.sm }}>{slots.content?.[0]}</div>
-                </div>
+            <>
                 <style dangerouslySetInnerHTML={{ __html: disclosureCss() }} />
-            </details>
+                <details
+                    name={props.group}
+                    open={props.open === true || props.start === "open"}
+                    data-bp-disclosure=""
+                    {...look(theme, props.recipe, { borderTop: `1px solid ${tone.hairline}`, padding: `${theme.space.sm} 0` })}
+                >
+                    <summary
+                        style={{
+                            cursor: "pointer",
+                            fontFamily: theme.fonts.heading,
+                            fontWeight: 600,
+                            fontSize: theme.text.subheading,
+                            color: tone.ink,
+                        }}
+                    >
+                        {props.label}
+                    </summary>
+                    {/* The wrapper is what collapses; padding on it would keep the row open, so it sits one level in. */}
+                    <div data-bp-panel="">
+                        <div style={{ paddingTop: theme.space.sm }}>{slots.content?.[0]}</div>
+                    </div>
+                </details>
+            </>
         );
     },
 });

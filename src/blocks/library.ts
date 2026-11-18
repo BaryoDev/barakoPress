@@ -672,8 +672,10 @@ const changelogList: BlockPreset = {
 /*
  * Questions that open, and what it does not do.
  *
- * No group, which is the whole difference from `tabs`: a reader comparing two answers wants both
- * open, and a tab strip takes the first one away when they open the second.
+ * No group unless an item names one, which is the difference from `tabs`: a reader comparing two
+ * answers wants both open, and a tab strip takes the first one away when they open the second. A
+ * ledger gives its items one `group`; the group is on each `faqItem` because a preset's own props
+ * do not reach the blocks in its slots.
  */
 const faq: BlockPreset = {
     type: "faq",
@@ -689,9 +691,10 @@ const faq: BlockPreset = {
 };
 
 /*
- * `open` and `group` are what make a ledger: one item open at first, the others closed when another
- * opens. A preset cannot hand a boolean down, so `open` picks between two disclosures through
- * `showIf`, the way `hero` picks between its buttons. Only one of the two is ever rendered.
+ * `start` and `group` are what make a ledger: one item open at first, the others closed when another
+ * opens. `start` is a choice and not a boolean because a preset cannot hand a boolean down, and the
+ * way round that (a `showIf` pair) cost four more blocks per item against the page budget. This is
+ * one disclosure and one richText, the same three blocks an item cost before.
  */
 const faqItem: BlockPreset = {
     type: "faqItem",
@@ -699,20 +702,13 @@ const faqItem: BlockPreset = {
     fields: [
         text("question", "Question", true),
         text("answer", "Answer", true),
-        { name: "open", kind: "boolean", label: "Open to begin with" },
+        choice("start", "Start", ["open", "closed"]),
         text("group", "Only one open in this group"),
         tone,
     ],
     blocks: [
-        showIf({ value: p("open") }, [
-            holding("disclosure", { label: p("question"), tone: p("tone"), group: p("group"), open: true }, [
-                b("richText", { markdown: p("answer"), width: "full" }),
-            ]),
-        ]),
-        showIf({ value: p("open"), unless: true }, [
-            holding("disclosure", { label: p("question"), tone: p("tone"), group: p("group") }, [
-                b("richText", { markdown: p("answer"), width: "full" }),
-            ]),
+        holding("disclosure", { label: p("question"), tone: p("tone"), group: p("group"), start: p("start") }, [
+            b("richText", { markdown: p("answer"), width: "full" }),
         ]),
     ],
 };

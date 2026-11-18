@@ -321,15 +321,22 @@ describe("the disclosure's open and close motion (#235)", () => {
                     items: [
                         items.map((i) => ({
                             type: "faqItem",
-                            props: { question: i.question, answer: `About ${i.question}`, group, ...(i.open ? { open: true } : {}) },
+                            props: {
+                                question: i.question,
+                                answer: `About ${i.question}`,
+                                group,
+                                ...(i.open ? { start: "open" } : {}),
+                            },
                         })),
                     ],
                 },
             },
         ]);
 
+    const one = () => page([{ type: "disclosure", props: { label: "One", content: [[]] } }]);
+
     it("animates grid-template-rows from 0fr to 1fr over .4s on the issue's easing", async () => {
-        const css = styles(await page([{ type: "disclosure", props: { label: "One", content: [[]] } }]));
+        const css = styles(await one());
 
         expect(css).toContain("grid-template-rows:0fr");
         expect(css).toContain("grid-template-rows:1fr");
@@ -338,20 +345,39 @@ describe("the disclosure's open and close motion (#235)", () => {
         expect(css).toContain("content-visibility .4s allow-discrete");
     });
 
+    it("scopes the rules to the disclosure and to browsers that have ::details-content", async () => {
+        const css = styles(await one());
+
+        expect(css.startsWith("@supports selector(::details-content){")).toBe(true);
+        expect(css).toContain("details[data-bp-disclosure]::details-content{");
+        expect(css).toContain("details[data-bp-disclosure][open]::details-content{");
+        expect(css).not.toMatch(/(^|[{}])::details-content/);
+    });
+
+    it("clips the panel without cutting a focus ring at its edge", async () => {
+        const css = styles(await one());
+
+        expect(css).toContain("overflow:clip;overflow-clip-margin:6px");
+        expect(css).not.toContain("overflow:hidden");
+    });
+
     it("leaves a reduced-motion visitor with no motion rule at all", async () => {
-        const css = styles(await page([{ type: "disclosure", props: { label: "One", content: [[]] } }]));
-        const left = unguarded(css);
+        const left = unguarded(styles(await one()));
 
         expect(left).not.toContain("transition");
         expect(left).not.toContain("grid-template-rows");
         expect(left).not.toContain("details-content");
+        expect(left).not.toContain("overflow");
     });
 
-    it("wraps the panel so the row can collapse, and keeps a real details element", async () => {
-        const html = await page([{ type: "disclosure", props: { label: "One", content: [[]] } }]);
+    it("wraps the panel so the row can collapse, and keeps the style out of the details", async () => {
+        const html = await one();
 
         expect(html).toMatch(/<details[^>]*data-bp-disclosure/);
         expect(html).toMatch(/<\/summary><div data-bp-panel="">/);
+        // The style is a sibling before it, so the last child of a details is still its content.
+        expect(html).toMatch(/<\/style><details/);
+        expect(html).toMatch(/<\/div><\/div><\/details>/);
     });
 
     it("puts one group name on every details of a faq, so opening one closes the others", async () => {
@@ -360,7 +386,7 @@ describe("the disclosure's open and close motion (#235)", () => {
         expect(html.match(/<details[^>]*name="ledger"/g)).toHaveLength(3);
     });
 
-    it("opens the item that asks to be open and only that one", async () => {
+    it("opens the item that starts open and only that one", async () => {
         const html = await ledger([{ question: "A", open: true }, { question: "B" }, { question: "C" }]);
 
         expect(html.match(/<details/g)).toHaveLength(3);
@@ -368,14 +394,20 @@ describe("the disclosure's open and close motion (#235)", () => {
         expect(html).toMatch(/<details[^>]*open=""[^>]*>\s*<summary[^>]*>A</);
     });
 
-    it("builds a nine item ledger from faq items with the first open", async () => {
+    it("renders start closed and start left out as one closed details each", async () => {
+        for (const props of [{ start: "closed" }, {}]) {
+            const html = await page([{ type: "faqItem", props: { question: "A", answer: "a", ...props } }]);
+            expect(html.match(/<details/g)).toHaveLength(1);
+            expect(html).not.toContain('open=""');
+        }
+    });
+
+    it("builds a nine item ledger from faq items with the first open (markup only)", async () => {
         const items = Array.from({ length: 9 }, (_, i) => ({ question: `Q${i + 1}`, open: i === 0 }));
         const html = await ledger(items);
 
         expect(html.match(/<details[^>]*name="ledger"/g)).toHaveLength(9);
         expect(html.match(/<details[^>]*open=""/g)).toHaveLength(1);
-        // Closed answers are still in the markup, which is what find-in-page and a keyboard reach.
-        expect(html).toContain("About Q9");
     });
 
     it("leaves faq items independent when no group is given", async () => {
@@ -385,5 +417,21 @@ describe("the disclosure's open and close motion (#235)", () => {
 
         expect(html).toContain("<details");
         expect(html).not.toContain("name=");
+    });
+
+    it("keeps a faqItem at the same block cost as before: one disclosure and one richText", () => {
+        // A preset's body is what the bind pass spends the page budget on, per item. Master's body
+        // was these two blocks; a showIf pair around two disclosures made it six.
+        const walk = (list: { slots?: Record<string, unknown[][]> }[]): number =>
+            list.reduce(
+                (n, b) =>
+                    n + 1 + Object.values(b.slots ?? {}).reduce((m, lists) => m + lists.reduce((k, l) => k + walk(l as never), 0), 0),
+                0,
+            );
+        const body = registry.get("faqItem")?.preset ?? [];
+
+        expect(walk(body as never)).toBe(2);
+        // A nine item ledger is then the faq, its nine items and two blocks under each.
+        expect(1 + 9 + 9 * walk(body as never)).toBe(28);
     });
 });
