@@ -337,6 +337,7 @@ describe("createBlockRegistry", () => {
             "recordPanel",
             "transitionButton",
             "howBuilt",
+            "versionBadge",
         ]);
     });
 

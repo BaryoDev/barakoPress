@@ -71,6 +71,7 @@ one to look different saves its own under the same name and that one wins.
 | `codeTabs` | A snippet to run, with the other ways behind it | heading, body, code, language, selectLabel, copiedLabel, tone, padding, width, items |
 | `progressList` | How far along each entry of a collection is | heading, collection, filterField, filterValue, empty, tone, padding, width |
 | `changelogList` | Release entries, with the word for the kind of release | heading, collection, filterField, filterValue, empty, tone, padding, width |
+| `versionBadge` | The current version of a package or release, read from its registry | source, id, label |
 | `faq` | Questions, all openable at once | heading, body, tone, padding, width, items |
 | `map` | An embedded map, held to `embedHosts` | src, title, heading, aspect, tone, padding |
 | `stat` | One figure and its label | value, label, align, motion |
@@ -108,6 +109,66 @@ closed and open issues, as a GitHub milestone does, needs a field holding the to
 `progressBar` placed on its own takes `remaining` in place of `total`. `changelogList` does not group by itself, because grouping means knowing which field holds
 the kind and that is the tenant's field name. One band per kind with `filterField` and `filterValue`
 is the grouping, and the chip on each entry is the option's own word.
+
+## Synced versions
+
+`versionBadge` shows the latest version of a package or release, so no page types one. `source` is
+`nuget`, `npm` or `github`, and `id` is the package name, or `owner/repo` for github. `label` is the
+words beside the version. The badge carries the time of the last check in its tooltip, and the same
+words are in the page for a screen reader.
+
+Each source is a public endpoint and none takes a token. github is the unauthenticated
+latest-release endpoint and gives the release tag. npm is the registry's `latest` dist-tag. nuget is
+the flat container's version list, and gives the newest version that is not a prerelease.
+
+A value is read once per window, `synced.revalidateSeconds`, which is an hour unless the config says
+otherwise. Every good read is also written to a snapshot file, in `synced.snapshotDir` (default
+`.next/cache/press-synced` under the working directory). When a registry cannot be reached, the
+badge shows the last good value with its original check time. With no value ever read, it shows the
+label alone, and with no label it shows nothing. It never fails the page. A snapshot that cannot be
+written, on a read-only filesystem for example, is skipped.
+
+`richText` also fills version tokens: `{cms.Version}` in the markdown becomes the version the config
+maps that name to. The names are config, `synced.tokens`, each one a `source` and an `id`:
+
+```ts
+defineConfig({
+    synced: {
+        tokens: {
+            "vm.Version": { source: "github", id: "owner/repo" },
+            "module.Version": { source: "nuget", id: "Example.Package" },
+        },
+    },
+});
+```
+
+The engine defines no tokens, so a site that lists none gets none. The reference deployment's
+`press.config.ts` lists `cms.Version`, `brew.Version`, `press.Version` and `vm.Version`.
+`module.Version` is not listed there because no single package is the module: a site that wants it
+maps it to the package it means.
+
+Tokens are filled in prose only. A token inside a fenced block, a code span, a link or image
+destination, an autolink or a reference definition stays as written, so a page can show the syntax.
+`\{name}` renders as the literal `{name}`, and `{{...}}` is a binding and is left alone. A name the
+config does not list is left as typed, `{name}`. A listed name with no value yet is dropped from the
+text, so a page never prints "undefined". A value is escaped, so a version with markdown characters
+in it reads as text. A registry value has its newlines and edge whitespace removed first.
+
+Two things in markdown are read as prose and not skipped: a fenced block inside a blockquote or a
+list item, and an indented code block. Markdown longer than 100,000 characters is returned
+unchanged, with no token filled.
+
+NuGet gives the newest version that is not a prerelease. When a package has only prereleases, the
+newest of those is what it shows. Ids are checked before a request is made: no segment made only of
+dots, a first character that is a letter or digit (NuGet), and a length cap (npm 214, github and
+NuGet 100 per side). A registry that answers 429, or 403 with `x-ratelimit-remaining: 0` or a `retry-after`
+header, is left alone for as long as it asks, within the window and at least a minute, and the last
+good value stands in meanwhile. Any other 403 is an ordinary failure and waits a minute.
+
+The request carries `next.revalidate` for the window, so Next caches it and pages stay static. The
+check time is the response's `Date` header, so a cached reply keeps the time it was first read, and
+the value is read again once that is older than the window. A kept value stamped more than five
+minutes ahead of the clock is treated as stale.
 
 ## Plugin packages
 
