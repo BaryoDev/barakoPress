@@ -18,6 +18,7 @@ vi.mock("next/link", () => ({
 
 const { defineConfig } = await import("../config.js");
 const { forgetInProcessStore } = await import("../store.js");
+const { MAX_MARKDOWN, withVersionTokens } = await import("../version-tokens.js");
 const { createBlockRegistry } = await import("./registry.js");
 const { BlockList } = await import("./render.js");
 const { resolveBlocks } = await import("./schema.js");
@@ -271,3 +272,57 @@ describe("version tokens in richText", () => {
     });
 });
 
+describe("the token scanner on markdown source", () => {
+    // A filled value is markdown-escaped, so 0.18.1 reads 0\.18\.1 here.
+    const FILLED = "0\\.18\\.1";
+    const fill = (md: string) => withVersionTokens(configFor(), md);
+
+    it("returns a 200k line of angle brackets unchanged, past the length cap", async () => {
+        online();
+        const md = `${"<".repeat(200_000)} {press.Version}`;
+        expect(md.length).toBeGreaterThan(MAX_MARKDOWN);
+        expect(await fill(md)).toBe(md);
+    });
+
+    it("returns a 200k line of backticks unchanged, past the length cap", async () => {
+        online();
+        const md = `${"`".repeat(200_000)} {press.Version}`;
+        expect(await fill(md)).toBe(md);
+    });
+
+    it("scans a long line under the cap and still fills the token after it", async () => {
+        online();
+        const angles = `${"<".repeat(90_000)} {press.Version}`;
+        expect(await fill(angles)).toBe(`${"<".repeat(90_000)} ${FILLED}`);
+        // 45000 backtick pairs, each a span, then a token in prose.
+        const ticks = `${"`a".repeat(45_000)} {press.Version}`;
+        expect(await fill(ticks)).toBe(`${"`a".repeat(45_000)} ${FILLED}`);
+    });
+
+    it("does not open a span at an escaped backtick", async () => {
+        online();
+        expect(await fill("\\`{press.Version}\\`")).toBe("\\`" + FILLED + "\\`");
+    });
+
+    it("reads a doubled backslash as a backslash and then a live token", async () => {
+        online();
+        expect(await fill("a \\\\{press.Version}")).toBe("a \\\\" + FILLED);
+    });
+
+    it("treats a triple-backtick run that closes on its line as a span, not a fence", async () => {
+        online();
+        expect(await fill("```{press.Version}``` then {press.Version}")).toBe("```{press.Version}``` then " + FILLED);
+        expect(await fill("```inline``` next {press.Version}\nand {press.Version}")).toBe("```inline``` next " + FILLED + "\nand " + FILLED);
+    });
+
+    it("closes a code span only on a backtick run of the same length", async () => {
+        online();
+        // The single opener skips the double run and closes on the later single, so the token stays inside.
+        expect(await fill("`a ``{press.Version}`` b` c {press.Version}")).toBe("`a ``{press.Version}`` b` c " + FILLED);
+    });
+
+    it("keeps a fenced token as written and fills one after the fence", async () => {
+        online();
+        expect(await fill("```\n{press.Version}\n```\n{press.Version}")).toBe("```\n{press.Version}\n```\n" + FILLED);
+    });
+});

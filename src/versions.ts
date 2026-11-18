@@ -29,12 +29,19 @@ function validId(source: VersionSource, id: unknown): id is string {
     return id.length <= (source === "github" ? MAX_ID.github * 2 + 1 : MAX_ID[source]);
 }
 
-const text = (v: unknown): string | undefined => (typeof v === "string" && v !== "" ? v : undefined);
+/** A registry value is one line of text: newlines and edge whitespace go, and nothing left is no value. */
+const clean = (v: unknown): string | undefined => {
+    if (typeof v !== "string") return undefined;
+    const t = v.replace(/[\r\n]/g, "").trim();
+    return t === "" ? undefined : t;
+};
+const text = clean;
+const isText = (v: unknown): v is string => typeof v === "string";
 
 function newestStable(json: unknown): string | undefined {
     const versions = (json as { versions?: unknown })?.versions;
     if (!Array.isArray(versions)) return undefined;
-    const all = versions.filter((v): v is string => typeof v === "string" && v !== "");
+    const all = versions.flatMap((v) => clean(v) ?? []);
     // The list is in version order. A prerelease carries a hyphen, and only wins when nothing else exists.
     return [...all].reverse().find((v) => !v.includes("-")) ?? all.at(-1);
 }
@@ -70,7 +77,7 @@ export async function latestVersion(
 ): Promise<Synced<string> | null> {
     const found = endpoint(ref);
     if (!found) return null;
-    return syncedJson(config, { key: `${ref.source}:${ref.id.toLowerCase()}`, ...found, ...options });
+    return syncedJson(config, { check: isText, key: `${ref.source}:${ref.id.toLowerCase()}`, ...found, ...options });
 }
 
 /** The text a version token stands for, or null when it has no value yet. */

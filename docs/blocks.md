@@ -152,13 +152,23 @@ destination, an autolink or a reference definition stays as written, so a page c
 `\{name}` renders as the literal `{name}`, and `{{...}}` is a binding and is left alone. A name the
 config does not list is left as typed, `{name}`. A listed name with no value yet is dropped from the
 text, so a page never prints "undefined". A value is escaped, so a version with markdown characters
-in it reads as text.
+in it reads as text. A registry value has its newlines and edge whitespace removed first.
+
+Two things in markdown are read as prose and not skipped: a fenced block inside a blockquote or a
+list item, and an indented code block. Markdown longer than 100,000 characters is returned
+unchanged, with no token filled.
 
 NuGet gives the newest version that is not a prerelease. When a package has only prereleases, the
 newest of those is what it shows. Ids are checked before a request is made: no segment made only of
 dots, a first character that is a letter or digit (NuGet), and a length cap (npm 214, github and
-NuGet 100 per side). A registry that answers 403 or 429 is left alone for as long as it asks, within
-the window and at least a minute, and the last good value stands in meanwhile.
+NuGet 100 per side). A registry that answers 429, or 403 with `x-ratelimit-remaining: 0` or a `retry-after`
+header, is left alone for as long as it asks, within the window and at least a minute, and the last
+good value stands in meanwhile. Any other 403 is an ordinary failure and waits a minute.
+
+The request carries `next.revalidate` for the window, so Next caches it and pages stay static. The
+check time is the response's `Date` header, so a cached reply keeps the time it was first read, and
+the value is read again once that is older than the window. A kept value stamped more than five
+minutes ahead of the clock is treated as stale.
 
 ## Plugin packages
 

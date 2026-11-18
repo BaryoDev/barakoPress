@@ -114,13 +114,56 @@ describe("syncedJson", () => {
 describe("syncedJson, the rest", () => {
     const url = "https://registry.example/x";
 
-    it("passes a timeout signal and skips the Next data cache", async () => {
+    it("passes a timeout signal and asks Next to cache for the window", async () => {
         const fetch = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => new Response(JSON.stringify({ v: "1" })));
         await syncedJson(configFor({ timeoutMs: 1234 }), { key: "t", url, pick, fetch });
         const init = fetch.mock.calls[0]![1]!;
         expect(init.signal).toBeInstanceOf(AbortSignal);
-        expect(init.cache).toBe("no-store");
-        expect(init).not.toHaveProperty("next");
+        expect(init.cache).not.toBe("no-store");
+        expect(init).toHaveProperty("next", { revalidate: configFor().synced.revalidateSeconds });
+    });
+
+    it("takes checkedAt from the Date header, and from now() when it is missing or bad", async () => {
+        const dated = (date?: string) => async () =>
+            new Response(JSON.stringify({ v: "1" }), { headers: date === undefined ? {} : { date } });
+        const read = (key: string, date?: string) =>
+            syncedJson(configFor({ revalidateSeconds: 100_000 }), { key, url, pick, fetch: dated(date), now: () => 2_000_000_000_000 });
+
+        expect((await read("d1", "Wed, 21 Oct 2026 07:28:00 GMT"))?.checkedAt).toBe(Date.parse("Wed, 21 Oct 2026 07:28:00 GMT"));
+        expect((await read("d2"))?.checkedAt).toBe(2_000_000_000_000);
+        expect((await read("d3", "not a date"))?.checkedAt).toBe(2_000_000_000_000);
+    });
+
+    it("treats a snapshot stamped well in the future as stale and asks again", async () => {
+        const config = configFor({ revalidateSeconds: 3600 });
+        await syncedJson(config, { key: "future", url, pick, fetch: reply({ v: "old" }), now: () => 10 * 60 * 1000 + 5_000_000 });
+        forgetInProcessStore();
+        const fetch = vi.fn(reply({ v: "new" }));
+
+        const got = await syncedJson(config, { key: "future", url, pick, fetch, now: () => 5_000_000 });
+
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(got).toEqual({ value: "new", checkedAt: 5_000_000, stale: false });
+    });
+
+    it("keeps a stamp a little ahead of the clock as fresh", async () => {
+        const config = configFor({ revalidateSeconds: 3600 });
+        await syncedJson(config, { key: "skew", url, pick, fetch: reply({ v: "1" }), now: () => 5_000_000 + 60_000 });
+        forgetInProcessStore();
+        const fetch = vi.fn();
+        expect((await syncedJson(config, { key: "skew", url, pick, fetch, now: () => 5_000_000 }))?.stale).toBe(false);
+        expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it("ignores a snapshot whose value is not the expected type", async () => {
+        const config = configFor();
+        await syncedJson(config, { key: "typed", url, pick, fetch: reply({ v: "1" }), now: () => 1_000 });
+        const [file] = await readdir(dir);
+        await writeFile(join(dir, file!), JSON.stringify({ checkedAt: 1_000, value: { a: 1 } }));
+        forgetInProcessStore();
+        const check = (v: unknown): v is string => typeof v === "string";
+
+        expect(await syncedJson(config, { key: "typed", url, pick, check, fetch: down, now: () => 2_000 })).toBeNull();
     });
 
     it("holds off longer after a 403 that says how long, within the window", async () => {
@@ -133,7 +176,8 @@ describe("syncedJson, the rest", () => {
             syncedJson(config, { key, url, pick, fetch: limited(headers), now: () => 1_000_000 });
 
         await run("a", { "retry-after": "600" });
-        await run("b", { "x-ratelimit-reset": String(1_000 + 900) });
+        await run("b", { "x-ratelimit-remaining": "0", "x-ratelimit-reset": String(1_000 + 900) });
+        await run("e", { "x-ratelimit-remaining": "42", "x-ratelimit-reset": String(1_000 + 900) });
         await run("c", { "retry-after": "5" });
         await run("d", { "retry-after": "999999" });
 
@@ -142,6 +186,8 @@ describe("syncedJson, the rest", () => {
         expect(marker("b")).toBe(900);
         expect(marker("c")).toBe(60);
         expect(marker("d")).toBe(3600);
+        // A 403 that is not a rate limit takes the ordinary marker, whatever the reset header says.
+        expect(marker("e")).toBe(60);
     });
 
     it("does not overwrite a good snapshot with a bad reply", async () => {
@@ -237,6 +283,15 @@ describe("latestVersion", () => {
         await latestVersion(config(), { source: "npm", id: "legacy-pkg" }, { fetch });
         expect(fetch.mock.calls[0]![0]).toBe("https://registry.npmjs.org/-/package/Legacy-Pkg/dist-tags");
         expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("strips newlines and edge whitespace from a registry value", async () => {
+        const got = await latestVersion(config(), { source: "npm", id: "tidy" }, { fetch: seen({ latest: "  1.2.3\n\n# Heading\r\n" }) });
+        expect(got?.value).toBe("1.2.3# Heading");
+        const padded = await latestVersion(config(), { source: "npm", id: "pad" }, { fetch: seen({ latest: " \n " }) });
+        expect(padded).toBeNull();
+        const nuget = await latestVersion(config(), { source: "nuget", id: "Tidy.Pkg" }, { fetch: seen({ versions: ["1.0.0", " 2.0.0\n"] }) });
+        expect(nuget?.value).toBe("2.0.0");
     });
 
     it("refuses ids with dot segments, a bad first character, or too long", async () => {

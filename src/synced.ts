@@ -30,6 +30,8 @@ export interface SyncedOptions<T> {
     url: string;
     /** Turns the parsed JSON into the value kept. Throw, or return undefined, to refuse a reply. */
     pick: (json: unknown) => T | undefined;
+    /** True for a kept value of the right type. A snapshot that fails it counts as none. */
+    check?: (value: unknown) => value is T;
     /** Injected by tests. Defaults to the global fetch. */
     fetch?: typeof fetch;
     /** Injected by tests. */
@@ -72,11 +74,17 @@ function waitFor(res: Response, now: number): number | undefined {
     return reset > 0 ? Math.ceil(reset - now / 1000) : undefined;
 }
 
-function parseKept<T>(text: string | null): Kept<T> | null {
+/** Clock skew allowed before a stamp in the future counts as bad. */
+const SKEW_MS = 5 * 60 * 1000;
+
+const isFresh = (checkedAt: number, now: number, windowMs: number) => now - checkedAt < windowMs && checkedAt - now <= SKEW_MS;
+
+function parseKept<T>(text: string | null, check?: (value: unknown) => boolean): Kept<T> | null {
     if (text === null) return null;
     try {
         const kept = JSON.parse(text) as Kept<T>;
-        return kept && typeof kept.checkedAt === "number" && "value" in kept ? kept : null;
+        if (!kept || typeof kept.checkedAt !== "number" || !Number.isFinite(kept.checkedAt) || !("value" in kept)) return null;
+        return !check || check(kept.value) ? kept : null;
     } catch {
         return null;
     }
@@ -87,11 +95,11 @@ function snapshotName(key: string): string {
     return `${key.toLowerCase().replace(/[^a-z0-9._-]/g, (c) => `~${c.charCodeAt(0).toString(16)}`)}.json`;
 }
 
-async function readSnapshot<T>(config: PressConfig, key: string): Promise<Kept<T> | null> {
+async function readSnapshot<T>(config: PressConfig, key: string, check?: (value: unknown) => boolean): Promise<Kept<T> | null> {
     try {
         const [{ readFile }, { join }] = await Promise.all([import("node:fs/promises"), import("node:path")]);
         const dir = config.synced.snapshotDir ?? join(process.cwd(), DEFAULT_SNAPSHOT_DIR);
-        return parseKept<T>(await readFile(join(dir, snapshotName(key)), "utf8"));
+        return parseKept<T>(await readFile(join(dir, snapshotName(key)), "utf8"), check);
     } catch {
         return null;
     }
@@ -155,12 +163,12 @@ async function read<T>(config: PressConfig, options: SyncedOptions<T>): Promise<
     const now = options.now ?? Date.now;
     const windowMs = config.synced.revalidateSeconds * 1000;
 
-    const held = parseKept<T>(await storeGet(store, storeKey(options.key)));
-    if (held && now() - held.checkedAt < windowMs) return { ...held, stale: false };
+    const held = parseKept<T>(await storeGet(store, storeKey(options.key)), options.check);
+    if (held && isFresh(held.checkedAt, now(), windowMs)) return { ...held, stale: false };
 
     // A cold process or a build worker has no store entry but may have a file a moment old.
-    const snapshot = held ? null : await readSnapshot<T>(config, options.key);
-    if (snapshot && now() - snapshot.checkedAt < windowMs) {
+    const snapshot = held ? null : await readSnapshot<T>(config, options.key, options.check);
+    if (snapshot && isFresh(snapshot.checkedAt, now(), windowMs)) {
         await storeSet(store, storeKey(options.key), JSON.stringify(snapshot), 0);
         return { ...snapshot, stale: false };
     }
@@ -168,18 +176,23 @@ async function read<T>(config: PressConfig, options: SyncedOptions<T>): Promise<
     if ((await storeGet(store, failedKey(options.key))) === null) {
         let wait = RETRY_SECONDS;
         try {
-            // No Next data cache: the store owns the window, and checkedAt is when the registry answered.
+            // Next caches the call for the window. A cached reply keeps its Date header, so checkedAt is when the registry answered.
             const res = await (options.fetch ?? fetch)(options.url, {
                 headers: { accept: "application/json" },
                 signal: AbortSignal.timeout(config.synced.timeoutMs),
-                cache: "no-store",
-            });
+                next: { revalidate: config.synced.revalidateSeconds },
+            } as RequestInit);
             if (!res.ok) {
-                throw new Refused(`${res.status}`, res.status === 403 || res.status === 429 ? waitFor(res, now()) : undefined);
+                // A 403 is a rate limit only when it says so. Any other 403 is an ordinary failure.
+                const limited =
+                    res.status === 429 ||
+                    (res.status === 403 && (res.headers.get("x-ratelimit-remaining") === "0" || res.headers.has("retry-after")));
+                throw new Refused(`${res.status}`, limited ? waitFor(res, now()) : undefined);
             }
             const value = options.pick(await res.json());
             if (value === undefined) throw new Refused("unexpected reply");
-            const kept: Kept<T> = { value, checkedAt: now() };
+            const dated = Date.parse(res.headers.get("date") ?? "");
+            const kept: Kept<T> = { value, checkedAt: Number.isFinite(dated) ? dated : now() };
             await storeSet(store, storeKey(options.key), JSON.stringify(kept), 0);
             await writeSnapshot(config, options.key, kept);
             return { ...kept, stale: false };
