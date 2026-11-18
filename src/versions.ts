@@ -9,12 +9,25 @@ import { syncedJson, type Synced } from "./synced.js";
  * npm: the `latest` dist-tag. nuget: the flat container's version list, newest stable first.
  */
 
-/** An id is checked before it goes in a URL, so a block's prop cannot steer the request elsewhere. */
+/*
+ * An id is checked before it goes in a URL, so a block's prop cannot steer the request elsewhere:
+ * no segment made only of dots (the URL parser would collapse it), a length cap, and a first
+ * character that is not punctuation. The cap is the registry's own limit where there is one.
+ */
+const DOTS = /^\.+$/;
+const MAX_ID = { github: 100, npm: 214, nuget: 100 } as const;
 const ID: Record<VersionSource, RegExp> = {
     github: /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\/[A-Za-z0-9._-]+$/,
-    npm: /^(?:@[a-z0-9~-][a-z0-9._~-]*\/)?[a-z0-9~-][a-z0-9._~-]*$/,
-    nuget: /^[A-Za-z0-9._-]+$/,
+    npm: /^(?:@[A-Za-z0-9~-][A-Za-z0-9._~-]*\/)?[A-Za-z0-9~-][A-Za-z0-9._~-]*$/,
+    nuget: /^[A-Za-z0-9][A-Za-z0-9._-]*$/,
 };
+
+function validId(source: VersionSource, id: unknown): id is string {
+    if (typeof id !== "string" || !ID[source]?.test(id)) return false;
+    const parts = id.split("/");
+    if (parts.some((part) => DOTS.test(part) || part.length > MAX_ID[source])) return false;
+    return id.length <= (source === "github" ? MAX_ID.github * 2 + 1 : MAX_ID[source]);
+}
 
 const text = (v: unknown): string | undefined => (typeof v === "string" && v !== "" ? v : undefined);
 
@@ -27,7 +40,7 @@ function newestStable(json: unknown): string | undefined {
 }
 
 function endpoint(ref: VersionRef): { url: string; pick: (json: unknown) => string | undefined } | null {
-    if (typeof ref.id !== "string" || !ID[ref.source]?.test(ref.id)) return null;
+    if (!validId(ref.source, ref.id)) return null;
     switch (ref.source) {
         case "github":
             return {
@@ -57,7 +70,7 @@ export async function latestVersion(
 ): Promise<Synced<string> | null> {
     const found = endpoint(ref);
     if (!found) return null;
-    return syncedJson(config, { key: `${ref.source}:${ref.id}`, ...found, ...options });
+    return syncedJson(config, { key: `${ref.source}:${ref.id.toLowerCase()}`, ...found, ...options });
 }
 
 /** The text a version token stands for, or null when it has no value yet. */

@@ -124,10 +124,22 @@ describe("the versionBadge block", () => {
         expect(out).not.toContain("undefined");
     });
 
-    it("draws the label alone for a source it does not know", async () => {
-        online();
-        const out = await render(badge({ source: "pypi" }));
+    it("draws the label alone for a source it does not know, and asks nobody", async () => {
+        const fetch = vi.fn();
+        vi.stubGlobal("fetch", fetch);
+        const config = configFor();
+        const definition = createBlockRegistry(config).get("versionBadge")!;
+        const node = await definition.component({
+            props: { source: "pypi", id: "x", label: "barakoPress" },
+            slots: {},
+            theme: config.theme,
+        });
+        const out = await html(<>{node}</>);
+
+        expect(out).toContain("barakoPress");
+        expect(out).not.toContain("Last checked");
         expect(out).not.toContain("undefined");
+        expect(fetch).not.toHaveBeenCalled();
     });
 });
 
@@ -144,6 +156,15 @@ describe("the versionBadge block in /api/blocks", () => {
         expect(found?.fields.map((f) => f.name)).toEqual(["source", "id", "label"]);
         expect(found?.fields[0]).toMatchObject({ kind: "select", required: true, options: ["nuget", "npm", "github"] });
         expect(found?.fields[1]).toMatchObject({ kind: "text", required: true });
+    });
+
+    it("publishes its fields through the (config, registry) form the app mounts", async () => {
+        const config = configFor();
+        const registry = createBlockRegistry(config);
+        const res = await createBlockSchemaRoute(config, registry)(new Request("https://site.example/api/blocks"));
+        const body = (await res.json()) as { blocks: { type: string; fields: { name: string }[] }[] };
+
+        expect(body.blocks.find((b) => b.type === "versionBadge")?.fields.map((f) => f.name)).toEqual(["source", "id", "label"]);
     });
 });
 
@@ -194,4 +215,59 @@ describe("version tokens in richText", () => {
         await render(text("Plain {text} here."));
         expect(fetch).not.toHaveBeenCalled();
     });
+
+    it("returns a plain value, not a promise, for text with no configured token", async () => {
+        const config = configFor();
+        const definition = createBlockRegistry(config).get("richText")!;
+        const node = definition.component({ props: { markdown: "Plain {text} {{item.X}}." }, slots: {}, theme: config.theme });
+        expect(node).not.toBeInstanceOf(Promise);
+    });
+
+    it("leaves a token alone in a fence, a code span, a link, an image, an autolink and a definition", async () => {
+        online();
+        const md = [
+            "```",
+            "{press.Version}",
+            "```",
+            "",
+            "Use `{press.Version}` or ``a {press.Version} b``.",
+            "",
+            "[link](https://x.example/{press.Version}) and ![i](https://x.example/{press.Version}.png)",
+            "",
+            "<https://x.example/{press.Version}>",
+            "",
+            "[ref]: https://x.example/{press.Version}",
+            "",
+            "Now {press.Version}.",
+        ].join("\n");
+        const out = await render(text(md));
+
+        // Only the one in prose was filled. The rest, which a URL encoder may have reshaped, were not.
+        expect(out.match(/0\.18\.1/g)).toHaveLength(1);
+        expect(out).toContain("Now 0.18.1.");
+        expect(out).toContain("<code>{press.Version}</code>");
+    });
+
+    it("renders an escaped token as its literal text without the backslash", async () => {
+        online();
+        const out = await render(text("Write \\{press.Version} for it, shows {press.Version}."));
+        expect(out).toContain("Write {press.Version} for it, shows 0.18.1.");
+    });
+
+    it("leaves a double-brace binding alone", async () => {
+        online();
+        const out = await render(text("{{press.Version}} and {press.Version}"));
+        expect(out).toContain("{{press.Version}} and 0.18.1");
+    });
+
+    it("escapes markdown in a substituted value", async () => {
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () => new Response(JSON.stringify({ latest: "1_2*3" }))),
+        );
+        const out = await render(text("v{press.Version}"));
+        expect(out).toContain("v1_2*3");
+        expect(out).not.toContain("<em>");
+    });
 });
+

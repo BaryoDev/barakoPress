@@ -1,9 +1,9 @@
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineConfig } from "./config.js";
-import { forgetInProcessStore } from "./store.js";
+import { forgetInProcessStore, memoryStore, type PressStore } from "./store.js";
 import { syncedJson } from "./synced.js";
 import { latestVersion } from "./versions.js";
 
@@ -12,8 +12,12 @@ import { latestVersion } from "./versions.js";
  * reaches a network: every call is given a fetch.
  */
 let dir: string;
-const configFor = (extra: Record<string, unknown> = {}) =>
-    defineConfig({ site: { name: "T", url: "https://t.example" }, synced: { snapshotDir: dir, ...extra } });
+const configFor = ({ store, ...synced }: Record<string, unknown> = {}) =>
+    defineConfig({
+        site: { name: "T", url: "https://t.example" },
+        synced: { snapshotDir: dir, ...synced },
+        ...(store ? { store: store as PressStore } : {}),
+    });
 
 const reply = (body: unknown, status = 200) => async () => new Response(JSON.stringify(body), { status });
 let down: ReturnType<typeof makeDown>;
@@ -70,7 +74,8 @@ describe("syncedJson", () => {
 
     it("treats a bad status and a reply it cannot read as a failure", async () => {
         const config = configFor();
-        expect(await syncedJson(config, { key: "a", url: "u", pick, fetch: reply({}, 503) })).toBeNull();
+        // A body that would pick fine, so only the status check can refuse it.
+        expect(await syncedJson(config, { key: "a", url: "u", pick, fetch: reply({ v: "9" }, 503) })).toBeNull();
         forgetInProcessStore();
         expect(await syncedJson(config, { key: "a", url: "u", pick, fetch: reply({ other: 1 }) })).toBeNull();
     });
@@ -105,6 +110,94 @@ describe("syncedJson", () => {
     });
 });
 
+
+describe("syncedJson, the rest", () => {
+    const url = "https://registry.example/x";
+
+    it("passes a timeout signal and skips the Next data cache", async () => {
+        const fetch = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => new Response(JSON.stringify({ v: "1" })));
+        await syncedJson(configFor({ timeoutMs: 1234 }), { key: "t", url, pick, fetch });
+        const init = fetch.mock.calls[0]![1]!;
+        expect(init.signal).toBeInstanceOf(AbortSignal);
+        expect(init.cache).toBe("no-store");
+        expect(init).not.toHaveProperty("next");
+    });
+
+    it("holds off longer after a 403 that says how long, within the window", async () => {
+        const sets: [string, number][] = [];
+        const base = memoryStore();
+        const store: PressStore = { ...base, set: async (k, v, ttl) => (sets.push([k, ttl]), base.set(k, v, ttl)) };
+        const limited = (headers: Record<string, string>) => async () => new Response("{}", { status: 403, headers });
+        const config = configFor({ revalidateSeconds: 3600, store });
+        const run = (key: string, headers: Record<string, string>) =>
+            syncedJson(config, { key, url, pick, fetch: limited(headers), now: () => 1_000_000 });
+
+        await run("a", { "retry-after": "600" });
+        await run("b", { "x-ratelimit-reset": String(1_000 + 900) });
+        await run("c", { "retry-after": "5" });
+        await run("d", { "retry-after": "999999" });
+
+        const marker = (k: string) => sets.find(([key]) => key === `synced-failed:${k}`)![1];
+        expect(marker("a")).toBe(600);
+        expect(marker("b")).toBe(900);
+        expect(marker("c")).toBe(60);
+        expect(marker("d")).toBe(3600);
+    });
+
+    it("does not overwrite a good snapshot with a bad reply", async () => {
+        const config = configFor();
+        await syncedJson(config, { key: "keep", url, pick, fetch: reply({ v: "1" }), now: () => 1_000 });
+        const [file] = await readdir(dir);
+        const before = await readFile(join(dir, file!), "utf8");
+        forgetInProcessStore();
+
+        const got = await syncedJson(config, { key: "keep", url, pick, fetch: reply({ nope: 1 }), now: () => 90_000_000 });
+
+        expect(got).toEqual({ value: "1", checkedAt: 1_000, stale: true });
+        expect(await readFile(join(dir, file!), "utf8")).toBe(before);
+    });
+
+    it("names the snapshot file from the lowercased key with every odd character escaped", async () => {
+        await syncedJson(configFor(), { key: "npm:@Scope/Pkg", url, pick, fetch: reply({ v: "1" }) });
+        expect(await readdir(dir)).toEqual(["npm~3a~40scope~2fpkg.json"]);
+    });
+
+    it("makes one call for callers that arrive together", async () => {
+        const fetch = vi.fn(async () => new Response(JSON.stringify({ v: "1" })));
+        const config = configFor();
+        const all = await Promise.all([1, 2, 3].map(() => syncedJson(config, { key: "herd", url, pick, fetch })));
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(all.map((g) => g?.value)).toEqual(["1", "1", "1"]);
+    });
+
+    it("uses a fresh snapshot on a cold store without asking the source", async () => {
+        const config = configFor();
+        await syncedJson(config, { key: "cold", url, pick, fetch: reply({ v: "7" }), now: () => 10_000 });
+        forgetInProcessStore();
+        const fetch = vi.fn();
+
+        const got = await syncedJson(config, { key: "cold", url, pick, fetch, now: () => 20_000 });
+
+        expect(got).toEqual({ value: "7", checkedAt: 10_000, stale: false });
+        expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it("treats a store that throws as a miss and does not throw", async () => {
+        const broken: PressStore = {
+            get: async () => {
+                throw new Error("redis down");
+            },
+            set: async () => {
+                throw new Error("redis down");
+            },
+            delete: async () => {},
+            add: async () => false,
+        };
+        const got = await syncedJson(configFor({ store: broken }), { key: "broken", url, pick, fetch: reply({ v: "5" }) });
+        expect(got?.value).toBe("5");
+    });
+});
+
 describe("latestVersion", () => {
     const config = () => configFor();
     const seen = (body: unknown) => {
@@ -131,6 +224,37 @@ describe("latestVersion", () => {
         const got = await latestVersion(config(), { source: "nuget", id: "BarakoCMS.Client" }, { fetch });
         expect(got?.value).toBe("2.0.0");
         expect(fetch.mock.calls[0]![0]).toBe("https://api.nuget.org/v3-flatcontainer/barakocms.client/index.json");
+    });
+
+    it("returns null for a github reply with no tag and an npm reply with no latest", async () => {
+        expect(await latestVersion(config(), { source: "github", id: "a/b" }, { fetch: seen({ name: "x" }) })).toBeNull();
+        expect(await latestVersion(config(), { source: "npm", id: "pkg" }, { fetch: seen({ next: "1" }) })).toBeNull();
+    });
+
+    it("allows uppercase in an npm id and keys the read from the lowercased id", async () => {
+        const fetch = seen({ latest: "1.0.0" });
+        await latestVersion(config(), { source: "npm", id: "Legacy-Pkg" }, { fetch });
+        await latestVersion(config(), { source: "npm", id: "legacy-pkg" }, { fetch });
+        expect(fetch.mock.calls[0]![0]).toBe("https://registry.npmjs.org/-/package/Legacy-Pkg/dist-tags");
+        expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("refuses ids with dot segments, a bad first character, or too long", async () => {
+        const fetch = seen({});
+        const bad = [
+            { source: "github", id: "a/.." },
+            { source: "github", id: "../b" },
+            { source: "github", id: "a/..." },
+            { source: "nuget", id: ".." },
+            { source: "nuget", id: "." },
+            { source: "nuget", id: ".hidden" },
+            { source: "nuget", id: "a".repeat(101) },
+            { source: "npm", id: "a".repeat(215) },
+            { source: "github", id: `${"a".repeat(101)}/b` },
+            { source: "github", id: `a/${"b".repeat(101)}` },
+        ] as const;
+        for (const ref of bad) expect(await latestVersion(config(), ref, { fetch })).toBeNull();
+        expect(fetch).not.toHaveBeenCalled();
     });
 
     it("does not call out for an id that is not one", async () => {

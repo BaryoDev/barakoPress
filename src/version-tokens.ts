@@ -5,27 +5,132 @@ import { versionText } from "./versions.js";
  * `{cms.Version}` style tokens in `richText` (#232). Which names exist, and the package each one
  * means, is `synced.tokens` in the config. A name that is not configured is left as typed.
  *
+ * Only prose is touched. A token inside a fenced block, a code span, a link or image destination,
+ * an autolink or a reference definition stays as written, so a docs page can show the syntax.
+ * `\{name}` renders as the literal `{name}`, and `{{...}}` is a binding and is never read here.
+ *
  * A configured token with no value yet, a registry that was down with no snapshot, is dropped
  * rather than printed, so a page never says "undefined" or shows a bare token.
  */
 
-const TOKEN = /\{([A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*)\}/g;
+const TOKEN = /^\{([A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*)\}/;
+const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+const DEFINITION = /^ {0,3}\[[^\]]+\]:/;
+
+type Part = string | { token: string };
+
+/** The markdown cut into text to keep and the configured tokens to fill. */
+function parts(config: PressConfig, markdown: string): Part[] {
+    const out: Part[] = [];
+    let keep = "";
+    const flush = () => {
+        if (keep) out.push(keep);
+        keep = "";
+    };
+
+    let fence: string | null = null;
+    for (const line of markdown.split("\n")) {
+        const open = FENCE.exec(line);
+        if (fence !== null) {
+            keep += `${line}\n`;
+            if (open && open[1]![0] === fence[0] && open[1]!.length >= fence.length && line.trim() === open[1]) fence = null;
+            continue;
+        }
+        if (open) {
+            fence = open[1]!;
+            keep += `${line}\n`;
+            continue;
+        }
+        if (DEFINITION.test(line)) {
+            keep += `${line}\n`;
+            continue;
+        }
+
+        for (let i = 0; i < line.length; ) {
+            const c = line[i]!;
+            if (c === "`") {
+                // A span closes on a run of the same length. With none, the backticks are plain.
+                let n = 1;
+                while (line[i + n] === "`") n++;
+                const close = line.indexOf("`".repeat(n), i + n);
+                const end = close === -1 ? i + n : close + n;
+                keep += line.slice(i, end);
+                i = end;
+            } else if (c === "<") {
+                const close = line.indexOf(">", i);
+                const inner = close === -1 ? "" : line.slice(i + 1, close);
+                if (/^[A-Za-z][A-Za-z0-9+.-]*:\S*$/.test(inner)) {
+                    keep += line.slice(i, close + 1);
+                    i = close + 1;
+                } else {
+                    keep += c;
+                    i++;
+                }
+            } else if (c === "]" && line[i + 1] === "(") {
+                // A link or image destination, to its closing parenthesis.
+                let depth = 0;
+                let j = i + 1;
+                for (; j < line.length; j++) {
+                    if (line[j] === "\\") j++;
+                    else if (line[j] === "(") depth++;
+                    else if (line[j] === ")" && --depth === 0) break;
+                }
+                keep += line.slice(i, j + 1);
+                i = j + 1;
+            } else if (c === "\\" && line[i + 1] === "{") {
+                const escaped = TOKEN.exec(line.slice(i + 1));
+                if (escaped) {
+                    keep += escaped[0];
+                    i += 1 + escaped[0].length;
+                } else {
+                    keep += c;
+                    i++;
+                }
+            } else if (c === "{" && line[i + 1] === "{") {
+                const close = line.indexOf("}}", i + 2);
+                const end = close === -1 ? i + 2 : close + 2;
+                keep += line.slice(i, end);
+                i = end;
+            } else if (c === "{") {
+                const found = TOKEN.exec(line.slice(i));
+                if (found && Object.hasOwn(config.synced.tokens, found[1]!)) {
+                    flush();
+                    out.push({ token: found[1]! });
+                } else {
+                    keep += found ? found[0] : c;
+                }
+                i += found ? found[0].length : 1;
+            } else {
+                keep += c;
+                i++;
+            }
+        }
+        keep += "\n";
+    }
+    flush();
+    // A newline went after every line, including the last, which had none.
+    const last = out.length - 1;
+    if (typeof out[last] === "string") out[last] = out[last]!.slice(0, -1);
+    return out;
+}
+
+/** A value goes into markdown as text, so what markdown would read as syntax is escaped. */
+function asText(value: string): string {
+    return value.replace(/[\\`*_{}[\]()#+\-.!|<>~&]/g, "\\$&");
+}
 
 export function namesToken(config: PressConfig, markdown: string): boolean {
     if (typeof markdown !== "string" || !markdown.includes("{")) return false;
-    return [...markdown.matchAll(TOKEN)].some((m) => Object.hasOwn(config.synced.tokens, m[1]!));
+    return parts(config, markdown).some((part) => typeof part !== "string");
 }
 
 export async function withVersionTokens(config: PressConfig, markdown: string): Promise<string> {
-    const names = new Set<string>();
-    for (const m of markdown.matchAll(TOKEN)) {
-        if (Object.hasOwn(config.synced.tokens, m[1]!)) names.add(m[1]!);
-    }
+    const found = parts(config, markdown);
     const values = new Map<string, string>();
     await Promise.all(
-        [...names].map(async (name) => {
-            values.set(name, (await versionText(config, name)) ?? "");
+        [...new Set(found.flatMap((part) => (typeof part === "string" ? [] : [part.token])))].map(async (name) => {
+            values.set(name, asText((await versionText(config, name)) ?? ""));
         }),
     );
-    return markdown.replace(TOKEN, (whole, name: string) => (values.has(name) ? values.get(name)! : whole));
+    return found.map((part) => (typeof part === "string" ? part : values.get(part.token)!)).join("");
 }

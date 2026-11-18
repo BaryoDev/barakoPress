@@ -33,7 +33,6 @@ export const config = defineConfig({
       "brew.Version": { source: "github", id: "BaryoDev/barakoBrew" },
       "press.Version": { source: "npm", id: "barakopress" },
       "vm.Version": { source: "github", id: "BaryoDev/BaryoVM" },
-      "module.Version": { source: "nuget", id: "BarakoCMS.Payments" },
     },
   },
 });

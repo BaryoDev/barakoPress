@@ -143,9 +143,22 @@ defineConfig({
 ```
 
 The engine defines no tokens, so a site that lists none gets none. The reference deployment's
-`press.config.ts` lists `cms.Version`, `brew.Version`, `press.Version`, `vm.Version` and
-`module.Version`. A name the config does not list is left as typed, `{name}`. A listed name with no
-value yet is dropped from the text, so a page never prints "undefined".
+`press.config.ts` lists `cms.Version`, `brew.Version`, `press.Version` and `vm.Version`.
+`module.Version` is not listed there because no single package is the module: a site that wants it
+maps it to the package it means.
+
+Tokens are filled in prose only. A token inside a fenced block, a code span, a link or image
+destination, an autolink or a reference definition stays as written, so a page can show the syntax.
+`\{name}` renders as the literal `{name}`, and `{{...}}` is a binding and is left alone. A name the
+config does not list is left as typed, `{name}`. A listed name with no value yet is dropped from the
+text, so a page never prints "undefined". A value is escaped, so a version with markdown characters
+in it reads as text.
+
+NuGet gives the newest version that is not a prerelease. When a package has only prereleases, the
+newest of those is what it shows. Ids are checked before a request is made: no segment made only of
+dots, a first character that is a letter or digit (NuGet), and a length cap (npm 214, github and
+NuGet 100 per side). A registry that answers 403 or 429 is left alone for as long as it asks, within
+the window and at least a minute, and the last good value stands in meanwhile.
 
 ## Plugin packages
 

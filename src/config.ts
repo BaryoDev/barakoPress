@@ -804,13 +804,6 @@ export interface SyncedConfig {
     tokens?: Record<string, VersionRef>;
 }
 
-/**
- * The version tokens the engine itself defines: none. The engine serves sites that are not ours, so
- * a name like `cms.Version` must not resolve to anybody's package until a site maps it in
- * `synced.tokens`. Kept as a constant so the merge in `syncedOf` stays one rule.
- */
-export const SYNCED_TOKENS: Readonly<Record<string, VersionRef>> = {};
-
 export const DEFAULT_SYNCED = { revalidateSeconds: 3600, timeoutMs: 5000 } as const;
 
 export interface PressConfig {
@@ -1188,7 +1181,7 @@ function timeoutMs(value: number | undefined): number {
 function syncedOf(input: SyncedConfig | undefined): PressConfig["synced"] {
     const whole = (v: number | undefined, fallback: number) => (Number.isInteger(v) && v! > 0 ? v! : fallback);
     const tokens: Record<string, VersionRef> = {};
-    for (const [name, ref] of Object.entries({ ...SYNCED_TOKENS, ...input?.tokens })) {
+    for (const [name, ref] of Object.entries(input?.tokens ?? {})) {
         if (ref && VERSION_SOURCES.includes(ref.source) && typeof ref.id === "string" && ref.id !== "") {
             tokens[name] = { source: ref.source, id: ref.id };
         }
