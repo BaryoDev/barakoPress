@@ -76,8 +76,10 @@ export function milestonesBlocks(config: PressConfig): BlockDefinition[] {
                     >
                         {list.map((m, i) => {
                             const total = m.closed + m.open;
-                            const percent = total > 0 ? Math.round((m.closed / total) * 100) : 0;
-                            const due = m.due ? formatDate(config, m.due) : "";
+                            // Floored, so the text never says 100 while an issue is open.
+                            const percent = total > 0 ? Math.floor((m.closed / total) * 100) : 0;
+                            // GitHub stores the day the maintainer chose, so it is the UTC calendar day in every zone.
+                            const due = m.due ? formatDate(config, new Date(m.due).toISOString().slice(0, 10)) : "";
                             const bar = progressBar.component({
                                 props: {
                                     label: m.title,

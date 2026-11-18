@@ -129,23 +129,6 @@ badge shows the last good value with its original check time. With no value ever
 label alone, and with no label it shows nothing. It never fails the page. A snapshot that cannot be
 written, on a read-only filesystem for example, is skipped.
 
-## GitHub milestones
-
-`milestones` lists a repository's milestones, each drawn with `progressBar`. `repo` is `owner/name`,
-`state` is `open` (the default), `closed` or `all`, and `limit` is 1 to 30 (30 when unset). It reads
-GitHub's public milestones endpoint with no token, through the same window and snapshot file as
-`versionBadge`, so a GitHub outage shows the last good list, and with none it shows `empty` or
-nothing. A repo id that is not `owner/name` is refused before any request.
-
-Closed issues are the bar's `count` and open issues its `remaining`, so 3 closed and 1 open draws 75
-percent. Do not map the open count to `progressTotal`: that reads it as the whole and draws the wrong
-bar. A milestone with no issues draws 0 percent. The block adds the percent, and the closed and open
-counts and the due date when set. The due date is formatted in the site's `locale` and `timeZone`, and
-a milestone with no due date shows none.
-
-The block says no words of its own. `dueLabel`, `closedLabel` and `openLabel` are what the tenant
-wants before the date and beside the counts, and an empty one says nothing.
-
 `richText` also fills version tokens: `{cms.Version}` in the markdown becomes the version the config
 maps that name to. The names are config, `synced.tokens`, each one a `source` and an `id`:
 
@@ -187,6 +170,24 @@ The request carries `next.revalidate` for the window, so Next caches it and page
 check time is the response's `Date` header, so a cached reply keeps the time it was first read, and
 the value is read again once that is older than the window. A kept value stamped more than five
 minutes ahead of the clock is treated as stale.
+
+## GitHub milestones
+
+`milestones` lists a repository's milestones, each drawn with `progressBar`. `repo` is `owner/name`,
+`state` is `open` (the default), `closed` or `all`, and `limit` is 1 to 30 (30 when unset). A
+`state` or `limit` outside that range drops the block, the same as any block with a bad field. It reads
+GitHub's public milestones endpoint with no token, through the same window and snapshot file as
+`versionBadge`, so a GitHub outage shows the last good list, and with none it shows `empty` or
+nothing. A repo id that is not `owner/name` is refused before any request.
+
+Closed issues are the bar's `count` and open issues its `remaining`, so 3 closed and 1 open draws 75
+percent. Do not map the open count to `progressTotal`: that reads it as the whole and draws the wrong
+bar. A milestone with no issues draws 0 percent. The block adds the percent, and the closed and open
+counts and the due date when set. The due date is formatted in the site's `locale` and `timeZone`, and
+a milestone with no due date shows none.
+
+The block says no words of its own. `dueLabel`, `closedLabel` and `openLabel` are what the tenant
+wants before the date and beside the counts, and an empty one says nothing.
 
 ## Plugin packages
 

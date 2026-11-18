@@ -34,7 +34,13 @@ function toMilestone(raw: unknown): Milestone | undefined {
     return { title, due, open: count(m.open_issues), closed: count(m.closed_issues) };
 }
 
-const isMilestones = (v: unknown): v is Milestone[] => Array.isArray(v);
+const isCount = (v: unknown) => typeof v === "number" && Number.isInteger(v) && v >= 0;
+const isMilestones = (v: unknown): v is Milestone[] =>
+    Array.isArray(v) &&
+    v.every((m) => {
+        const x = m as Partial<Milestone> | null;
+        return !!x && typeof x.title === "string" && (x.due === null || typeof x.due === "string") && isCount(x.open) && isCount(x.closed);
+    });
 
 /** 1 to 30, whole. A non-number is the cap. */
 export function milestoneLimit(value: unknown): number {
