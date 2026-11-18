@@ -22,7 +22,7 @@ const ID: Record<VersionSource, RegExp> = {
     nuget: /^[A-Za-z0-9][A-Za-z0-9._-]*$/,
 };
 
-function validId(source: VersionSource, id: unknown): id is string {
+export function validId(source: VersionSource, id: unknown): id is string {
     if (typeof id !== "string" || !ID[source]?.test(id)) return false;
     const parts = id.split("/");
     if (parts.some((part) => DOTS.test(part) || part.length > MAX_ID[source])) return false;
