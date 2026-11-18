@@ -9,7 +9,7 @@
 #
 # .github/audit-allowlist.json accepts an advisory for a while: an array of
 # { "id": "GHSA-...", "package": "...", "reason": "...", "expires": "YYYY-MM-DD" }. An entry counts
-# only with an id, a reason and an expires date that is today (UTC) or later. A finding is accepted
+# only with an id, a reason and an expires date written YYYY-MM-DD that is today (UTC) or later. A finding is accepted
 # when every advisory behind it, followed through its via chain, is accepted. A missing file accepts
 # nothing. A file that is not valid JSON fails the audit. AUDIT_ALLOWLIST overrides the path.
 #
@@ -54,7 +54,8 @@ judge() {
           process.exit(1);
         }
         for (const e of list) {
-          if (e && e.id && e.reason && e.expires && String(e.expires) >= today) accepted.set(e.id, String(e.expires));
+          const exp = String(e?.expires ?? "");
+          if (e && e.id && e.reason && /^\d{4}-\d{2}-\d{2}$/.test(exp) && exp >= today) accepted.set(e.id, exp);
         }
       }
       // Every advisory id behind a package, following via through other packages.
