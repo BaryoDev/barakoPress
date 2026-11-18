@@ -59,10 +59,12 @@ export function issueListBlocks(config: PressConfig): BlockDefinition[] {
             ],
             component: async ({ props, theme }) => {
                 const limit = clampLimit(props.limit);
-                const rows = mergeIssues(await openIssues(config, { repos: props.repos, label: props.label, limit }), limit);
+                const { reads, ok } = await openIssues(config, { repos: props.repos, label: props.label });
+                const rows = mergeIssues(reads, limit);
                 const heading = props.heading?.trim();
                 const empty = props.emptyText?.trim();
-                if (rows.length === 0 && !empty) return null;
+                // No read at all is an outage or a bad id, which is not the same as nothing listed, so say nothing.
+                if (rows.length === 0 && (!empty || !ok)) return null;
 
                 const c = theme.colors;
                 const now = Date.now();
@@ -91,7 +93,9 @@ export function issueListBlocks(config: PressConfig): BlockDefinition[] {
                                         </a>
                                         <span style={{ display: "block", color: c.muted, fontSize: theme.text.small }}>
                                             <span>{row.repo.split("/")[1]}</span> <span>{`#${row.number}`}</span>{" "}
-                                            <time dateTime={new Date(row.createdAt).toISOString()}>{ageText(config.locale, row.createdAt, now)}</time>
+                                            {row.createdAt !== undefined && (
+                                                <time dateTime={new Date(row.createdAt).toISOString()}>{ageText(config.locale, row.createdAt, now)}</time>
+                                            )}
                                         </span>
                                     </li>
                                 ))}

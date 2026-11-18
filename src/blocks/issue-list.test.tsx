@@ -22,6 +22,7 @@ const { createBlockRegistry } = await import("./registry.js");
 const { BlockList } = await import("./render.js");
 const { resolveBlocks } = await import("./schema.js");
 const { createBlockSchemaRoute } = await import("../routes/block-schema.js");
+const { isRows, openIssues } = await import("../issues.js");
 
 let dir: string;
 const configFor = (locale?: string) =>
@@ -58,7 +59,7 @@ const issue = (number: number, title: string, days: number, extra: Record<string
 function serve(table: Record<string, unknown[] | number>) {
     const fn = vi.fn(async (url: string) => {
         const repo = /repos\/([^/]+\/[^/]+)\/issues/.exec(url)?.[1] ?? "";
-        const body = table[repo];
+        const body = table[repo] ?? table[repo.toLowerCase()] ?? Object.entries(table).find(([k]) => k.toLowerCase() === repo.toLowerCase())?.[1];
         if (typeof body === "number") return new Response("{}", { status: body });
         if (!body) return new Response("{}", { status: 404 });
         return new Response(JSON.stringify(body));
@@ -109,7 +110,7 @@ describe("the issueList block", () => {
     it("asks the API for open issues with the label and a page size", async () => {
         const fetch = serve({ "BaryoDev/kinspot": [] });
         await render(list({ limit: 5 }));
-        expect(fetch.mock.calls[0][0]).toBe("https://api.github.com/repos/BaryoDev/kinspot/issues?state=open&labels=known-gap&per_page=10");
+        expect(fetch.mock.calls[0][0]).toBe("https://api.github.com/repos/BaryoDev/kinspot/issues?state=open&labels=known-gap&per_page=100");
     });
 
     it("merges two repositories newest first and applies the limit after the merge", async () => {
@@ -133,13 +134,20 @@ describe("the issueList block", () => {
         expect(out).not.toContain("undefined");
     });
 
-    it("draws the snapshot when the fetch fails", async () => {
+    it("draws the snapshot when the fetch fails, after the window has passed", async () => {
         serve({ "BaryoDev/kinspot": [issue(12, "Kept issue", 3)] });
         await render(list());
 
-        offline();
+        const offlineFetch = vi.fn(async () => {
+            throw new TypeError("fetch failed");
+        });
+        vi.stubGlobal("fetch", offlineFetch);
         forgetInProcessStore();
+        const real = Date.now();
+        vi.spyOn(Date, "now").mockReturnValue(real + 2 * 3600_000);
         const out = await render(list());
+
+        expect(offlineFetch).toHaveBeenCalledTimes(1);
         expect(out).toContain("Kept issue");
         expect(out).toContain("#12");
     });
@@ -179,10 +187,92 @@ describe("the issueList block", () => {
         const fetch = serve({});
         for (const bad of ["../x", "a/..", "a/b/c", "nope", "a b/c", "-a/b", `${"a".repeat(101)}/b`]) {
             const out = await render(list({ repos: [bad], emptyText: "none" }));
-            expect(out).toContain("none");
+            // Nothing was read, which is not the same as nothing listed.
+            expect(out).not.toContain("issue-list");
         }
-        expect(await render(list({ repos: ["../x"] }))).not.toContain("issue-list");
         expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it("refuses a label with a comma or over 50 characters, with no request", async () => {
+        const fetch = serve({ "BaryoDev/kinspot": [issue(1, "x", 1)] });
+        expect(await render(list({ label: "a,b", emptyText: "none" }))).not.toContain("issue-list");
+        expect(await render(list({ label: "l".repeat(51), emptyText: "none" }))).not.toContain("issue-list");
+        expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it("draws no empty line when every read failed and nothing was kept", async () => {
+        serve({ "BaryoDev/kinspot": 500, "BaryoDev/brew": 404 });
+        const out = await render(list({ repos: ["BaryoDev/kinspot", "BaryoDev/brew"], emptyText: "Nothing listed." }));
+        expect(out).not.toContain("Nothing listed.");
+        expect(out).not.toContain("issue-list");
+    });
+
+    it("skips a null entry, a 404 repository and a repository listed twice", async () => {
+        const fetch = serve({ "BaryoDev/kinspot": [null, issue(1, "Fine", 1)], "BaryoDev/gone": 404 });
+        const out = await render(list({ repos: ["BaryoDev/gone", "BaryoDev/kinspot", "baryodev/KINSPOT"] }));
+        expect(out).toContain("Fine");
+        expect(out.match(/issue-list-row/g)).toHaveLength(1);
+        expect(fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it("keeps an issue whose date cannot be read and shows no age for it", async () => {
+        serve({ "BaryoDev/kinspot": [issue(1, "No date", 1, { created_at: "soon" }), issue(2, "Has date", 2)] });
+        const out = await render(list());
+        expect(out).toContain("No date");
+        expect(out).toContain("Has date");
+        expect(out.match(/<time/g)).toHaveLength(1);
+        expect(out.indexOf("Has date")).toBeLessThan(out.indexOf("No date"));
+    });
+
+    it("puts the real instant in the time element", async () => {
+        const created = "2026-11-10T08:30:00.000Z";
+        serve({ "BaryoDev/kinspot": [issue(1, "Dated", 1, { created_at: created })] });
+        expect(await render(list())).toContain(`dateTime="${created}"`);
+    });
+
+    it("shows the repository name as this block wrote it, not as the first read fetched it", async () => {
+        serve({ "BaryoDev/kinspot": [issue(1, "Shared", 1)] });
+        const out = await render([...list({ repos: ["BaryoDev/KinSpot"] }), ...list({ repos: ["baryodev/kinspot"] })]);
+        expect(out).toContain("<span>KinSpot</span>");
+        expect(out).toContain("<span>kinspot</span>");
+    });
+
+    it("makes two calls and two lists for two labels on one repository", async () => {
+        const fetch = vi.fn(async (url: string) =>
+            new Response(JSON.stringify(url.includes("labels=a&") ? [issue(1, "Under A", 1)] : [issue(2, "Under B", 1)])),
+        );
+        vi.stubGlobal("fetch", fetch);
+        const out = await render([...list({ label: "a" }), ...list({ label: "b" })]);
+        expect(fetch).toHaveBeenCalledTimes(2);
+        expect(out).toContain("Under A");
+        expect(out).toContain("Under B");
+    });
+
+    it("shares one call between blocks that differ only in limit, and cuts each to its own", async () => {
+        const rows = [1, 2, 3, 4, 5, 6].map((n) => issue(n, `Row ${n}`, n));
+        const fetch = serve({ "BaryoDev/kinspot": rows });
+        const out = await render([...list({ limit: 3 }), ...list({ limit: 5 })]);
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(out.match(/issue-list-row/g)).toHaveLength(8);
+    });
+
+    it("reads at most ten repositories when given more, and a stored list of eleven hides the block", async () => {
+        const fetch = serve({});
+        const repos = Array.from({ length: 11 }, (_, i) => `o/r${i}`);
+        await openIssues(configFor(), { repos, label: "x" });
+        expect(fetch).toHaveBeenCalledTimes(10);
+
+        fetch.mockClear();
+        expect(await render(list({ repos, emptyText: "none" }))).not.toContain("issue-list");
+        expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it("refuses a kept value with a link off github.com or a number that is not an integer", () => {
+        const row = { repo: "o/r", title: "t", url: "https://github.com/o/r/issues/1", number: 1 };
+        expect(isRows([row])).toBe(true);
+        expect(isRows([{ ...row, url: "javascript:alert(1)" }])).toBe(false);
+        expect(isRows([{ ...row, number: 1.5 }])).toBe(false);
+        expect(isRows([{ ...row, number: "1" }])).toBe(false);
     });
 
     it("skips a bad id and still reads the good one", async () => {
@@ -190,14 +280,6 @@ describe("the issueList block", () => {
         const out = await render(list({ repos: ["../x", "BaryoDev/kinspot"] }));
         expect(out).toContain("Good");
         expect(fetch).toHaveBeenCalledTimes(1);
-    });
-
-    it("reads no more than ten repositories", async () => {
-        const fetch = serve({});
-        const repos = Array.from({ length: 10 }, (_, i) => `o/r${i}`);
-        // The field itself allows ten entries, so the eleventh is refused by the schema before it renders.
-        await render(list({ repos: [...repos, "o/extra"] }));
-        expect(fetch.mock.calls.length).toBeLessThanOrEqual(10);
     });
 
     it("draws a title that contains HTML as text", async () => {

@@ -6,10 +6,10 @@ import { IconGlyph, PROSE_CLASS, primitiveBlocks } from "./primitives.js";
 import { dataBlocks } from "./data.js";
 import { recordBlocks } from "./record.js";
 import { howBuiltBlocks } from "./how-built.js";
+import { issueListBlocks } from "./issue-list.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
 import { siteBlocks } from "./site-blocks.js";
 import { treeBlocks } from "./tree-blocks.js";
-import { issueListBlocks } from "./issue-list.js";
 import { versionBadgeBlocks } from "./version-badge.js";
 import { milestonesBlocks } from "./milestones.js";
 

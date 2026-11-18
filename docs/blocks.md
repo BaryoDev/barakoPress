@@ -206,8 +206,19 @@ no request. Titles are written by anyone, so they are drawn as text and never as
 
 The engine picks no words. `emptyText` is the line shown when nothing is listed, for example
 "Nothing listed.". Left unset, an empty list draws nothing, not even the heading. Reads go through the
-same window and snapshot file as the version badge, one key per repository, label and size, with no
-token.
+same window and snapshot file as the version badge, one key per repository and label, with no
+token. Every read asks for the first 100 issues and the cut to `limit` happens afterwards, so blocks
+that differ only in `limit` share one call. There is no paging past 100: a repository with more than
+100 open issues and pull requests under that label shows the newest of the first page only.
+
+GitHub allows 60 unauthenticated calls an hour per address, and each repository and label pair is one
+call per window, so a page with many repositories spends that budget quickly. A repository that is
+rate limited shows its last good rows. When no repository could be read and nothing was kept, the
+block draws nothing, `emptyText` included, because that line means "read, and there are none".
+
+A `limit` outside 1 to 50, or more than 10 `repos`, hides the block, the same as any block whose field
+is out of range. A `label` is at most 50 characters and cannot contain a comma. An issue whose date
+cannot be read is listed without an age.
 
 ## Plugin packages
 
