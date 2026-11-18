@@ -160,7 +160,7 @@ describe("the milestones block", () => {
         expect(milestoneLimit("abc")).toBe(30);
         expect(milestoneLimit(7.9)).toBe(7);
         const fetch = vi.fn(async (_url: string) => new Response("[]"));
-        await repoMilestones(configFor(), "a/b", "open", 500, { fetch });
+        await repoMilestones(configFor(), "a/b", "open", 500, { fetch: fetch as unknown as typeof globalThis.fetch });
         expect(fetch.mock.calls[0][0]).toBe("https://api.github.com/repos/a/b/milestones?state=open&per_page=30");
     });
 
