@@ -339,6 +339,7 @@ describe("createBlockRegistry", () => {
             "howBuilt",
             "versionBadge",
             "milestones",
+            "issueList",
         ]);
     });
 
