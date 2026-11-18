@@ -773,6 +773,46 @@ export interface OptionStyle {
     label?: string;
 }
 
+/** Where a published version can be read from. All three are public endpoints, no token. */
+export const VERSION_SOURCES = ["nuget", "npm", "github"] as const;
+export type VersionSource = (typeof VERSION_SOURCES)[number];
+
+/** One package or release: the registry and the id it is known by there (`owner/repo` for github). */
+export interface VersionRef {
+    source: VersionSource;
+    id: string;
+}
+
+/**
+ * Values synced from a public registry rather than typed (#232). The `versionBadge` block and the
+ * tokens in `richText` read them through one cache, which #233 and #234 reuse.
+ */
+export interface SyncedConfig {
+    /** Seconds a fetched value is reused before the registry is asked again. Default 3600. */
+    revalidateSeconds?: number;
+    /** How long one registry call may take before the last good value stands in. Default 5000. */
+    timeoutMs?: number;
+    /**
+     * Where the last good value of each read is written, so a registry outage cannot fail a build.
+     * Default `.next/cache/press-synced` under the working directory. A write that fails is ignored.
+     */
+    snapshotDir?: string;
+    /**
+     * Names usable in `richText` as `{name}`, each mapped to a package. This is the whole list: the
+     * engine defines none.
+     */
+    tokens?: Record<string, VersionRef>;
+}
+
+/**
+ * The version tokens the engine itself defines: none. The engine serves sites that are not ours, so
+ * a name like `cms.Version` must not resolve to anybody's package until a site maps it in
+ * `synced.tokens`. Kept as a constant so the merge in `syncedOf` stays one rule.
+ */
+export const SYNCED_TOKENS: Readonly<Record<string, VersionRef>> = {};
+
+export const DEFAULT_SYNCED = { revalidateSeconds: 3600, timeoutMs: 5000 } as const;
+
 export interface PressConfig {
     types: TypeNames;
     fields: FieldMap;
@@ -786,6 +826,9 @@ export interface PressConfig {
     backstopSeconds: number;
     /** How long a read from the CMS may take before it counts as failed and the last good answer stands in. */
     cmsTimeoutMs: number;
+    /** Registry values the `versionBadge` block and the `richText` version tokens read (#232). */
+    synced: Required<Pick<SyncedConfig, "revalidateSeconds" | "timeoutMs">> &
+        Pick<SyncedConfig, "snapshotDir"> & { tokens: Record<string, VersionRef> };
     /** Passed to toLocaleDateString. */
     locale: string;
     /**
@@ -924,8 +967,12 @@ export type PressConfigInput = {
     sites?: Partial<SitesConfig>;
     /** Partial, so a site renaming one word keeps the English for the rest. */
     labels?: Partial<Labels>;
+    synced?: SyncedConfig;
 } & Partial<
-    Omit<PressConfig, "types" | "fields" | "pageFields" | "routes" | "site" | "pageSizes" | "theme" | "sites" | "holding" | "labels">
+    Omit<
+        PressConfig,
+        "types" | "fields" | "pageFields" | "routes" | "site" | "pageSizes" | "theme" | "sites" | "holding" | "labels" | "synced"
+    >
 >;
 
 /**
@@ -1138,6 +1185,22 @@ function timeoutMs(value: number | undefined): number {
     return Number.isInteger(value) && value! > 0 && value! <= 0xffff_ffff ? value! : 5_000;
 }
 
+function syncedOf(input: SyncedConfig | undefined): PressConfig["synced"] {
+    const whole = (v: number | undefined, fallback: number) => (Number.isInteger(v) && v! > 0 ? v! : fallback);
+    const tokens: Record<string, VersionRef> = {};
+    for (const [name, ref] of Object.entries({ ...SYNCED_TOKENS, ...input?.tokens })) {
+        if (ref && VERSION_SOURCES.includes(ref.source) && typeof ref.id === "string" && ref.id !== "") {
+            tokens[name] = { source: ref.source, id: ref.id };
+        }
+    }
+    return {
+        revalidateSeconds: whole(input?.revalidateSeconds, DEFAULT_SYNCED.revalidateSeconds),
+        timeoutMs: whole(input?.timeoutMs, DEFAULT_SYNCED.timeoutMs),
+        ...(input?.snapshotDir ? { snapshotDir: input.snapshotDir } : {}),
+        tokens,
+    };
+}
+
 export function defineConfig(
     input: PressConfigInput & ({ site: SiteIdentity } | { sites: Partial<SitesConfig> }),
 ): PressConfig {
@@ -1162,6 +1225,7 @@ export function defineConfig(
         cacheTag: input.cacheTag ?? "cms",
         backstopSeconds: input.backstopSeconds ?? 300,
         cmsTimeoutMs: timeoutMs(input.cmsTimeoutMs),
+        synced: syncedOf(input.synced),
         locale: input.locale ?? "en-GB",
         ...(validTimeZone(input.timeZone) ? { timeZone: validTimeZone(input.timeZone) } : {}),
         ...(validRobots(input.robots) ? { robots: validRobots(input.robots) } : {}),

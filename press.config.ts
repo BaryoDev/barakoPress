@@ -26,6 +26,16 @@ import { plugins } from "./press.plugins";
 export const config = defineConfig({
   sites: {},
   pages: "",
+  // The names `{cms.Version}` and the rest resolve to in richText. The engine defines none.
+  synced: {
+    tokens: {
+      "cms.Version": { source: "github", id: "BaryoDev/barakoCMS" },
+      "brew.Version": { source: "github", id: "BaryoDev/barakoBrew" },
+      "press.Version": { source: "npm", id: "barakopress" },
+      "vm.Version": { source: "github", id: "BaryoDev/BaryoVM" },
+      "module.Version": { source: "nuget", id: "BarakoCMS.Payments" },
+    },
+  },
 });
 
 /*

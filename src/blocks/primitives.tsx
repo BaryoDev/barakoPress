@@ -5,6 +5,7 @@ import type { PressConfig } from "../config.js";
 import { holdsLink, renderInlineMarkdown } from "../markdown.js";
 import { plainLiterals } from "../literal.js";
 import { recipeLook } from "../recipes.js";
+import { namesToken, withVersionTokens } from "../version-tokens.js";
 import type { PressTheme } from "../theme.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
 import { CopyButton } from "./copy-button.js";
@@ -784,24 +785,32 @@ const text = defineBlock<TextProps>({
  * Rendered markdown is a string of HTML, the one thing an inline style cannot reach, so a page that
  * holds one emits `proseCss` for this class.
  */
-const richText = defineBlock<{ markdown: string; width?: string; recipe?: string }>({
-    type: "richText",
-    label: "Rich text",
-    layer: "primitive",
-    fields: [
-        { name: "markdown", kind: "markdown", label: "Text", required: true },
-        { name: "width", kind: "select", label: "Width", options: [...WIDTHS] },
-        recipeField,
-    ],
-    component: ({ props, theme }) => (
-        <div
-            // Named first so the class stays ahead of the style in the markup, as it always was.
-            className={PROSE_CLASS}
-            {...look(theme, props.recipe, { maxWidth: widthOf(theme, props.width ?? "prose") }, {}, PROSE_CLASS)}
-            dangerouslySetInnerHTML={{ __html: renderProse(props.markdown, theme) }}
-        />
-    ),
-});
+const richText = (config: PressConfig) =>
+    defineBlock<{ markdown: string; width?: string; recipe?: string }>({
+        type: "richText",
+        label: "Rich text",
+        layer: "primitive",
+        fields: [
+            { name: "markdown", kind: "markdown", label: "Text", required: true },
+            { name: "width", kind: "select", label: "Width", options: [...WIDTHS] },
+            recipeField,
+        ],
+        component: ({ props, theme }) => {
+            const draw = (markdown: string) => (
+                <div
+                    // Named first so the class stays ahead of the style in the markup, as it always was.
+                    className={PROSE_CLASS}
+                    {...look(theme, props.recipe, { maxWidth: widthOf(theme, props.width ?? "prose") }, {}, PROSE_CLASS)}
+                    dangerouslySetInnerHTML={{ __html: renderProse(markdown, theme) }}
+                />
+            );
+            // Only text that names a configured token waits on a registry. Every other block draws
+            // synchronously, as it always did.
+            return namesToken(config, props.markdown)
+                ? withVersionTokens(config, props.markdown).then(draw)
+                : draw(props.markdown);
+        },
+    });
 
 /** A figure's browser margin is 40px each side, which no recipe meant, so it stays off under one. */
 const FIGURE: CSSProperties = { margin: 0 };
@@ -1950,7 +1959,7 @@ export function primitiveBlocks(config: PressConfig): BlockDefinition[] {
         spacer,
         divider,
         text,
-        richText,
+        richText(config),
         image,
         video,
         embed(config),
