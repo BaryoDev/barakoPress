@@ -338,6 +338,7 @@ describe("createBlockRegistry", () => {
             "transitionButton",
             "howBuilt",
             "versionBadge",
+            "milestones",
         ]);
     });
 

@@ -1614,7 +1614,7 @@ type ProgressProps = {
  * well as on the bar. Nothing usable in either form draws the label and no bar: a milestone with
  * nothing filled in should read as a milestone, not disappear.
  */
-const progressBar = defineBlock<ProgressProps>({
+export const progressBar = defineBlock<ProgressProps>({
     type: "progressBar",
     label: "Progress bar",
     layer: "primitive",
