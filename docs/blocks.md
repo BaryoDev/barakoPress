@@ -73,6 +73,7 @@ one to look different saves its own under the same name and that one wins.
 | `changelogList` | Release entries, with the word for the kind of release | heading, collection, filterField, filterValue, empty, tone, padding, width |
 | `versionBadge` | The current version of a package or release, read from its registry | source, id, label |
 | `milestones` | A repository's GitHub milestones, each on a progress bar | repo, state, limit, dueLabel, closedLabel, openLabel, empty |
+| `issueList` | Open issues with one label from public GitHub repositories | repos, label, limit, heading, emptyText |
 | `faq` | Questions, all openable at once | heading, body, tone, padding, width, items |
 | `map` | An embedded map, held to `embedHosts` | src, title, heading, aspect, tone, padding |
 | `stat` | One figure and its label | value, label, align, motion |
@@ -183,11 +184,41 @@ nothing. A repo id that is not `owner/name` is refused before any request.
 Closed issues are the bar's `count` and open issues its `remaining`, so 3 closed and 1 open draws 75
 percent. Do not map the open count to `progressTotal`: that reads it as the whole and draws the wrong
 bar. A milestone with no issues draws 0 percent. The block adds the percent, and the closed and open
-counts and the due date when set. The due date is formatted in the site's `locale` and `timeZone`, and
-a milestone with no due date shows none.
+counts and the due date when set. The due date is GitHub's calendar day, formatted in the site's `locale`
+in UTC so a site west of UTC does not show the day before. A milestone with no due date shows none.
 
 The block says no words of its own. `dueLabel`, `closedLabel` and `openLabel` are what the tenant
 wants before the date and beside the counts, and an empty one says nothing.
+
+## Issue list
+
+`issueList` lists open issues that carry one label, from one or more public GitHub repositories, so a
+list such as known gaps is the issue tracker and closing an issue removes the line. `repos` holds up
+to 10 `owner/name` entries, `label` is the label, `limit` is the most rows shown (1 to 50, default
+10), and `heading` is the words above the list. Each row is the issue title as a link, the repository
+name, the issue number and how long ago it was opened, in the site's locale. The link is the API's
+`html_url` when it is on `https://github.com/`, and is built from the repository and number otherwise.
+
+Pull requests and issues that are not open are dropped. With several repositories the rows are merged
+and sorted newest first, then cut to `limit`. A repository that cannot be reached shows its last good
+rows and does not hide the others. A `repos` entry that is not a valid `owner/name` is skipped, with
+no request. Titles are written by anyone, so they are drawn as text and never as HTML.
+
+The engine picks no words. `emptyText` is the line shown when nothing is listed, for example
+"Nothing listed.". Left unset, an empty list draws nothing, not even the heading. Reads go through the
+same window and snapshot file as the version badge, one key per repository and label, with no
+token. Every read asks for the first 100 issues and the cut to `limit` happens afterwards, so blocks
+that differ only in `limit` share one call. There is no paging past 100: a repository with more than
+100 open issues and pull requests under that label shows the newest of the first page only.
+
+GitHub allows 60 unauthenticated calls an hour per address, and each repository and label pair is one
+call per window, so a page with many repositories spends that budget quickly. A repository that is
+rate limited shows its last good rows. When no repository could be read and nothing was kept, the
+block draws nothing, `emptyText` included, because that line means "read, and there are none".
+
+A `limit` outside 1 to 50, or more than 10 `repos`, hides the block, the same as any block whose field
+is out of range. A `label` is at most 50 characters and cannot contain a comma. An issue whose date
+cannot be read is listed without an age.
 
 ## Plugin packages
 

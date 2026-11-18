@@ -6,6 +6,7 @@ import { IconGlyph, PROSE_CLASS, primitiveBlocks } from "./primitives.js";
 import { dataBlocks } from "./data.js";
 import { recordBlocks } from "./record.js";
 import { howBuiltBlocks } from "./how-built.js";
+import { issueListBlocks } from "./issue-list.js";
 import { defineBlock, type BlockDefinition } from "./schema.js";
 import { siteBlocks } from "./site-blocks.js";
 import { treeBlocks } from "./tree-blocks.js";
@@ -315,7 +316,7 @@ function collection(config: PressConfig, holding = false): BlockDefinition {
 }
 
 export function builtInBlocks(config: PressConfig): BlockDefinition[] {
-    return [...primitiveBlocks(config), ...dataBlocks(config), columns, callToAction, collection(config), ...treeBlocks(config), ...siteBlocks(config), ...recordBlocks(config), ...howBuiltBlocks(), ...versionBadgeBlocks(config), ...milestonesBlocks(config)];
+    return [...primitiveBlocks(config), ...dataBlocks(config), columns, callToAction, collection(config), ...treeBlocks(config), ...siteBlocks(config), ...recordBlocks(config), ...howBuiltBlocks(), ...versionBadgeBlocks(config), ...milestonesBlocks(config), ...issueListBlocks(config)];
 }
 
 /*
