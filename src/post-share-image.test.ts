@@ -246,7 +246,7 @@ describe("the post page's tags", () => {
     });
 
     it("advertises nothing when the site is holding", () => {
-        expect(generatedPostShareImages({ ...config, holding: true }, post())).toBeUndefined();
+        expect(generatedPostShareImages({ ...config, holding: true } as never, post())).toBeUndefined();
     });
 
     it("advertises nothing for a slug the route would refuse", () => {
