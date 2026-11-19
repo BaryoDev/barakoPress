@@ -309,8 +309,9 @@ describe("the blocks an editor is offered", () => {
 
 /*
  * The accordion of #235. `<details name>` closes the others with nothing loaded, so what is tested
- * here is the markup that mechanism needs and the CSS that animates it. The timing itself is a
- * browser's to draw and is checked by hand, see the issue.
+ * here is the markup that mechanism needs and the CSS that animates it. The behaviour in a browser
+ * (keyboard, the group closing the other item, start open, reduced motion) is checked by
+ * look/disclosure.component.pw.ts. The timing itself is a browser's to draw and is not measured.
  */
 describe("the disclosure's open and close motion (#235)", () => {
     const ledger = (items: { question: string; open?: boolean }[], group = "ledger") =>
