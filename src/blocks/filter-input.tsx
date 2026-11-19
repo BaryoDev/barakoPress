@@ -63,9 +63,12 @@ export function wireFilterInput(input: HTMLInputElement): (() => void) | undefin
             }
         }
         // A group's rows are the rows whose first block sits inside one of the group's blocks.
-        groups = [...byToken.values()].map((blocks) => ({
-            blocks,
-            rows: [...rows.values()].filter((row) => blocks.some((block) => block.contains(row.blocks[0]))),
+        // A row's block can also be one of the group's blocks; its miss is the row's own, so the group
+        // keeps to the blocks that are not rows, and the two never overwrite each other.
+        const rowBlocks = new Set([...rows.values()].flatMap((row) => row.blocks));
+        groups = [...byToken.values()].map((all) => ({
+            blocks: all.filter((block) => !rowBlocks.has(block)),
+            rows: [...rows.values()].filter((row) => all.some((block) => block.contains(row.blocks[0]))),
         }));
     };
     collect();

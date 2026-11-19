@@ -131,7 +131,17 @@ async function render() {
                         [
                             { type: "filterInput", props: hideEmptyGroups ? { hideEmptyGroups: true } : {} },
                             { type: "text", props: { value: "group {{group.key}}" } },
-                            { type: "repeat", props: { content: [[{ type: "text", props: { value: "row {{item.Title}}" } }]] } },
+                            {
+                                type: "repeat",
+                                props: {
+                                    content: [
+                                        [
+                                            { type: "text", props: { value: "row {{item.Title}}" } },
+                                            { type: "text", props: { value: "about {{item.Summary}}" } },
+                                        ],
+                                    ],
+                                },
+                            },
                         ],
                     ],
                 },

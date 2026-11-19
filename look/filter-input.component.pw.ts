@@ -309,6 +309,17 @@ test("counts only the rows of the groups that are shown", async ({ page }) => {
     expect(await visibleGroups(page)).toEqual(["group Auth"]);
 });
 
+test("keeps a missed row hidden and counts one shown row in a group that still has a match", async ({ page }) => {
+    await page.setContent(fixture.grouped);
+    const box = page.getByRole("searchbox", { name: "Filter" });
+
+    // Auth holds "tokens" in one row; the SSO row beside it is missed and stays hidden.
+    await box.fill("tokens");
+    expect(await visibleRows(page)).toEqual(["row Auth"]);
+    await expect(page.locator("[data-bp-filter-count]")).toHaveText("1 shown");
+    await expect(page.locator("[data-bp-filter-empty]")).toHaveText("");
+});
+
 test("keeps a group's heading when the box did not opt in", async ({ page }) => {
     await page.setContent(fixture.groupedOff);
     const box = page.getByRole("searchbox", { name: "Filter" });
