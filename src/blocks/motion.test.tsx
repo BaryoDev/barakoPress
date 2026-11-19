@@ -346,6 +346,15 @@ describe("the disclosure's open and close motion (#235)", () => {
         expect(css).toContain("content-visibility .4s allow-discrete");
     });
 
+    it("shows an opening panel's content at once, so Tab after Enter reaches the answer", async () => {
+        const css = styles(await one());
+        const open = css.slice(css.indexOf("[open]::details-content{"));
+
+        expect(open.slice(0, open.indexOf("}"))).toBe(
+            "[open]::details-content{grid-template-rows:1fr;transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1)",
+        );
+    });
+
     it("scopes the rules to the disclosure and to browsers that have ::details-content", async () => {
         const css = styles(await one());
 
