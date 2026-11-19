@@ -5,7 +5,8 @@
 #   image_uncompressed_mb    the layers of the image unpacked
 #   image_compressed_mb      the layers gzipped, about what a registry pull transfers
 #                            (both are read from the saved image, so the image store does not change them)
-#   startup_seconds          container start to the first 200 from a built static file
+#   startup_seconds          container start to the first 200 for a built static file (not a page
+#                            render: no page can render without a CMS in this job)
 #   memory_at_rest_mb        the server's resident memory after 60 seconds idle
 #
 # The image is the repository's Dockerfile, built with the normal layer cache, so a run after a
@@ -69,15 +70,20 @@ PORT=$(docker port "$CNAME" 3000/tcp | head -n1 | sed 's/.*://')
 BASE="http://127.0.0.1:$PORT"
 ready=""
 chunk=""
-for _ in $(seq 1 600); do
+deadline=$(( $(date +%s) + 120 ))
+while [ "$(date +%s)" -lt "$deadline" ]; do
     if [ -z "$chunk" ]; then
         chunk=$(docker exec "$CNAME" sh -c 'cd .next/static/chunks 2>/dev/null && ls *.js 2>/dev/null | head -n1' 2>/dev/null || true)
     fi
-    if [ -n "$chunk" ] && [ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/_next/static/chunks/$chunk" || true)" = "200" ]; then ready=1; break; fi
+    if [ -n "$chunk" ] && [ "$(curl -sg --max-time 2 -o /dev/null -w '%{http_code}' "$BASE/_next/static/chunks/$chunk" || true)" = "200" ]; then ready=1; break; fi
     [ "$(docker inspect -f '{{.State.Running}}' "$CNAME")" = "true" ] || { docker logs "$CNAME" 2>&1 | tail -40 >&2; fail "the server exited during startup"; }
     sleep 0.2
 done
-[ -n "$ready" ] || { docker logs "$CNAME" 2>&1 | tail -40 >&2; fail "no static file answered 200"; }
+if [ -z "$ready" ]; then
+    docker logs "$CNAME" 2>&1 | tail -40 >&2
+    [ -n "$chunk" ] || fail "no built chunk found under .next/static/chunks"
+    fail "no static file answered 200"
+fi
 startup_seconds=$(elapsed "$start" "$(now)")
 echo "ready in ${startup_seconds}s" >&2
 
