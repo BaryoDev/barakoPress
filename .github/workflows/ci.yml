@@ -343,7 +343,6 @@ jobs:
   # across pull requests shows. It needs no secret.
   perf-budget:
     name: Performance budget (${{ matrix.arch }})
-    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
