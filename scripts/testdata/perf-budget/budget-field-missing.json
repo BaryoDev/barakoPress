@@ -1,0 +1,20 @@
+{
+  "about": "budget.json with image_compressed_mb's budget field left out, which must fail rather than read as unbudgeted.",
+  "amd64": {
+    "image_uncompressed_mb": {
+      "baseline": 250.0,
+      "budget": 275
+    },
+    "image_compressed_mb": {
+      "baseline": 80.0
+    },
+    "startup_seconds": {
+      "baseline": 1.0,
+      "budget": 5
+    },
+    "memory_at_rest_mb": {
+      "baseline": 60.0,
+      "budget": 120
+    }
+  }
+}

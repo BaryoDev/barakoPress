@@ -54,6 +54,20 @@ an issue first, so nobody spends a weekend on something that then has to be turn
 
 No em dashes or en dashes anywhere, in code, comments, commits or docs. CI fails on one.
 
+## Performance budget
+
+The Performance budget job in CI builds the `Dockerfile`, starts the image on amd64 and arm64 with a
+CMS address that nothing listens on (it calls nothing, and needs no secret), and measures four
+numbers: uncompressed and compressed image size, seconds from container start to a 200 from
+a built static file, and resident memory after 60 seconds idle. `scripts/perf-budget.py` compares them with
+`perf-budget.json` and shows the baseline, this run and the budget in the job summary. A number over
+budget fails the job, a lower one shows as an improvement. The measured JSON is uploaded as the
+`perf-amd64` and `perf-arm64` artifacts on every run.
+
+If growth is deliberate, raise the budget in `perf-budget.json` and say why in the pull request.
+`scripts/test-perf-budget.sh` proves the comparison fails when it should, with no Docker.
+`scripts/perf-measure.sh <out.json>` runs the measurement locally.
+
 ## Licence
 
 barakoPress is released under [MIT](LICENSE), and your contribution ships under it. The

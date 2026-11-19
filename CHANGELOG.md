@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A Performance budget job on every pull request builds the production image, boots it with a CMS address that nothing listens on and fails when image size (uncompressed and compressed), startup to a built static file or memory at rest passes the budget in `perf-budget.json`. It runs on amd64 and arm64 and keeps the measured numbers as an artifact (#853).
 - A share image for each post (#263). Mount `createPostShareImage(config)` at
   `app/%5Fshare/post-image/[slug]/route.ts`. With `PRESS_SHARE_IMAGE_FONT` set, a post advertises
   `/_share/post-image/<slug>?v=<updated time>` in `og:image` and `twitter:image`, a 1200 by 630 card of its title and
