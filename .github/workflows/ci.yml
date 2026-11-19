@@ -335,6 +335,47 @@ jobs:
         if: failure()
         run: docker compose -f /tmp/compose.yml logs --tail 80
 
+  # Lean only stays lean if something notices weight coming back (#853). This builds the production
+  # image, boots it with a CMS address that nothing listens on, and records image size, startup to
+  # a built static file and memory at rest. Each is compared with perf-budget.json, and the summary shows the
+  # baseline, this run and the budget. Raising a budget is an edit to that file, so it is reviewed.
+  # Both architectures run because both ship. The numbers are uploaded on every run, so a slow creep
+  # across pull requests shows. It needs no secret.
+  perf-budget:
+    name: Performance budget (${{ matrix.arch }})
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Prove the budget comparison can fail
+        run: bash scripts/test-perf-budget.sh
+
+      - name: Measure the image and the running server
+        run: bash scripts/perf-measure.sh "$RUNNER_TEMP/perf.json"
+
+      - name: Compare with perf-budget.json
+        run: python3 scripts/perf-budget.py "$RUNNER_TEMP/perf.json" perf-budget.json --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the numbers
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: perf-${{ matrix.arch }}
+          path: ${{ runner.temp }}/perf.json
+          if-no-files-found: ignore
+          retention-days: 90
+
   look:
     # The look check proving it is a gate. One pair list, run twice: green against pages that match
     # the prototype on disk, red against the same pages with the hero heading in another colour, and
