@@ -312,6 +312,7 @@ type FilterInputProps = {
     label?: string;
     countLabel?: string;
     emptyLabel?: string;
+    hideEmptyGroups?: boolean;
     recipe?: string;
     inputRecipe?: string;
     state?: string;
@@ -325,6 +326,7 @@ const filterInput = defineBlock<FilterInputProps>({
         { name: "label", kind: "text", label: "The box's label and placeholder" },
         { name: "countLabel", kind: "text", label: "The live count, with {count} and {total}" },
         { name: "emptyLabel", kind: "text", label: "When nothing matched, with {query}" },
+        { name: "hideEmptyGroups", kind: "boolean", label: "Hide a group left with no rows" },
         { name: "recipe", kind: "text", label: "Style recipe, the whole box" },
         { name: "inputRecipe", kind: "text", label: "Style recipe, the text field" },
         // Written by the binder, like the filter bar's.

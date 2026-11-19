@@ -9,6 +9,9 @@
   drawn card. A post with no title keeps the site card, and a noIndex post advertises no card and its
   card route answers 404. A draft or unknown slug answers 404, and so does a font that cannot be read or drawn with. The `v` changes when the post is edited, and the image is
   cached for an hour with stale-while-revalidate, as the page card is.
+- A `filterInput` in a grouped source takes `hideEmptyGroups` (#257). The binder numbers each group in
+  `data-bp-filter-group`, and the script hides a group whose rows the typed words all missed and shows it
+  when one returns. The count ignores hidden groups. It is the box's own prop and off by default.
 - A `dataTable` that reads as the viewer takes `search`, `searchParam`, `searchLabel` and `filters` (#7). The
   search is a GET form and a filter is a link, so each is a URL. They go to the core's authenticated
   list as `search` and `filter[field][eq]`, cut to the core's limits (200 characters of search, five
