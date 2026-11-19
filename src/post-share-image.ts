@@ -39,10 +39,10 @@ export function postShareImageHref(origin: string, slug: string, version?: strin
 
 /**
  * The `og:image` list for a post: the generated card when a font is configured and the post has a
- * title and a slug and is not noIndex, else nothing, which leaves the site's card in place.
+ * title and a slug and is not noIndex, and the site is not holding, else nothing, which leaves the site's card in place.
  */
 export function generatedPostShareImages(config: PressConfig, item: Pick<Item, "slug" | "title" | "content" | "seo">): string[] | undefined {
-    if (!config.site.url || !readEnv().shareImageFont) return undefined;
+    if (config.holding || !config.site.url || !readEnv().shareImageFont) return undefined;
     if (!item.title.trim() || !isPostSlug(item.slug) || item.seo?.noIndex) return undefined;
     return [postShareImageHref(siteBaseUrl(config.site.url), item.slug, item.content?.updatedAt)];
 }

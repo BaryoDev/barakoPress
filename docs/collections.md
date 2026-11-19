@@ -434,7 +434,10 @@ export const GET = createPostShareImage(config);
 The post page then names `/_share/post-image/<slug>?v=<updated time>` in `og:image` and
 `twitter:image`. An image set in the post's SEO fields wins, then the post's cover. Only a post with neither gets the
 drawn card. A noIndex post advertises no card. A post with no title, a site with no URL
-or no font, and a site that has not mounted the route keep the site's card as before.
+or no font, and a site whose config is holding keep the site's card as before. The fallback depends only on
+those, not on whether the route is mounted: a site that sets the font must mount the route, or the
+advertised image URL answers 404. The folder is named `%5Fshare` because Next excludes a folder that
+starts with `_` from routing, and the encoded name serves `/_share/...`.
 
 - The route reads the post by slug through the same read the post page makes, so a draft, an
   unpublished post or an unknown slug answers 404, as does a post with `seo.noIndex` or a font that cannot be read or drawn with. It never draws

@@ -245,6 +245,10 @@ describe("the post page's tags", () => {
         expect(itemMetadata(post({ collection: "doctors" }), config).openGraph?.images).toBeUndefined();
     });
 
+    it("advertises nothing when the site is holding", () => {
+        expect(generatedPostShareImages({ ...config, holding: true }, post())).toBeUndefined();
+    });
+
     it("advertises nothing for a slug the route would refuse", () => {
         expect(generatedPostShareImages(config, post({ slug: "a/b" }))).toBeUndefined();
     });
