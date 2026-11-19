@@ -424,4 +424,6 @@ export { createSitemap, SITEMAP_MAX_URLS } from "./routes/sitemap.js";
 export { createRobots } from "./routes/robots.js";
 export { basePath, cookieName, cookiePath, normalizeBasePath, withBase } from "./base-path.js";
 export { createShareImage } from "./routes/share-image.js";
+export { createPostShareImage } from "./routes/post-share-image.js";
+export { POST_SHARE_IMAGE_ROUTE, postShareImageHref } from "./post-share-image.js";
 export { SHARE_IMAGE_ROUTE, shareImageHref } from "./share-image.js";

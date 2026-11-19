@@ -32,6 +32,7 @@ import { listRelatedItems } from "../related.js";
 import { readingMinutes } from "../reading-time.js";
 import { Asset, renderProse } from "../assets.js";
 import { shareImageUrl } from "../media.js";
+import { generatedPostShareImages } from "../post-share-image.js";
 import { IconGlyph } from "../blocks/primitives.js";
 import { siteConfig, type SiteParams } from "../site.js";
 import { BLOCK_PROSE_CLASS } from "../blocks/built-in.js";
@@ -709,12 +710,14 @@ export function createCollectionDetail(base: PressConfig, collection: string, op
  * returns title, description, canonical, social image and noIndex on every public response, so this
  * maps, and an editor changing the meta description in the console changes the page.
  */
-export function itemMetadata(item: Item): Metadata {
+export function itemMetadata(item: Item, config?: PressConfig): Metadata {
     const seo = item.seo;
     const title = seo?.title ?? item.title;
     const description = seo?.description ?? item.summary;
     // An inline image is not an address a crawler can fetch, so a share card never carries one.
-    const image = shareImageUrl(seo?.imageUrl) ?? shareImageUrl(item.image);
+    // A post with no image set in its SEO fields gets a drawn card when a share image font is configured, else its cover.
+    const generated = config && item.collection === POST_COLLECTION ? generatedPostShareImages(config, item) : undefined;
+    const image = shareImageUrl(seo?.imageUrl) ?? generated?.[0] ?? shareImageUrl(item.image);
 
     return {
         title,
@@ -744,7 +747,7 @@ export function createCollectionMetadata(base: PressConfig, collection: string) 
         const config = await siteConfig(base, params);
         const { slug, product } = await params;
         const item = await getItem(config, collection, slug, product);
-        return item ? itemMetadata(item) : { title: "Not found" };
+        return item ? itemMetadata(item, config) : { title: "Not found" };
     };
 }
 
