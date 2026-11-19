@@ -424,7 +424,7 @@ With `PRESS_SHARE_IMAGE_FONT` set (a ttf, otf or woff file on the server), each 
 the route beside the others:
 
 ```ts
-// app/_share/post-image/[slug]/route.ts
+// app/%5Fshare/post-image/[slug]/route.ts
 import { createPostShareImage } from "barakopress";
 import { config } from "@/press.config";
 

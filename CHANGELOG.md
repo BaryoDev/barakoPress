@@ -3,7 +3,7 @@
 ## Unreleased
 
 - A share image for each post (#263). Mount `createPostShareImage(config)` at
-  `app/_share/post-image/[slug]/route.ts`. With `PRESS_SHARE_IMAGE_FONT` set, a post advertises
+  `app/%5Fshare/post-image/[slug]/route.ts`. With `PRESS_SHARE_IMAGE_FONT` set, a post advertises
   `/_share/post-image/<slug>?v=<updated time>` in `og:image` and `twitter:image`, a 1200 by 630 card of its title and
   category. An image in the post's SEO fields wins, then the post's cover, and only a post with neither gets the
   drawn card. A post with no title keeps the site card, and a noIndex post advertises no card and its
