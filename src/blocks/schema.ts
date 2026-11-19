@@ -459,7 +459,7 @@ export interface ResolvedBlock {
      * to, with the values this row's field holds under it. A row of a source nested in another's
      * row belongs to both bars. `BlockList` writes them onto the block's wrapper.
      */
-    filters?: { id: string; values: string[]; row?: number }[];
+    filters?: { id: string; values?: string[]; row?: number; group?: number }[];
 }
 
 export interface ResolveOptions {

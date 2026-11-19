@@ -117,6 +117,10 @@ interface Filter {
     inputDrawn: boolean;
     /** The next row number, shared by every group of a grouped source. */
     rows: { next: number };
+    /** The box opted in, so each group is numbered for it to hide a group whose rows it all missed. */
+    textGroups: boolean;
+    /** The next group number. */
+    groups: { next: number };
     /** Inside one group of a grouped source, where the bar is not drawn again. */
     inGroup?: boolean;
 }
@@ -1103,7 +1107,8 @@ async function filterOf(
 ): Promise<Filter | undefined> {
     const found = (type: string) => (grouped ? content.find((block) => block.definition.type === type) : findFilterBlock(content, type));
     const bar = found(FILTER_BAR_BLOCK);
-    const text = found(FILTER_INPUT_BLOCK) !== undefined;
+    const input = found(FILTER_INPUT_BLOCK);
+    const text = input !== undefined;
     // A bar with no field offers no buttons; a box beside it still filters.
     const field = bar ? (await boundString(bar, frame.source, "field")).trim() : "";
     if (field === "" && !text) return undefined;
@@ -1126,6 +1131,9 @@ async function filterOf(
         text,
         inputDrawn: false,
         rows: { next: 0 },
+        // The box takes its own prop, so a box with no bar beside it can opt in; the bar's stays the bar's.
+        textGroups: grouped && input?.props.hideEmptyGroups === true,
+        groups: { next: 0 },
     };
 }
 
@@ -1172,6 +1180,13 @@ function offeredValues(config: PressConfig, item: Item, filter: Filter): string[
 function mark(block: ResolvedBlock, id: string, values: string[], row?: number): void {
     if (block.filters?.some((mark) => mark.id === id)) return;
     block.filters = [...(block.filters ?? []), row === undefined ? { id, values } : { id, values, row }];
+}
+
+/** Numbers a block as a group of box `id`, keeping any mark it already has under that id. */
+function markGroup(block: ResolvedBlock, id: string, group: number): void {
+    const marks = block.filters ?? [];
+    const at = marks.findIndex((mark) => mark.id === id);
+    block.filters = at < 0 ? [...marks, { id, group }] : marks.map((mark, i) => (i === at ? { ...mark, group } : mark));
 }
 
 /** Keys in the order first seen, with the ones `order` names moved to the front in that order. */
@@ -1223,6 +1238,11 @@ async function bindGroups(
         if (filter?.hideEmptyGroups) {
             const values = [...new Set(group.items.flatMap((item) => offeredValues(ctx.config, item, filter)))];
             for (const block of bound) mark(block, filter.id, values);
+        }
+        // Numbered the way a row is, so the box can tell which rows sit inside which group.
+        if (filter?.textGroups) {
+            const number = filter.groups.next++;
+            for (const block of bound) markGroup(block, filter.id, number);
         }
         out.push(...bound);
     }

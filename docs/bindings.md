@@ -357,8 +357,14 @@ the list is untouched.
 | `label` | The box's accessible name and placeholder. Default is the site's `filterInput` label (`Filter`) |
 | `countLabel` | The live count. `{count}` is the rows showing, `{total}` all of them. Default is the `filterCount` label (`{count} shown`) |
 | `emptyLabel` | The line when nothing matched. `{query}` is what was typed. Default is the `filterEmpty` label (`Nothing matches that.`) |
+| `hideEmptyGroups` | In a grouped source, hide a group whose rows the typed words all left out. Off by default |
 | `recipe`, `inputRecipe` | A style recipe for the whole box, and one for the text field, replacing the default look as a recipe does on a primitive |
 
-A group of a grouped source that is left with no visible row keeps its heading, since the text rule
-marks rows and not groups. The box is a client component, `src/blocks/filter-input.tsx`, and holds
-only an id.
+In a grouped source (`groupBy`) a group whose rows are all missed keeps its heading by default. Set
+`hideEmptyGroups` on the box to hide it. The binder then numbers each group in `data-bp-filter-group`
+(`<id>:<n>`, the way it numbers a row), and the script sets `data-bp-filter-miss` on a group's blocks
+when every row inside them is missed and clears it when one comes back. The live count ignores hidden
+groups. The prop is the box's own: a box with no bar beside it can use it, and a bar's
+`hideEmptyGroups` does not turn it on. With the prop off, or in a source with no `groupBy`, nothing
+about the markup or the behaviour changes. The box is a client component, `src/blocks/filter-input.tsx`,
+and holds only an id.

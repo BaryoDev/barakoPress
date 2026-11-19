@@ -344,7 +344,7 @@ export {
     MAX_ALL_ROWS,
     MAX_ROW_BLOCKS,
 } from "./blocks/data.js";
-export { FILTER_ATTR, FILTER_VALUES_ATTR, FILTER_CHOSEN_ATTR, FILTER_ROW_ATTR, FILTER_MISS_ATTR, filterToken } from "./blocks/filter.js";
+export { FILTER_ATTR, FILTER_VALUES_ATTR, FILTER_CHOSEN_ATTR, FILTER_ROW_ATTR, FILTER_GROUP_ATTR, FILTER_MISS_ATTR, filterToken } from "./blocks/filter.js";
 export {
     TONES,
     SPACES,
