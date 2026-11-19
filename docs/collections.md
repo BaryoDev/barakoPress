@@ -417,6 +417,42 @@ match. With no `searchPath` there is no form at all, so Enter can never reload t
 query: with script the box answers in the page, and a reader with no script gets a field that does
 nothing, not one that reloads the page and empties itself.
 
+## Share image for a post
+
+With `PRESS_SHARE_IMAGE_FONT` set (a ttf, otf or woff file on the server), each post can draw its own
+1200 by 630 card: the post's title, its category in a smaller line above, and the site's name. Mount
+the route beside the others:
+
+```ts
+// app/%5Fshare/post-image/[slug]/route.ts
+import { createPostShareImage } from "barakopress";
+import { config } from "@/press.config";
+
+export const GET = createPostShareImage(config);
+```
+
+The post page then names `/_share/post-image/<slug>?v=<updated time>` in `og:image` and
+`twitter:image`. An image set in the post's SEO fields wins, then the post's cover. Only a post with neither gets the
+drawn card. A noIndex post advertises no card. A post with no title, a site with no URL
+or no font, and a site whose config is holding keep the site's card as before. The fallback depends only on
+those, not on whether the route is mounted: a site that sets the font must mount the route, or the
+advertised image URL answers 404. The folder is named `%5Fshare` because Next excludes a folder that
+starts with `_` from routing, and the encoded name serves `/_share/...`.
+
+- The route reads the post by slug through the same read the post page makes, so a draft, an
+  unpublished post or an unknown slug answers 404, as does a post with `seo.noIndex` or a font that cannot be read or drawn with. It never draws
+  the site card in their place. The 404 and 502 carry `cache-control: no-store`.
+- The slug is checked before any lookup (letters, combining marks, digits, dot, underscore and hyphen, at most 200
+  characters) and the query is never read, so no caller input becomes text on the card.
+- The path is under `_share` because the proxy rewrites every other path of a request-time site and
+  stamps `private, no-store` on it. Under `_share` the route's own header reaches the client:
+  `public, max-age=0, s-maxage=3600, stale-while-revalidate=86400`, with `Vary` on the header that
+  picks the tenant when there is one.
+- Invalidation follows the post. The post read carries the post's cache tag, so a publish webhook
+  drops it and the next draw reads the new title. The `v` in the address is the entry's updated
+  time, so an edit changes the URL the page advertises, and a crawler or CDN that kept the old card
+  asks for a new one.
+
 ## Related posts, if the CMS has the AI module
 
 `createBlogPost` asks `BarakoCMS.AI` for the posts closest to this one and renders a band of cards

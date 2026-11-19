@@ -204,7 +204,7 @@ async function collectionMetadata(config: PressConfig, hit: { key: string; slug?
         return label ? { title: label } : {};
     }
     const item = await getItem(config, hit.key, hit.slug, hit.product);
-    return item ? itemMetadata(item) : { title: "Not found" };
+    return item ? itemMetadata(item, config) : { title: "Not found" };
 }
 
 /** A page that names roles is not shared output: only a viewer holding one of them may see it. */
