@@ -20,6 +20,8 @@ const fixture = JSON.parse(readFileSync(join(here, "filter-input-fixture.generat
     searchFirst: string;
     filterFirst: string;
     inDialog: string;
+    grouped: string;
+    groupedOff: string;
     rules: Record<string, string>;
 };
 
@@ -268,4 +270,50 @@ test("filters rows normally when the box and its source sit inside an open dialo
 
     await box.fill("cafe");
     expect(await visibleRows(page)).toEqual(["row Café"]);
+});
+
+/** The group headings a reader can see in the grouped fixture. */
+async function visibleGroups(page: Page): Promise<string[]> {
+    return (await page.locator("p:visible", { hasText: /^group / }).allTextContents()).map((t) => t.trim());
+}
+
+test("hides a group whose rows are all missed and shows it when a row returns", async ({ page }) => {
+    await page.setContent(fixture.grouped);
+    const box = page.getByRole("searchbox", { name: "Filter" });
+    expect(await visibleGroups(page)).toEqual(["group Auth", "group Storage", "group Mail"]);
+
+    // Only the Storage group holds a row with "coffee".
+    await box.fill("coffee");
+    expect(await visibleRows(page)).toEqual(["row Café"]);
+    expect(await visibleGroups(page)).toEqual(["group Storage"]);
+
+    // A word in one Auth row brings that group back and keeps the others away.
+    await box.fill("tokens");
+    expect(await visibleRows(page)).toEqual(["row Auth"]);
+    expect(await visibleGroups(page)).toEqual(["group Auth"]);
+
+    await box.fill("zzz");
+    expect(await visibleGroups(page)).toEqual([]);
+
+    await box.press("Escape");
+    expect(await visibleRows(page)).toEqual(ALL);
+    expect(await visibleGroups(page)).toEqual(["group Auth", "group Storage", "group Mail"]);
+});
+
+test("counts only the rows of the groups that are shown", async ({ page }) => {
+    await page.setContent(fixture.grouped);
+    const box = page.getByRole("searchbox", { name: "Filter" });
+
+    await box.fill("sign");
+    await expect(page.locator("[data-bp-filter-count]")).toHaveText("2 shown");
+    expect(await visibleGroups(page)).toEqual(["group Auth"]);
+});
+
+test("keeps a group's heading when the box did not opt in", async ({ page }) => {
+    await page.setContent(fixture.groupedOff);
+    const box = page.getByRole("searchbox", { name: "Filter" });
+
+    await box.fill("coffee");
+    expect(await visibleRows(page)).toEqual(["row Café"]);
+    expect(await visibleGroups(page)).toEqual(["group Auth", "group Storage", "group Mail"]);
 });

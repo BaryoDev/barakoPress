@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import {
     FILTER_COUNT_ATTR,
     FILTER_EMPTY_ATTR,
+    FILTER_GROUP_ATTR,
     FILTER_INPUT_ATTR,
     FILTER_MISS_ATTR,
     FILTER_ROW_ATTR,
@@ -19,6 +20,10 @@ import { foldText } from "./search-attrs.js";
  * `data-bp-filter-miss`, and one rule the server wrote hides what is marked, the same way a
  * `filterBar` hides by `data-bp-filter-value`. Nothing here sets a style, so the two filters
  * combine: a row shows when both let it.
+ *
+ * A grouped source whose box opted in with `hideEmptyGroups` numbers its groups the same way
+ * (`data-bp-filter-group="<id>:<n>"`). A group is hidden, by the same mark and the same rule, when
+ * every row inside its blocks is missed, and shown again when one comes back.
  *
  * It is handed an id and reads the DOM, as the search box does, so no row is serialised twice. The
  * box is `hidden` until this runs, so a page with no script shows every row and no dead field.
@@ -38,9 +43,17 @@ export function wireFilterInput(input: HTMLInputElement): (() => void) | undefin
     // The rows: each one's blocks, and its text folded the first time it is needed. Collected again
     // whenever the page changes under the box, since a refresh or a page of the source can replace
     // the rows while this stays mounted.
-    let rows = new Map<string, { blocks: HTMLElement[]; text?: string }>();
+    let rows = new Map<string, { blocks: HTMLElement[]; text?: string; missed?: boolean }>();
+    let groups: { blocks: HTMLElement[]; rows: { blocks: HTMLElement[]; missed?: boolean }[] }[] = [];
     const collect = () => {
         rows = new Map();
+        const byToken = new Map<string, HTMLElement[]>();
+        for (const block of scope.querySelectorAll<HTMLElement>(`[${FILTER_GROUP_ATTR}]`)) {
+            for (const token of (block.getAttribute(FILTER_GROUP_ATTR) ?? "").split(" ")) {
+                if (!token.startsWith(`${id}:`)) continue;
+                byToken.set(token, [...(byToken.get(token) ?? []), block]);
+            }
+        }
         for (const block of scope.querySelectorAll<HTMLElement>(`[${FILTER_ROW_ATTR}]`)) {
             for (const token of (block.getAttribute(FILTER_ROW_ATTR) ?? "").split(" ")) {
                 if (!token.startsWith(`${id}:`)) continue;
@@ -49,6 +62,11 @@ export function wireFilterInput(input: HTMLInputElement): (() => void) | undefin
                 rows.set(token, row);
             }
         }
+        // A group's rows are the rows whose first block sits inside one of the group's blocks.
+        groups = [...byToken.values()].map((blocks) => ({
+            blocks,
+            rows: [...rows.values()].filter((row) => blocks.some((block) => block.contains(row.blocks[0]))),
+        }));
     };
     collect();
 
@@ -88,8 +106,11 @@ export function wireFilterInput(input: HTMLInputElement): (() => void) | undefin
         const typed = input.value;
         const words = foldText(typed.trim()).split(/\s+/).filter(Boolean);
         let shown = 0;
+        // A row inside a hidden group is not on screen, whatever its own display says.
+        const hiddenGroup = (row: { blocks: HTMLElement[] }) =>
+            groups.some((group) => group.rows.includes(row) && group.blocks.some((block) => getComputedStyle(block).display === "none"));
         for (const row of rows.values()) {
-            if (getComputedStyle(row.blocks[0]).display !== "none") shown++;
+            if (getComputedStyle(row.blocks[0]).display !== "none" && !hiddenGroup(row)) shown++;
         }
         const total = rows.size;
         const template = (el: HTMLElement | null, attr: string) => el?.getAttribute(attr) ?? "";
@@ -122,7 +143,13 @@ export function wireFilterInput(input: HTMLInputElement): (() => void) | undefin
             row.text ??= foldText(row.blocks.map(visibleText).join(" "));
             const text = row.text;
             const missed = !words.every((word) => text.includes(word));
+            row.missed = missed;
             for (const block of row.blocks) mark(block, missed);
+        }
+        // A group with no rows drawn stays: there is nothing in it to have missed.
+        for (const group of groups) {
+            const missed = group.rows.length > 0 && group.rows.every((row) => row.missed === true);
+            for (const block of group.blocks) mark(block, missed);
         }
         settle();
     };
@@ -177,6 +204,7 @@ export function wireFilterInput(input: HTMLInputElement): (() => void) | undefin
         input.removeEventListener("keydown", onInputKey);
         document.removeEventListener("keydown", onDocumentKey);
         for (const row of rows.values()) for (const block of row.blocks) mark(block, false);
+        for (const group of groups) for (const block of group.blocks) mark(block, false);
         root.hidden = true;
     };
 }
