@@ -1,39 +1,39 @@
 {
-  "about": "Budgets for scripts/perf-measure.sh, compared by scripts/perf-budget.py in the Performance budget job (#853). Every metric is lower-is-better. baseline is the number a budget was set from; budget is the most a pull request may measure. Raising a budget is a reviewed change: say why in the pull request. arm64 baselines come from one local run on Docker Desktop (arm64). Image sizes get 10%. Startup and memory vary between machines, so their budgets sit at about two and a half times and one and a half times the number seen. amd64 has a baseline of null and no budget yet: the job records its numbers (the perf-amd64 artifact) until a run on a GitHub runner gives a baseline to set it from. Sizes are MB, startup is seconds until the server answers 200 for a built static file (not a page render, since no page can render without a CMS in this job), memory is the server resident MB after 60 s idle.",
+  "about": "Budgets for scripts/perf-measure.sh, compared by scripts/perf-budget.py in the Performance budget job (#853). Every metric is lower-is-better. baseline is the number a budget was set from; budget is the most a pull request may measure. Raising a budget is a reviewed change: say why in the pull request. Both architectures take their baselines from one CI run on GitHub runners (run 44537224816). Image sizes get 10%. Startup and memory vary between machines, so their budgets sit at about two and a half times and one and a half times the number seen. Sizes are MB, startup is seconds until the server answers 200 for a built static file (not a page render, since no page can render without a CMS in this job), memory is the server resident MB after 60 s idle.",
   "amd64": {
     "image_uncompressed_mb": {
-      "baseline": null,
-      "budget": null
+      "baseline": 214.6,
+      "budget": 236.1
     },
     "image_compressed_mb": {
-      "baseline": null,
-      "budget": null
+      "baseline": 75.2,
+      "budget": 82.7
     },
     "startup_seconds": {
-      "baseline": null,
-      "budget": null
+      "baseline": 1.1,
+      "budget": 2.8
     },
     "memory_at_rest_mb": {
-      "baseline": null,
-      "budget": null
+      "baseline": 94.0,
+      "budget": 141
     }
   },
   "arm64": {
     "image_uncompressed_mb": {
-      "baseline": 210.3,
-      "budget": 231
+      "baseline": 210.1,
+      "budget": 231.1
     },
     "image_compressed_mb": {
-      "baseline": 74.0,
-      "budget": 81.5
+      "baseline": 73.0,
+      "budget": 80.3
     },
     "startup_seconds": {
-      "baseline": 1.6,
-      "budget": 4
+      "baseline": 1.2,
+      "budget": 3.0
     },
     "memory_at_rest_mb": {
-      "baseline": 91.5,
-      "budget": 140
+      "baseline": 93.9,
+      "budget": 141
     }
   }
 }
