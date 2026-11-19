@@ -19,6 +19,12 @@ export const FILTER_CHOSEN_ATTR = "data-bp-filter-value";
  * each block of one row, so a row of several blocks is matched on all its text as one.
  */
 export const FILTER_ROW_ATTR = "data-bp-filter-row";
+/**
+ * Set on every block of a group of a grouped source whose `filterInput` opted in with
+ * `hideEmptyGroups`: `<id>:<n>`, numbered the way a row is. The script hides the group's blocks when
+ * every row inside them is missed.
+ */
+export const FILTER_GROUP_ATTR = "data-bp-filter-group";
 /** What a `filterInput` writes onto the blocks of a row its text left out: the ids, separated by spaces. */
 export const FILTER_MISS_ATTR = "data-bp-filter-miss";
 /** Marks the box's root, holding the id of the filter it runs. */
@@ -52,19 +58,26 @@ export function markToken(id: string, value: string): string {
 
 export interface FilterMark {
     id: string;
-    values: string[];
+    /** The bar's values. Absent on a mark that only numbers a group for the box, so no bar rule reads it. */
+    values?: string[];
     /** The row's number under this id, set only when the source holds a `filterInput`. */
     row?: number;
+    /** The group's number under this id, set only when the box opted into hiding empty groups. */
+    group?: number;
 }
 
 /** The attributes for a block the binder marked. */
 export function filterAttrs(marks: readonly FilterMark[]): Record<string, string> {
-    const attrs: Record<string, string> = {
-        [FILTER_ATTR]: marks.map((mark) => mark.id).join(" "),
-        [FILTER_VALUES_ATTR]: marks.flatMap((mark) => mark.values.map((value) => markToken(mark.id, value))).join(" "),
-    };
+    const attrs: Record<string, string> = {};
+    const barred = marks.filter((mark) => mark.values !== undefined);
+    if (barred.length > 0) {
+        attrs[FILTER_ATTR] = barred.map((mark) => mark.id).join(" ");
+        attrs[FILTER_VALUES_ATTR] = barred.flatMap((mark) => (mark.values ?? []).map((value) => markToken(mark.id, value))).join(" ");
+    }
     const rows = marks.filter((mark) => mark.row !== undefined).map((mark) => `${mark.id}:${mark.row}`);
     if (rows.length > 0) attrs[FILTER_ROW_ATTR] = rows.join(" ");
+    const groups = marks.filter((mark) => mark.group !== undefined).map((mark) => `${mark.id}:${mark.group}`);
+    if (groups.length > 0) attrs[FILTER_GROUP_ATTR] = groups.join(" ");
     return attrs;
 }
 

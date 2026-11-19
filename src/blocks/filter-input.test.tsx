@@ -118,6 +118,10 @@ async function page(blocks: unknown[]): Promise<string> {
 const text = (value: string) => ({ type: "text", props: { value } });
 const input = (props: Record<string, unknown> = {}) => ({ type: "filterInput", props });
 const bar = (props: Record<string, unknown>) => ({ type: "filterBar", props });
+const grouped = (content: unknown[]) => ({
+    type: "source",
+    props: { collection: "packages", mode: "list", pageSize: 50, groupBy: "Category", content: [content] },
+});
 const repeat = (content: unknown[]) => ({ type: "repeat", props: { content: [content] } });
 const source = (content: unknown[]) => ({ type: "source", props: { collection: "packages", mode: "list", pageSize: 50, content: [content] } });
 
@@ -203,6 +207,51 @@ describe("filterInput markup", () => {
         const out = await page([input()]);
 
         expect(out).not.toContain("<input");
+    });
+});
+
+/** The group numbers a marked block carries, in order. */
+const groupMarks = (out: string) => [...out.matchAll(/data-bp-filter-group="([^"]+)"/g)].map((m) => m[1]);
+
+describe("filterInput in a grouped source", () => {
+    const body = () => [text("== {{group.key}}"), repeat([text("[[{{item.Title}}]]")])];
+
+    it("numbers each group the way it numbers a row when the box opts in", async () => {
+        const out = await page([grouped([input({ hideEmptyGroups: true }), ...body()])]);
+
+        // Auth holds two rows and Storage one. A group's blocks are its heading and its rows.
+        expect(groupMarks(out)).toEqual(["f1-body:0", "f1-body:0", "f1-body:0", "f1-body:1", "f1-body:1"]);
+        expect(rows(out)).toEqual(["f1-body:0", "f1-body:1", "f1-body:2"]);
+        // A group-only mark carries no bar values, so a filterBar rule never reads it.
+        expect(out).toMatch(/<div data-block="text" data-bp-filter-group="f1-body:0"/);
+    });
+
+    it("leaves a group's heading unmarked when the box does not opt in", async () => {
+        const out = await page([grouped([input(), ...body()])]);
+
+        expect(groupMarks(out)).toEqual([]);
+        expect(rows(out)).toEqual(["f1-body:0", "f1-body:1", "f1-body:2"]);
+    });
+
+    it("numbers no group in a source with no groupBy, opted in or not", async () => {
+        const plain = await page([source([input({ hideEmptyGroups: true }), repeat([text("[[{{item.Title}}]]")])])]);
+
+        expect(groupMarks(plain)).toEqual([]);
+        expect(rows(plain)).toEqual(["f1-body:0", "f1-body:1", "f1-body:2"]);
+    });
+
+    it("keeps a bar's own hideEmptyGroups apart from the box's", async () => {
+        const out = await page([grouped([bar({ field: "Category", hideEmptyGroups: true }), input(), ...body()])]);
+
+        // The bar marks the groups with its values; the box did not opt in, so no group number.
+        expect(groupMarks(out)).toEqual([]);
+        expect(out).toContain('data-bp-filter-values="f1-body:Auth"');
+    });
+
+    it("writes the bar's values and the group number on one block when both opt in", async () => {
+        const out = await page([grouped([bar({ field: "Category", hideEmptyGroups: true }), input({ hideEmptyGroups: true }), ...body()])]);
+
+        expect(out).toMatch(/data-bp-filter="f1-body" data-bp-filter-values="f1-body:Auth" data-bp-filter-group="f1-body:0"/);
     });
 });
 

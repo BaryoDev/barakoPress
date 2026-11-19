@@ -3,6 +3,9 @@
 ## Unreleased
 
 - A Performance budget job on every pull request builds the production image, boots it with a CMS address that nothing listens on and fails when image size (uncompressed and compressed), startup to a built static file or memory at rest passes the budget in `perf-budget.json`. It runs on amd64 and arm64 and keeps the measured numbers as an artifact (#853).
+- A `filterInput` in a grouped source takes `hideEmptyGroups` (#257). The binder numbers each group in
+  `data-bp-filter-group`, and the script hides a group whose rows the typed words all missed and shows it
+  when one returns. The count ignores hidden groups. It is the box's own prop and off by default.
 - A `dataTable` that reads as the viewer takes `search`, `searchParam`, `searchLabel` and `filters` (#7). The
   search is a GET form and a filter is a link, so each is a URL. They go to the core's authenticated
   list as `search` and `filter[field][eq]`, cut to the core's limits (200 characters of search, five

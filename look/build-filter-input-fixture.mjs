@@ -18,7 +18,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { defineConfig } from "../dist/config.js";
 import { bindBlocks } from "../dist/blocks/bind.js";
 import { filterRule } from "../dist/blocks/filter.js";
-import { FILTER_COUNT_ATTR, FILTER_EMPTY_ATTR, FILTER_INPUT_ATTR, FILTER_MISS_ATTR, FILTER_ROW_ATTR } from "../dist/blocks/filter.js";
+import { FILTER_COUNT_ATTR, FILTER_EMPTY_ATTR, FILTER_GROUP_ATTR, FILTER_INPUT_ATTR, FILTER_MISS_ATTR, FILTER_ROW_ATTR } from "../dist/blocks/filter.js";
 import { DIALOG_PANEL_ATTR } from "../dist/blocks/dialog-attrs.js";
 import { wireFilterInput } from "../dist/blocks/filter-input.js";
 import { foldText, SEARCH_COUNT_ATTR, SEARCH_EMPTY_ATTR, SEARCH_GROUP_ATTR, SEARCH_GROUP_EMPTY_ATTR, SEARCH_GROUPS_ATTR, SEARCH_INDEX_ATTR, SEARCH_ROOT_ATTR } from "../dist/blocks/search-attrs.js";
@@ -118,6 +118,40 @@ async function render() {
     ];
     const inDialogBound = await bindBlocks(resolveBlocks(inDialogRaw, registry, { perViewer: false }), { config, registry, scopes: {} });
     const inDialogBody = renderToStaticMarkup(createElement(BlockList, { blocks: inDialogBound, theme: config.theme }));
+    // A grouped source: a heading and the rows of each Category. `hideEmptyGroups` is the box's own.
+    const groupedFor = async (hideEmptyGroups) => {
+        const groupedRaw = [
+            {
+                type: "source",
+                props: {
+                    collection: "packages",
+                    mode: "list",
+                    groupBy: "Category",
+                    content: [
+                        [
+                            { type: "filterInput", props: hideEmptyGroups ? { hideEmptyGroups: true } : {} },
+                            { type: "text", props: { value: "group {{group.key}}" } },
+                            {
+                                type: "repeat",
+                                props: {
+                                    content: [
+                                        [
+                                            { type: "text", props: { value: "row {{item.Title}}" } },
+                                            { type: "text", props: { value: "about {{item.Summary}}" } },
+                                        ],
+                                    ],
+                                },
+                            },
+                        ],
+                    ],
+                },
+            },
+        ];
+        const groupedBound = await bindBlocks(resolveBlocks(groupedRaw, registry, { perViewer: false }), { config, registry, scopes: {} });
+        return renderToStaticMarkup(createElement(BlockList, { blocks: groupedBound, theme: config.theme }));
+    };
+    const groupedBody = await groupedFor(true);
+    const groupedOffBody = await groupedFor(false);
     const head = '<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{margin:0;font-family:sans-serif}</style>';
     const script = `<script>
 const FILTER_INPUT_ATTR = ${JSON.stringify(FILTER_INPUT_ATTR)};
@@ -125,6 +159,7 @@ const FILTER_COUNT_ATTR = ${JSON.stringify(FILTER_COUNT_ATTR)};
 const FILTER_EMPTY_ATTR = ${JSON.stringify(FILTER_EMPTY_ATTR)};
 const FILTER_MISS_ATTR = ${JSON.stringify(FILTER_MISS_ATTR)};
 const FILTER_ROW_ATTR = ${JSON.stringify(FILTER_ROW_ATTR)};
+const FILTER_GROUP_ATTR = ${JSON.stringify(FILTER_GROUP_ATTR)};
 const DIALOG_PANEL_ATTR = ${JSON.stringify(DIALOG_PANEL_ATTR)};
 ${foldText.toString()}
 ${wireFilterInput.toString()}
@@ -152,6 +187,8 @@ wireSearch(document.getElementById("site-search"));
         filterFirst: `<!doctype html><html><head>${head}</head><body>${search}${body}${filterScript}${searchScript}</body></html>`,
         plain: `<!doctype html><html><head>${head}</head><body>${body}</body></html>`,
         wired: `<!doctype html><html><head>${head}</head><body>${body}${script}</body></html>`,
+        grouped: `<!doctype html><html><head>${head}</head><body>${groupedBody}${script}</body></html>`,
+        groupedOff: `<!doctype html><html><head>${head}</head><body>${groupedOffBody}${script}</body></html>`,
         inDialog: `<!doctype html><html><head>${head}</head><body>${inDialogBody}${script}</body></html>`,
         rules: Object.fromEntries(state.values.map((value) => [value, filterRule(state.id, value)])),
     };
