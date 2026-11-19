@@ -72,7 +72,12 @@ export function createShareImage(base: PressConfig) {
             return new Response("Not found", { status: 404 });
         }
 
-        return drawShareCard(config, { title: found.page.title }, font);
+        try {
+            return await drawShareCard(config, { title: found.page.title }, font);
+        } catch {
+            console.warn("share image: the card could not be drawn");
+            return new Response("Not found", { status: 404 });
+        }
     };
 }
 
@@ -93,7 +98,7 @@ export async function drawShareCard(config: PressConfig, text: ShareCardText, fo
     const vary = tenantVary(config);
     if (vary) headers.vary = vary;
     const kicker = text.kicker ? shareTitle(text.kicker).slice(0, MAX_KICKER) : "";
-    return new ImageResponse(
+    const image = new ImageResponse(
         {
             type: "div",
             props: {
@@ -126,4 +131,8 @@ export async function drawShareCard(config: PressConfig, text: ShareCardText, fo
         },
         { ...SHARE_IMAGE_SIZE, headers, fonts: [{ name: "Press", data: font, weight: 400, style: "normal" }] },
     );
+    // ImageResponse draws lazily: a font that cannot be parsed fails when the stream is read, after a
+    // 200 is already promised. Reading it here makes a bad font throw where the caller can answer 404.
+    const png = await image.arrayBuffer();
+    return new Response(png, { status: 200, headers: image.headers });
 }
