@@ -22,9 +22,9 @@ export const POST_SHARE_IMAGE_ROUTE = "/_share/post-image";
 export const MAX_POST_SLUG = 200;
 const MAX_VERSION = 64;
 
-/** A slug worth a lookup: letters, digits, dot, underscore and hyphen, starting with a letter or digit. */
+/** A slug worth a lookup: letters, combining marks, digits, dot, underscore and hyphen, starting with a letter or digit. */
 export function isPostSlug(slug: unknown): slug is string {
-    return typeof slug === "string" && slug.length > 0 && slug.length <= MAX_POST_SLUG && /^[\p{L}\p{N}][\p{L}\p{N}._-]*$/u.test(slug);
+    return typeof slug === "string" && slug.length > 0 && slug.length <= MAX_POST_SLUG && /^[\p{L}\p{N}][\p{L}\p{M}\p{N}._-]*$/u.test(slug);
 }
 
 /**
@@ -39,10 +39,10 @@ export function postShareImageHref(origin: string, slug: string, version?: strin
 
 /**
  * The `og:image` list for a post: the generated card when a font is configured and the post has a
- * title and a slug, else nothing, which leaves the site's card in place.
+ * title and a slug and is not noIndex, else nothing, which leaves the site's card in place.
  */
-export function generatedPostShareImages(config: PressConfig, item: Pick<Item, "slug" | "title" | "content">): string[] | undefined {
+export function generatedPostShareImages(config: PressConfig, item: Pick<Item, "slug" | "title" | "content" | "seo">): string[] | undefined {
     if (!config.site.url || !readEnv().shareImageFont) return undefined;
-    if (!item.title.trim() || !isPostSlug(item.slug)) return undefined;
+    if (!item.title.trim() || !isPostSlug(item.slug) || item.seo?.noIndex) return undefined;
     return [postShareImageHref(siteBaseUrl(config.site.url), item.slug, item.content?.updatedAt)];
 }

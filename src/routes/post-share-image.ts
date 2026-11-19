@@ -13,7 +13,7 @@ import { drawShareCard, loadFont } from "./share-image.js";
  * The post is read by collection and slug through `getItem`, the read the post page makes, so a post
  * the page cannot show (a draft, an unpublished or deleted entry) is not drawn. Those answer 404, not
  * the site card: the page never advertises this URL for them, so a 404 is the honest answer and no
- * cache keeps a card for a post that is not there. A CMS failure answers 502 with no-store, so an
+ * cache keeps a card for a post that is not there. A font that cannot be read or drawn with answers 404 too. The 404 and the 502 carry no-store. A CMS failure answers 502 with no-store, so an
  * outage is not cached as "no image".
  *
  * The slug is the only input. It is checked against a short pattern before any lookup, and the query
@@ -21,7 +21,7 @@ import { drawShareCard, loadFont } from "./share-image.js";
  */
 export function createPostShareImage(base: PressConfig) {
     return async function GET(_request: Request, ctx: { params: Promise<{ slug: string }> }): Promise<Response> {
-        const notFound = () => new Response("Not found", { status: 404 });
+        const notFound = () => new Response("Not found", { status: 404, headers: { "cache-control": "no-store" } });
         const fontPath = readEnv().shareImageFont;
         if (!fontPath) return notFound();
         const { slug } = await ctx.params;
@@ -36,7 +36,7 @@ export function createPostShareImage(base: PressConfig) {
             console.warn("post share image: the post could not be read");
             return new Response("Bad gateway", { status: 502, headers: { "cache-control": "no-store" } });
         }
-        if (!item || !item.title.trim()) return notFound();
+        if (!item || !item.title.trim() || item.seo?.noIndex) return notFound();
 
         let font: ArrayBuffer;
         try {
@@ -45,6 +45,11 @@ export function createPostShareImage(base: PressConfig) {
             console.warn("post share image: the font named by PRESS_SHARE_IMAGE_FONT could not be read");
             return notFound();
         }
-        return drawShareCard(config, { title: item.title, kicker: postFromItem(config, item).category?.name }, font);
+        try {
+            return await drawShareCard(config, { title: item.title, kicker: postFromItem(config, item).category?.name }, font);
+        } catch {
+            console.warn("post share image: the card could not be drawn");
+            return notFound();
+        }
     };
 }

@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { rmSync, writeFileSync } from "node:fs";
 import { defineConfig } from "./config.js";
 import type { Item } from "./collections.js";
 
@@ -128,6 +130,28 @@ describe("the post share image route", () => {
         expect(res.headers.get("cache-control")).toBe("no-store");
     });
 
+    it("answers 404 with no-store", async () => {
+        state.item = null;
+        expect((await ask("no-such-post")).headers.get("cache-control")).toBe("no-store");
+    });
+
+    it("answers 404, not a thrown error, when the font file is garbage", async () => {
+        const bad = join(tmpdir(), `press-bad-font-${process.pid}.ttf`);
+        writeFileSync(bad, "this is not a font");
+        process.env.PRESS_SHARE_IMAGE_FONT = bad;
+        try {
+            const res = await ask("hello-world");
+            expect(res.status).toBe(404);
+        } finally {
+            rmSync(bad, { force: true });
+        }
+    });
+
+    it("answers 404 for a noIndex post", async () => {
+        state.item = post({ seo: { noIndex: true } as never });
+        expect((await ask("hello-world")).status).toBe(404);
+    });
+
     it("never looks up a hostile slug", async () => {
         const hostile = [
             "../../etc/passwd",
@@ -161,6 +185,12 @@ describe("isPostSlug", () => {
         for (const ok of ["hello", "hello-world", "v1.2_release", "kape-ana-2", "pagkain"]) expect(isPostSlug(ok)).toBe(true);
         expect(isPostSlug(undefined)).toBe(false);
         expect(isPostSlug(5)).toBe(false);
+    });
+
+    it("takes a slug written with combining marks, and still refuses a leading mark, dot or dash", () => {
+        expect(isPostSlug("cafe\u0301")).toBe(true);
+        expect(isPostSlug("cafe\u0301-au-lait")).toBe(true);
+        for (const bad of ["\u0301abc", ".a", "-a", "_a", "a/b", ""]) expect(isPostSlug(bad), JSON.stringify(bad)).toBe(false);
     });
 });
 
@@ -197,6 +227,18 @@ describe("the post page's tags", () => {
     it("keeps an image the post's SEO fields name", () => {
         const meta = itemMetadata(post({ seo: { imageUrl: "https://cdn.example/own.png" } as never }), config);
         expect(meta.openGraph?.images).toEqual(["https://cdn.example/own.png"]);
+    });
+
+    it("keeps the post's cover over the drawn card when the SEO fields name no image", () => {
+        const meta = itemMetadata(post({ image: "https://cdn.example/cover.png" } as never), config);
+        expect(meta.openGraph?.images).toEqual(["https://cdn.example/cover.png"]);
+        expect(meta.twitter?.images).toEqual(["https://cdn.example/cover.png"]);
+    });
+
+    it("advertises no card for a noIndex post", () => {
+        const meta = itemMetadata(post({ seo: { noIndex: true } as never }), config);
+        expect(meta.openGraph?.images).toBeUndefined();
+        expect(generatedPostShareImages(config, post({ seo: { noIndex: true } as never }))).toBeUndefined();
     });
 
     it("draws nothing for another collection's entry", () => {

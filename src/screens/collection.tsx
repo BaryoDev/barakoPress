@@ -715,9 +715,9 @@ export function itemMetadata(item: Item, config?: PressConfig): Metadata {
     const title = seo?.title ?? item.title;
     const description = seo?.description ?? item.summary;
     // An inline image is not an address a crawler can fetch, so a share card never carries one.
-    // A post with no image set in its SEO fields gets a drawn card when a share image font is configured, else its cover.
+    // An image in the SEO fields wins, then the post's cover. Only a post with neither gets a drawn card, when a share image font is configured.
     const generated = config && item.collection === POST_COLLECTION ? generatedPostShareImages(config, item) : undefined;
-    const image = shareImageUrl(seo?.imageUrl) ?? generated?.[0] ?? shareImageUrl(item.image);
+    const image = shareImageUrl(seo?.imageUrl) ?? shareImageUrl(item.image) ?? generated?.[0];
 
     return {
         title,

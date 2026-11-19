@@ -432,12 +432,14 @@ export const GET = createPostShareImage(config);
 ```
 
 The post page then names `/_share/post-image/<slug>?v=<updated time>` in `og:image` and
-`twitter:image`. An image set in the post's SEO fields wins. A post with no title, a site with no URL
+`twitter:image`. An image set in the post's SEO fields wins, then the post's cover. Only a post with neither gets the
+drawn card. A noIndex post advertises no card. A post with no title, a site with no URL
 or no font, and a site that has not mounted the route keep the site's card as before.
 
 - The route reads the post by slug through the same read the post page makes, so a draft, an
-  unpublished post or an unknown slug answers 404. It never draws the site card in their place.
-- The slug is checked before any lookup (letters, digits, dot, underscore and hyphen, at most 200
+  unpublished post or an unknown slug answers 404, as does a post with `seo.noIndex` or a font that cannot be read or drawn with. It never draws
+  the site card in their place. The 404 and 502 carry `cache-control: no-store`.
+- The slug is checked before any lookup (letters, combining marks, digits, dot, underscore and hyphen, at most 200
   characters) and the query is never read, so no caller input becomes text on the card.
 - The path is under `_share` because the proxy rewrites every other path of a request-time site and
   stamps `private, no-store` on it. Under `_share` the route's own header reaches the client:
