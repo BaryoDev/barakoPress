@@ -17,7 +17,7 @@ fail=0
 expect() { # <description> <pass|fail> <results> [text the output must contain]...
     local what="$1" want="$2" results="$3" out status needle
     shift 3
-    out=$(python3 scripts/perf-budget.py "$results" "$FIX/budget.json" 2>&1)
+    out=$(python3 scripts/perf-budget.py "$results" "${BUDGET:-$FIX/budget.json}" 2>&1)
     status=$?
     if { [ "$want" = pass ] && [ "$status" -eq 0 ]; } || { [ "$want" = fail ] && [ "$status" -ne 0 ]; }; then
         for needle in "$@"; do
@@ -46,6 +46,8 @@ expect "a measured metric with no budget line" fail "$FIX/metric-unbudgeted.json
 expect "an architecture with no budgets yet"   pass "$FIX/arm64-recorded.json" "recorded, no budget yet"
 expect "an architecture the file does not name" fail "$FIX/unknown-arch.json" "no budgets for 'riscv64'"
 expect "an unreadable results file"            fail "$FIX/unreadable.json" "cannot read"
+BUDGET="$FIX/budget-field-missing.json" expect "a budget line that lost its budget field" fail "$FIX/image-over-budget.json" \
+    "image_compressed_mb has no budget field"
 
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

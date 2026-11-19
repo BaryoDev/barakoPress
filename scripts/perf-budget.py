@@ -61,7 +61,10 @@ def main():
         if not number(value):
             problems.append(f"{metric} has no numeric value in the results ({value!r})")
             continue
-        base, limit = entry.get("baseline"), entry.get("budget")
+        if "budget" not in entry:
+            problems.append(f"{metric} has no budget field in perf-budget.json (write null for no budget yet)")
+            continue
+        base, limit = entry.get("baseline"), entry["budget"]
         if limit is not None and not number(limit):
             problems.append(f"{metric}'s budget is not a number ({limit!r})")
             continue
