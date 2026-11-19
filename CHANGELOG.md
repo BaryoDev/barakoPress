@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- A share image for each post (#263). Mount `createPostShareImage(config)` at
+  `app/%5Fshare/post-image/[slug]/route.ts`. With `PRESS_SHARE_IMAGE_FONT` set, a post advertises
+  `/_share/post-image/<slug>?v=<updated time>` in `og:image` and `twitter:image`, a 1200 by 630 card of its title and
+  category. An image in the post's SEO fields wins, then the post's cover, and only a post with neither gets the
+  drawn card. A post with no title keeps the site card, and a noIndex post advertises no card and its
+  card route answers 404. A draft or unknown slug answers 404, and so does a font that cannot be read or drawn with. The `v` changes when the post is edited, and the image is
+  cached for an hour with stale-while-revalidate, as the page card is.
 - A `filterInput` in a grouped source takes `hideEmptyGroups` (#257). The binder numbers each group in
   `data-bp-filter-group`, and the script hides a group whose rows the typed words all missed and shows it
   when one returns. The count ignores hidden groups. It is the box's own prop and off by default.

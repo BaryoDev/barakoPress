@@ -16,6 +16,7 @@ import { siteConfigOrNull, tenantVary } from "../site.js";
 export const SHARE_IMAGE_SIZE = { width: 1200, height: 630 } as const;
 const MAX_TITLE = 140;
 const MAX_PATH = 512;
+const MAX_KICKER = 60;
 
 /** next/og defaults to a year, immutable. A retitled page would keep its old card in every cache, so this one revalidates. */
 export const SHARE_IMAGE_CACHE_CONTROL = "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400";
@@ -71,34 +72,67 @@ export function createShareImage(base: PressConfig) {
             return new Response("Not found", { status: 404 });
         }
 
-        const { ImageResponse } = await import("next/og");
-        const headers: Record<string, string> = { "cache-control": SHARE_IMAGE_CACHE_CONTROL };
-        // The card is drawn for the tenant, and the URL does not name one picked by a header.
-        const vary = tenantVary(config);
-        if (vary) headers.vary = vary;
-        return new ImageResponse(
-            {
-                type: "div",
-                props: {
-                    style: {
-                        width: "100%",
-                        height: "100%",
-                        display: "flex",
-                        flexDirection: "column",
-                        justifyContent: "space-between",
-                        padding: 80,
-                        background: "#ffffff",
-                        color: "#111111",
-                        fontFamily: "Press",
-                    },
-                    children: [
-                        { type: "div", props: { style: { fontSize: 72, lineHeight: 1.15, display: "flex" }, children: shareTitle(found.page.title) } },
-                        { type: "div", props: { style: { fontSize: 36, display: "flex" }, children: config.site.name } },
-                    ],
-                },
-                key: null,
-            },
-            { ...SHARE_IMAGE_SIZE, headers, fonts: [{ name: "Press", data: font, weight: 400, style: "normal" }] },
-        );
+        try {
+            return await drawShareCard(config, { title: found.page.title }, font);
+        } catch {
+            console.warn("share image: the card could not be drawn");
+            return new Response("Not found", { status: 404 });
+        }
     };
+}
+
+/** What a card says: the title, and an optional small line above it. */
+export interface ShareCardText {
+    title: string;
+    kicker?: string;
+}
+
+/**
+ * The card as a PNG response, with the site's name, the configured font and the revalidating cache
+ * header. Both the page card and the post card draw through here so they cannot drift apart.
+ */
+export async function drawShareCard(config: PressConfig, text: ShareCardText, font: ArrayBuffer): Promise<Response> {
+    const { ImageResponse } = await import("next/og");
+    const headers: Record<string, string> = { "cache-control": SHARE_IMAGE_CACHE_CONTROL };
+    // The card is drawn for the tenant, and the URL does not name one picked by a header.
+    const vary = tenantVary(config);
+    if (vary) headers.vary = vary;
+    const kicker = text.kicker ? shareTitle(text.kicker).slice(0, MAX_KICKER) : "";
+    const image = new ImageResponse(
+        {
+            type: "div",
+            props: {
+                style: {
+                    width: "100%",
+                    height: "100%",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    padding: 80,
+                    background: "#ffffff",
+                    color: "#111111",
+                    fontFamily: "Press",
+                },
+                children: [
+                    {
+                        type: "div",
+                        props: {
+                            style: { display: "flex", flexDirection: "column" },
+                            children: [
+                                ...(kicker ? [{ type: "div", props: { style: { fontSize: 32, display: "flex", marginBottom: 24, color: "#555555" }, children: kicker } }] : []),
+                                { type: "div", props: { style: { fontSize: 72, lineHeight: 1.15, display: "flex" }, children: shareTitle(text.title) } },
+                            ],
+                        },
+                    },
+                    { type: "div", props: { style: { fontSize: 36, display: "flex" }, children: config.site.name } },
+                ],
+            },
+            key: null,
+        },
+        { ...SHARE_IMAGE_SIZE, headers, fonts: [{ name: "Press", data: font, weight: 400, style: "normal" }] },
+    );
+    // ImageResponse draws lazily: a font that cannot be parsed fails when the stream is read, after a
+    // 200 is already promised. Reading it here makes a bad font throw where the caller can answer 404.
+    const png = await image.arrayBuffer();
+    return new Response(png, { status: 200, headers: image.headers });
 }
