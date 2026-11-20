@@ -83,12 +83,20 @@ one to look different saves its own under the same name and that one wins.
 | `person` | One person | name, role, photo, href, linkLabel, align |
 | `keyValueRow` | One fact | label, value |
 | `codeTab` | One more way to run it | label, code, language, selectLabel, copiedLabel, group |
-| `faqItem` | One question and its answer | question, answer, tone |
+| `faqItem` | One question and its answer | question, answer, start, group, tone |
 | `card` | One card typed in place | title, tag, body, meta, icon, tint, linkLabel, href, image, imageAlt |
 
 The blocks in the second half go in the first half's slots: stats in a `statBand`, entries in a
 `timeline`, `disclosure` blocks in `tabs`, `codeTab` blocks in `codeTabs`, `faqItem` blocks in
 `faq`, and `card` blocks in a `cardGrid`'s `items`, after any cards its collection draws. A
+`disclosure` and a `faqItem` open and close over .4s (a grid row going from 0fr to 1fr), and not at
+all for a reader who asked for reduced motion or whose browser has no `::details-content`, which
+gets the browser's own instant open. Give the items of one `faq` the same `group` and opening one
+closes the others, with no script; set `start` to `open` on the first to begin with it open, which
+is how a ledger of nine is built (`disclosure` has the same `start`, beside its `open`). The
+disclosure's markup is a `<style>` sibling, then the `<details>`, whose content now sits in a
+`div[data-bp-panel]` that clips it, with the old padded `div` inside that: a site rule that
+targeted `details > div` now meets the wrapper, which has no padding. A `faq` on its own leaves every item openable at once. A
 `card`'s `tint` is a colour written out, and it colours the icon. A card grid reads its entries
 through `{{item.Title}}`, `{{item.Summary}}`,
 `{{item.Date | date}}` and `{{item.Href}}`, so it works against whatever the tenant calls those

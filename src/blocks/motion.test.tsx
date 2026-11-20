@@ -306,3 +306,156 @@ describe("the blocks an editor is offered", () => {
         expect(bare).not.toContain("user-select:all\">Copy");
     });
 });
+
+/*
+ * The accordion of #235. `<details name>` closes the others with nothing loaded, so what is tested
+ * here is the markup that mechanism needs and the CSS that animates it. The behaviour in a browser
+ * (keyboard, the group closing the other item, start open, reduced motion) is checked by
+ * look/disclosure.component.pw.ts. The timing itself is a browser's to draw and is not measured.
+ */
+describe("the disclosure's open and close motion (#235)", () => {
+    const ledger = (items: { question: string; open?: boolean }[], group = "ledger") =>
+        page([
+            {
+                type: "faq",
+                props: {
+                    items: [
+                        items.map((i) => ({
+                            type: "faqItem",
+                            props: {
+                                question: i.question,
+                                answer: `About ${i.question}`,
+                                group,
+                                ...(i.open ? { start: "open" } : {}),
+                            },
+                        })),
+                    ],
+                },
+            },
+        ]);
+
+    const one = () => page([{ type: "disclosure", props: { label: "One", content: [[]] } }]);
+
+    it("animates grid-template-rows from 0fr to 1fr over .4s on the issue's easing", async () => {
+        const css = styles(await one());
+
+        expect(css).toContain("grid-template-rows:0fr");
+        expect(css).toContain("grid-template-rows:1fr");
+        expect(css).toContain("transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1)");
+        // Without this the content is cut off at once on close and the row has nothing to shrink.
+        expect(css).toContain("content-visibility .4s allow-discrete");
+    });
+
+    it("shows an opening panel's content at once, so Tab after Enter reaches the answer", async () => {
+        const css = styles(await one());
+        const open = css.slice(css.indexOf("[open]::details-content{"));
+
+        expect(open.slice(0, open.indexOf("}"))).toBe(
+            "[open]::details-content{grid-template-rows:1fr;transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1)",
+        );
+    });
+
+    it("scopes the rules to the disclosure and to browsers that have ::details-content", async () => {
+        const css = styles(await one());
+
+        expect(css.startsWith("@supports selector(::details-content){")).toBe(true);
+        expect(css).toContain("details[data-bp-disclosure]::details-content{");
+        expect(css).toContain("details[data-bp-disclosure][open]::details-content{");
+        expect(css).not.toMatch(/(^|[{}])::details-content/);
+    });
+
+    it("clips the panel without cutting a focus ring at its edge", async () => {
+        const css = styles(await one());
+
+        expect(css).toContain("overflow:clip;overflow-clip-margin:6px");
+        expect(css).not.toContain("overflow:hidden");
+    });
+
+    it("leaves a reduced-motion visitor with no motion rule at all", async () => {
+        const left = unguarded(styles(await one()));
+
+        expect(left).not.toContain("transition");
+        expect(left).not.toContain("grid-template-rows");
+        expect(left).not.toContain("details-content");
+        expect(left).not.toContain("overflow");
+    });
+
+    it("wraps the panel so the row can collapse, and keeps the style out of the details", async () => {
+        const html = await one();
+
+        expect(html).toMatch(/<details[^>]*data-bp-disclosure/);
+        expect(html).toMatch(/<\/summary><div data-bp-panel="">/);
+        // The style is a sibling before it, so the last child of a details is still its content.
+        expect(html).toMatch(/<\/style><details/);
+        expect(html).toMatch(/<\/div><\/div><\/details>/);
+    });
+
+    it("puts one group name on every details of a faq, so opening one closes the others", async () => {
+        const html = await ledger([{ question: "A" }, { question: "B" }, { question: "C" }]);
+
+        expect(html.match(/<details[^>]*name="ledger"/g)).toHaveLength(3);
+    });
+
+    it("opens the item that starts open and only that one", async () => {
+        const html = await ledger([{ question: "A", open: true }, { question: "B" }, { question: "C" }]);
+
+        expect(html.match(/<details/g)).toHaveLength(3);
+        expect(html.match(/<details[^>]*open=""/g)).toHaveLength(1);
+        expect(html).toMatch(/<details[^>]*open=""[^>]*>\s*<summary[^>]*>A</);
+    });
+
+    it("renders start closed and start left out as one closed details each", async () => {
+        for (const props of [{ start: "closed" }, {}]) {
+            const html = await page([{ type: "faqItem", props: { question: "A", answer: "a", ...props } }]);
+            expect(html.match(/<details/g)).toHaveLength(1);
+            expect(html).not.toContain('open=""');
+        }
+    });
+
+    it("builds a nine item ledger from faq items with the first open (markup only)", async () => {
+        const items = Array.from({ length: 9 }, (_, i) => ({ question: `Q${i + 1}`, open: i === 0 }));
+        const html = await ledger(items);
+
+        expect(html.match(/<details[^>]*name="ledger"/g)).toHaveLength(9);
+        expect(html.match(/<details[^>]*open=""/g)).toHaveLength(1);
+    });
+
+    it("leaves faq items independent when no group is given", async () => {
+        const html = await page([
+            { type: "faq", props: { items: [[{ type: "faqItem", props: { question: "A", answer: "a" } }]] } },
+        ]);
+
+        expect(html).toContain("<details");
+        expect(html).not.toContain("name=");
+    });
+
+    it("keeps a faqItem at the same block cost as before: one disclosure and one richText", () => {
+        // A preset's body is what the bind pass spends the page budget on, per item. Master's body
+        // was these two blocks; a showIf pair around two disclosures made it six.
+        const walk = (list: { slots?: Record<string, unknown[][]> }[]): number =>
+            list.reduce(
+                (n, b) =>
+                    n + 1 + Object.values(b.slots ?? {}).reduce((m, lists) => m + lists.reduce((k, l) => k + walk(l as never), 0), 0),
+                0,
+            );
+        const body = registry.get("faqItem")?.preset ?? [];
+
+        expect(walk(body as never)).toBe(2);
+    });
+
+    it("keeps each disclosure usable by keyboard and screen reader (markup check; the repo runs no axe)", async () => {
+        const html = await ledger([{ question: "A", open: true }, { question: "B" }, { question: "C" }]);
+        const all = html.match(/<details[\s\S]*?<\/details>/g) ?? [];
+
+        expect(all).toHaveLength(3);
+        for (const d of all) {
+            // The summary is the first child, so it is the one focusable toggle and names the details.
+            expect(d).toMatch(/^<details[^>]*>\s*<summary[^>]*>[^<\s]/);
+            expect(d.match(/<summary/g)).toHaveLength(1);
+            // Nothing takes the toggle or the answer out of the tab order or the accessibility tree.
+            expect(d).not.toMatch(/tabindex="-1"|aria-hidden|<(details|summary)[^>]*role=/);
+            // The answer stays in the markup when closed, so find-in-page can reach it.
+            expect(d).toMatch(/<div data-bp-panel="">[\s\S]*About /);
+        }
+    });
+});

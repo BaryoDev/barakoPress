@@ -672,8 +672,10 @@ const changelogList: BlockPreset = {
 /*
  * Questions that open, and what it does not do.
  *
- * No group, which is the whole difference from `tabs`: a reader comparing two answers wants both
- * open, and a tab strip takes the first one away when they open the second.
+ * No group unless an item names one, which is the difference from `tabs`: a reader comparing two
+ * answers wants both open, and a tab strip takes the first one away when they open the second. A
+ * ledger gives its items one `group`; the group is on each `faqItem` because a preset's own props
+ * do not reach the blocks in its slots.
  */
 const faq: BlockPreset = {
     type: "faq",
@@ -688,12 +690,24 @@ const faq: BlockPreset = {
     ],
 };
 
+/*
+ * `start` and `group` are what make a ledger: one item open at first, the others closed when another
+ * opens. `start` is a choice and not a boolean because a preset cannot hand a boolean down, and the
+ * way round that (a `showIf` pair) cost four more blocks per item against the page budget. This is
+ * one disclosure and one richText, the same three blocks an item cost before.
+ */
 const faqItem: BlockPreset = {
     type: "faqItem",
     label: "Question",
-    fields: [text("question", "Question", true), text("answer", "Answer", true), tone],
+    fields: [
+        text("question", "Question", true),
+        text("answer", "Answer", true),
+        choice("start", "Start", ["open", "closed"]),
+        text("group", "Only one open in this group"),
+        tone,
+    ],
     blocks: [
-        holding("disclosure", { label: p("question"), tone: p("tone") }, [
+        holding("disclosure", { label: p("question"), tone: p("tone"), group: p("group"), start: p("start") }, [
             b("richText", { markdown: p("answer"), width: "full" }),
         ]),
     ],

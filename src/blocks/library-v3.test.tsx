@@ -629,7 +629,7 @@ describe("the v3 blocks on their own", () => {
         expect([...html.matchAll(/name="codeTabs"/g)]).toHaveLength(3);
     });
 
-    it("leaves every question openable at once, which is the whole of the difference from tabs", async () => {
+    it("leaves every question openable at once when no group is set, the difference from tabs", async () => {
         const html = await render([
             {
                 type: "faq",
