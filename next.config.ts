@@ -48,6 +48,29 @@ const config: NextConfig = {
 
   // Read once, at build time, from the Dockerfile's build argument. See PRESS_TRAILING_SLASH there.
   trailingSlash: process.env.PRESS_TRAILING_SLASH === "true",
+
+  /*
+   * Security headers the app sends itself, so the image is safe behind any proxy. The Caddyfile
+   * sends the same ones plus HSTS and the full Content-Security-Policy.
+   *
+   * No script-src policy here. A tenant's site can embed third-party scripts, and a strict default
+   * would break it. Only the frame rule is sent: frame-ancestors 'self' matches X-Frame-Options.
+   * A configurable script and frame policy per site is tracked separately.
+   */
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+        ],
+      },
+    ];
+  },
 };
 
 export default config;
