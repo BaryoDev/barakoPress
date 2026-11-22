@@ -12,6 +12,34 @@ master as `dev` and `dev-<commit sha>` (`.github/workflows/publish.yml`). It is 
 as built here: request-time identity, no overlay and no plugins. A site with its own theme or blocks
 builds from the same source; see the overlay below and [Plugin packages](blocks.md#plugin-packages).
 
+### Verify the image
+
+The images are signed with cosign (keyless, from this repository's publish workflow) and carry a
+build provenance attestation. You need `cosign`, `docker` and `jq`. Resolve the tag to a digest, then
+verify the digest:
+
+```bash
+DIGEST=$(docker buildx imagetools inspect --format '{{json .Manifest}}' ghcr.io/baryodev/barako-press:0.8.0 | jq -r '.digest')
+
+cosign verify \
+  --certificate-identity-regexp '^https://github\.com/BaryoDev/barakoPress/\.github/workflows/publish\.yml@refs/(heads/master|tags/v[0-9].*)$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/baryodev/barako-press@$DIGEST
+
+cosign verify-attestation --type slsaprovenance1 \
+  --certificate-identity-regexp '^https://github\.com/BaryoDev/barakoPress/\.github/workflows/publish\.yml@refs/(heads/master|tags/v[0-9].*)$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/baryodev/barako-press@$DIGEST
+```
+
+The same two commands work for `ghcr.io/baryodev/barako-press-source`. Do not run an image that
+fails. To run exactly what was verified, deploy by digest.
+
+Signed: the version tag, `latest` and `dev`, and `dev-<commit sha>`, of both `barako-press` and
+`barako-press-source`. `latest` and `dev` are copied from the digest that was verified, and move only
+after the signature and the attestation check out. Not signed: the per-architecture images the
+build pushes by digest, and any image published before signing was added.
+
 ```bash
 cp .env.example .env      # point CMS_URL at your instance, set PRESS_SECRET
 npm install

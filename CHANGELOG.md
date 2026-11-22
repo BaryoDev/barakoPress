@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The published images, `barako-press` and `barako-press-source`, are signed with cosign (keyless) and carry a build provenance attestation. The publish workflow signs and attests each digest, verifies both against its own identity, and only then copies `latest` or `dev` from that digest, so a failed check leaves the floating tags where they were. A manual run from a branch other than master no longer publishes. How to verify is in [Deploying](docs/deploying.md#verify-the-image). Images published before this are not signed.
 - Security: the `next` peer range is `>=16.4.5`, up from `>=16.3.8`. Next 16.0.0 to 16.4.4 carry GHSA-7qx7-33qx-rqx2, GHSA-f3mh-rxg3-f5g2, GHSA-pc58-hwjq-p385 and GHSA-rhh4-g77r-r9qj, fixed in 16.4.5. The reference app and the image build on 16.4.6.
 - `compose.yml` pins `postgres:16-alpine` and `caddy:2-alpine` by digest, and Dependabot moves the pins and the Dockerfile base to patched builds.
 - The app sends `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `frame-ancestors 'self'` and a Permissions-Policy that denies camera, microphone and geolocation itself, so the image is safe behind any proxy. There is no script-src policy in the app yet, since a tenant site can embed third-party scripts. A test checks that theme values and prose cannot close a `<style>` or `<script>` block.

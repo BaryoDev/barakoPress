@@ -17,7 +17,11 @@ short-lived credential itself. Provenance is attached automatically, which is wh
 
 The same tag publishes the container image. `.github/workflows/publish.yml` builds the reference app
 into `ghcr.io/baryodev/barako-press` on an amd64 and an arm64 runner, joins the two into one manifest
-list, and refuses to publish unless the pushed manifest carries both. The tags it pushes:
+list, and refuses to publish unless the pushed manifest carries both. It then signs both images
+(`barako-press` and `barako-press-source`) with cosign, attests their build provenance, and verifies
+both against this workflow's identity. `latest` and `dev` are copied from the verified digest as the
+last step, so a failed check leaves them where they were. How to verify an image is in
+[Deploying](docs/deploying.md#verify-the-image). The tags it pushes:
 
 | Trigger | Tags |
 | --- | --- |
@@ -27,7 +31,8 @@ list, and refuses to publish unless the pushed manifest carries both. The tags i
 
 The manual run is for a release that has no image, which is how `0.7.0` got one: it was tagged before
 this workflow existed. Run it from master, since a run started on the old tag would use that tag's
-copy of the workflow, which does not exist.
+copy of the workflow, which does not exist. A manual run from any other branch builds and publishes
+nothing.
 
 ## One time, before any of that works
 
