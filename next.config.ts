@@ -49,6 +49,11 @@ const config: NextConfig = {
   // Read once, at build time, from the Dockerfile's build argument. See PRESS_TRAILING_SLASH there.
   trailingSlash: process.env.PRESS_TRAILING_SLASH === "true",
 
+  // Keep regenerated pages in memory only. The compose files run the site on a read-only root, where
+  // writing them under .next/server fails and logs a warning on every regeneration. The image is
+  // built with no CMS, so there were no rendered pages on disk worth keeping across a restart.
+  experimental: { isrFlushToDisk: false },
+
   /*
    * Security headers the app sends itself, so the image is safe behind any proxy. The Caddyfile
    * sends the same ones plus HSTS and the full Content-Security-Policy.

@@ -13,6 +13,8 @@
 # API trusts for X-Forwarded-For. "db" is internal (no route out) and holds only the database and
 # the API. Every container drops all capabilities and cannot gain new ones, and runs with a
 # read-only root filesystem except the console, whose entrypoint rewrites files in /app at start.
+# If 172.28.0.0/24 is already used on the host, set EDGE_SUBNET and EDGE_PROXY_IP (an address
+# inside it) in .env.
 
 services:
   postgres:
@@ -71,7 +73,7 @@ services:
       ForwardedHeaders__Enabled: "true"
       # Trust X-Forwarded-For from the Caddy container alone, at its fixed address on the edge
       # network. A wider range lets any client pick the IP the rate limits and audit log see.
-      ForwardedHeaders__KnownProxies__0: "172.28.0.10"
+      ForwardedHeaders__KnownProxies__0: "${EDGE_PROXY_IP:-172.28.0.10}"
     networks:
       - edge
       - db
@@ -93,6 +95,8 @@ services:
     environment:
       # Read by the browser, so it is the public API address, not the service name.
       NEXT_PUBLIC_API_URL: "https://${API_DOMAIN:?set API_DOMAIN in .env}"
+      # The site, for the page block editor's schema. The site allows this console's origin below.
+      NEXT_PUBLIC_PRESS_URL: "https://${SITE_DOMAIN}"
     networks:
       - edge
     cap_drop: [ALL]
@@ -131,6 +135,8 @@ services:
       PRESS_FONT_ORIGINS: ${PRESS_FONT_ORIGINS:-}
       # Which origins a site's Umami script may be loaded from. Empty allows none, so no script renders.
       PRESS_SCRIPT_ORIGINS: ${PRESS_SCRIPT_ORIGINS:-}
+      # Which browser origins may read the block schema. The console above.
+      PRESS_CONSOLE_ORIGINS: ${PRESS_CONSOLE_ORIGINS:-https://${CONSOLE_DOMAIN}}
     networks:
       - edge
     cap_drop: [ALL]
@@ -140,7 +146,7 @@ services:
     tmpfs:
       - /tmp
       # Next writes its render cache here. Owned by the nextjs user the image runs as.
-      - /app/.next/cache:uid=1001,gid=1001
+      - /app/.next/cache:uid=1001,gid=1001,size=256m
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
@@ -160,7 +166,7 @@ services:
       - "443:443"
     networks:
       edge:
-        ipv4_address: 172.28.0.10
+        ipv4_address: ${EDGE_PROXY_IP:-172.28.0.10}
     # The image runs as root, and with every other capability dropped, binding 80 and 443 needs this one.
     cap_drop: [ALL]
     cap_add: [NET_BIND_SERVICE]
@@ -186,6 +192,7 @@ services:
       CSP_FRAME_ORIGINS: ${CSP_FRAME_ORIGINS:-https://www.youtube-nocookie.com https://www.youtube.com https://youtube.com https://player.vimeo.com https://www.google.com https://open.spotify.com https://w.soundcloud.com}
       ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env, Let us Encrypt needs it}
     volumes:
+      # Root in this container has no DAC_OVERRIDE, so the Caddyfile must be world readable (0644).
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
@@ -194,7 +201,7 @@ networks:
   edge:
     ipam:
       config:
-        - subnet: 172.28.0.0/24
+        - subnet: ${EDGE_SUBNET:-172.28.0.0/24}
   # No route out of the host. Only the database and the API are on it.
   db:
     internal: true

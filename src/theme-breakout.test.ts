@@ -56,6 +56,18 @@ describe("theme css cannot break out of style", () => {
     it("inline css cannot break out of style when a colour or font closes the block", () => {
         expectInert(inlineCss(hostileTheme(BREAKOUT)));
     });
+
+    it("theme css cannot break out of style through a token, tone or variant name", () => {
+        const theme = resolveTheme({
+            tokens: { [BREAKOUT]: "#ff0000", [BREAKOUT_SPACED]: "#ff0000" },
+            tones: { [BREAKOUT]: { ink: "#000000", bg: "#ffffff", edge: "#cccccc" } },
+            variants: { [BREAKOUT]: { accent: "#ff0000" } },
+        } as Parameters<typeof resolveTheme>[0]);
+
+        expectInert(themeVariablesCss(theme));
+        expectInert(proseCss(theme, "prose"));
+        expectInert(inlineCss(theme));
+    });
 });
 
 describe("tenant prose cannot open a script or close a style", () => {
