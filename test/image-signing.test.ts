@@ -39,18 +39,18 @@ describe("image signing in the publish workflow", () => {
     it("signs and verifies each image by digest, never by tag", () => {
         const signs = publish.filter((l) => l.startsWith("cosign sign"));
         expect(signs).toHaveLength(1);
-        expect(signs[0]).toContain('"ghcr.io/baryodev/$image@$DIGEST"');
+        expect(signs[0]).toContain('"ghcr.io/baryodev/$NAME@$DIGEST"');
         expect(publish).toContain("for image in barako-press barako-press-source; do");
-        const verifies = publish.filter((l) => l.includes("ghcr.io/baryodev/$image@$DIGEST") && !l.startsWith("cosign sign"));
+        const verifies = publish.filter((l) => l.includes("ghcr.io/baryodev/$NAME@$DIGEST") && !l.startsWith("cosign sign"));
         expect(verifies.length).toBeGreaterThanOrEqual(1);
         for (const l of publish.filter((l) => /^(cosign sign|cosign verify)/.test(l))) {
             expect(l).not.toMatch(/:\$(T|VERSION)/);
         }
         // Each image is attested for its own digest.
         expect(publish).toContain("subject-name: ghcr.io/baryodev/barako-press");
-        expect(publish).toContain("subject-digest: ${{ steps.sign.outputs.barako_press_digest }}");
+        expect(publish).toContain("subject-digest: ${{ steps.manifest.outputs.barako_press_digest }}");
         expect(publish).toContain("subject-name: ghcr.io/baryodev/barako-press-source");
-        expect(publish).toContain("subject-digest: ${{ steps.sign.outputs.barako_press_source_digest }}");
+        expect(publish).toContain("subject-digest: ${{ steps.manifest.outputs.barako_press_source_digest }}");
         expect(publish.filter((l) => l === "push-to-registry: true")).toHaveLength(2);
     });
 
@@ -219,5 +219,39 @@ describe("image signing in the publish workflow", () => {
         expect(job("build")).toContain("ref: ${{ needs.version.outputs.ref }}");
         expect(workflow.match(/needs\.version\.outputs\.ref\b/g)).toHaveLength(1);
         expect(version).toContain("ref: ${{ steps.v.outputs.ref }}");
+    });
+
+    it("checks the architectures of the digest it resolved, not of a tag", () => {
+        const step = job("publish").split("- name: The pushed images carry both architectures")[1].split("\n      - ")[0];
+        expect(step).toContain('docker buildx imagetools inspect "$IMG@$DIGEST" --raw');
+        expect(step).toContain("PRESS_DIGEST: ${{ steps.manifest.outputs.barako_press_digest }}");
+        expect(step).not.toMatch(/\$IMG:/);
+    });
+
+    it("signs, attests, verifies and copies the digest the manifest step resolved", () => {
+        const text = job("publish");
+        expect(text).not.toContain("steps.sign.outputs");
+        expect(text.match(/steps\.manifest\.outputs\.barako_press_digest/g)!.length).toBeGreaterThanOrEqual(5);
+        expect(text.match(/steps\.manifest\.outputs\.barako_press_source_digest/g)!.length).toBeGreaterThanOrEqual(5);
+        const resolves = code(text).filter((l) => l.includes("--format '{{json .Manifest}}'") && l.includes("jq -r '.digest'"));
+        expect(resolves.filter((l) => l.startsWith("DIGEST=$(")).length).toBe(1);
+        expect(code(text)).toContain("echo \"${image//-/_}_digest=$DIGEST\" >> \"$GITHUB_OUTPUT\"");
+    });
+
+    it("resolves no tag again after the architecture check", () => {
+        const after = job("publish").split("- name: The pushed images carry both architectures")[1];
+        const inspects = code(after).filter((l) => l.includes("imagetools inspect"));
+        const own = inspects.filter((l) => !l.startsWith("PLATFORMS=$(") && !l.includes("imagetools inspect \"$IMG@$DIGEST\""));
+        // The only other read is the floating tag read back to compare it with the verified digest.
+        expect(own).toHaveLength(1);
+        expect(own[0]).toMatch(/^ACTUAL=\$\(/);
+        const signStep = after.split("- name: Sign every published image and verify the signature")[1].split("\n      - ")[0];
+        expect(signStep).not.toContain("imagetools");
+        expect(signStep).not.toMatch(/\$T\b|\$VERSION/);
+    });
+
+    it("keys the publish job concurrency on the version and does not cancel", () => {
+        const text = job("publish");
+        expect(text).toContain("concurrency:\n      group: publish-image-${{ needs.version.outputs.version }}\n      cancel-in-progress: false\n");
     });
 });

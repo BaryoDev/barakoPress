@@ -15,7 +15,7 @@ builds from the same source; see the overlay below and [Plugin packages](blocks.
 ### Verify the image
 
 The images are signed with cosign (keyless, from this repository's publish workflow) and carry a
-build provenance attestation. You need `cosign`, `docker` and `jq`. Resolve the tag to a digest, then
+build provenance attestation. You need `cosign` 3 or later (cosign 2 does not read the bundle format these signatures use by default), `docker` and `jq`. Resolve the tag to a digest, then
 verify the digest:
 
 ```bash
@@ -43,10 +43,9 @@ attestation check out. A prerelease (a version with a hyphen) is signed under it
 does not move `latest`. Not signed: the per-architecture images the build pushes by digest, and any
 image published before signing was added.
 
-What a signature proves: the image was built by this workflow, from a commit on master (a release tag
-that is not on master fails the run), and the identity cannot come from a branch other than master or
-a version tag. Every existing `v` tag is on master. An image published by a manual run with `tag` set
-holds that tag's source, but its signature and provenance name the master run and commit that
+What a signature proves: the image was built by this repository's publish workflow, run from master
+or a semver version tag, with the GitHub OIDC issuer. An image published by a manual run with `tag`
+set holds that tag's source, but its signature and provenance name the master run and commit that
 dispatched it.
 
 ```bash

@@ -171,6 +171,10 @@ jobs:
     name: Publish ${{ needs.version.outputs.is_release == 'true' && 'release' || 'dev' }} tags
     needs: [version, build]
     runs-on: ubuntu-latest
+    # One publish per version at a time, so a tag push and a backfill of the same version cannot overlap.
+    concurrency:
+      group: publish-image-${{ needs.version.outputs.version }}
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
@@ -198,7 +202,12 @@ jobs:
       # The manifest lists are made under a tag that never moves: the version for a release, and
       # dev-<sha> for a master build. The floating tags (latest, dev) are copied from the verified
       # digest at the end of the job, after the images are signed and attested.
+      #
+      # Each manifest's digest is resolved here, once, and checked for shape. Every later step uses
+      # that digest: the architecture check, the signature, the attestation, the verifies and the
+      # floating tag copy. None of them resolves a tag again.
       - name: Create the manifest lists
+        id: manifest
         run: |
           set -euo pipefail
           T="$( [ "$IS_RELEASE" = "true" ] && echo "$VERSION" || echo "dev-${GITHUB_SHA}" )"
@@ -213,6 +222,9 @@ jobs:
               REFS+=("$IMG@$D")
             done
             docker buildx imagetools create --tag "$IMG:$T" "${REFS[@]}"
+            DIGEST=$(docker buildx imagetools inspect --format '{{json .Manifest}}' "$IMG:$T" | jq -r '.digest')
+            [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::$IMG:$T resolved to '$DIGEST', not a sha256 digest"; exit 1; }
+            echo "${image//-/_}_digest=$DIGEST" >> "$GITHUB_OUTPUT"
             echo "pushed $image: $T" >> "$GITHUB_STEP_SUMMARY"
           done
 
@@ -220,14 +232,17 @@ jobs:
       # configuration being right is not evidence that the push was. A single-architecture image is
       # invisible until something on the other architecture tries to run it.
       - name: The pushed images carry both architectures
+        env:
+          PRESS_DIGEST: ${{ steps.manifest.outputs.barako_press_digest }}
+          SOURCE_DIGEST: ${{ steps.manifest.outputs.barako_press_source_digest }}
         run: |
           set -euo pipefail
-          T="$( [ "$IS_RELEASE" = "true" ] && echo "$VERSION" || echo "dev-${GITHUB_SHA}" )"
-          for image in barako-press barako-press-source; do
+          for pair in "barako-press $PRESS_DIGEST" "barako-press-source $SOURCE_DIGEST"; do
+            read -r image DIGEST <<< "$pair"
             IMG=ghcr.io/baryodev/$image
-            PLATFORMS=$(docker buildx imagetools inspect "$IMG:$T" --raw \
+            PLATFORMS=$(docker buildx imagetools inspect "$IMG@$DIGEST" --raw \
               | python3 -c "import sys,json; m=json.load(sys.stdin).get('manifests',[]); print(' '.join(sorted(f\"{x['platform']['os']}/{x['platform']['architecture']}\" for x in m if x.get('platform',{}).get('architecture') not in (None,'unknown'))))")
-            echo "$IMG:$T carries: $PLATFORMS"
+            echo "$IMG@$DIGEST carries: $PLATFORMS"
             case "$PLATFORMS" in
               *linux/amd64*) ;;
               *) echo "::error::no linux/amd64 in the pushed manifest of $image"; exit 1 ;;
@@ -242,39 +257,33 @@ jobs:
         with:
           cosign-release: v3.1.4
 
-      # Signed by digest, never by tag: a tag can move after the signature is made. The digest is read
-      # back from the registry, so it is the one a consumer pulling the tag resolves to. This runs
-      # after the architecture check, so an image that fails it is never signed. jq is on the
-      # ubuntu-latest runner image. The identity names this workflow file and the refs that publish
-      # (master and version tags), so a run from any other ref does not verify.
+      # Signed by digest, never by tag: a tag can move after the signature is made. The digest is the
+      # one the manifest step resolved and the architecture check read, so the image that was checked
+      # is the image that is signed. jq is on the ubuntu-latest runner image. The identity names this
+      # workflow file and the refs that publish (master and version tags), so a run from any other ref
+      # does not verify.
       - name: Sign every published image and verify the signature
-        id: sign
         env:
           IDENTITY_REGEXP: '^https://github\.com/BaryoDev/barakoPress/\.github/workflows/publish\.yml@refs/(heads/master|tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?)$'
           OIDC_ISSUER: https://token.actions.githubusercontent.com
+          PRESS_DIGEST: ${{ steps.manifest.outputs.barako_press_digest }}
+          SOURCE_DIGEST: ${{ steps.manifest.outputs.barako_press_source_digest }}
         run: |
           set -euo pipefail
-          T="$( [ "$IS_RELEASE" = "true" ] && echo "$VERSION" || echo "dev-${GITHUB_SHA}" )"
-          for image in barako-press barako-press-source; do
-            REF="ghcr.io/baryodev/$image:$T"
-            DIGEST=$(docker buildx imagetools inspect --format '{{json .Manifest}}' "$REF" | jq -r '.digest')
-            case "$DIGEST" in
-              sha256:*) ;;
-              *) echo "::error::no digest for $REF, got '$DIGEST'"; exit 1 ;;
-            esac
-            cosign sign --yes "ghcr.io/baryodev/$image@$DIGEST"
+          for pair in "barako-press $PRESS_DIGEST" "barako-press-source $SOURCE_DIGEST"; do
+            read -r NAME DIGEST <<< "$pair"
+            cosign sign --yes "ghcr.io/baryodev/$NAME@$DIGEST"
             cosign verify \
               --certificate-identity-regexp "$IDENTITY_REGEXP" \
               --certificate-oidc-issuer "$OIDC_ISSUER" \
-              "ghcr.io/baryodev/$image@$DIGEST" > /dev/null
-            echo "${image//-/_}_digest=$DIGEST" >> "$GITHUB_OUTPUT"
+              "ghcr.io/baryodev/$NAME@$DIGEST" > /dev/null
           done
 
       - name: Attest build provenance for barako-press
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ghcr.io/baryodev/barako-press
-          subject-digest: ${{ steps.sign.outputs.barako_press_digest }}
+          subject-digest: ${{ steps.manifest.outputs.barako_press_digest }}
           push-to-registry: true
           create-storage-record: false
 
@@ -282,7 +291,7 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ghcr.io/baryodev/barako-press-source
-          subject-digest: ${{ steps.sign.outputs.barako_press_source_digest }}
+          subject-digest: ${{ steps.manifest.outputs.barako_press_source_digest }}
           push-to-registry: true
           create-storage-record: false
 
@@ -290,8 +299,8 @@ jobs:
         env:
           IDENTITY_REGEXP: '^https://github\.com/BaryoDev/barakoPress/\.github/workflows/publish\.yml@refs/(heads/master|tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?)$'
           OIDC_ISSUER: https://token.actions.githubusercontent.com
-          PRESS_DIGEST: ${{ steps.sign.outputs.barako_press_digest }}
-          SOURCE_DIGEST: ${{ steps.sign.outputs.barako_press_source_digest }}
+          PRESS_DIGEST: ${{ steps.manifest.outputs.barako_press_digest }}
+          SOURCE_DIGEST: ${{ steps.manifest.outputs.barako_press_source_digest }}
         run: |
           set -euo pipefail
           for pair in "barako-press $PRESS_DIGEST" "barako-press-source $SOURCE_DIGEST"; do
@@ -307,8 +316,8 @@ jobs:
       # release moves neither tag.
       - name: Move the floating tags to the verified images
         env:
-          PRESS_DIGEST: ${{ steps.sign.outputs.barako_press_digest }}
-          SOURCE_DIGEST: ${{ steps.sign.outputs.barako_press_source_digest }}
+          PRESS_DIGEST: ${{ steps.manifest.outputs.barako_press_digest }}
+          SOURCE_DIGEST: ${{ steps.manifest.outputs.barako_press_source_digest }}
         run: |
           set -euo pipefail
           if [ "$IS_RELEASE" = "true" ]; then
