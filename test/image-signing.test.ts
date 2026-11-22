@@ -217,6 +217,7 @@ describe("image signing in the publish workflow", () => {
         expect(version).toContain('REF="$TAGGED"');
         expect(version).not.toMatch(/REF="(v\$V|\$GITHUB_REF)"/);
         expect(job("build")).toContain("ref: ${{ needs.version.outputs.ref }}");
-        expect(workflow.match(/outputs\.ref\b/g)).toHaveLength(1);
+        expect(workflow.match(/needs\.version\.outputs\.ref\b/g)).toHaveLength(1);
+        expect(version).toContain("ref: ${{ steps.v.outputs.ref }}");
     });
 });
