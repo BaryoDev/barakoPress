@@ -297,8 +297,13 @@ jobs:
           else
             FLOAT=dev
           fi
-          docker buildx imagetools create --tag "ghcr.io/baryodev/barako-press:$FLOAT" "ghcr.io/baryodev/barako-press@$PRESS_DIGEST"
-          docker buildx imagetools create --tag "ghcr.io/baryodev/barako-press-source:$FLOAT" "ghcr.io/baryodev/barako-press-source@$SOURCE_DIGEST"
+          for pair in "barako-press $PRESS_DIGEST" "barako-press-source $SOURCE_DIGEST"; do
+            read -r NAME DIGEST <<< "$pair"
+            docker buildx imagetools create --tag "ghcr.io/baryodev/$NAME:$FLOAT" "ghcr.io/baryodev/$NAME@$DIGEST"
+            # Read the tag back: it has to resolve to the digest that was signed and verified.
+            ACTUAL=$(docker buildx imagetools inspect --format '{{json .Manifest}}' "ghcr.io/baryodev/$NAME:$FLOAT" | jq -r '.digest')
+            [ "$ACTUAL" = "$DIGEST" ] || { echo "::error::$NAME:$FLOAT resolves to '$ACTUAL', not the verified $DIGEST"; exit 1; }
+          done
           echo "moved :$FLOAT to the verified images" >> "$GITHUB_STEP_SUMMARY"
 
   close-milestone:

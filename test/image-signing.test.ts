@@ -82,12 +82,12 @@ describe("image signing in the publish workflow", () => {
         const attest = idx((l) => l.startsWith("cosign verify-attestation"));
         const moves = publish
             .map((l, i) => [l, i] as const)
-            .filter(([l]) => l.includes("--tag") && l.includes(":$FLOAT"));
-        expect(moves).toHaveLength(2);
+            .filter(([l]) => l.startsWith("docker buildx imagetools create --tag") && l.includes(":$FLOAT"));
+        expect(moves).toHaveLength(1);
         for (const [l, i] of moves) {
             expect(i).toBeGreaterThan(attest);
             expect(i).toBeGreaterThan(sign);
-            expect(l).toMatch(/@\$(PRESS|SOURCE)_DIGEST"$/);
+            expect(l).toContain('"ghcr.io/baryodev/$NAME@$DIGEST"');
         }
         // The manifest step creates the immutable tag only.
         const create = publish.filter((l) => l.startsWith('docker buildx imagetools create --tag "$IMG:$T"'));
@@ -110,5 +110,18 @@ describe("image signing in the publish workflow", () => {
         // The step that moves the tags is the last step of the job.
         const steps = text.split(/^ {6}- /m);
         expect(steps[steps.length - 1]).toContain("Move the floating tags to the verified images");
+    });
+
+    it("reads each floating tag back and compares it with the verified digest", () => {
+        const move = code(job("publish").split("Move the floating tags to the verified images")[1]);
+        const create = move.findIndex((l) => l.startsWith("docker buildx imagetools create --tag"));
+        const read = move.findIndex((l) => l.startsWith("ACTUAL=$(docker buildx imagetools inspect") && l.includes(":$FLOAT"));
+        const compare = move.findIndex((l) => l.startsWith('[ "$ACTUAL" = "$DIGEST" ]'));
+        expect(create).toBeGreaterThanOrEqual(0);
+        expect(read).toBeGreaterThan(create);
+        expect(compare).toBeGreaterThan(read);
+        expect(move[compare]).toContain("::error::$NAME");
+        expect(move[compare]).toContain("exit 1");
+        expect(move).toContain('for pair in "barako-press $PRESS_DIGEST" "barako-press-source $SOURCE_DIGEST"; do');
     });
 });
