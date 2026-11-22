@@ -22,12 +22,12 @@ verify the digest:
 DIGEST=$(docker buildx imagetools inspect --format '{{json .Manifest}}' ghcr.io/baryodev/barako-press:0.8.0 | jq -r '.digest')
 
 cosign verify \
-  --certificate-identity-regexp '^https://github\.com/BaryoDev/barakoPress/\.github/workflows/publish\.yml@refs/(heads/master|tags/v[0-9].*)$' \
+  --certificate-identity-regexp '^https://github\.com/BaryoDev/barakoPress/\.github/workflows/publish\.yml@refs/(heads/master|tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?)$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   ghcr.io/baryodev/barako-press@$DIGEST
 
 cosign verify-attestation --type slsaprovenance1 \
-  --certificate-identity-regexp '^https://github\.com/BaryoDev/barakoPress/\.github/workflows/publish\.yml@refs/(heads/master|tags/v[0-9].*)$' \
+  --certificate-identity-regexp '^https://github\.com/BaryoDev/barakoPress/\.github/workflows/publish\.yml@refs/(heads/master|tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?)$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   ghcr.io/baryodev/barako-press@$DIGEST
 ```
@@ -35,10 +35,19 @@ cosign verify-attestation --type slsaprovenance1 \
 The same two commands work for `ghcr.io/baryodev/barako-press-source`. Do not run an image that
 fails. To run exactly what was verified, deploy by digest.
 
-Signed: the version tag, `latest` and `dev`, and `dev-<commit sha>`, of both `barako-press` and
-`barako-press-source`. `latest` and `dev` are copied from the digest that was verified, and move only
-after the signature and the attestation check out. Not signed: the per-architecture images the
-build pushes by digest, and any image published before signing was added.
+The images that carry a signature are the version tag, `latest` and `dev`, and `dev-<commit sha>`, of
+both `barako-press` and `barako-press-source`. The tag is created before the signature, so a tag is
+signed when the Publish run that made it passed. The verify commands above are how to tell. `latest`
+and `dev` are copied from the digest that was verified, and move only after the signature and the
+attestation check out. A prerelease (a version with a hyphen) is signed under its own version tag and
+does not move `latest`. Not signed: the per-architecture images the build pushes by digest, and any
+image published before signing was added.
+
+What a signature proves: the image was built by this workflow, from a commit on master (a release tag
+that is not on master fails the run), and the identity cannot come from a branch other than master or
+a version tag. Every existing `v` tag is on master. An image published by a manual run with `tag` set
+holds that tag's source, but its signature and provenance name the master run and commit that
+dispatched it.
 
 ```bash
 cp .env.example .env      # point CMS_URL at your instance, set PRESS_SECRET

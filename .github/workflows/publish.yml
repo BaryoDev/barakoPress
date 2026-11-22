@@ -41,12 +41,20 @@ jobs:
   version:
     name: Work out the version
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.v.outputs.version }}
       is_release: ${{ steps.v.outputs.is_release }}
       move_latest: ${{ steps.v.outputs.move_latest }}
       ref: ${{ steps.v.outputs.ref }}
     steps:
+      # The full history is fetched so the release check below can tell whether a tagged commit is on
+      # master. The token is not kept in the checkout.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - id: v
         env:
           INPUT_TAG: ${{ inputs.tag }}
@@ -71,10 +79,16 @@ jobs:
             esac
           fi
           if [ "$RELEASE" = true ]; then
+            # A prerelease (a hyphen in the version) never moves `latest`.
+            case "$V" in *-*) LATEST=false ;; esac
             # Anchored, because a `case` glob is not. An unanchored pattern matches `1.2.3$(id)`
             # and a value carrying a newline, and this one reaches a shell again as a tag list.
             [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]] || {
               echo "::error::'$V' is not a version"; exit 1; }
+            # A release is built from a commit on master. A tag on any other branch publishes nothing.
+            TAGGED=$(git rev-parse --verify "refs/tags/v$V^{commit}" 2>/dev/null) || {
+              echo "::error::tag v$V does not exist"; exit 1; }
+            git merge-base --is-ancestor "$TAGGED" origin/master || { echo "::error::v$V is not on master, refusing to publish a release from it"; exit 1; }
           fi
           {
             echo "version=$V"
@@ -185,14 +199,15 @@ jobs:
           T="$( [ "$IS_RELEASE" = "true" ] && echo "$VERSION" || echo "dev-${GITHUB_SHA}" )"
           for image in barako-press barako-press-source; do
             IMG=ghcr.io/baryodev/$image
-            REFS=""
+            REFS=()
             for arch in amd64 arm64; do
               F="/tmp/digests/$image-$arch"
               [ -s "$F" ] || { echo "::error::no digest for $image $arch, refusing to publish a single-architecture image"; exit 1; }
-              REFS="$REFS $IMG@$(cat "$F")"
+              D=$(cat "$F")
+              [[ "$D" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::digest for $image $arch is not a sha256 digest: '$D'"; exit 1; }
+              REFS+=("$IMG@$D")
             done
-            # shellcheck disable=SC2086
-            docker buildx imagetools create --tag "$IMG:$T" $REFS
+            docker buildx imagetools create --tag "$IMG:$T" "${REFS[@]}"
             echo "pushed $image: $T" >> "$GITHUB_STEP_SUMMARY"
           done
 
@@ -230,7 +245,7 @@ jobs:
       - name: Sign every published image and verify the signature
         id: sign
         env:
-          IDENTITY_REGEXP: '^https://github\.com/BaryoDev/barakoPress/\.github/workflows/publish\.yml@refs/(heads/master|tags/v[0-9].*)$'
+          IDENTITY_REGEXP: '^https://github\.com/BaryoDev/barakoPress/\.github/workflows/publish\.yml@refs/(heads/master|tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?)$'
           OIDC_ISSUER: https://token.actions.githubusercontent.com
         run: |
           set -euo pipefail
@@ -268,7 +283,7 @@ jobs:
 
       - name: Verify the provenance attestation of every published image
         env:
-          IDENTITY_REGEXP: '^https://github\.com/BaryoDev/barakoPress/\.github/workflows/publish\.yml@refs/(heads/master|tags/v[0-9].*)$'
+          IDENTITY_REGEXP: '^https://github\.com/BaryoDev/barakoPress/\.github/workflows/publish\.yml@refs/(heads/master|tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?)$'
           OIDC_ISSUER: https://token.actions.githubusercontent.com
           PRESS_DIGEST: ${{ steps.sign.outputs.barako_press_digest }}
           SOURCE_DIGEST: ${{ steps.sign.outputs.barako_press_source_digest }}

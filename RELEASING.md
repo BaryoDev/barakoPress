@@ -25,14 +25,14 @@ last step, so a failed check leaves them where they were. How to verify an image
 
 | Trigger | Tags |
 | --- | --- |
-| a `v*` tag push | the version (`0.8.0`) and `latest` |
+| a `v*` tag push | the version (`0.8.0`) and `latest`; a prerelease (`0.8.0-rc.1`) gets the version only |
 | a push to master | `dev` and `dev-<commit sha>` |
 | a manual run with `tag` set, e.g. `v0.7.0` | that version only, built from the tag's source; `latest` does not move |
 
 The manual run is for a release that has no image, which is how `0.7.0` got one: it was tagged before
 this workflow existed. Run it from master, since a run started on the old tag would use that tag's
 copy of the workflow, which does not exist. A manual run from any other branch builds and publishes
-nothing.
+nothing. The image from a manual run holds the tag's source, but its signature and provenance name the master run and commit that dispatched it. A tag that is not on master is refused.
 
 ## One time, before any of that works
 

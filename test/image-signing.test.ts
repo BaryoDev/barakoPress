@@ -12,8 +12,11 @@ import { describe, expect, it } from "vitest";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const workflow = readFileSync(resolve(root, ".github/workflows/publish.yml"), "utf8");
 
+// Comment lines dropped, and a line ending in a backslash joined to the next, so a shell command
+// that spans lines is one entry.
 const code = (text: string) =>
     text
+        .replace(/\\\n\s*/g, "")
         .split("\n")
         .map((l) => l.trim())
         .filter((l) => l.length > 0 && !l.startsWith("#"));
@@ -27,8 +30,8 @@ const job = (name: string) => {
     return next < 0 ? rest : rest.slice(0, next + 1);
 };
 
-const IDENTITY =
-    "IDENTITY_REGEXP: '^https://github\\.com/BaryoDev/barakoPress/\\.github/workflows/publish\\.yml@refs/(heads/master|tags/v[0-9].*)$'";
+const IDENTITY_RE = String.raw`^https://github\.com/BaryoDev/barakoPress/\.github/workflows/publish\.yml@refs/(heads/master|tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?)$`;
+const IDENTITY = `IDENTITY_REGEXP: '${IDENTITY_RE}'`;
 
 describe("image signing in the publish workflow", () => {
     const publish = code(job("publish"));
@@ -99,14 +102,17 @@ describe("image signing in the publish workflow", () => {
     it("fails the job when a verify fails, and keeps the floating tags after it", () => {
         const text = job("publish");
         // Every run block that signs or verifies runs under set -e and pipefail, and none swallows a failure.
-        const blocks = text.split(/^ {6}- /m).filter((b) => /cosign (sign|verify)/.test(b));
-        expect(blocks.length).toBeGreaterThanOrEqual(2);
+        const blocks = text
+            .split(/^ {6}- /m)
+            .filter((b) => /cosign (sign|verify)/.test(b) || b.includes("Move the floating tags to the verified images"));
+        expect(blocks.length).toBeGreaterThanOrEqual(3);
         for (const b of blocks) {
             expect(b).toContain("set -euo pipefail");
             expect(b).not.toMatch(/\|\| true/);
             expect(b).not.toMatch(/continue-on-error/);
         }
         expect(text).not.toMatch(/continue-on-error/);
+        expect(text).not.toMatch(/always\(\)|failure\(\)/);
         // The step that moves the tags is the last step of the job.
         const steps = text.split(/^ {6}- /m);
         expect(steps[steps.length - 1]).toContain("Move the floating tags to the verified images");
@@ -123,5 +129,77 @@ describe("image signing in the publish workflow", () => {
         expect(move[compare]).toContain("::error::$NAME");
         expect(move[compare]).toContain("exit 1");
         expect(move).toContain('for pair in "barako-press $PRESS_DIGEST" "barako-press-source $SOURCE_DIGEST"; do');
+    });
+
+    it("verifies and verify-attests by digest and passes the pinned identity and issuer to both", () => {
+        const verifies = publish.filter((l) => /^cosign verify(-attestation)? /.test(l));
+        expect(verifies).toHaveLength(2);
+        for (const l of verifies) {
+            expect(l).toMatch(/ "ghcr\.io\/baryodev\/\$[A-Za-z_]+@\$DIGEST"( > \/dev\/null)?$/);
+            expect(l).not.toMatch(/ghcr\.io\/baryodev\/[^ ]*:/);
+            expect(l).toContain('--certificate-identity-regexp "$IDENTITY_REGEXP"');
+            expect(l).toContain('--certificate-oidc-issuer "$OIDC_ISSUER"');
+        }
+    });
+
+    it("accepts master and version tags of this workflow and nothing else", () => {
+        const fromWorkflow = publish
+            .filter((l) => l.startsWith("IDENTITY_REGEXP:"))
+            .map((l) => l.slice("IDENTITY_REGEXP: '".length, -1));
+        expect(fromWorkflow).toHaveLength(2);
+        const base = "https://github.com/BaryoDev/barakoPress/.github/workflows/publish.yml@";
+        for (const src of fromWorkflow) {
+            const re = new RegExp(src);
+            for (const ok of ["refs/heads/master", "refs/tags/v1.2.3", "refs/tags/v1.2.3-rc.1"]) {
+                expect(re.test(base + ok), ok).toBe(true);
+            }
+            for (const bad of ["refs/tags/v1-evil", "refs/tags/v9anything", "refs/heads/master-x", "refs/heads/feature"]) {
+                expect(re.test(base + bad), bad).toBe(false);
+            }
+            expect(re.test(base.replace("barakoPress", "barakoCMS") + "refs/heads/master")).toBe(false);
+            expect(re.test(base.replace("publish.yml", "release.yml") + "refs/heads/master")).toBe(false);
+        }
+    });
+
+    it("documents the same identity regexp as the workflow", () => {
+        const docs = readFileSync(resolve(root, "docs/deploying.md"), "utf8");
+        expect(docs.split(IDENTITY_RE).length - 1).toBe(2);
+    });
+
+    it("refuses a release tag that is not on master, from a checkout with no write permissions", () => {
+        const version = job("version");
+        expect(version).toContain("permissions:\n      contents: read\n");
+        expect(version).not.toMatch(/: write/);
+        expect(version).toContain("fetch-depth: 0");
+        expect(version).toContain("persist-credentials: false");
+        const lines = code(version);
+        const check = lines.find((l) => l.startsWith('git merge-base --is-ancestor "$TAGGED" origin/master'));
+        expect(check).toBeDefined();
+        expect(check).toContain("::error::");
+        expect(check).toContain("exit 1");
+    });
+
+    it("does not move latest for a prerelease", () => {
+        const lines = code(job("version"));
+        const skip = lines.findIndex((l) => l === 'case "$V" in *-*) LATEST=false ;; esac');
+        const out = lines.findIndex((l) => l === 'echo "move_latest=$LATEST"');
+        expect(skip).toBeGreaterThanOrEqual(0);
+        expect(out).toBeGreaterThan(skip);
+    });
+
+    it("checks every digest file is a sha256 digest before building a manifest from it", () => {
+        const step = job("publish").split("- name: Create the manifest lists")[1].split("\n      #")[0];
+        expect(step).toContain('[[ "$D" =~ ^sha256:[0-9a-f]{64}$ ]] ||');
+        expect(step).toContain("::error::digest for $image $arch is not a sha256 digest");
+        expect(step).toContain('REFS+=("$IMG@$D")');
+        expect(step).toContain('"${REFS[@]}"');
+        expect(step).not.toMatch(/\$REFS\b/);
+    });
+
+    it("has no checkout and no build in the job that holds the OIDC token", () => {
+        const text = job("publish");
+        expect(text).not.toContain("actions/checkout");
+        expect(text).not.toMatch(/\bnpm\b/);
+        expect(text).not.toContain("build-push-action");
     });
 });
