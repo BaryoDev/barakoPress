@@ -173,7 +173,7 @@ describe("image signing in the publish workflow", () => {
         expect(version).toContain("fetch-depth: 0");
         expect(version).toContain("persist-credentials: false");
         const lines = code(version);
-        const check = lines.find((l) => l.startsWith('git merge-base --is-ancestor "$TAGGED" origin/master'));
+        const check = lines.find((l) => l.startsWith('git merge-base --is-ancestor "$TAGGED" refs/remotes/origin/master ||'));
         expect(check).toBeDefined();
         expect(check).toContain("::error::");
         expect(check).toContain("exit 1");
@@ -201,5 +201,22 @@ describe("image signing in the publish workflow", () => {
         expect(text).not.toContain("actions/checkout");
         expect(text).not.toMatch(/\bnpm\b/);
         expect(text).not.toContain("build-push-action");
+    });
+
+    it("checks a pushed tag still points at the commit that triggered the run", () => {
+        const lines = code(job("version"));
+        const l = lines.find((l) => l.includes('[ "$TAGGED" = "$GITHUB_SHA" ]'));
+        expect(l).toBeDefined();
+        expect(l).toContain("::error::");
+        expect(l).toContain("exit 1");
+        expect(l).toMatch(/^refs\/tags\/v\*\) /);
+    });
+
+    it("builds the commit that was checked, never a tag name", () => {
+        const version = job("version");
+        expect(version).toContain('REF="$TAGGED"');
+        expect(version).not.toMatch(/REF="(v\$V|\$GITHUB_REF)"/);
+        expect(job("build")).toContain("ref: ${{ needs.version.outputs.ref }}");
+        expect(workflow.match(/outputs\.ref\b/g)).toHaveLength(1);
     });
 });

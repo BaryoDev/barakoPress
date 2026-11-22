@@ -67,14 +67,13 @@ jobs:
           # checks the tag out, which builds that release's source with today's machinery.
           if [ -n "${INPUT_TAG:-}" ]; then
             V="${INPUT_TAG#v}"
-            REF="v$V"
             RELEASE=true
             # Backfilling does not move `latest`. The newest release is whatever last pushed a tag,
             # and an older one publishing its image is not a statement that it is current.
             LATEST=false
           else
             case "$GITHUB_REF" in
-              refs/tags/v*) V="${GITHUB_REF#refs/tags/v}"; REF="$GITHUB_REF"; RELEASE=true; LATEST=true ;;
+              refs/tags/v*) V="${GITHUB_REF#refs/tags/v}"; RELEASE=true; LATEST=true ;;
               *) V="0.0.0-dev.${GITHUB_SHA::7}"; REF="$GITHUB_SHA"; RELEASE=false; LATEST=false ;;
             esac
           fi
@@ -88,7 +87,13 @@ jobs:
             # A release is built from a commit on master. A tag on any other branch publishes nothing.
             TAGGED=$(git rev-parse --verify "refs/tags/v$V^{commit}" 2>/dev/null) || {
               echo "::error::tag v$V does not exist"; exit 1; }
-            git merge-base --is-ancestor "$TAGGED" origin/master || { echo "::error::v$V is not on master, refusing to publish a release from it"; exit 1; }
+            git merge-base --is-ancestor "$TAGGED" refs/remotes/origin/master || { echo "::error::v$V is not on master, refusing to publish a release from it"; exit 1; }
+            # A pushed tag is built from the commit that triggered the run, and the build checks out
+            # exactly the commit checked here, so a tag moved after this point changes nothing.
+            case "$GITHUB_REF" in
+              refs/tags/v*) [ "$TAGGED" = "$GITHUB_SHA" ] || { echo "::error::v$V no longer points at the commit that triggered this run"; exit 1; } ;;
+            esac
+            REF="$TAGGED"
           fi
           {
             echo "version=$V"
