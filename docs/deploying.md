@@ -34,6 +34,14 @@ start without that file, and refuses again if `PRESS_SECRET` and `REVALIDATE_SEC
 comes up with no secret can never be told that content changed. Only ports 80 and 443 are published:
 the API, the console and the site are reachable only through Caddy on the compose network.
 
+The API trusts `X-Forwarded-For` from one address only: Caddy's, 172.28.0.10 on a fixed `edge`
+subnet, 172.28.0.0/24. If that subnet is already in use on the host, `docker compose up` fails
+with an overlapping pool error. Set `EDGE_SUBNET` to a free range and `EDGE_PROXY_IP` to an
+address inside it in `.env`; both the network and the API's trusted proxy follow. With a load
+balancer in front of Caddy, add its range to Caddy's `trusted_proxies` server option, or Caddy
+forwards the load balancer's address as the client's, and the API's rate limits and audit log
+count every visitor as one.
+
 ### The site alone, on a host that already has a proxy
 
 That stack brings its own Caddy, so on a machine already terminating TLS it fights the existing
