@@ -27,7 +27,7 @@ services:
     networks:
       - db
     # The official image starts as root, fixes ownership of the data directory, then drops to the
-    # postgres user. That needs these four capabilities and nothing else.
+    # postgres user. That needs these five capabilities and nothing else.
     cap_drop: [ALL]
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     security_opt:
@@ -161,7 +161,7 @@ services:
     networks:
       edge:
         ipv4_address: 172.28.0.10
-    # Binding 80 and 443 as a non-root user needs this one capability.
+    # The image runs as root, and with every other capability dropped, binding 80 and 443 needs this one.
     cap_drop: [ALL]
     cap_add: [NET_BIND_SERVICE]
     security_opt:
