@@ -160,6 +160,26 @@ jobs:
           mkdir -p /tmp/digests
           echo "$DIGEST" > "/tmp/digests/${{ matrix.image }}-${{ matrix.arch }}"
 
+      # The digest just pushed is scanned on its own architecture before the publish job moves any
+      # tag, with the same gate CI uses. A failure here stops the release with nothing tagged. The
+      # source image is a build base that keeps npm, and it never runs a site, so only the runtime
+      # image is scanned. Counts and ids only, nothing uploaded.
+      - name: Install Trivy
+        if: matrix.target == 'run'
+        run: bash scripts/install-trivy.sh
+
+      - name: The pushed image has no fixable High or Critical vulnerability
+        if: matrix.target == 'run'
+        env:
+          IMAGE: ghcr.io/baryodev/${{ matrix.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -uo pipefail
+          trivy image --skip-version-check --image-src remote --scanners vuln --severity HIGH,CRITICAL \
+            --format json --output "$RUNNER_TEMP/image-scan.json" "$IMAGE@$DIGEST" || exit 1
+          bash scripts/image-scan-gate.sh "$RUNNER_TEMP/image-scan.json" | tee -a "$GITHUB_STEP_SUMMARY"
+          exit "${PIPESTATUS[0]}"
+
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: digest-${{ matrix.image }}-${{ matrix.arch }}
