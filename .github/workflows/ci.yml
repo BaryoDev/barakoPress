@@ -480,6 +480,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: The scan gate fails on the reports it must refuse
+        run: bash scripts/test-image-scan-gate.sh
+
       - name: Build the image
         run: docker build -t barako-press:ci .
 

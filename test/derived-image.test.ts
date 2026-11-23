@@ -17,8 +17,17 @@ describe("the published source image", () => {
     const recipe = read("examples/derived-image/Dockerfile");
 
     it("is a stage of the engine Dockerfile that the build stage starts from", () => {
-        expect(dockerfile).toMatch(/^FROM node:22.23.4-alpine AS source$/m);
+        expect(dockerfile).toMatch(/^FROM node:22\.23\.4-alpine@sha256:[0-9a-f]{64} AS source$/m);
         expect(dockerfile).toMatch(/^FROM source AS build$/m);
+    });
+
+    it("pins every node base by the same digest, in the engine Dockerfile and the recipe", () => {
+        const bases = (text: string) => text.match(/^FROM node:\S+/gm) ?? [];
+        const all = [...bases(dockerfile), ...bases(recipe)];
+        expect(bases(dockerfile)).toHaveLength(3);
+        expect(bases(recipe)).toHaveLength(1);
+        expect(new Set(all).size).toBe(1);
+        expect(all[0]).toMatch(/^FROM node:22\.23\.4-alpine@sha256:[0-9a-f]{64}$/);
     });
 
     it("is built for both architectures and pushed as barako-press-source", () => {
@@ -47,7 +56,11 @@ describe("the published source image", () => {
     });
 
     it("ends in the same runtime stage as the engine Dockerfile", () => {
-        const run = (text: string) => text.slice(text.indexOf("FROM node:22.23.4-alpine AS run"));
+        const run = (text: string) => {
+            const at = text.search(/^FROM node:\S+ AS run$/m);
+            expect(at).toBeGreaterThan(-1);
+            return text.slice(at);
+        };
         const code = (text: string) => text.split("\n").filter((l) => l.trim() && !l.trim().startsWith("#")).join("\n");
         expect(code(run(recipe))).toBe(code(run(dockerfile)));
     });
