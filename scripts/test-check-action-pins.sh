@@ -61,6 +61,9 @@ STEPS
 wf docker-tag <<STEPS
       - uses: docker://alpine:3.20
 STEPS
+# No trailing newline after the last line: a read loop that drops an unterminated final line passes it.
+mkdir -p "$d/no-eol"
+printf 'name: fixture\non: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@%s # v7\n      - uses: actions/setup-node@v4' "$sha" > "$d/no-eol/w.yml"
 wf none <<STEPS
       - run: echo no actions here
 STEPS
@@ -74,6 +77,7 @@ expect local pass
 expect docker-digest pass
 expect docker-tag fail
 expect none fail
+expect no-eol fail
 
 echo "this repository's workflows:"
 if [ -d "$here/../.github/workflows" ]; then
