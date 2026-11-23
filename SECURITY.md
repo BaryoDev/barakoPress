@@ -5,12 +5,12 @@
 If you find a security problem in barakoPress, report it privately:
 
 1. **Do not open a public GitHub issue.**
-2. Use GitHub's private vulnerability reporting: open the Security tab of this repository and choose
-   "Report a vulnerability".
+2. Report it the way the [barakoCMS security policy](https://github.com/BaryoDev/barakoCMS/security/policy)
+   says; that contact takes problems in barakoPress too.
 3. Include a description, steps to reproduce, and the impact you see.
 
 A problem in the API (authorisation, tokens, rate limits) belongs to
-[barakoCMS](https://github.com/BaryoDev/barakoCMS/security/policy) and is reported the same way.
+[barakoCMS](https://github.com/BaryoDev/barakoCMS/security/policy).
 
 ## Response timeline
 
