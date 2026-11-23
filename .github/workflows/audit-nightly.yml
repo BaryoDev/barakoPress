@@ -1,7 +1,8 @@
 name: audit nightly
 
-# The dependency audit on master every night, so a new advisory against a locked package shows up
-# without waiting for a pull request. ci.yml runs the same script on every change.
+# The dependency audit and an image scan on master every night, so a new advisory against a locked
+# package or a package in the image shows up without waiting for a pull request. ci.yml runs the
+# same scripts on every change.
 #
 # A failed run is the signal. This workflow does not open or comment on issues, because the
 # repository is public and an advisory should not be posted before it is fixed.
@@ -31,3 +32,27 @@ jobs:
       # Exit 1 is a finding and exit 2 is a registry that could not be asked. Both fail the run.
       - name: Dependency audit
         run: scripts/audit.sh
+
+  image:
+    name: Scan the image built from master
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: master
+          persist-credentials: false
+      - name: Build the image
+        run: docker build -t barako-press:nightly .
+      - name: Install Trivy
+        run: bash scripts/install-trivy.sh
+      # The same flags and gate as ci.yml. Output stays in the run log and the step summary.
+      - name: The image has no fixable High or Critical vulnerability
+        run: |
+          set -uo pipefail
+          trivy image --skip-version-check --scanners vuln --severity HIGH,CRITICAL --format json \
+            --output "$RUNNER_TEMP/image-scan.json" barako-press:nightly
+          bash scripts/image-scan-gate.sh "$RUNNER_TEMP/image-scan.json" | tee -a "$GITHUB_STEP_SUMMARY"
+          exit "${PIPESTATUS[0]}"

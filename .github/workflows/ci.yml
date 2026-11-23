@@ -461,6 +461,69 @@ jobs:
           if-no-files-found: ignore
           retention-days: 90
 
+  # Known vulnerabilities in the production image: Alpine packages and the node_modules Next traced
+  # into it. It builds the image the way perf-budget does and runs beside that job, so it adds no
+  # time to the gate. Trivy has no analyzer for the node binary in /usr/local/bin, so node itself is
+  # kept current by the base image digest pin and Dependabot, not by this scan. A High or Critical
+  # with a fix fails the job. One with no fix yet is reported and does not fail. The output is
+  # counts, package names, ids and fixed versions, and nothing is uploaded, because the repository
+  # is public and a report naming an unpatched vulnerability tells everyone before the fix ships.
+  # The scanner is a release binary checked against a pinned checksum.
+  image-scan:
+    name: Image vulnerability scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the image
+        run: docker build -t barako-press:ci .
+
+      - name: Install Trivy
+        run: bash scripts/install-trivy.sh
+
+      - name: The image has no fixable High or Critical vulnerability
+        run: |
+          set -uo pipefail
+          trivy image --skip-version-check --scanners vuln --severity HIGH,CRITICAL --format json \
+            --output "$RUNNER_TEMP/image-scan.json" barako-press:ci
+          bash scripts/image-scan-gate.sh "$RUNNER_TEMP/image-scan.json" | tee -a "$GITHUB_STEP_SUMMARY"
+          exit "${PIPESTATUS[0]}"
+
+  # A CycloneDX SBOM for what package.json declares. A tool that writes nothing still exits 0, so the
+  # file is checked rather than the command, and an invalid tree fails before the tool runs.
+  sbom:
+    name: SBOM generates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Generate the SBOM
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          npm ls --all > /dev/null || { echo "::error::npm ls reports the dependency tree invalid."; exit 1; }
+          mkdir -p "$RUNNER_TEMP/sbom"
+          f="$RUNNER_TEMP/sbom/barako-press.cdx.json"
+          npx --yes @cyclonedx/cyclonedx-npm --output-file "$f" package.json
+          [ -s "$f" ] || { echo "::error::the SBOM is missing or empty."; exit 1; }
+          COMPONENTS=$(python3 -c "import json,sys; print(len(json.load(open(sys.argv[1])).get('components', [])))" "$f")
+          [ "$COMPONENTS" -gt 0 ] || { echo "::error::the SBOM lists no components, so it describes nothing."; exit 1; }
+          echo "barako-press.cdx.json: $COMPONENTS components" >> "$GITHUB_STEP_SUMMARY"
+
   look:
     # The look check proving it is a gate. One pair list, run twice: green against pages that match
     # the prototype on disk, red against the same pages with the hero heading in another colour, and
