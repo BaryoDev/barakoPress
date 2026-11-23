@@ -11,18 +11,52 @@ on:
 
 permissions:
   contents: read
-  security-events: write
-  # init reads the workflow run to work out what it is analysing. Without this it fails with
-  # "Resource not accessible by integration", which reads like a licensing problem and is not.
-  actions: read
 
 jobs:
+  # The job id is `analyze` because the master ruleset requires a check with exactly that name.
   analyze:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+      # init reads the workflow run to work out what it is analysing. Without this it fails with
+      # "Resource not accessible by integration", which reads like a licensing problem and is not.
+      actions: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: github/codeql-action/init@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           languages: javascript-typescript
-      - uses: github/codeql-action/analyze@v4
+          build-mode: none
+          queries: security-extended
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: "/language:javascript-typescript"
+
+  # The workflow files themselves: untrusted input reaching a shell, a token with more rights than a
+  # job needs, an action not pinned.
+  analyze-actions:
+    name: analyze-actions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+      # init reads the workflow run to work out what it is analysing. Without this it fails with
+      # "Resource not accessible by integration", which reads like a licensing problem and is not.
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: actions
+          build-mode: none
+          queries: security-extended
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: "/language:actions"

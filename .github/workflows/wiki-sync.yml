@@ -47,7 +47,7 @@ jobs:
       # The tip of master rather than the commit that started the run, so a rerun of an old run
       # cannot put older docs back over newer ones. No token kept: nothing writes to this repository.
       - name: Check out master
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: master
           path: source
@@ -55,7 +55,7 @@ jobs:
 
       # This checkout keeps the token, because the push goes to it.
       - name: Check out the wiki
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ github.repository }}.wiki
           path: wiki

@@ -1,0 +1,64 @@
+# Secret scanning config. The default rules are the whole policy, extended and not replaced.
+# Each allowlist exempts one file, one rule and the exact fake values found there (AND), so a new
+# or different value in the same file is still reported:
+#   - made-up keys and secrets in unit tests, to exercise key handling
+#   - scripts/two-hosts.sh, whose curl header value is a stand-in, not a credential
+title = "barakoPress"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "A stand-in header value in a local curl helper (scripts/two-hosts.sh)"
+condition = "AND"
+targetRules = ["curl-auth-header"]
+paths = ['''^scripts/two\-hosts\.sh$''']
+regexes = [
+  '''^not\-the\-key$''',
+]
+
+[[allowlists]]
+description = "Made-up key or secret in a unit test (src/delivery.test.ts)"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^src/delivery\.test\.ts$''']
+regexes = [
+  '''^a\-renderer\-key\-for\-tests\-0123456789$''',
+]
+
+[[allowlists]]
+description = "Made-up key or secret in a unit test (src/env.test.ts)"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^src/env\.test\.ts$''']
+regexes = [
+  '''^a\-renderer\-key\-for\-tests\-0123456789$''',
+]
+
+[[allowlists]]
+description = "Made-up key or secret in a unit test (src/holding.test.tsx)"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^src/holding\.test\.tsx$''']
+regexes = [
+  '''^renderer\-key\-for\-tests\-0123456789abcdef$''',
+]
+
+[[allowlists]]
+description = "Made-up key or secret in a unit test (src/routes/revalidate.test.ts)"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^src/routes/revalidate\.test\.ts$''']
+regexes = [
+  '''^e1854345942be5d0b9ddb88d4a0df29bfe7cf80cd23d22de51304e7fd29a2eeb$''',
+  '''^one\-press\-secret\-for\-tests\-0123456789abcdef$''',
+]
+
+[[allowlists]]
+description = "Made-up key or secret in a unit test (src/share-links.test.tsx)"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^src/share\-links\.test\.tsx$''']
+regexes = [
+  '''^revoked\-key\-for\-tests\-0123456789abcd$''',
+]
