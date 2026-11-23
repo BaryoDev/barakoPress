@@ -518,7 +518,8 @@ jobs:
           npm ls --all > /dev/null || { echo "::error::npm ls reports the dependency tree invalid."; exit 1; }
           mkdir -p "$RUNNER_TEMP/sbom"
           f="$RUNNER_TEMP/sbom/barako-press.cdx.json"
-          npx --yes @cyclonedx/cyclonedx-npm --output-file "$f" package.json
+          # Pinned, so a new release of the tool is a reviewed change and not whatever npm serves today.
+          npx --yes @cyclonedx/cyclonedx-npm@7.0.0 --output-file "$f" package.json
           [ -s "$f" ] || { echo "::error::the SBOM is missing or empty."; exit 1; }
           COMPONENTS=$(python3 -c "import json,sys; print(len(json.load(open(sys.argv[1])).get('components', [])))" "$f")
           [ "$COMPONENTS" -gt 0 ] || { echo "::error::the SBOM lists no components, so it describes nothing."; exit 1; }
