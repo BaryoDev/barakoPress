@@ -310,6 +310,42 @@ gets no tag from the engine's head. Put `<SiteAnalytics site={cfg.site} />` in t
 tag should refuse the script with a `block` glob such as `**/analytics/script.js`, so a capture never
 depends on the tracker answering.
 
+**The page's own Content-Security-Policy.** Each page of a site opens its `<head>` with a
+`<meta http-equiv="Content-Security-Policy">` built for that site, so the site is held to what it may
+load behind any proxy and not only behind the bundled Caddyfile. It is made of:
+
+| Directive | Allows |
+| --- | --- |
+| `script-src` | `'self'`, `'unsafe-inline'` (the renderer writes inline scripts), and the analytics script's origin when the page renders the tag |
+| `connect-src` | `'self'` and the same analytics origin, since Umami's tracker posts its beacons to its own origin |
+| `style-src` | `'self'`, `'unsafe-inline'`, and the origins in `PRESS_FONT_ORIGINS` |
+| `font-src` | `'self'`, `data:`, the same origins, and `fonts.gstatic.com` when Google Fonts is one |
+| `img-src`, `media-src` | `'self'`, `https:`, and the CMS origin when it is http (local development) |
+| `frame-src` | An `https://` origin for each of the site's embed hosts: `embedHosts` in the config, or the tenant's `EmbedHosts` setting. `'none'` when it has none |
+
+The directives that never depend on a site (`object-src 'none'`, `base-uri 'self'`,
+`frame-ancestors 'self'`, `form-action 'self'`) go in a header from `next.config.ts` instead, because
+a browser ignores `frame-ancestors` in a meta tag and the header is fixed at build time.
+
+Every value that goes into the policy has to be a scheme, a host and an optional port. A setting that
+holds a space, a semicolon, a quote or a star is dropped, so no setting can add a directive or a
+keyword. A page carries the policy of its own site: one tenant's embed host is not in another's. The
+holding page gets it too, without an analytics origin.
+
+`PRESS_CSP=off` stops the meta tag, for a deployment that sends a policy of its own. It is read when
+a page renders, like `PRESS_SCRIPT_ORIGINS`. The tag is also left out when `NODE_ENV` is not
+`production`, because Next's development server needs eval.
+
+The bundled Caddyfile sends its own policy as well, and a response that carries both is held to
+both. So behind that Caddyfile a tenant's embed host has to be in `CSP_FRAME_ORIGINS` too, and the
+analytics origin in `CSP_SCRIPT_ORIGINS` (which the Caddyfile now also allows in `connect-src`), kept
+equal to `PRESS_SCRIPT_ORIGINS`. A plugin block that loads a script, frame or stylesheet from
+another origin is blocked by this policy, so a deployment that installs one sets `PRESS_CSP=off`.
+
+A site that draws its own root layout puts `<SitePolicyMeta config={cfg} site={cfg.site} />` first in
+its `<head>`, ahead of `SiteAnalytics`, so the policy applies before any link or script. `sitePolicy`
+is exported too, for a site that builds the string itself.
+
 **Header and footer as block regions.** The built-in header and footer take links and text and
 nothing else, so a clinic that wants a light footer with opening hours and a map cannot have one, and
 a school that wants an enrolment banner with a button cannot either. Point a region at a page and its

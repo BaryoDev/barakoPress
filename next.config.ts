@@ -56,13 +56,18 @@ const config: NextConfig = {
 
   /*
    * Security headers the app sends itself, so the image is safe behind any proxy. The Caddyfile
-   * sends the same ones plus HSTS and the full Content-Security-Policy.
+   * sends the same ones plus HSTS and its own full Content-Security-Policy, and a response that
+   * carries both is held to both.
    *
-   * No script-src policy here. A tenant's site can embed third-party scripts, and a strict default
-   * would break it. Only the frame rule is sent: frame-ancestors 'self' matches X-Frame-Options.
-   * A configurable script and frame policy per site is tracked separately.
+   * This header holds only the directives that never depend on a site: object-src, base-uri,
+   * frame-ancestors (a browser ignores that one in a meta tag) and form-action. headers() is fixed
+   * at build time, so it cannot know a tenant's embed hosts or the analytics origin. The script,
+   * style, font, image, media, connect and frame policy is built per site in src/csp.ts and sent in a
+   * meta tag at the top of every page head. PRESS_CSP=off turns that off.
    */
   async headers() {
+    // Kept equal to STATIC_POLICY in src/csp.ts, which a test checks. This file cannot import the package's TypeScript.
+    const STATIC_POLICY = "object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'";
     return [
       {
         source: "/:path*",
@@ -70,7 +75,7 @@ const config: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+          { key: "Content-Security-Policy", value: STATIC_POLICY },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
         ],
       },
