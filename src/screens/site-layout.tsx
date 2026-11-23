@@ -21,6 +21,7 @@ import {
     GOOGLE_FONTS_ORIGIN,
 } from "../fonts.js";
 import { allowedScriptOrigins, analyticsTag, type AnalyticsTag } from "../analytics.js";
+import { cspEnabled, mediaOriginsOf, sitePolicy } from "../csp.js";
 import { SHARE_INVALID_FRAGMENT } from "../routes/share.js";
 import { liveTheme, themeVariablesCss, type PressTheme } from "../theme.js";
 import { VariantScript } from "./theme-variants.js";
@@ -71,17 +72,19 @@ type LayoutProps = { children: ReactNode; params?: SiteParams };
  * given one, since nobody should be counted visiting a site that is not open yet.
  */
 function ThemeHead({
-    theme,
+    cfg,
     loadFonts,
     analytics,
 }: {
-    theme: PressTheme;
+    cfg: PressConfig;
     loadFonts: boolean;
     analytics?: AnalyticsTag | null;
 }) {
+    const theme = cfg.theme;
     const faces = loadFonts ? fontLinks(theme, allowedFontOrigins()) : null;
     return (
         <head>
+            <SitePolicyMeta config={cfg} loadFonts={loadFonts} analytics={analytics} />
             <style dangerouslySetInnerHTML={{ __html: themeVariablesCss(theme) }} />
             <VariantScript theme={theme} />
             {faces && (
@@ -100,6 +103,42 @@ function ThemeHead({
             {analytics && <AnalyticsScript tag={analytics} />}
         </head>
     );
+}
+
+/**
+ * The page's own Content-Security-Policy, built from what this site may load: its embed hosts,
+ * the analytics script when the page renders one, the font origins and the CMS media origin.
+ *
+ * A meta policy applies to what comes after it. The engine's head puts it first of what this layout
+ * renders, ahead of every font link, style and script it writes. Next puts a few tags of its own
+ * ahead of it (the charset and viewport meta, its own same-origin script and stylesheet tags, and
+ * the preloads for the font stylesheets), all from the page's own origin or an origin the policy
+ * allows. A site that draws its own root layout puts it first in its `<head>`,
+ * ahead of `SiteAnalytics`, and passes the same site settings. Renders nothing with `PRESS_CSP=off`,
+ * and outside production.
+ */
+export function SitePolicyMeta({
+    config,
+    site,
+    analytics,
+    loadFonts = true,
+}: {
+    config: PressConfig;
+    /** The site's analytics settings, for a site that draws its own layout. Without them, no analytics origin is allowed. */
+    site?: Pick<SiteIdentity, "analyticsScript" | "analyticsWebsiteId">;
+    /** An analytics tag already read, in place of `site`. */
+    analytics?: AnalyticsTag | null;
+    loadFonts?: boolean;
+}) {
+    if (!cspEnabled()) return null;
+    const tag = analytics ?? (site ? analyticsTag(site, allowedScriptOrigins()) : null);
+    const content = sitePolicy({
+        embedHosts: config.embedHosts,
+        scriptOrigins: tag ? [new URL(tag.src).origin] : [],
+        fontOrigins: loadFonts ? allowedFontOrigins() : [],
+        mediaOrigins: mediaOriginsOf(config),
+    });
+    return <meta httpEquiv="Content-Security-Policy" content={content} />;
 }
 
 function AnalyticsScript({ tag }: { tag: AnalyticsTag }) {
@@ -253,7 +292,7 @@ async function HoldingDocument({ cfg, registry, loadFonts }: { cfg: PressConfig;
 
     return (
         <html lang={cfg.locale}>
-            <ThemeHead theme={cfg.theme} loadFonts={loadFonts} />
+            <ThemeHead cfg={cfg} loadFonts={loadFonts} />
             <body style={{ margin: 0, background: t.colors.pageBg, color: t.colors.ink, fontFamily: t.fonts.body }}>
                 <style dangerouslySetInnerHTML={{ __html: `#${SHARE_INVALID_FRAGMENT}{display:none}#${SHARE_INVALID_FRAGMENT}:target{display:block}` }} />
                 <p
@@ -660,7 +699,7 @@ export function createSiteLayout(config: PressConfig, options: SiteLayoutOptions
 
         return (
             <html lang={cfg.locale} suppressHydrationWarning>
-                <ThemeHead theme={cfg.theme} loadFonts={loadFonts} analytics={analyticsTag(cfg.site, allowedScriptOrigins())} />
+                <ThemeHead cfg={cfg} loadFonts={loadFonts} analytics={analyticsTag(cfg.site, allowedScriptOrigins())} />
                 <body style={{ margin: 0, background: c.pageBg, color: c.ink, fontFamily: t.fonts.body }}>
                     {cfg.site.iconSprite && <IconSprite symbols={cfg.site.iconSprite} />}
                     {cfg.site.revealOnScroll && (

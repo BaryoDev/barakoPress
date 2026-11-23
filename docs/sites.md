@@ -310,6 +310,64 @@ gets no tag from the engine's head. Put `<SiteAnalytics site={cfg.site} />` in t
 tag should refuse the script with a `block` glob such as `**/analytics/script.js`, so a capture never
 depends on the tracker answering.
 
+**The page's own Content-Security-Policy.** Each page of a site carries a
+`<meta http-equiv="Content-Security-Policy">` built for that site, so the site is held to what it may
+load behind any proxy and not only behind the bundled Caddyfile. It is made of:
+
+| Directive | Allows |
+| --- | --- |
+| `script-src` | `'self'`, `'unsafe-inline'` (the renderer writes inline scripts), and the analytics script's origin when the page renders the tag |
+| `connect-src` | `'self'` and the same analytics origin |
+| `style-src` | `'self'`, `'unsafe-inline'`, and the origins in `PRESS_FONT_ORIGINS` |
+| `font-src` | `'self'`, `data:`, the same origins, and `fonts.gstatic.com` when Google Fonts is one |
+| `img-src` | `'self'`, `data:`, `https:`, and the CMS origin when it is http on localhost or 127.0.0.1 (local development) |
+| `media-src` | `'self'`, `https:`, and the same local CMS origin |
+| `frame-src` | An `https://` origin for each of the site's embed hosts: `embedHosts` in the config, or the tenant's `EmbedHosts` setting. `'none'` when it has none |
+
+Media from an http host other than localhost is blocked, so serve it over https. An https CMS needs
+no entry, since `https:` covers it. The embed block frames only a URL on the default https port,
+because `frame-src` names each host without a port.
+
+Analytics: `connect-src` names only the script's own origin. A tracker that sends its data to an
+origin other than the one its script loads from is blocked. A self-hosted Umami, whose script and
+endpoint share one origin, works.
+
+The directives that never depend on a site (`object-src 'none'`, `base-uri 'self'`,
+`frame-ancestors 'self'`, `form-action 'self'`) go in a header from `next.config.ts` instead, because
+a browser ignores `frame-ancestors` in a meta tag and the header is fixed at build time.
+
+Every value that goes into the policy has to be a scheme, a host and an optional port. A setting that
+holds a space, a semicolon, a quote or a star is dropped, so no setting can add a directive or a
+keyword. A page carries the policy of its own site: one tenant's embed host is not in another's. The
+holding page gets it too, without an analytics origin.
+
+A meta policy applies to what comes after it. Under Next the policy lands after a few tags Next
+writes itself (the charset and viewport meta, its same-origin script and stylesheet tags, and the
+preloads for the font stylesheets), and before every font link, inline style and script the layout
+writes. Those earlier tags are from the page's own origin or an origin the policy allows.
+
+`PRESS_CSP=off` stops the meta tag, for a deployment that sends a policy of its own. The tag is also
+left out when `NODE_ENV` is not `production`, because Next's development server needs eval.
+`PRESS_CSP`, `PRESS_SCRIPT_ORIGINS` and `PRESS_FONT_ORIGINS` are read when a page renders. A
+build-time site's static pages have the meta baked in when `next build` runs, so a changed value
+reaches them only when the page renders again (a rebuild, or a purge for a revalidated page), and
+`PRESS_CSP=off` has to be set in the environment of the build for such a site. The reference
+`Dockerfile` does not pass `PRESS_CSP` to its build stage (it sets only `PRESS_TRAILING_SLASH` and
+`BASE_PATH` there), so a build argument alone does not reach it. The reference image builds no pages
+from a CMS, so for it the value is read at request time.
+
+The bundled Caddyfile sends its own policy as well, and a response that carries both is held to
+both. So behind that Caddyfile a tenant's embed host has to be in `CSP_FRAME_ORIGINS` too, and the
+analytics origin in `CSP_SCRIPT_ORIGINS` (which the Caddyfile also allows in `connect-src`): the same
+origins as `PRESS_SCRIPT_ORIGINS`, written as `https://host` separated by spaces. A plugin block that
+loads a script, frame or stylesheet from another origin is blocked by the page's policy, so a
+deployment that installs one sets `PRESS_CSP=off`. Behind the bundled Caddyfile, `CSP_SCRIPT_ORIGINS`,
+`CSP_FRAME_ORIGINS` and `CSP_FONT_ORIGINS` must also name what the plugin loads.
+
+A site that draws its own root layout puts `<SitePolicyMeta config={cfg} site={cfg.site} />` first in
+its `<head>`, ahead of `SiteAnalytics`, so it applies before the layout's own links and scripts.
+`sitePolicy` is exported too, for a site that builds the string itself.
+
 **Header and footer as block regions.** The built-in header and footer take links and text and
 nothing else, so a clinic that wants a light footer with opening hours and a map cannot have one, and
 a school that wants an enrolment banner with a button cannot either. Point a region at a page and its

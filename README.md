@@ -145,7 +145,7 @@ an unbound scope. It is never anonymous:
 the caller presents the tenant's key as `Authorization: Bearer`, derived from `PRESS_SECRET` and
 printed by `barakopress bindings-key <tenant>`. Answers are never cached.
 
-`Card` and `PostView` are exported too, for a site that wants its own page but the engine's markup. `SiteAnalytics` is exported too, for a site that draws its own root layout: it goes in that layout's `<head>`.
+`Card` and `PostView` are exported too, for a site that wants its own page but the engine's markup. `SiteAnalytics` and `SitePolicyMeta` are exported too, for a site that draws its own root layout: they go in that layout's `<head>`, the policy first.
 
 ## What it renders
 
@@ -253,6 +253,7 @@ per request, so when a value was read depended on which value it was.
 | `PRESS_FONT_ORIGINS` | The origins a font stylesheet may be linked from. Unset, Google Fonts only. See [One build, many sites](https://github.com/BaryoDev/barakoPress/blob/master/docs/sites.md#one-build-many-sites) |
 | `BASE_PATH` | A path prefix to serve the whole site under, such as `/kape-ana`. Empty by default, which is the root. Written with or without the leading or trailing slash, it is read as a leading slash and no trailing one. Next reads it at build time, so it is also a build argument. See [Serving under a path](https://github.com/BaryoDev/barakoPress/blob/master/docs/deploying.md#serving-under-a-path) |
 | `PRESS_SCRIPT_ORIGINS` | The origins a site's Umami script (`AnalyticsScript`) may be loaded from. Unset, none, so no script is rendered. Read when a page renders, so a cached page keeps its tag until it renders again. See [One build, many sites](https://github.com/BaryoDev/barakoPress/blob/master/docs/sites.md#one-build-many-sites) |
+| `PRESS_CSP` | `off` stops a page sending its own Content-Security-Policy meta tag. Anything else, or unset, leaves it on. Sent only when `NODE_ENV` is `production`. Read when a page renders, so a build-time site needs it set at build. See [The page's own Content-Security-Policy](https://github.com/BaryoDev/barakoPress/blob/master/docs/sites.md#one-build-many-sites) |
 
 Values are used exactly as the environment has them, untrimmed. A secret with a trailing space is a
 different HMAC key, so trimming one here would stop a webhook that verifies today.
