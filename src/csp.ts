@@ -22,8 +22,8 @@ import { GOOGLE_FONTS_FILES_ORIGIN, GOOGLE_FONTS_ORIGIN } from "./fonts.js";
  * request. That is a separate change.
  */
 
-const LABEL = "[a-z0-9]([a-z0-9-]*[a-z0-9])?";
-const ORIGIN = new RegExp(`^(https?)://(${LABEL}(\\.${LABEL})*)(:\\d{1,5})?$`, "i");
+const LABEL = "[a-z0-9](?:[a-z0-9-]*[a-z0-9])?";
+const ORIGIN = new RegExp(`^(?<scheme>https?)://(?<host>${LABEL}(?:\\.${LABEL})*)(?::(?<port>\\d{1,5}))?$`, "i");
 const MAX_ORIGIN = 280;
 
 /**
@@ -34,10 +34,12 @@ const MAX_ORIGIN = 280;
 export function cspOrigin(value: unknown, allowHttp = false): string | undefined {
     if (typeof value !== "string" || value.length > MAX_ORIGIN) return undefined;
     const match = ORIGIN.exec(value);
-    if (!match) return undefined;
-    const scheme = match[1].toLowerCase();
+    if (!match?.groups) return undefined;
+    const scheme = match.groups.scheme.toLowerCase();
     if (scheme === "http" && !allowHttp) return undefined;
-    return `${scheme}://${match[2].toLowerCase()}${match[5] ?? ""}`;
+    const port = match.groups.port;
+    if (port !== undefined && Number(port) > 65535) return undefined;
+    return `${scheme}://${match.groups.host.toLowerCase()}${port !== undefined ? `:${port}` : ""}`;
 }
 
 /** An embed host as a setting writes it, a bare host or an https origin, as an https origin. */
