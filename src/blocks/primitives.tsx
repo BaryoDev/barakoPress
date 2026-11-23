@@ -958,7 +958,8 @@ function embed(config: PressConfig): BlockDefinition {
             } catch {
                 return null;
             }
-            if (url.protocol !== "https:" || !allowed.has(url.hostname.toLowerCase())) return null;
+            // The page's frame-src names each host without a port, so a frame on another port would be blocked anyway.
+            if (url.protocol !== "https:" || url.port !== "" || !allowed.has(url.hostname.toLowerCase())) return null;
             return (
                 <iframe
                     src={url.toString()}

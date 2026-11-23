@@ -109,8 +109,11 @@ function ThemeHead({
  * The page's own Content-Security-Policy, built from what this site may load: its embed hosts,
  * the analytics script when the page renders one, the font origins and the CMS media origin.
  *
- * It has to be the first thing in `<head>`, so it applies before any link or script after it. The
- * engine's head puts it there. A site that draws its own root layout puts it first in its `<head>`,
+ * A meta policy applies to what comes after it. The engine's head puts it first of what this layout
+ * renders, ahead of every font link, style and script it writes. Next puts a few tags of its own
+ * ahead of it (the charset and viewport meta, its own same-origin script and stylesheet tags, and
+ * the preloads for the font stylesheets), all from the page's own origin or an origin the policy
+ * allows. A site that draws its own root layout puts it first in its `<head>`,
  * ahead of `SiteAnalytics`, and passes the same site settings. Renders nothing with `PRESS_CSP=off`,
  * and outside production.
  */

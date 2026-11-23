@@ -188,9 +188,12 @@ describe("content primitives", () => {
 
         expect(render([allowed])).toContain("<iframe");
         expect(render([allowed])).toContain("sandbox=");
-        for (const src of ["https://evil.example/x", "http://player.vimeo.com/video/1"]) {
+        // A frame on another port would be blocked by the page's frame-src, which names hosts without one.
+        for (const src of ["https://evil.example/x", "http://player.vimeo.com/video/1", "https://player.vimeo.com:8443/video/1"]) {
             expect(render([{ type: "embed", props: { src, title: "A film" } }])).not.toContain("<iframe");
         }
+        const defaultPort = { type: "embed", props: { src: "https://player.vimeo.com:443/video/1", title: "A film" } };
+        expect(render([defaultPort])).toContain("<iframe");
     });
 
     it("lets a site name the hosts it frames", () => {

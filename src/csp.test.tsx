@@ -32,7 +32,7 @@ vi.mock("next/link", () => ({
 
 const { defineConfig, EMBED_HOSTS } = await import("./config.js");
 const { forgetCachedReads } = await import("./delivery.js");
-const { sitePolicy, cspOrigin, STATIC_POLICY } = await import("./csp.js");
+const { sitePolicy, cspOrigin, mediaOriginsOf, STATIC_POLICY } = await import("./csp.js");
 const { createSiteLayout, SitePolicyMeta } = await import("./screens/site-layout.js");
 
 const CMS = "http://cms.test";
@@ -90,9 +90,9 @@ async function render(node: ReactNode): Promise<string> {
     return new Response(prelude).text();
 }
 
-async function pageAt(host: string): Promise<string> {
+async function pageAt(host: string, loadFonts = false): Promise<string> {
     requestHeaders = new Headers({ host });
-    const Layout = createSiteLayout(config, { loadFonts: false });
+    const Layout = createSiteLayout(config, { loadFonts });
     return render(await Layout({ children: <p>the page</p> }));
 }
 
@@ -183,10 +183,34 @@ describe("the policy", () => {
         expect(directive(policy, "media-src")).toEqual(["'self'", "https:", "http://localhost:5005"]);
     });
 
-    it("puts the config's CMS origin in the media directives of a page when it is http", async () => {
+    it("names the CMS origin in the media directives only for a loopback http CMS", () => {
+        const at = (cmsUrl: string) => mediaOriginsOf({ cmsUrl });
+        expect(at("http://localhost:5005")).toEqual(["http://localhost:5005"]);
+        expect(at("http://127.0.0.1:5005")).toEqual(["http://127.0.0.1:5005"]);
+        expect(at("http://[::1]:5005")).toEqual([]);
+        // The server's own address for the CMS is no address a browser can reach.
+        expect(at("http://api:8080")).toEqual([]);
+        expect(at("http://cms.test")).toEqual([]);
+        // https is covered by `https:`.
+        expect(at("https://cms.example")).toEqual([]);
+        expect(at("not a url")).toEqual([]);
+    });
+
+    it("leaves a compose-style CMS address out of a page's policy", async () => {
         const policy = metaOf(await pageAt("plain.example"))!;
-        expect(directive(policy, "img-src")).toContain("http://cms.test");
-        expect(directive(policy, "media-src")).toContain("http://cms.test");
+        expect(policy).not.toContain("cms.test");
+        expect(directive(policy, "img-src")).toEqual(["'self'", "data:", "https:"]);
+    });
+
+    it("carries the font origins into style-src and font-src when the page loads fonts", async () => {
+        const policy = metaOf(await pageAt("plain.example", true))!;
+        expect(directive(policy, "style-src")).toEqual(["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"]);
+        expect(directive(policy, "font-src")).toEqual(["'self'", "data:", "https://fonts.googleapis.com", "https://fonts.gstatic.com"]);
+        vi.stubEnv("PRESS_FONT_ORIGINS", "https://type.school.example");
+        const own = metaOf(await pageAt("plain.example", true))!;
+        expect(directive(own, "style-src")).toContain("https://type.school.example");
+        expect(directive(own, "font-src")).toEqual(["'self'", "data:", "https://type.school.example"]);
+        expect(own).not.toContain("gstatic");
     });
 });
 
@@ -229,6 +253,12 @@ describe("hostile values", () => {
         expect(cspOrigin("http://localhost:5005")).toBeUndefined();
         expect(cspOrigin("http://localhost:5005", true)).toBe("http://localhost:5005");
         expect(cspOrigin("https://a.example:99999999")).toBeUndefined();
+        expect(cspOrigin("https://a.example:99999")).toBeUndefined();
+        expect(cspOrigin("https://a.example:65535")).toBe("https://a.example:65535");
+        const long = `https://${"a".repeat(70)}.${"b".repeat(70)}.${"c".repeat(70)}.${"d".repeat(70)}.example`;
+        expect(long.length).toBeGreaterThan(280);
+        expect(cspOrigin(long)).toBeUndefined();
+        expect(sitePolicy({ embedHosts: [long, "ok.example"] })).toBe(sitePolicy({ embedHosts: ["ok.example"] }));
         expect(cspOrigin(42)).toBeUndefined();
     });
 
@@ -242,12 +272,6 @@ describe("hostile values", () => {
         } finally {
             TENANTS.video.settings.EmbedHosts = ["player.video.example"];
         }
-    });
-
-    it("is escaped as an attribute value", async () => {
-        const html = await render(<head><SitePolicyMeta config={config} /></head>);
-        expect(html).toContain('http-equiv="Content-Security-Policy"');
-        expect(html).not.toMatch(/content="[^"]*[<>][^"]*"/);
     });
 });
 

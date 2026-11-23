@@ -6,7 +6,7 @@ import { GOOGLE_FONTS_FILES_ORIGIN, GOOGLE_FONTS_ORIGIN } from "./fonts.js";
  * The Content-Security-Policy a page sends for itself.
  *
  * The Caddyfile sends a policy too, but a site run behind any other proxy had none. This one is put
- * in a `<meta>` at the top of the page head, so it holds wherever the image runs. It is built per
+ * in a `<meta>` early in the page head, so it holds wherever the image runs. It is built per
  * site, because a tenant's embed hosts and the analytics origin differ from site to site, and the
  * next.config.ts `headers()` is fixed at build time and cannot know them. The header carries only
  * the directives that never depend on a site.
@@ -102,10 +102,16 @@ export function cspEnabled(env = readEnv()): boolean {
     return env.csp?.trim().toLowerCase() !== "off";
 }
 
-/** The origins of the CMS the media policy has to name, from the config. */
+/**
+ * The CMS origin the media directives have to name. Only a loopback http origin (local development)
+ * is added: `https:` already covers an https CMS, and the server's own URL for an http CMS, such as
+ * a compose service name, is no address a browser can reach.
+ */
 export function mediaOriginsOf(config: Pick<PressConfig, "cmsUrl">): string[] {
     try {
-        const origin = cspOrigin(new URL(cmsUrlFor(config)).origin, true);
+        const url = new URL(cmsUrlFor(config));
+        if (url.protocol !== "http:" || !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) return [];
+        const origin = cspOrigin(url.origin, true);
         return origin ? [origin] : [];
     } catch {
         return [];
