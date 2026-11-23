@@ -1,0 +1,24 @@
+# Secret scanning config. The default rules are the whole policy, extended and not replaced.
+# Allowlisted by path and rule only, and only where the value is fake:
+#   - the unit tests that name a made-up renderer key or secret to exercise key handling
+#   - scripts/two-hosts.sh, whose curl Host header looks like an Authorization header to the rules
+title = "barakoPress"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Made-up keys and secrets in unit tests"
+targetRules = ["generic-api-key"]
+paths = [
+  '''^src/share-links\.test\.tsx$''',
+  '''^src/env\.test\.ts$''',
+  '''^src/delivery\.test\.ts$''',
+  '''^src/holding\.test\.tsx$''',
+  '''^src/routes/revalidate\.test\.ts$''',
+]
+
+[[allowlists]]
+description = "A Host header in a local curl helper, not a credential"
+targetRules = ["curl-auth-header"]
+paths = ['''^scripts/two-hosts\.sh$''']

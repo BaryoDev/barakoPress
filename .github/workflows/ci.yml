@@ -21,14 +21,23 @@ jobs:
   engine:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
           cache: npm
 
       - run: npm ci
+
+      # A tag can be moved after review, a commit SHA cannot. Every action in every workflow has to
+      # name a full 40-character SHA. The self-test proves the check goes red on a tag first.
+      - name: Actions are pinned by SHA
+        run: |
+          bash scripts/test-check-action-pins.sh
+          bash scripts/check-action-pins.sh .github/workflows
 
       - name: House style
         run: |
@@ -124,15 +133,84 @@ jobs:
         # answers 200 as itself once the CMS is gone.
         run: scripts/two-hosts.sh
 
+  # Secrets in the tree or in history. The scanner is the gitleaks release binary, checked against a
+  # pinned checksum from the release's own checksums file before it is extracted. A scan that finds
+  # nothing looks the same as a scan that is not running, so the last step plants credentials and
+  # fails if the scan does not catch them.
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # History, not one commit. The default depth gives the scan almost nothing to read.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          VERSION=8.30.1
+          SHA256=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+          curl -sSL --fail -o /tmp/gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz"
+          echo "${SHA256}  /tmp/gitleaks.tar.gz" | sha256sum -c -
+          sudo tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      - name: Secret scan
+        run: gitleaks git . --config .gitleaks.toml --redact --verbose
+
+      # Scans a scratch directory, so clone depth cannot break it, with the repository's own config.
+      # Each planted secret is its own file and the report is read back, so the check needs both
+      # default rules to fire, not any one of them. The prefixes are assembled from halves, because
+      # written whole they would match the rules and flag this file. The AWS rule only accepts
+      # A-Z and 2-7 after the prefix. Bounded reads first: piping /dev/urandom into `tr | head -c N`
+      # kills tr with SIGPIPE and, under pipefail, fails the assignment before the scan runs.
+      - name: The scan catches a planted credential
+        run: |
+          set -euo pipefail
+          TMP=$(mktemp -d)
+          mkdir "$TMP/plant"
+          AWS_P="AK"; AWS_P="${AWS_P}IA" # allow-secret
+          GH_P="gh"; GH_P="${GH_P}p_" # allow-secret
+          AWS_SUFFIX=$(head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'A-Z2-7' | cut -c1-16)
+          GH_SUFFIX=$(head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9' | cut -c1-36)
+          [ "${#AWS_SUFFIX}" -eq 16 ] && [ "${#GH_SUFFIX}" -eq 36 ] || { echo "::error::could not build the planted values"; exit 1; }
+          printf 'aws_access_key_id = "%s%s"\n' "$AWS_P" "$AWS_SUFFIX" > "$TMP/plant/aws.txt" # allow-secret
+          printf 'gh_token = "%s%s"\n' "$GH_P" "$GH_SUFFIX" > "$TMP/plant/github.txt" # allow-secret
+
+          # gitleaks exits 1 for a leak and for an error alike, so ask for 42 on a leak. Anything
+          # else is a broken run.
+          code=0
+          gitleaks dir "$TMP/plant" --config .gitleaks.toml --redact --no-banner --exit-code 42 \
+            --report-format json --report-path "$TMP/report.json" || code=$?
+          if [ "$code" -ne 42 ]; then
+            echo "::error::gitleaks exited $code on the planted credentials, wanted 42. The gate is not working."
+            exit 1
+          fi
+          for rule in aws-access-token github-pat; do
+            if ! jq -e --arg r "$rule" 'any(.[]; .RuleID == $r)' "$TMP/report.json" >/dev/null; then
+              echo "::error::The secret scan did not report rule $rule for its planted credential. The gate is not working."
+              exit 1
+            fi
+          done
+          echo "Both planted secrets were caught. The scan is live."
+
   plugins:
     # The derived image recipe (#25), built the way a deployment builds it: the sample plugin packed
     # into a tarball, handed to the Dockerfile as the `plugins` context, and the image run against two
     # tenants where only one enabled the plugin.
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
           cache: npm
@@ -155,9 +233,11 @@ jobs:
     # The test that matters: can somebody else install this and render their own content model.
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
 
@@ -353,8 +433,10 @@ jobs:
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
@@ -372,7 +454,7 @@ jobs:
 
       - name: Keep the numbers
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: perf-${{ matrix.arch }}
           path: ${{ runner.temp }}/perf.json
@@ -392,9 +474,11 @@ jobs:
     # looking exactly right in the diff and the unit tests, and was only found by rendering it.
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
           cache: npm

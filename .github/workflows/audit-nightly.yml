@@ -1,0 +1,33 @@
+name: audit nightly
+
+# The dependency audit on master every night, so a new advisory against a locked package shows up
+# without waiting for a pull request. ci.yml runs the same script on every change.
+#
+# A failed run is the signal. This workflow does not open or comment on issues, because the
+# repository is public and an advisory should not be posted before it is fixed.
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Audit dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: master
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+      # Exit 1 is a finding and exit 2 is a registry that could not be asked. Both fail the run.
+      - name: Dependency audit
+        run: scripts/audit.sh
