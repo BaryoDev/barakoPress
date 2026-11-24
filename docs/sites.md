@@ -66,7 +66,9 @@ A tenant named by steps 1, 2 or 4 is checked before anything renders: the proxy 
 settings type for it, and when the CMS refuses it the proxy answers 404 itself. A 404 the page
 rendered would be kept by the render cache and served after the tenant exists; the proxy's 404 is
 not kept. The answer is remembered for a minute when the tenant is served, 5 seconds when it is
-refused and 10 seconds when the CMS could not be asked, in which case the page answers for itself.
+refused and 10 seconds when the CMS could not be asked or answered with another error, in which case
+the page answers for itself. A tenant paused inside that minute can still render a 404 that is kept
+until the route revalidates, the same minute a host lookup is kept.
 So a site that went up before its tenant serves its pages within about 5 seconds of the tenant being
 created, with no restart. A tenant found by its host is not checked again: the lookup answers only
 for tenants the CMS serves.

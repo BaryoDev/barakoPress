@@ -682,8 +682,10 @@ export async function tenantForHost(config: PressConfig, host: string): Promise<
  *
  * A served tenant is remembered for a minute and a refused one for a few seconds, so a tenant created
  * now is served within seconds and an invented handle costs one read per window. A read that fails
- * is not a refusal: the page reads again and answers for itself, as it did before this check, and
- * the next ask comes after the same ten seconds a failed delivery read waits.
+ * is not a refusal, nor is an answer other than 404: the page reads again and answers for itself, as
+ * it did before this check, and the next ask comes after the same ten seconds a failed delivery read
+ * waits. A tenant paused while it is remembered as served is still rewritten for up to that minute,
+ * the same minute a host lookup is kept.
  */
 const SERVED_TTL_SECONDS = 60;
 const REFUSED_TTL_SECONDS = 5;
@@ -695,7 +697,11 @@ export async function tenantServed(config: PressConfig, tenant: string): Promise
     const type = config.sites?.settingsType;
     if (!type) return true;
     const store = storeFor(config);
-    const known = await store.get(servedKey(tenant));
+    // A store that fails is the same as one that knows nothing: ask, and let the page answer.
+    let known: string | null = null;
+    try {
+        known = await store.get(servedKey(tenant));
+    } catch {}
     if (known !== null) return known === "1";
 
     const path = `/api/public/${encodeURIComponent(type)}?page=1&pageSize=1`;
@@ -712,12 +718,16 @@ export async function tenantServed(config: PressConfig, tenant: string): Promise
         if (res.status === 404) served = (await res.text()).trim() !== NO_TENANT_BODY;
         else await res.body?.cancel();
         if (!served) ttl = REFUSED_TTL_SECONDS;
+        // A 429 or a 500 says nothing about the tenant, so it is asked again as soon as a failed fetch is.
+        else if (!res.ok && res.status !== 404) ttl = UNSURE_TTL_SECONDS;
     } catch (e) {
         const why = e instanceof Error ? e.message : String(e);
         console.warn(`cms: could not ask whether tenant "${tenant}" is served (${why}), letting the page answer`);
         ttl = UNSURE_TTL_SECONDS;
     }
-    await store.set(servedKey(tenant), served ? "1" : "0", ttl);
+    try {
+        await store.set(servedKey(tenant), served ? "1" : "0", ttl);
+    } catch {}
     return served;
 }
 

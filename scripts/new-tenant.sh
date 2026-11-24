@@ -27,8 +27,11 @@ for _ in $(seq 1 60); do
   curl -s -o /dev/null "$APP/api/health" && break
   sleep 1
 done
-# Without this, a fake CMS that never bound its port looks the same as a tenant it refuses.
+# Without these, a fake CMS that never bound its port looks the same as a tenant it refuses, and
+# another server on the app port answers in place of this one.
 { kill -0 "$CMS_PID" 2>/dev/null && curl -sf -o /dev/null "$CMS/__reads"; } || fail "the fake CMS is not answering on $CMS_PORT"
+health=$(curl -s "$APP/api/health" || true)
+{ kill -0 "$APP_PID" 2>/dev/null && [ "$health" = "ok" ]; } || fail "the site is not answering on $APP_PORT"
 
 # More than once, so a 404 kept by the first view would be the one the later views get.
 for _ in 1 2 3; do

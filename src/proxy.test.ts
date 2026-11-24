@@ -289,6 +289,36 @@ describe("a tenant named without its host", () => {
         expect(settingsReads(fetched)).toBe(1);
     });
 
+    it("asks again after ten seconds when the CMS answers with an error, not after a minute", async () => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        const busy = vi.fn(async () => new Response("", { status: 503 }));
+        vi.stubGlobal("fetch", busy);
+        const proxy = createPressProxy(config);
+        expect(rewriteOf(await proxy(request("late.example", "/")))).toBe("/_press/late~public~-");
+
+        const fetched = cms();
+        vi.stubGlobal("fetch", fetched);
+        vi.setSystemTime(Date.now() + 11_000);
+        expect(rewriteOf(await proxy(request("late.example", "/")))).toBe("/_press");
+        expect(settingsReads(fetched)).toBe(1);
+    });
+
+    it("lets the page answer when the store fails, rather than failing the request", async () => {
+        const broken = {
+            get: () => {
+                throw new Error("store down");
+            },
+            set: async () => {
+                throw new Error("store down");
+            },
+            delete: async () => {},
+            add: async () => false,
+        };
+        TENANTS.late.refused = false;
+        const proxy = createPressProxy(defineConfig({ sites: {}, cmsUrl: CMS, store: broken }));
+        expect(rewriteOf(await proxy(request("late.example", "/")))).toBe("/_press/late~public~-");
+    });
+
     it("takes a 404 that is not the CMS refusing the tenant as served", async () => {
         // A tenant with no site settings type is served all the same; the page renders its defaults.
         vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 404 })));
