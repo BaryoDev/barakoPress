@@ -265,7 +265,7 @@ describe("the policy", () => {
         it("leaves the policy unchanged when it is unset", () => {
             vi.stubEnv("PRESS_MEDIA_ORIGINS", "");
             expect(mediaOriginsOf(cms)).toEqual([]);
-            vi.unstubAllEnvs();
+            vi.stubEnv("PRESS_MEDIA_ORIGINS", undefined);
             expect(mediaOriginsOf(cms)).toEqual([]);
             expect(sitePolicy({ mediaOrigins: mediaOriginsOf(cms) })).toBe(sitePolicy({}));
         });
