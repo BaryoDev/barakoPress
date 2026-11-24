@@ -148,7 +148,8 @@ location /kape-ana/ {
 
 Do not strip the prefix in the proxy. The container serves `/kape-ana/...` itself, including its
 assets under `/kape-ana/_next/` and the API routes under `/kape-ana/api/`. The health check must ask
-for `/kape-ana/`, since `/` answers 404 (`compose.site.yml` does this from `BASE_PATH`). A webhook URL
+for `/kape-ana/api/health`, since `/api/health` without the prefix answers 404 (`compose.site.yml` does this from
+`BASE_PATH`). It renders no page, so a check made before barakoCMS serves the tenant caches nothing. A webhook URL
 from barakoCMS is `https://playground.baryo.dev/kape-ana/api/revalidate`.
 
 What the prefix changes in the engine:

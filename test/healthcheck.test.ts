@@ -19,11 +19,12 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
 
 /** Runs a `node -e` healthcheck against a local server and returns the one path it asked for. */
-async function asked(command: string, basePath: string): Promise<string> {
+async function asked(command: string, basePath: string, status = 200): Promise<string> {
     expect(command).toContain("http://127.0.0.1:3000");
     const paths: string[] = [];
     const server = createServer((req, res) => {
         paths.push(req.url ?? "");
+        res.statusCode = status;
         res.end("ok");
     });
     await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready));
@@ -69,6 +70,10 @@ const CHECKS: [string, () => string][] = [
 describe.each(CHECKS)("the %s healthcheck", (_, command) => {
     it("asks for /api/health and renders no page", async () => {
         expect(await asked(command(), "")).toBe("/api/health");
+    });
+
+    it("still passes on an image older than the route, which answers 404 there", async () => {
+        expect(await asked(command(), "", 404)).toBe("/api/health");
     });
 });
 
