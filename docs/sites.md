@@ -324,7 +324,7 @@ load behind any proxy and not only behind the bundled Caddyfile. It is made of:
 | `media-src` | `'self'`, `https:`, and the same local origins |
 | `frame-src` | An `https://` origin for each of the site's embed hosts: `embedHosts` in the config, or the tenant's `EmbedHosts` setting. `'none'` when it has none |
 
-Media from an http host other than localhost is blocked, so serve it over https. In a compose stack `CMS_URL` is an internal name a browser cannot reach, so set `PRESS_MEDIA_ORIGINS` to the origins the browser uses, such as `http://admin.localhost:8080 http://api.localhost:8080`, separated by commas or spaces. Only `localhost`, `127.0.0.1` and `*.localhost` are read, each cut to its origin. An https CMS needs
+Media from an http host other than localhost is blocked, so serve it over https. In a compose stack `CMS_URL` is an internal name a browser cannot reach, so set `PRESS_MEDIA_ORIGINS` to the origins the browser uses, such as `http://admin.localhost:8080 http://api.localhost:8080`, separated by commas or spaces. Only `localhost`, `127.0.0.1` and `*.localhost` are read, each cut to its origin. The bundled Caddyfile sends a header policy of its own that allows only https media, and a browser holds a page to both, so behind it these origins stay blocked. An https CMS needs
 no entry, since `https:` covers it. The embed block frames only a URL on the default https port,
 because `frame-src` names each host without a port.
 

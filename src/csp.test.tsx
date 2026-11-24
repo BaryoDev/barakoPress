@@ -119,6 +119,7 @@ beforeEach(() => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("PRESS_CSP", "");
     vi.stubEnv("PRESS_SCRIPT_ORIGINS", "");
+    vi.stubEnv("PRESS_MEDIA_ORIGINS", "");
     vi.stubGlobal("fetch", cms());
 });
 afterEach(() => {
@@ -226,6 +227,11 @@ describe("the policy", () => {
             const bare = sitePolicy({});
             for (const bad of [
                 "http://admin.localhost:8080; script-src *",
+                "http://a;b.localhost",
+                "http://a'b.localhost",
+                "http://a*.localhost",
+                "http://.localhost",
+                "http://a..localhost",
                 "http://evil.example",
                 "javascript:alert(1)",
                 "*",

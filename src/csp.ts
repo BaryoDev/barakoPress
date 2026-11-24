@@ -113,7 +113,7 @@ function loopbackOrigin(value: string): string | undefined {
         const url = new URL(value);
         if (url.protocol !== "http:") return undefined;
         const host = url.hostname;
-        if (!["localhost", "127.0.0.1", "[::1]"].includes(host) && !host.endsWith(".localhost")) return undefined;
+        if (host !== "localhost" && host !== "127.0.0.1" && !host.endsWith(".localhost")) return undefined;
         return cspOrigin(url.origin, true);
     } catch {
         return undefined;
