@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.19.2 (2026-11-24)
 
 - A site pinned to a tenant (`CMS_TENANT`), or one named by `sites.tenantHeader` or the default tenant, no longer keeps a 404 for its pages after its tenant is created. Before, the first request made before barakoCMS served the tenant rendered a not-found, and Next served that cached 404 for the route until it revalidated or the container restarted. Now the proxy asks the CMS first, with one settings read remembered for a minute (5 seconds while refused), and answers 404 itself while the tenant is refused, which nothing caches. The site serves its pages within about 5 seconds of the tenant being created. A tenant found by its host was already checked by the host lookup. `scripts/new-tenant.sh` proves it against a real server in CI. A pinned tenant that barakoCMS stops serving now answers 404 within a minute, where before its cached pages stayed up until they revalidated.
 
