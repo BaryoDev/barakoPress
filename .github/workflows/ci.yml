@@ -133,6 +133,11 @@ jobs:
         # answers 200 as itself once the CMS is gone.
         run: scripts/two-hosts.sh
 
+      - name: A site that went up before its tenant serves it once the tenant exists
+        # Pinned with CMS_TENANT to a tenant the stand-in CMS refuses, then registers it. The 404s before
+        # must not be kept, so the home page renders as the tenant within seconds and with no restart.
+        run: scripts/new-tenant.sh
+
   # Secrets in the tree or in history. The scanner is the gitleaks release binary, checked against a
   # pinned checksum from the release's own checksums file before it is extracted. A scan that finds
   # nothing looks the same as a scan that is not running, so the last step plants credentials and

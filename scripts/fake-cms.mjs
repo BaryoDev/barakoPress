@@ -1,6 +1,7 @@
 /*
  * A stand-in barakoCMS with three tenants on three domains, for scripts/two-hosts.sh. The third is
- * holding, so the other two show it leaves them alone.
+ * holding, so the other two show it leaves them alone. A fourth, for scripts/new-tenant.sh, is not
+ * served until POST /__register?tenant=late, as a tenant created after its site went up.
  *
  * It answers only what the renderer asks: the host lookup, each tenant's site settings and its posts,
  * the Pages module's navigation and path resolve, the redirects resolver, and share link redeem.
@@ -198,9 +199,15 @@ const tenants = {
             "/about": pageAt("about", "About Soon", "The real about page"),
         },
     },
+    late: {
+        host: "late.example",
+        settings: { Name: "Late Club", Url: "https://late.example" },
+        post: "first-post",
+        refused: true,
+    },
 };
 
-const reads = { rckoronadal: 0, baryo: 0, soon: 0 };
+const reads = { rckoronadal: 0, baryo: 0, soon: 0, late: 0 };
 
 function send(res, status, body) {
     res.writeHead(status, { "content-type": "application/json" });
@@ -212,6 +219,12 @@ const page = (items) => ({ items, page: 1, pageSize: 20, totalItems: items.lengt
 createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://cms");
     if (url.pathname === "/__reads") return send(res, 200, reads);
+    if (req.method === "POST" && url.pathname === "/__register") {
+        const named = url.searchParams.get("tenant") ?? "";
+        if (!Object.hasOwn(tenants, named)) return send(res, 404);
+        tenants[named].refused = false;
+        return send(res, 200);
+    }
 
     const byHost = url.pathname.match(/^\/api\/tenants\/by-host\/(.+)$/);
     if (byHost) {
@@ -223,6 +236,11 @@ createServer((req, res) => {
     const handle = req.headers["x-tenant"];
     const tenant = typeof handle === "string" ? tenants[handle] : undefined;
     if (!tenant) return send(res, 404);
+    // What barakoCMS answers in Multi mode for a tenant it does not serve, on every route.
+    if (tenant.refused) {
+        res.writeHead(404, { "content-type": "text/plain" });
+        return res.end("This deployment serves registered tenants only.");
+    }
 
     if (req.method === "POST" && url.pathname === "/api/public/site/share-links/redeem") {
         let body = "";

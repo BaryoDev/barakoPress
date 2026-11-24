@@ -38,11 +38,14 @@ const { showsHoldingPage, siteConfig, siteConfigOrNull, signShareCookie } = awai
 const CMS = "http://cms.test";
 const SECRET = "a-share-secret-that-is-long-enough-0123456789";
 
-const TENANTS: Record<string, { host: string; settings: Record<string, unknown> }> = {
+const TENANTS: Record<string, { host?: string; settings: Record<string, unknown>; refused?: boolean }> = {
     rckoronadal: { host: "rckoronadal.org", settings: { Name: "Rotary Club of Koronadal", Url: "https://rckoronadal.org" } },
     baryo: { host: "baryo.dev", settings: { Name: "BaryoDev", Url: "https://baryo.dev" } },
     soon: { host: "soon.example", settings: { Name: "Soon Club", Mode: "Holding", HoldingMessage: "Opening in October" } },
+    // No host: a site pinned to it with CMS_TENANT, whose tenant the CMS does not serve yet.
+    late: { settings: { Name: "Late Club", Url: "https://late.example" }, refused: true },
 };
+const NO_TENANT = "This deployment serves registered tenants only.";
 
 function cms() {
     return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -55,6 +58,7 @@ function cms() {
         const handle = new Headers(init?.headers).get("x-tenant");
         const tenant = handle ? TENANTS[handle] : undefined;
         if (!tenant) return new Response("", { status: 404 });
+        if (tenant.refused) return new Response(NO_TENANT, { status: 404 });
         if (url.pathname === "/api/public/site") {
             return Response.json({
                 items: [{ id: "s", data: tenant.settings }],
@@ -85,6 +89,7 @@ function rewriteOf(res: Response): string | null {
 
 beforeEach(() => {
     forgetCachedReads();
+    TENANTS.late.refused = true;
     requestHeaders = null;
     requestCookies = {};
     vi.stubEnv("PRESS_SECRET", SECRET);
@@ -234,6 +239,101 @@ describe("the proxy", () => {
         );
         const proxy = createPressProxy(config);
         expect(rewriteOf(await proxy(request("baryo.dev", "/")))).toBe("/_press");
+    });
+});
+
+describe("a tenant named without its host", () => {
+    const settingsReads = (fetched: ReturnType<typeof cms>) =>
+        fetched.mock.calls.filter(([input]) => new URL(String(input)).pathname === "/api/public/site").length;
+
+    beforeEach(() => vi.stubEnv("CMS_TENANT", "late"));
+    afterEach(() => vi.useRealTimers());
+
+    it("answers 404 itself while the CMS refuses the tenant, and the site within seconds of it being served", async () => {
+        // Only the clock: the store expires by Date.now, and the fetches stay real promises.
+        vi.useFakeTimers({ toFake: ["Date"] });
+        const proxy = createPressProxy(config);
+        // The proxy's 404 is not a render, so nothing for this tenant is put in the page cache.
+        expect(rewriteOf(await proxy(request("late.example", "/")))).toBe("/_press");
+
+        TENANTS.late.refused = false;
+        vi.setSystemTime(Date.now() + 6_000);
+        expect(rewriteOf(await proxy(request("late.example", "/")))).toBe("/_press/late~public~-");
+    });
+
+    it("asks the CMS about a served tenant once a minute, not once a request", async () => {
+        TENANTS.late.refused = false;
+        const fetched = cms();
+        vi.stubGlobal("fetch", fetched);
+        const proxy = createPressProxy(config);
+        for (const path of ["/", "/blog/x", "/about"]) await proxy(request("late.example", path));
+        expect(settingsReads(fetched)).toBe(1);
+    });
+
+    it("lets the page answer when the CMS cannot be asked, and asks again after ten seconds", async () => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        const down = vi.fn(async () => {
+            throw new Error("ECONNREFUSED");
+        });
+        vi.stubGlobal("fetch", down);
+        const proxy = createPressProxy(config);
+        expect(rewriteOf(await proxy(request("late.example", "/")))).toBe("/_press/late~public~-");
+        await proxy(request("late.example", "/"));
+        expect(down).toHaveBeenCalledTimes(1);
+
+        const fetched = cms();
+        vi.stubGlobal("fetch", fetched);
+        vi.setSystemTime(Date.now() + 11_000);
+        expect(rewriteOf(await proxy(request("late.example", "/")))).toBe("/_press");
+        expect(settingsReads(fetched)).toBe(1);
+    });
+
+    it("asks again after ten seconds when the CMS answers with an error, not after a minute", async () => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        const busy = vi.fn(async () => new Response("", { status: 503 }));
+        vi.stubGlobal("fetch", busy);
+        const proxy = createPressProxy(config);
+        expect(rewriteOf(await proxy(request("late.example", "/")))).toBe("/_press/late~public~-");
+
+        const fetched = cms();
+        vi.stubGlobal("fetch", fetched);
+        vi.setSystemTime(Date.now() + 11_000);
+        expect(rewriteOf(await proxy(request("late.example", "/")))).toBe("/_press");
+        expect(settingsReads(fetched)).toBe(1);
+    });
+
+    it("lets the page answer when the store fails, rather than failing the request", async () => {
+        const broken = {
+            get: () => {
+                throw new Error("store down");
+            },
+            set: async () => {
+                throw new Error("store down");
+            },
+            delete: async () => {},
+            add: async () => false,
+        };
+        TENANTS.late.refused = false;
+        const proxy = createPressProxy(defineConfig({ sites: {}, cmsUrl: CMS, store: broken }));
+        expect(rewriteOf(await proxy(request("late.example", "/")))).toBe("/_press/late~public~-");
+    });
+
+    it("takes a 404 that is not the CMS refusing the tenant as served", async () => {
+        // A tenant with no site settings type is served all the same; the page renders its defaults.
+        vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 404 })));
+        const proxy = createPressProxy(config);
+        expect(rewriteOf(await proxy(request("late.example", "/")))).toBe("/_press/late~public~-");
+    });
+
+    it("does not ask about a tenant its host already resolved", async () => {
+        vi.unstubAllEnvs();
+        vi.stubEnv("PRESS_SECRET", SECRET);
+        const fetched = cms();
+        vi.stubGlobal("fetch", fetched);
+        const proxy = createPressProxy(config);
+        expect(rewriteOf(await proxy(request("baryo.dev", "/")))).toBe("/_press/baryo~public~baryo.dev");
+        expect(settingsReads(fetched)).toBe(0);
     });
 });
 
