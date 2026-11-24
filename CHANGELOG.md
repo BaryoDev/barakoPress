@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.19.0 (2026-11-24)
 
 - `PRESS_MEDIA_ORIGINS` names the browser-facing http origins that `img-src` and `media-src` allow, for a stack whose `CMS_URL` is an internal service name. Only `localhost`, `127.0.0.1` and names ending in `.localhost` are kept, each as its origin alone, and `CMS_URL` follows the same rule, so `http://admin.localhost:8080` now works. Any other http host, other scheme or malformed value is dropped, and https origins need no entry.
 - The image base is pinned by digest (`node:22.23.4-alpine@sha256:...`, the multi-arch index) in all three stages and Dependabot moves it. The image has its own `HEALTHCHECK`, the same node fetch the compose files use, so it reports health when run without compose. The final stage removes npm, corepack and yarn, which the server never runs, so they are not in the running container's filesystem (they stay in the base layer underneath). The derived image recipe ends in the same runtime stage, and a test keeps the two equal. CI scans the built image with Trivy on every change and every night, and the publish workflow scans each pushed runtime digest on its own architecture before any tag moves. Each fails on a High or Critical vulnerability that has a fix. The scan gate also fails on a report that found no operating system packages, and a self-test in CI proves the reports it must refuse. A job proves a CycloneDX SBOM generates for `package.json`.
