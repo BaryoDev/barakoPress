@@ -173,9 +173,12 @@ jobs:
         env:
           IMAGE: ghcr.io/baryodev/${{ matrix.image }}
           DIGEST: ${{ steps.build.outputs.digest }}
+          PLATFORM: ${{ matrix.platform }}
+        # The digest is an index (the image plus its attestation), and Trivy reads an index as
+        # linux/amd64 unless told otherwise, so the arm64 scan names its platform.
         run: |
           set -uo pipefail
-          trivy image --skip-version-check --image-src remote --scanners vuln --severity HIGH,CRITICAL \
+          trivy image --skip-version-check --image-src remote --platform "$PLATFORM" --scanners vuln --severity HIGH,CRITICAL \
             --format json --output "$RUNNER_TEMP/image-scan.json" "$IMAGE@$DIGEST" || exit 1
           bash scripts/image-scan-gate.sh "$RUNNER_TEMP/image-scan.json" | tee -a "$GITHUB_STEP_SUMMARY"
           exit "${PIPESTATUS[0]}"
