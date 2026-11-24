@@ -671,6 +671,56 @@ export async function tenantForHost(config: PressConfig, host: string): Promise<
     return tenant;
 }
 
+/*
+ * Whether barakoCMS serves a tenant the deployment named without asking it: a pinned `CMS_TENANT`,
+ * a tenant header or the default tenant. A tenant found by its host needs no asking, since the
+ * by-host lookup answers only for tenants the CMS serves.
+ *
+ * The proxy asks before it rewrites. A page rendered for a tenant the CMS refuses is a 404, and Next
+ * keeps that 404 as the page until the route revalidates, so a new site whose tenant was created
+ * after its first visit stayed a 404 until a restart. The proxy's own 404 is not kept anywhere.
+ *
+ * A served tenant is remembered for a minute and a refused one for a few seconds, so a tenant created
+ * now is served within seconds and an invented handle costs one read per window. A read that fails
+ * is not a refusal: the page reads again and answers for itself, as it did before this check, and
+ * the next ask comes after the same ten seconds a failed delivery read waits.
+ */
+const SERVED_TTL_SECONDS = 60;
+const REFUSED_TTL_SECONDS = 5;
+const UNSURE_TTL_SECONDS = FAILED_READ_TTL_MS / 1000;
+
+const servedKey = (tenant: string) => `served:${tenant}`;
+
+export async function tenantServed(config: PressConfig, tenant: string): Promise<boolean> {
+    const type = config.sites?.settingsType;
+    if (!type) return true;
+    const store = storeFor(config);
+    const known = await store.get(servedKey(tenant));
+    if (known !== null) return known === "1";
+
+    const path = `/api/public/${encodeURIComponent(type)}?page=1&pageSize=1`;
+    let served = true;
+    let ttl = SERVED_TTL_SECONDS;
+    try {
+        const res = await fetch(`${cmsUrlFor(config)}${path}`, {
+            headers: deliveryHeaders({ ...config, tenant }),
+            cache: "no-store",
+            // As every delivery read (#106): the headers carry the renderer key, which a redirect would hand on.
+            redirect: "error",
+            signal: AbortSignal.timeout(config.cmsTimeoutMs),
+        });
+        if (res.status === 404) served = (await res.text()).trim() !== NO_TENANT_BODY;
+        else await res.body?.cancel();
+        if (!served) ttl = REFUSED_TTL_SECONDS;
+    } catch (e) {
+        const why = e instanceof Error ? e.message : String(e);
+        console.warn(`cms: could not ask whether tenant "${tenant}" is served (${why}), letting the page answer`);
+        ttl = UNSURE_TTL_SECONDS;
+    }
+    await store.set(servedKey(tenant), served ? "1" : "0", ttl);
+    return served;
+}
+
 
 /*
  * What a type says about itself (barakoCMS 4.7, #1108): `GET /api/public/types/{type}/description`

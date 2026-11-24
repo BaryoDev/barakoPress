@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { cookieName } from "./base-path.js";
 import type { PressConfig } from "./config.js";
+import { tenantServed } from "./delivery.js";
 import {
     isPressPath,
     isRewritten,
@@ -23,7 +24,8 @@ import { LINK_COOKIE, openLinkCookie, samePath, SHARE_COOKIE, shareCookieValid, 
  *
  * Both answers go in the path, and the pages read them from there. A host the CMS does not know is
  * a 404 before anything renders, so an invented host never makes a cache entry: only a host a
- * tenant owns can put one there.
+ * tenant owns can put one there. A tenant named some other way (pinned, a header, the default) is
+ * asked about the same way, through `tenantServed`.
  *
  * The answer carries `Cache-Control: private, no-store`, which is what a request-time site has
  * always sent. Next's render cache is the server's own and is not this header, so the render is
@@ -105,6 +107,9 @@ export function createPressProxy(config: PressConfig) {
             return noTenant(request);
         }
         if (!found) return noTenant(request);
+        // A tenant found by its host is one the CMS serves. Any other is asked here, because the 404 a
+        // page renders for a tenant the CMS refuses is kept as that page, and this one is not.
+        if (found.host === null && !(await tenantServed(config, found.tenant))) return noTenant(request);
 
         const url = request.nextUrl.clone();
         if (opensLink(request, found.tenant, pathname)) {

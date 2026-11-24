@@ -62,6 +62,15 @@ resolved to, so an outage after the tenant was paused cannot bring its pages bac
 domain is an unknown host to the lookup, so it falls to `sites.defaultTenant` when one is set, the
 same as any host the CMS does not know.
 
+A tenant named by steps 1, 2 or 4 is checked before anything renders: the proxy reads one row of the
+settings type for it, and when the CMS refuses it the proxy answers 404 itself. A 404 the page
+rendered would be kept by the render cache and served after the tenant exists; the proxy's 404 is
+not kept. The answer is remembered for a minute when the tenant is served, 5 seconds when it is
+refused and 10 seconds when the CMS could not be asked, in which case the page answers for itself.
+So a site that went up before its tenant serves its pages within about 5 seconds of the tenant being
+created, with no restart. A tenant found by its host is not checked again: the lookup answers only
+for tenants the CMS serves.
+
 A handle is only ever read from the request through a header the operator named. `X-Tenant` and
 `X-Forwarded-Host` sent by a caller are ignored unless you configure them, and you should configure
 them only behind a proxy that sets the header and strips a caller's value.
