@@ -32,7 +32,7 @@ async function asked(command: string, basePath: string, status = 200): Promise<s
     try {
         // Rejects when the check exits non-zero, so a pass here is also a healthy container.
         await promisify(execFile)(process.execPath, ["-e", command.replace("127.0.0.1:3000", `127.0.0.1:${port}`)], {
-            env: { BASE_PATH: basePath },
+            env: { NODE_ENV: "test", BASE_PATH: basePath },
             timeout: 10_000,
         });
     } finally {
