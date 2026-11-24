@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The image `HEALTHCHECK` asks for `/api/health`, a route that answers `ok` and reads nothing from the CMS. In 0.19.0 it fetched the home page. On a site pinned to one tenant, a check made before barakoCMS served that tenant rendered a not-found, and Next served that cached 404 for `/` to the visitors after it. `compose.yml`, `compose.site.yml` and the derived image recipe use the same path, and all of them pass on any status under 500 (`compose.site.yml` asked for a 2xx before), so an image older than this one, which answers 404 there, still counts as up. A site already on 0.19.0 can restart its container once barakoCMS serves the tenant. Until it upgrades, it can also set its own healthcheck on `/api/health` that passes on any status under 500: 0.19.0 has no such route and answers Next's prebuilt 404 there, which renders nothing from the CMS. A check that asks for a 2xx fails on 0.19.0.
+
 ## 0.19.0 (2026-11-24)
 
 - `PRESS_MEDIA_ORIGINS` names the browser-facing http origins that `img-src` and `media-src` allow, for a stack whose `CMS_URL` is an internal service name. Only `localhost`, `127.0.0.1` and names ending in `.localhost` are kept, each as its origin alone, and `CMS_URL` follows the same rule, so `http://admin.localhost:8080` now works. Any other http host, other scheme or malformed value is dropped, and https origins need no entry.

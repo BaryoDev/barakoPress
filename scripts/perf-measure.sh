@@ -11,9 +11,9 @@
 #
 # The image is the repository's Dockerfile, built with the normal layer cache, so a run after a
 # small change costs a rebuild of the layers that moved (a fresh CI runner has no cache and builds
-# every layer, which is the cost that matters there). The server has no readiness or health route
-# of its own, and every page and feed route reads the CMS, so readiness is the first 200 for a
-# built file under /_next/static/chunks: it answers without any backend. The container is given a
+# every layer, which is the cost that matters there). Every page and feed route reads the CMS, so
+# readiness is the first 200 for a built file under /_next/static/chunks: it answers without any
+# backend, and it measures the same thing it did before the image had /api/health. The container is given a
 # CMS address that nothing listens on, so it never calls out, and no secret is needed.
 #
 # Usage: scripts/perf-measure.sh <output json>

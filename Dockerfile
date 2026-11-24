@@ -99,12 +99,13 @@ RUN mkdir -p .next/cache && chown -R nextjs:nodejs .next
 USER nextjs
 EXPOSE 3000
 
-# Asks the server for its own home page, under BASE_PATH when one is set, and passes on any status
-# under 500. A container answering for several sites has no tenant for 127.0.0.1, so the proxy
-# answers 404 there, and that is still a server that is up. Node is already in the image, so this
-# adds no curl or wget. Same command and timings as the site service in compose.yml.
+# Asks the server for /api/health, under BASE_PATH when one is set, and passes on any status under
+# 500. The proxy never rewrites /api, so the check renders no page. A check of the home page rendered
+# it before barakoCMS served the tenant, and Next served that 404 from cache to every visitor after.
+# Node is already in the image, so this adds no curl or wget. Same command and timings as the site
+# service in compose.yml.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
-  CMD ["node", "-e", "fetch('http://127.0.0.1:3000'+('/'+(process.env.BASE_PATH||'').trim().split('/').filter(Boolean).join('/')+'/').replace('//','/')).then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
+  CMD ["node", "-e", "fetch('http://127.0.0.1:3000'+('/'+(process.env.BASE_PATH||'').trim().split('/').filter(Boolean).join('/')+'/api/health').replace('//','/')).then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
 
 # No shell form: the server should be PID 1 so a stop signal reaches it rather than a shell.
 CMD ["node", "server.js"]
