@@ -103,17 +103,45 @@ export function cspEnabled(env = readEnv()): boolean {
 }
 
 /**
- * The CMS origin the media directives have to name. Only a loopback http origin (local development)
- * is added: `https:` already covers an https CMS, and the server's own URL for an http CMS, such as
- * a compose service name, is no address a browser can reach.
+ * `value` as an http origin a browser may load media from, or undefined. Only loopback is kept:
+ * localhost, 127.0.0.1, and a name ending in `.localhost` (RFC 6761). An https origin is dropped
+ * because `https:` already covers it, and so is any other scheme, any other http host and anything
+ * that does not parse. What comes back is `cspOrigin` of the parsed origin, never the input.
  */
-export function mediaOriginsOf(config: Pick<PressConfig, "cmsUrl">): string[] {
+function loopbackOrigin(value: string): string | undefined {
     try {
-        const url = new URL(cmsUrlFor(config));
-        if (url.protocol !== "http:" || !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) return [];
-        const origin = cspOrigin(url.origin, true);
-        return origin ? [origin] : [];
+        const url = new URL(value);
+        if (url.protocol !== "http:") return undefined;
+        const host = url.hostname;
+        if (!["localhost", "127.0.0.1", "[::1]"].includes(host) && !host.endsWith(".localhost")) return undefined;
+        return cspOrigin(url.origin, true);
     } catch {
-        return [];
+        return undefined;
     }
+}
+
+/**
+ * The origins the media directives have to name, from the CMS address and `PRESS_MEDIA_ORIGINS`
+ * (origins separated by commas or spaces). Only loopback http origins are added, by one rule for both:
+ * `https:` already covers an https CMS, and the server's own URL for an http CMS, such as a compose
+ * service name, is no address a browser can reach. Name the browser-facing one in
+ * `PRESS_MEDIA_ORIGINS`. Read per call and never at module scope, like `PRESS_SCRIPT_ORIGINS`.
+ */
+export function mediaOriginsOf(
+    config: Pick<PressConfig, "cmsUrl">,
+    raw: string | undefined = readEnv().mediaOrigins,
+): string[] {
+    const out = new Set<string>();
+    let cms: string | undefined;
+    try {
+        cms = cmsUrlFor(config);
+    } catch {
+        cms = undefined;
+    }
+    const listed = raw?.trim() ? raw.trim().split(/[\s,]+/).filter(Boolean) : [];
+    for (const value of [cms, ...listed]) {
+        const origin = value ? loopbackOrigin(value) : undefined;
+        if (origin) out.add(origin);
+    }
+    return [...out];
 }
