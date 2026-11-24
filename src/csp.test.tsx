@@ -248,7 +248,8 @@ describe("the policy", () => {
             const policy = sitePolicy({ mediaOrigins: media("http://evil.example http://api.localhost:8080 * 'unsafe-inline' javascript:alert(1)") });
             expect(directive(policy, "img-src")).toEqual(["'self'", "data:", "https:", "http://api.localhost:8080"]);
             expect(names(policy)).toEqual(DIRECTIVES);
-            expect(policy).not.toMatch(/evil|\*|unsafe-inline|javascript:/);
+            expect(directive(policy, "media-src")).toEqual(["'self'", "https:", "http://api.localhost:8080"]);
+            expect(policy).toBe(sitePolicy({ mediaOrigins: ["http://api.localhost:8080"] }));
         });
 
         it("adds nothing for an https origin, since https: covers it", () => {
