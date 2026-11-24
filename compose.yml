@@ -135,6 +135,8 @@ services:
       PRESS_FONT_ORIGINS: ${PRESS_FONT_ORIGINS:-}
       # Which origins a site's Umami script may be loaded from. Empty allows none, so no script renders.
       PRESS_SCRIPT_ORIGINS: ${PRESS_SCRIPT_ORIGINS:-}
+      # The browser-facing http origins on localhost or *.localhost that images and media load from, such as http://api.localhost:8080.
+      PRESS_MEDIA_ORIGINS: ${PRESS_MEDIA_ORIGINS:-}
       # Which browser origins may read the block schema. The console above.
       PRESS_CONSOLE_ORIGINS: ${PRESS_CONSOLE_ORIGINS:-https://${CONSOLE_DOMAIN}}
     networks:

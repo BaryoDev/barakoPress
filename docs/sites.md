@@ -320,11 +320,11 @@ load behind any proxy and not only behind the bundled Caddyfile. It is made of:
 | `connect-src` | `'self'` and the same analytics origin |
 | `style-src` | `'self'`, `'unsafe-inline'`, and the origins in `PRESS_FONT_ORIGINS` |
 | `font-src` | `'self'`, `data:`, the same origins, and `fonts.gstatic.com` when Google Fonts is one |
-| `img-src` | `'self'`, `data:`, `https:`, and the CMS origin when it is http on localhost or 127.0.0.1 (local development) |
-| `media-src` | `'self'`, `https:`, and the same local CMS origin |
+| `img-src` | `'self'`, `data:`, `https:`, and the http origins on localhost, 127.0.0.1 or `*.localhost` named by the CMS address or `PRESS_MEDIA_ORIGINS` (local development) |
+| `media-src` | `'self'`, `https:`, and the same local origins |
 | `frame-src` | An `https://` origin for each of the site's embed hosts: `embedHosts` in the config, or the tenant's `EmbedHosts` setting. `'none'` when it has none |
 
-Media from an http host other than localhost is blocked, so serve it over https. An https CMS needs
+Media from an http host other than localhost is blocked, so serve it over https. In a compose stack `CMS_URL` is an internal name a browser cannot reach, so set `PRESS_MEDIA_ORIGINS` to the origins the browser uses, such as `http://admin.localhost:8080 http://api.localhost:8080`, separated by commas or spaces. Only `localhost`, `127.0.0.1` and `*.localhost` are read, each cut to its origin. The bundled Caddyfile sends a header policy of its own that allows only https media, and a browser holds a page to both, so behind it these origins stay blocked. An https CMS needs
 no entry, since `https:` covers it. The embed block frames only a URL on the default https port,
 because `frame-src` names each host without a port.
 
@@ -348,7 +348,7 @@ writes. Those earlier tags are from the page's own origin or an origin the polic
 
 `PRESS_CSP=off` stops the meta tag, for a deployment that sends a policy of its own. The tag is also
 left out when `NODE_ENV` is not `production`, because Next's development server needs eval.
-`PRESS_CSP`, `PRESS_SCRIPT_ORIGINS` and `PRESS_FONT_ORIGINS` are read when a page renders. A
+`PRESS_CSP`, `PRESS_SCRIPT_ORIGINS`, `PRESS_FONT_ORIGINS` and `PRESS_MEDIA_ORIGINS` are read when a page renders. A
 build-time site's static pages have the meta baked in when `next build` runs, so a changed value
 reaches them only when the page renders again (a rebuild, or a purge for a revalidated page), and
 `PRESS_CSP=off` has to be set in the environment of the build for such a site. The reference

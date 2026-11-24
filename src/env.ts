@@ -49,6 +49,8 @@ export interface PressEnv {
     fontOrigins?: string;
     /** `PRESS_SCRIPT_ORIGINS`. The origins a site's analytics script may be loaded from. */
     scriptOrigins?: string;
+    /** `PRESS_MEDIA_ORIGINS`. The browser-facing http origins on loopback that images and media may load from. */
+    mediaOrigins?: string;
     /** `PRESS_CSP`. `off` stops a page sending its own Content-Security-Policy meta tag. Anything else leaves it on. */
     csp?: string;
     /** `NODE_ENV`. The page policy is sent only when this is `production`. */
@@ -74,6 +76,7 @@ export const ENV_NAMES = {
     previewSecret: "PRESS_PREVIEW_SECRET",
     fontOrigins: "PRESS_FONT_ORIGINS",
     scriptOrigins: "PRESS_SCRIPT_ORIGINS",
+    mediaOrigins: "PRESS_MEDIA_ORIGINS",
     csp: "PRESS_CSP",
     nodeEnv: "NODE_ENV",
     shareImageFont: "PRESS_SHARE_IMAGE_FONT",

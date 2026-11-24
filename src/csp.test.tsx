@@ -119,6 +119,7 @@ beforeEach(() => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("PRESS_CSP", "");
     vi.stubEnv("PRESS_SCRIPT_ORIGINS", "");
+    vi.stubEnv("PRESS_MEDIA_ORIGINS", "");
     vi.stubGlobal("fetch", cms());
 });
 afterEach(() => {
@@ -188,12 +189,90 @@ describe("the policy", () => {
         expect(at("http://localhost:5005")).toEqual(["http://localhost:5005"]);
         expect(at("http://127.0.0.1:5005")).toEqual(["http://127.0.0.1:5005"]);
         expect(at("http://[::1]:5005")).toEqual([]);
+        expect(at("http://admin.localhost:8080")).toEqual(["http://admin.localhost:8080"]);
         // The server's own address for the CMS is no address a browser can reach.
         expect(at("http://api:8080")).toEqual([]);
         expect(at("http://cms.test")).toEqual([]);
         // https is covered by `https:`.
         expect(at("https://cms.example")).toEqual([]);
         expect(at("not a url")).toEqual([]);
+    });
+
+    describe("PRESS_MEDIA_ORIGINS", () => {
+        const cms = { cmsUrl: "http://api:8080" };
+        const media = (raw?: string) => mediaOriginsOf(cms, raw);
+
+        it("puts *.localhost origins in img-src and media-src, read from the environment", async () => {
+            vi.stubEnv("PRESS_MEDIA_ORIGINS", "http://admin.localhost:8080, http://api.localhost:8080");
+            expect(mediaOriginsOf(cms)).toEqual(["http://admin.localhost:8080", "http://api.localhost:8080"]);
+            const policy = sitePolicy({ mediaOrigins: mediaOriginsOf(cms) });
+            expect(directive(policy, "img-src")).toEqual(["'self'", "data:", "https:", "http://admin.localhost:8080", "http://api.localhost:8080"]);
+            expect(directive(policy, "media-src")).toEqual(["'self'", "https:", "http://admin.localhost:8080", "http://api.localhost:8080"]);
+        });
+
+        it("reads a list separated by commas, spaces or both", () => {
+            expect(media("http://a.localhost:1 http://b.localhost:2,http://c.localhost:3 ,\n http://localhost:4")).toEqual([
+                "http://a.localhost:1",
+                "http://b.localhost:2",
+                "http://c.localhost:3",
+                "http://localhost:4",
+            ]);
+        });
+
+        it("keeps only the origin of a value with a path or query", () => {
+            expect(media("http://admin.localhost:8080/path?x=1")).toEqual(["http://admin.localhost:8080"]);
+        });
+
+        it("adds nothing for a value that could change the policy", () => {
+            const bare = sitePolicy({});
+            for (const bad of [
+                "http://admin.localhost:8080; script-src *",
+                "http://a;b.localhost",
+                "http://a'b.localhost",
+                "http://a*.localhost",
+                "http://.localhost",
+                "http://a..localhost",
+                "http://evil.example",
+                "javascript:alert(1)",
+                "*",
+                "'unsafe-inline'",
+                "http://localhost.evil.example",
+                "http://foo.localhost.evil.example",
+                "http://user@evil.example",
+                "http://admin.localhost@evil.example",
+                "ftp://admin.localhost",
+                "",
+                "   ",
+                ", ,",
+            ]) {
+                expect(media(bad), JSON.stringify(bad)).toEqual([]);
+                expect(sitePolicy({ mediaOrigins: media(bad) }), JSON.stringify(bad)).toBe(bare);
+            }
+        });
+
+        it("drops the bad entries of a list and keeps the loopback ones", () => {
+            const policy = sitePolicy({ mediaOrigins: media("http://evil.example http://api.localhost:8080 * 'unsafe-inline' javascript:alert(1)") });
+            expect(directive(policy, "img-src")).toEqual(["'self'", "data:", "https:", "http://api.localhost:8080"]);
+            expect(names(policy)).toEqual(DIRECTIVES);
+            expect(directive(policy, "media-src")).toEqual(["'self'", "https:", "http://api.localhost:8080"]);
+            expect(policy).toBe(sitePolicy({ mediaOrigins: ["http://api.localhost:8080"] }));
+        });
+
+        it("adds nothing for an https origin, since https: covers it", () => {
+            expect(media("https://cdn.example https://admin.localhost:8080")).toEqual([]);
+        });
+
+        it("leaves the policy unchanged when it is unset", () => {
+            vi.stubEnv("PRESS_MEDIA_ORIGINS", "");
+            expect(mediaOriginsOf(cms)).toEqual([]);
+            vi.stubEnv("PRESS_MEDIA_ORIGINS", undefined);
+            expect(mediaOriginsOf(cms)).toEqual([]);
+            expect(sitePolicy({ mediaOrigins: mediaOriginsOf(cms) })).toBe(sitePolicy({}));
+        });
+
+        it("is joined by a loopback CMS_URL without a duplicate", () => {
+            expect(mediaOriginsOf({ cmsUrl: "http://admin.localhost:8080" }, "http://admin.localhost:8080")).toEqual(["http://admin.localhost:8080"]);
+        });
     });
 
     it("leaves a compose-style CMS address out of a page's policy", async () => {
