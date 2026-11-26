@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { defineConfig } from "./config.js";
 import type { Item } from "./collections.js";
 
@@ -136,14 +136,15 @@ describe("the post share image route", () => {
     });
 
     it("answers 404, not a thrown error, when the font file is garbage", async () => {
-        const bad = join(tmpdir(), `press-bad-font-${process.pid}.ttf`);
+        const dir = mkdtempSync(join(tmpdir(), "press-bad-font-"));
+        const bad = join(dir, "bad.ttf");
         writeFileSync(bad, "this is not a font");
         process.env.PRESS_SHARE_IMAGE_FONT = bad;
         try {
             const res = await ask("hello-world");
             expect(res.status).toBe(404);
         } finally {
-            rmSync(bad, { force: true });
+            rmSync(dir, { recursive: true, force: true });
         }
     });
 
