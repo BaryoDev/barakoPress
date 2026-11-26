@@ -234,7 +234,7 @@ createServer((req, res) => {
     }
 
     const handle = req.headers["x-tenant"];
-    const tenant = typeof handle === "string" ? tenants[handle] : undefined;
+    const tenant = typeof handle === "string" && Object.hasOwn(tenants, handle) ? tenants[handle] : undefined;
     if (!tenant) return send(res, 404);
     // What barakoCMS answers in Multi mode for a tenant it does not serve, on every route.
     if (tenant.refused) {
