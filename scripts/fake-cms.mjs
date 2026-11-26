@@ -207,7 +207,7 @@ const tenants = {
     },
 };
 
-const reads = { rckoronadal: 0, baryo: 0, soon: 0, late: 0 };
+const reads = new Map(Object.keys(tenants).map((handle) => [handle, 0]));
 
 function send(res, status, body) {
     res.writeHead(status, { "content-type": "application/json" });
@@ -218,7 +218,7 @@ const page = (items) => ({ items, page: 1, pageSize: 20, totalItems: items.lengt
 
 createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://cms");
-    if (url.pathname === "/__reads") return send(res, 200, reads);
+    if (url.pathname === "/__reads") return send(res, 200, Object.fromEntries(reads));
     if (req.method === "POST" && url.pathname === "/__register") {
         const named = url.searchParams.get("tenant") ?? "";
         if (!Object.hasOwn(tenants, named)) return send(res, 404);
@@ -259,7 +259,7 @@ createServer((req, res) => {
         });
         return;
     }
-    reads[handle] += 1;
+    reads.set(handle, reads.get(handle) + 1);
 
     const post = { id: tenant.post, slug: tenant.post, data: { Title: `${tenant.settings.Name} post`, Slug: tenant.post, Body: "Hello." } };
     if (url.pathname === "/api/public/site") return send(res, 200, page([{ id: "site", data: tenant.settings }]));
