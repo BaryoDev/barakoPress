@@ -3,7 +3,7 @@
 # Next's standalone output traces the files actually imported and copies them, so the final image
 # is the server plus the modules it reaches, rather than every dependency in package.json.
 
-FROM node:22.23.4-alpine@sha256:0e1754758c2df4cfa3e68d59e2e1b7374bb7fd9ea6328eaaacf15cc934af8202 AS deps
+FROM node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
 # npm ci needs a lockfile; fall back so a fresh clone without one still builds.
@@ -20,7 +20,7 @@ FROM scratch AS plugins
 # The engine's source with its dependencies installed and nothing built. It is published as
 # ghcr.io/baryodev/barako-press-source:<version> so a site can build a derived image with a plugin or
 # an overlay from `FROM` that tag, with no checkout of this repository. See examples/derived-image.
-FROM node:22.23.4-alpine@sha256:0e1754758c2df4cfa3e68d59e2e1b7374bb7fd9ea6328eaaacf15cc934af8202 AS source
+FROM node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS source
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts
@@ -75,7 +75,7 @@ ENV BASE_PATH=$BASE_PATH
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-FROM node:22.23.4-alpine@sha256:0e1754758c2df4cfa3e68d59e2e1b7374bb7fd9ea6328eaaacf15cc934af8202 AS run
+FROM node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS run
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
 ARG BASE_PATH=
