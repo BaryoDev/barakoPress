@@ -30,11 +30,6 @@ on:
         required: false
         default: "{}"
         type: string
-      engine-ref:
-        description: The barakoPress ref holding the check.
-        required: false
-        default: master
-        type: string
       workers:
         description: Parallel captures. Two full page renders per test, so more is not faster.
         required: false
@@ -69,7 +64,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: BaryoDev/barakoPress
-          ref: ${{ inputs.engine-ref }}
           path: engine
           persist-credentials: false
 
