@@ -126,6 +126,37 @@ site with its own layout and routes, and its tree replaces the reference one; ot
 tree is removed as above. `PRESS_TRAILING_SLASH=true` sets Next's `trailingSlash`, for a site whose
 URLs end in a slash; configure its webhook URL with the slash too (see the revalidate endpoint).
 
+### Serving a second client on its own domain
+
+The compose stack serves more than its three fixed names. A client's own domain needs no edit to
+the `Caddyfile` or to `compose.yml`, and the default tenancy mode (`Single`) is enough: core's
+multi-tenancy page says that mode "does not stop a `Single` deployment from registering tenants".
+
+1. In the CMS, create the client's tenant and add its domain to the tenant. Adding it returns the
+   DNS record that proves you control the name; publish it, then verify the domain. (A domain from
+   a seed file is verified on load.)
+2. Point the domain's A or AAAA record at the machine that runs the stack.
+3. Visit `https://<the domain>/`. On that first visit Caddy gets the certificate, and the site finds
+   the tenant by the host and serves its pages.
+
+Before Caddy requests a certificate for a name it does not know, it calls the API's TLS check,
+`GET /api/tenants/tls-ask?domain=<name>`, over the compose network. The API answers 200 for a
+verified domain of an active tenant and 404 for anything else, and a 404 means no certificate is
+requested and the TLS handshake fails. A domain that is registered but not yet verified is refused
+the same way, so a stranger who points a name at your machine cannot make it request one.
+
+The three fixed names (`SITE_DOMAIN`, `API_DOMAIN`, `CONSOLE_DOMAIN`) keep their own blocks and are
+matched before the client block. The client block sends the same response headers as the blog,
+from one shared snippet in the `Caddyfile`.
+
+`CLIENT_TLS_ISSUER` is empty in a deployment, which leaves Caddy's normal issuers (Let's Encrypt,
+then ZeroSSL). `scripts/client-domain-check.sh` sets it to `issuer internal` so Caddy's own CA
+signs `*.localhost` names, because Caddy will not request a public certificate for one. The
+`client-domain` CI job runs that script against the shipped files: it checks that each client
+domain shows its own tenant's page over verified TLS and that an unregistered name completes no
+handshake. It does not check visitor sign-in on a client domain, because the reference site does
+not enable `viewerSessions`.
+
 ## Serving under a path
 
 One site can be served under a path prefix, such as `https://playground.baryo.dev/kape-ana/`, when
