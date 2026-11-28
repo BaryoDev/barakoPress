@@ -1,0 +1,16 @@
+# Gives the API a seed file, on top of compose.yml:
+#
+#   docker compose -f compose.yml -f compose.seed.yml up -d
+#
+# SEED_FILE is the file's path on this machine, ./seed.json beside this file when unset. A missing
+# file stops the API from starting rather than mounting an empty directory in its place.
+# docs/deploying.md says what the API does with the file and when.
+services:
+  api:
+    environment:
+      Seed__File: /seed/seed.json
+    volumes:
+      - type: bind
+        source: ${SEED_FILE:-./seed.json}
+        target: /seed/seed.json
+        read_only: true

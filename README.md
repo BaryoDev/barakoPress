@@ -292,8 +292,9 @@ ships no backend and no Next `cacheHandler`.
 
 The reference app in `app/` is a site that consumes this package by its name, the way yours does. It
 is published as `ghcr.io/baryodev/barako-press` for linux/amd64 and linux/arm64, tagged with each
-release's version and `latest`, and `dev` from master. The compose stack, the site-only compose file,
-the BaryoVM release manifests and building a site's own image with an overlay are in
+release's version and `latest`, and `dev` from master. The compose stack, serving a second client on
+its own domain with no Caddyfile edit, the site-only compose file, the BaryoVM release manifests and
+building a site's own image with an overlay are in
 [Deploying](https://github.com/BaryoDev/barakoPress/blob/master/docs/deploying.md).
 
 ## What it reads

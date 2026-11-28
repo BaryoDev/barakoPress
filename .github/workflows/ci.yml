@@ -420,6 +420,22 @@ jobs:
         if: failure()
         run: docker compose -f /tmp/compose.yml logs --tail 80
 
+  client-domain:
+    # A second client on its own domain, with no Caddyfile edit. Brings up the shipped compose.yml
+    # and Caddyfile with a real Caddy and proves a registered domain gets a certificate and its own
+    # tenant's page, and a name no tenant holds gets neither. The certificates come from Caddy's
+    # local CA, so no public ACME server is contacted. See scripts/client-domain-check.sh.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: A client domain is served over TLS and an unknown name is refused
+        run: bash scripts/client-domain-check.sh
+
   # Lean only stays lean if something notices weight coming back (#853). This builds the production
   # image, boots it with a CMS address that nothing listens on, and records image size, startup to
   # a built static file and memory at rest. Each is compared with perf-budget.json, and the summary shows the

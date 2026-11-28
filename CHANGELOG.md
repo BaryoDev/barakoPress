@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- The shipped `compose.yml` and `Caddyfile` serve a client's own domain with no edit. A catch-all block gets the certificate on the first visit, after the API's TLS check (`/api/tenants/tls-ask`) answers 200 for a verified domain of an active tenant, and any other name gets no certificate. The client block sends the blog's response headers. `docs/deploying.md` lists the DNS records a domain needs, and a `client-domain` CI job proves two tenants on their own domains over TLS with a real Caddy.
+- `compose.seed.yml` gives the API a seed file (`SEED_FILE`, `./seed.json` by default), for an apex or `www.` client domain that cannot verify through DNS. The `client-domain` check loads its tenants through it.
+- Caddy now answers 421 when a request's `Host` is not the name its TLS session was opened for (`strict_sni_host`), for the three fixed names as well as client domains. A client that reuses one connection for several of them is sent to a new connection.
+
 ## 0.19.2 (2026-11-24)
 
 - A site pinned to a tenant (`CMS_TENANT`), or one named by `sites.tenantHeader` or the default tenant, no longer keeps a 404 for its pages after its tenant is created. Before, the first request made before barakoCMS served the tenant rendered a not-found, and Next served that cached 404 for the route until it revalidated or the container restarted. Now the proxy asks the CMS first, with one settings read remembered for a minute (5 seconds while refused), and answers 404 itself while the tenant is refused, which nothing caches. The site serves its pages within about 5 seconds of the tenant being created. A tenant found by its host was already checked by the host lookup. `scripts/new-tenant.sh` proves it against a real server in CI. A pinned tenant that barakoCMS stops serving now answers 404 within a minute, where before its cached pages stayed up until they revalidated.
