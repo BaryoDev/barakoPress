@@ -1,19 +1,28 @@
-# Three hostnames, one proxy, certificates handled for you.
+# Three fixed hostnames and any client domain, one proxy, certificates handled for you.
 #
 # Caddy asks Let's Encrypt for a certificate on first start and renews it on its own, which is why
 # a working blog is a compose up and not an afternoon with certbot. The only prerequisite is that
 # all three names already point at this machine: the challenge fails otherwise, and it fails
 # loudly in the caddy logs rather than silently serving plain http.
+#
+# A client's own domain needs no edit here. Register the domain on the client's tenant in the CMS,
+# verify it, and point it at this machine: Caddy gets the certificate on the first visit and serves
+# the client's site. Before it issues one, Caddy calls the API's TLS check (the on_demand_tls
+# permission below), which answers 200 only for a verified domain of an active tenant. Any other
+# name gets no certificate, so a stranger cannot make this box request one.
 
 {
 	email {$ACME_EMAIL}
+
+	# The permission check for the catch-all block below. The service name, on the compose network:
+	# the API already lists it in AllowedHosts, and the request never leaves the host.
+	on_demand_tls {
+		permission http http://api:8080/api/tenants/tls-ask
+	}
 }
 
-# The blog. Everything a visitor sees.
-{$SITE_DOMAIN} {
-	encode zstd gzip
-	reverse_proxy site:3000
-
+# The blog's response headers, shared by the two blocks that serve it so they cannot drift.
+(site_headers) {
 	header {
 		# Sent on every response, including the ones Next renders from cache.
 		Strict-Transport-Security "max-age=31536000"
@@ -36,6 +45,32 @@
 		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' {$CSP_SCRIPT_ORIGINS:}; style-src 'self' 'unsafe-inline' {$CSP_FONT_ORIGINS:https://fonts.googleapis.com https://fonts.gstatic.com}; font-src 'self' data: {$CSP_FONT_ORIGINS:https://fonts.googleapis.com https://fonts.gstatic.com}; img-src 'self' data: https:; media-src 'self' https:; connect-src 'self' {$CSP_SCRIPT_ORIGINS:}; frame-src {$CSP_FRAME_ORIGINS:https://www.youtube-nocookie.com https://www.youtube.com https://youtube.com https://player.vimeo.com https://www.google.com https://open.spotify.com https://w.soundcloud.com}; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'"
 		-Server
 	}
+}
+
+# The blog. Everything a visitor sees.
+{$SITE_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy site:3000
+	import site_headers
+}
+
+# A client's own domain. Any name the blocks above and below do not claim lands here, and the
+# permission check above decides whether it gets a certificate at all. The site reads the Host
+# header, which Caddy passes through, and finds the tenant that holds the domain. Same headers as
+# the blog, from the same snippet.
+#
+# CLIENT_TLS_ISSUER is empty in a deployment, which leaves Caddy's normal issuers (Let's Encrypt,
+# then ZeroSSL) in place. The CI check for this block sets it to "issuer internal": Caddy will not
+# request a public certificate for a *.localhost name, and CI must never contact a public ACME
+# server, so the check has Caddy's own local CA sign the name instead.
+https:// {
+	tls {
+		on_demand
+		{$CLIENT_TLS_ISSUER:}
+	}
+	encode zstd gzip
+	reverse_proxy site:3000
+	import site_headers
 }
 
 # The API. Public because the delivery endpoints are anonymous by design, and because the console
