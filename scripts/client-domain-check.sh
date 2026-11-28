@@ -9,8 +9,9 @@
 #
 #   a. the second client's domain answers 200 with its own title and not the first's
 #   b. the first client's domain answers with its own title and not the second's
-#   c. a `*.localhost` name that no tenant holds gets no certificate, so the handshake fails
-#   e. a fixed name still reaches its own block (the API's health check on API_DOMAIN)
+#   c. a `*.localhost` name that no tenant holds gets no certificate, so the handshake fails, after
+#      the API's TLS check is seen answering 200 for a client domain and 404 for that name
+#   e. a fixed name still reaches its own block (the API's health body on API_DOMAIN)
 #
 # Not checked: a viewer signing in on the client's domain (d). It cannot be done from here, for
 # three reasons that are each enough. The reference site's press.config.ts does not enable
@@ -146,6 +147,10 @@ services:
       disable: true
 YAML
 
+# The project name is fixed, so a run killed before its cleanup leaves a database volume with the
+# old password, and this run's new password would not open it.
+dc down -v --remove-orphans >/dev/null 2>&1 || true
+
 echo "starting the stack"
 if ! dc up -d --build --wait --wait-timeout 900 > "$TMP/up.log" 2>&1; then
   tail -n 40 "$TMP/up.log" | tr -cd '\11\12\40-\176' | sed 's/^/  | /'
@@ -229,17 +234,32 @@ grep -qF "$TITLE_A" "$TMP/a.html" || fail "the first client's domain does not sh
 if grep -qF "$TITLE_B" "$TMP/a.html"; then fail "the first client's domain shows the second client's title"; fi
 echo "ok: the first client's domain shows its own title and not the second's"
 
-# No tenant holds this name, so the API's TLS check answers 404 and Caddy never issues for it. What
-# the visitor sees is a failed handshake, not a page, so curl reports no status at all.
-if curl -s --max-time 25 --cacert "$ROOT" --resolve "$UNKNOWN:$HTTPS_PORT:127.0.0.1" \
-  -o /dev/null "https://$UNKNOWN:$HTTPS_PORT/"; then
-  fail "a name no tenant holds completed a TLS handshake"
-fi
+# No tenant holds this name, so the API's TLS check answers 404 and Caddy never issues for it. Asked
+# directly first, so the refused handshake below is known to come from that answer and not from an
+# API that is down (Caddy refuses then too).
+tls_ask() { # name
+  curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Host: api' \
+    "http://127.0.0.1:$API_PORT/api/tenants/tls-ask?domain=$1" || true
+}
+code=$(tls_ask "$CLIENT_A")
+[ "$code" = "200" ] || fail "the API's TLS check did not answer 200 for a verified client domain (status $code)"
+code=$(tls_ask "$UNKNOWN")
+[ "$code" = "404" ] || fail "the API's TLS check did not answer 404 for a name no tenant holds (status $code)"
+
+# What the visitor sees is a refused handshake, which curl reports as exit 35. Any other failure (a
+# closed port, a timeout) means something else broke, so it fails the check rather than passing it.
+rc=0
+curl -s --max-time 25 --cacert "$ROOT" --resolve "$UNKNOWN:$HTTPS_PORT:127.0.0.1" \
+  -o /dev/null "https://$UNKNOWN:$HTTPS_PORT/" || rc=$?
+[ "$rc" -ne 0 ] || fail "a name no tenant holds completed a TLS handshake"
+[ "$rc" -eq 35 ] || fail "the request for a name no tenant holds failed, but not with a refused handshake (curl exit $rc)"
 echo "ok: a name no tenant holds gets no certificate"
 
-# The fixed names still win. API_DOMAIN reaches the API, not the catch-all and so not the site.
+# The fixed names still win. API_DOMAIN reaches the API, not the catch-all and so not the site: the
+# body is the API's own health answer, which the site has no route for.
 code=$(fetch "$API_DOMAIN" /health "$TMP/health.txt")
 [ "$code" = "200" ] || fail "the API's own name did not answer its health check (status $code)"
+grep -qF '"status":"Healthy"' "$TMP/health.txt" || fail "the API's own name answered, but not with the API's health body"
 echo "ok: a fixed name still reaches its own block"
 
 echo "all checks passed"
