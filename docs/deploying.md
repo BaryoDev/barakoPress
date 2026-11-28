@@ -132,12 +132,20 @@ The compose stack serves more than its three fixed names. A client's own domain 
 the `Caddyfile` or to `compose.yml`, and the default tenancy mode (`Single`) is enough: core's
 multi-tenancy page says that mode "does not stop a `Single` deployment from registering tenants".
 
-1. In the CMS, create the client's tenant and add its domain to the tenant. Adding it returns the
-   DNS record that proves you control the name; publish it, then verify the domain. (A domain from
-   a seed file is verified on load.)
-2. Point the domain's A or AAAA record at the machine that runs the stack.
+1. In the CMS, create the client's tenant and add its domain to the tenant. The tenant then lists
+   the TXT record that proves you control the name, at `_barako-challenge.<the domain>`.
+2. Add a `CNAME` on the domain pointing at `SITE_DOMAIN`, the deployment host here, and publish the
+   TXT record. Then verify the domain in the CMS. The check reads both records, so an `A` or `AAAA`
+   record alone never verifies.
 3. Visit `https://<the domain>/`. On that first visit Caddy gets the certificate, and the site finds
    the tenant by the host and serves its pages.
+
+A subdomain such as `blog.client.example` verifies this way. An apex domain cannot hold a `CNAME`,
+and core drops a leading `www.` from a claim, so `www.client.example` is checked at the apex too.
+Neither verifies through DNS; register those in a seed file (`Seed:File`), whose domains are trusted
+and verified on load, and point them at the machine with whatever record your DNS host allows. The
+TLS check also answers for the `www.` form of a verified domain, so point that name at the machine
+too, or a visit to it fails to get a certificate.
 
 Before Caddy requests a certificate for a name it does not know, it calls the API's TLS check,
 `GET /api/tenants/tls-ask?domain=<name>`, over the compose network. The API answers 200 for a
@@ -149,13 +157,21 @@ The three fixed names (`SITE_DOMAIN`, `API_DOMAIN`, `CONSOLE_DOMAIN`) keep their
 matched before the client block. The client block sends the same response headers as the blog,
 from one shared snippet in the `Caddyfile`.
 
-`CLIENT_TLS_ISSUER` is empty in a deployment, which leaves Caddy's normal issuers (Let's Encrypt,
-then ZeroSSL). `scripts/client-domain-check.sh` sets it to `issuer internal` so Caddy's own CA
-signs `*.localhost` names, because Caddy will not request a public certificate for one. The
+`CLIENT_TLS_ISSUER` is for the check only. `compose.yml` does not pass it to Caddy, so a value in
+`.env` has no effect and a deployment keeps Caddy's normal issuers (Let's Encrypt, then ZeroSSL).
+`scripts/client-domain-check.sh` sets it to `issuer internal` through its own override file, so
+Caddy's own CA signs `*.localhost` names, because Caddy will not request a public certificate for
+one. A value Caddy cannot parse stops it from starting. The
 `client-domain` CI job runs that script against the shipped files: it checks that each client
 domain shows its own tenant's page over verified TLS and that an unregistered name completes no
 handshake. It does not check visitor sign-in on a client domain, because the reference site does
 not enable `viewerSessions`.
+
+With `compose.site.yml` behind a proxy you already run, none of this is shipped: that proxy needs
+its own catch-all with on-demand TLS that asks `GET /api/tenants/tls-ask?domain=<name>` before it
+issues, and it must pass the client's `Host` through. Leave `CMS_TENANT` empty, because a pinned
+tenant makes the site ignore the host and serve that one tenant on every domain. A proxy without
+on-demand TLS needs a certificate added for each client domain.
 
 ## Serving under a path
 
