@@ -142,10 +142,35 @@ multi-tenancy page says that mode "does not stop a `Single` deployment from regi
 
 A subdomain such as `blog.client.example` verifies this way. An apex domain cannot hold a `CNAME`,
 and core drops a leading `www.` from a claim, so `www.client.example` is checked at the apex too.
-Neither verifies through DNS; register those in a seed file (`Seed:File`), whose domains are trusted
-and verified on load, and point them at the machine with whatever record your DNS host allows. The
+Neither verifies through DNS. Register those in a seed file instead, whose domains are trusted and
+written as verified, and point them at the machine with whatever record your DNS host allows. The
 TLS check also answers for the `www.` form of a verified domain, so point that name at the machine
 too, or a visit to it fails to get a certificate.
+
+`compose.seed.yml` gives the API the seed file. Save it beside `compose.yml` as `seed.json`, or set
+`SEED_FILE` in `.env` to its path, and start the stack with both compose files:
+
+```json
+{
+  "version": 1,
+  "tenants": {
+    "acme": {
+      "name": "Acme",
+      "domains": ["acme.example"]
+    }
+  }
+}
+```
+
+```sh
+docker compose -f compose.yml -f compose.seed.yml up -d
+```
+
+The API reads the file on every start and applies it only when it changed since the last start it
+applied. A changed file sets the name and domains of each tenant it lists, so list every domain the
+tenant keeps: one the file leaves out is removed from the tenant, including one added in the CMS.
+The rest of the format (members, roles, content types) is in core's guide to delivering a client
+project. `scripts/client-domain-check.sh` loads its two tenants through this same file.
 
 Before Caddy requests a certificate for a name it does not know, it calls the API's TLS check,
 `GET /api/tenants/tls-ask?domain=<name>`, over the compose network. The API answers 200 for a

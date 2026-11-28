@@ -3,9 +3,10 @@
 #
 # Brings the stack up as it ships, with an override file that changes only what a laptop or a CI
 # runner has to: the published ports (loopback, high numbers), throwaway secrets, `*.localhost` names
-# for the three fixed domains, a seed file that registers two tenants with one `*.localhost` domain
-# each, Caddy's local CA for the client domains, and a stand-in for the console. Then it proves, over
-# TLS verified against Caddy's own root and never with -k:
+# for the three fixed domains, Caddy's local CA for the client domains, and a stand-in for the
+# console. The shipped compose.seed.yml loads a seed file that registers two tenants with one
+# `*.localhost` domain each. Then it proves, over TLS verified against Caddy's own root and never
+# with -k:
 #
 #   a. the second client's domain answers 200 with its own title and not the first's
 #   b. the first client's domain answers with its own title and not the second's
@@ -51,7 +52,7 @@ OVERRIDE="$TMP/override.yml"
 SEED="$TMP/seed.json"
 ROOT="$TMP/root.crt"
 
-dc() { docker compose -p "$PROJECT" --env-file "$ENVF" -f compose.yml -f "$OVERRIDE" "$@"; }
+dc() { docker compose -p "$PROJECT" --env-file "$ENVF" -f compose.yml -f compose.seed.yml -f "$OVERRIDE" "$@"; }
 
 # Container logs carry whatever a client sent, so each line is stripped of control characters and
 # indented, which also stops a line that starts with "::" being read as a workflow command.
@@ -93,6 +94,7 @@ ACME_EMAIL=ci@example.test
 SITE_DOMAIN=$SITE_DOMAIN
 API_DOMAIN=$API_DOMAIN
 CONSOLE_DOMAIN=$CONSOLE_DOMAIN
+SEED_FILE=$SEED
 ENV
 
 # Seed file domains are trusted, so they are verified without a DNS record. Members: the initial
@@ -123,7 +125,8 @@ chmod 644 "$SEED"
 #   caddy.ports: loopback and high ports, in place of 80 and 443 (!override replaces the list).
 #   caddy.CLIENT_TLS_ISSUER: Caddy's local CA signs the client names. The default would try a public
 #     ACME server for a *.localhost name, which Caddy refuses, and CI must not contact one anyway.
-#   api: the seed file, and a loopback port so this script can log in and write entries.
+#   api: a loopback port so this script can log in and write entries. The seed file reaches it
+#     through the shipped compose.seed.yml, with SEED_FILE set in the env file above.
 #   console: a stand-in, with its health check off.
 cat > "$OVERRIDE" <<YAML
 services:
@@ -136,10 +139,6 @@ services:
   api:
     ports:
       - "127.0.0.1:$API_PORT:8080"
-    environment:
-      Seed__File: /seed/seed.json
-    volumes:
-      - $SEED:/seed/seed.json:ro
   console:
     image: $CADDY_IMAGE
     command: ["caddy", "respond", "--listen", ":3000", "console stand-in"]
