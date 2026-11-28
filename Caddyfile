@@ -19,6 +19,12 @@
 	on_demand_tls {
 		permission http http://api:8080/api/tenants/tls-ask
 	}
+
+	# A request whose Host is not the name its TLS session was opened for gets 421. Without this, a
+	# session for one client's domain could carry another name in Host and be routed by it.
+	servers {
+		strict_sni_host
+	}
 }
 
 # The blog's response headers, shared by the two blocks that serve it so they cannot drift.
